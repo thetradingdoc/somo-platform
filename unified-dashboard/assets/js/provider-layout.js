@@ -50,9 +50,6 @@
   }
 
   function mountProviderPage(options = {}) {
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'ui-audit-pre',hypothesisId:'H1',location:'provider-layout.js:60',message:'mountProviderPage_entry',data:{path:window.location.pathname,activeIdOption:options.activeId||null,bodyHasProviderClass:document.body.classList.contains('provider-portal')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!document.getElementById('ppSidebarNav')) {
       document.body.classList.add('provider-portal', 'provider-portal--scroll');
 
@@ -130,10 +127,6 @@
     if (typeof window.initProviderShell === 'function') {
       window.initProviderShell(initOpts);
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'ui-audit-pre',hypothesisId:'H1',location:'provider-layout.js:142',message:'mountProviderPage_exit',data:{path:window.location.pathname,activeIdResolved:activeId,hasSidebarNav:!!document.getElementById('ppSidebarNav'),bodyHasProviderClass:document.body.classList.contains('provider-portal'),legacySidebarStillExists:!!(document.getElementById('sidebar')||document.querySelector('.sidebar'))},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     if (options.topbarActions) {
       const right = document.querySelector('.pp-topbar-right');

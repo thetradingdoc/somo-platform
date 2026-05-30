@@ -78,6 +78,20 @@ function requireCustomerAuth(req, res, next) {
       });
     }
 
+    // W2-05: SaaS tenants must have merchant_id after onboarding (email + terms)
+    const onboardingComplete = customer.email_verified && termsAccepted;
+    if (
+      customer.customer_type === 'saas' &&
+      onboardingComplete &&
+      (!customer.merchant_id || String(customer.merchant_id).trim() === '')
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: 'merchant_required',
+        message: 'Account setup is incomplete. Contact support or complete signup.'
+      });
+    }
+
     // Get merchant if customer has one
     let merchant = null;
     if (customer.merchant_id) {

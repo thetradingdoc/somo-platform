@@ -180,6 +180,15 @@ async function provisionDedicatedNumber(db, customerId, options = {}) {
 }
 
 function activateTrialRecord(db, customerId, options = {}) {
+  const customer = db.getCustomer(customerId);
+  if (!customer) throw new Error('Customer not found');
+  if (!options.skipPhoneVerifyGate && Number(customer.phone_verified) !== 1) {
+    throw new TrialProvisionError(
+      'Contact phone must be verified before activating trial',
+      'phone_not_verified'
+    );
+  }
+
   const now = new Date();
   const expires = new Date(now.getTime() + getTrialDurationDays() * 24 * 60 * 60 * 1000);
   const phone = options.phoneE164;
@@ -194,6 +203,15 @@ function activateTrialRecord(db, customerId, options = {}) {
     phone_number: phone,
     trial_release_reason: null
   });
+
+  if (!options.skipWelcomeNudge) {
+    try {
+      const { maybeSendTrialWelcome } = require('./trial-alerts');
+      maybeSendTrialWelcome(customerId).catch((e) => {
+        console.warn('[TrialLifecycle] welcome nudge:', e.message);
+      });
+    } catch (_) {}
+  }
 
   return { now, expires };
 }
@@ -288,6 +306,28 @@ async function startTrialTenant(db, customerId, options = {}) {
   });
 
   const final = db.getCustomer(customerId);
+  if (db.upsertVoiceAgentSettings && (final.merchant_id || final.id)) {
+    try {
+      const VoiceAgentRuntime = require('./voice-agent-runtime');
+      const VoicePromptTemplates = require('./voice-prompt-templates');
+      const company = final.company_name || final.name || 'our office';
+      const seedSettings = {
+        retell_agent_id: final.retell_agent_id || null,
+        enabled: true,
+        greeting: VoiceAgentRuntime.buildDefaultGreeting(company),
+        after_hours_message: VoiceAgentRuntime.buildAfterHoursMessage({}),
+        business_hours: { mon: '09:00-17:00', tue: '09:00-17:00', wed: '09:00-17:00', thu: '09:00-17:00', fri: '09:00-17:00' }
+      };
+      db.upsertVoiceAgentSettings(final.merchant_id || null, seedSettings, final.id);
+      const defaultPrompt = VoicePromptTemplates.getDefaultCustomPrompt(final);
+      if (defaultPrompt && !final.custom_prompt) {
+        db.updateCustomer(final.id, { custom_prompt: defaultPrompt });
+      }
+    } catch (seedErr) {
+      console.warn('[TrialLifecycle] voice_agent_settings seed:', seedErr.message);
+    }
+  }
+
   if (!final.twilio_phone_number) {
     throw new TrialProvisionError(
       'Trial could not be started without a dedicated phone number',

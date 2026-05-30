@@ -42,12 +42,21 @@
   --primary: var(--somo-green);
   --primary-hover: var(--somo-green-hover);
 
-  /* Marketing landing (light pitch layout) — used by somo-landing with local overrides */
-  --somo-green-marketing: #93d33b;
-  --somo-green-marketing-hover: #7fb832;
-  --somo-green-marketing-dark: #5a8f1f;
+  /* Marketing landing (Image 1: MSU Green + Green Lizard) */
+  --somo-msu: #164437;
+  --somo-lizard: #b5e930;
+  --somo-lizard-hover: #9fd628;
+  --somo-grass: #238108;
+  --somo-lizard-10: #f4fbe8;
+  --somo-lizard-20: #e8f7d0;
+  --somo-rail-gradient: linear-gradient(180deg, #b5e930 0%, #238108 55%, #164437 100%);
+  --somo-green-marketing: var(--somo-lizard);
+  --somo-green-marketing-hover: var(--somo-lizard-hover);
+  --somo-green-marketing-dark: var(--somo-msu);
   --somo-bg-marketing: #fbf9f4;
   --somo-text-marketing: #1a1a1a;
   --somo-muted-marketing: #6b6b6b;
   --somo-border-marketing: #e8e4dc;
+  --somo-cap-surface: var(--somo-lizard-10);
+  --somo-cap-border: #d0ddd6;
 }

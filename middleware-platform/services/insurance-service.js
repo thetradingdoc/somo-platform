@@ -291,27 +291,6 @@ class InsuranceService {
       console.log('Date of Service:', eligibilityData.dateOfService);
 
       const willUseV3 = this.canCallStediHealthcare();
-      // #region agent log
-      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' },
-        body: JSON.stringify({
-          sessionId: '4ae50e',
-          runId: process.env.STEDI_ARCH_DEBUG_RUN || 'pre-fix',
-          hypothesisId: 'H1',
-          location: 'insurance-service.js:checkEligibility:inputFlags',
-          message: 'eligibility_input_flags',
-          data: {
-            hasPatientName: Boolean(eligibilityData.patientName),
-            hasDateOfBirth: Boolean(eligibilityData.dateOfBirth),
-            hasMemberId: Boolean(eligibilityData.memberId),
-            hasPayerId: Boolean(eligibilityData.payerId),
-            willUseV3
-          },
-          timestamp: Date.now()
-        })
-      }).catch(() => {});
-      // #endregion
 
       const stedi271Parser = require('./stedi-271-parser');
       let eligibilityResponse = null;
@@ -356,27 +335,6 @@ class InsuranceService {
             const msg = apiError.response.data?.message || apiError.response.data?.error;
             if (msg) console.warn('   Detail:', String(msg).slice(0, 200));
           }
-
-          // #region agent log
-          fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' },
-            body: JSON.stringify({
-              sessionId: '4ae50e',
-              runId: process.env.STEDI_ARCH_DEBUG_RUN || 'pre-fix',
-              hypothesisId: 'H1',
-              location: 'insurance-service.js:checkEligibility:v3ErrorCode',
-              message: 'v3_request_error_code',
-              data: {
-                status: apiError.response?.status || null,
-                stediCode: apiError.response?.data?.code || null,
-                hasPatientName: Boolean(eligibilityData.patientName),
-                hasDateOfBirth: Boolean(eligibilityData.dateOfBirth)
-              },
-              timestamp: Date.now()
-            })
-          }).catch(() => {});
-          // #endregion
         }
       }
 
@@ -1087,27 +1045,6 @@ class InsuranceService {
         serviceTypeCodes: [this._cptToServiceTypeCode(eligibilityData.serviceCode)]
       }
     };
-
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' },
-      body: JSON.stringify({
-        sessionId: '4ae50e',
-        runId: process.env.STEDI_ARCH_DEBUG_RUN || 'pre-fix',
-        hypothesisId: 'H1',
-        location: 'insurance-service.js:_buildHealthcareEligibilityJson:buildFlags',
-        message: 'v3_body_build_flags',
-        data: {
-          inputPatientNameProvided: Boolean(eligibilityData.patientName),
-          inputDobProvided: Boolean(eligibilityData.dateOfBirth),
-          subscriberUsesFallbackName: !eligibilityData.patientName,
-          subscriberUsesFallbackDob: !eligibilityData.dateOfBirth
-        },
-        timestamp: Date.now()
-      })
-    }).catch(() => {});
-    // #endregion
 
     if (eligibilityData.dateOfService) {
       body.encounter.dateOfService = String(eligibilityData.dateOfService).replace(/-/g, '');

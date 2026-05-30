@@ -12,25 +12,41 @@ This repository ships **two distinct user journeys** that share branding/UI toke
 
 ### Provider Portal (licensed providers)
 
-- **Sign in**: `/unified-dashboard/login.html`
-  - Email + password.
-- **Create account**: `/unified-dashboard/signup.html`
-  - Provider onboarding + email verification.
+- **Sign in**: `/login` → `unified-dashboard/login.html`
+  - Somo-branded email + password (matches `/signup` shell).
+  - Optional **`?redirect=`** query param: after successful login, navigates to a same-origin path (e.g. `/business/agent.html`). Invalid or cross-origin values fall back to `/business/today.html`.
+  - **No demo login UI** on this page.
+- **Create account**: `/signup` → `unified-dashboard/signup.html`
+  - Provider onboarding wizard + email verification.
 
 ### Portal router (recommended front door)
 
-- **Choose portal**: `/unified-dashboard/portal.html`
-  - Routes users to Patient Portal vs Provider Portal.
+- **Choose portal**: `/unified-dashboard/portal.html` (or `/portal` when routed)
+  - Routes users to Patient Portal vs Provider Portal (`/login` for providers).
+
+### Local owner credentials (dev only)
+
+- Template: `local/provider-login.credentials.example` → copy to `local/provider-login.credentials` (gitignored).
+- Env mirror: `SOMO_OWNER_EMAIL`, `SOMO_OWNER_PASSWORD`, optional `SOMO_OWNER_CLINIC_PHONE` in `middleware-platform/.env`.
+- Sync DB: `cd middleware-platform && npm run ensure:somo-owner` — see `local/README.md`.
 
 ## Rules (to prevent future drift)
 
-- **No demo/test UI** in production pages.
-  - Do not add “Quick Test Accounts”, “TEST MODE”, or similar shortcuts.
+- **No demo/test UI** on `/login` or other production provider pages.
+  - Do not add “Quick Test Accounts”, “Demo login”, “TEST MODE”, or similar shortcuts.
 - **No alternate entrypoints**.
-  - Do not create additional patient login pages or provider login pages.
-  - If you need a new UX, update the canonical page instead.
+  - Do not create additional provider login pages; update `/login` instead.
 - **No multi-document HTML files**.
   - A single `.html` file must contain exactly one `<head>` section and one closing `</html>`.
-- **Auth CTAs always route to the portal router** unless you are linking from inside a specific portal.
-  - External links/landing pages should go to `/unified-dashboard/portal.html`.
+- **Auth CTAs on marketing** may link directly to `/signup` or `/login`; the portal router remains the multi-portal front door.
 
+## Marketing landing dev (`somo-landing`)
+
+- Hot reload: `cd unified-dashboard/somo-landing && npm run dev` → `http://localhost:5180`
+- Vite proxies `/login`, `/signup`, `/api`, `/unified-dashboard`, and `/business` to middleware (`VITE_API_PROXY`, default `:4000`).
+- `VITE_LOGIN_URL` / `VITE_SIGNUP_URL` in `.env.development` — Hero **Sign in** uses `loginUrl()` (default `/login?utm_source=somo` on the dev server).
+- Production build on `:4000` uses same paths without a separate port.
+
+## API host (separate)
+
+- Subdomain/API marketing signup may still use `middleware-platform/public/signup/index.html` — unchanged by provider `/login` work.

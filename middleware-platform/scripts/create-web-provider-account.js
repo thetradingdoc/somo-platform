@@ -50,25 +50,6 @@ function parseArgs() {
   return out;
 }
 
-function generateClinicSlug(clinicName) {
-  return clinicName
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 50);
-}
-
-async function ensureUniqueClinicSlug(baseSlug) {
-  let slug = baseSlug;
-  let counter = 1;
-  while (await db.getClinicBySlug(slug)) {
-    slug = `${baseSlug}-${counter}`;
-    counter++;
-  }
-  return slug;
-}
-
 async function main() {
   const args = parseArgs();
   const email = (
@@ -130,34 +111,7 @@ Optional: --subdomain=my-brand   SKIP_RETELL=1
     process.exit(1);
   }
 
-  const merchantId = `merchant-${uuidv4()}`;
-  const apiKey = `mk_${crypto.randomBytes(32).toString('hex')}`;
   const passwordHash = await bcrypt.hash(password, 10);
-
-  console.log('Creating merchant…');
-  try {
-    db.createMerchant({
-      id: merchantId,
-      name: clinicName,
-      api_key: apiKey,
-      api_url: process.env.API_BASE_URL || process.env.PUBLIC_API_URL || '',
-      webhook_url: '',
-      enabled_platforms: ['voice', 'acp'],
-      status: 'active',
-      ...(fixedSubdomain ? { subdomain: fixedSubdomain.toLowerCase().replace(/[^a-z0-9-]/g, '') } : {})
-    });
-  } catch (e) {
-    if (e.message && /UNIQUE|subdomain/i.test(e.message)) {
-      console.error('Subdomain already in use. Omit --subdomain or pick another.');
-    }
-    console.error(e.message || e);
-    process.exit(1);
-  }
-
-  const createdMerchant = db.getMerchant(merchantId);
-  const subdomain = createdMerchant?.subdomain || null;
-  console.log(`  merchant_id: ${merchantId}`);
-  console.log(`  subdomain:   ${subdomain || '(none)'}`);
 
   const customerId = `cust_${uuidv4()}`;
   db.createCustomer({
@@ -172,58 +126,29 @@ Optional: --subdomain=my-brand   SKIP_RETELL=1
   });
   db.updateCustomer(customerId, {
     password_hash: passwordHash,
-    merchant_id: merchantId,
     customer_type: 'saas',
     status: 'active'
   });
   console.log(`  customer_id: ${customerId}`);
 
-  const baseSlug = generateClinicSlug(clinicName);
-  if (!baseSlug) {
-    console.error('Invalid clinic name for slug.');
-    process.exit(1);
-  }
-  const clinicSlug = await ensureUniqueClinicSlug(baseSlug);
-  const clinicId = `clinic-${uuidv4()}`;
-
-  await db.createClinic({
-    clinic_id: clinicId,
-    name: clinicName,
-    slug: clinicSlug,
-    phone_number: normalizedPhone,
-    email: email,
-    merchant_id: merchantId,
-    is_active: 1
+  const { provisionSaasTenant } = require('../services/saas-tenant-provision');
+  const provisioned = provisionSaasTenant(db, {
+    customerId,
+    clinicName,
+    phone: normalizedPhone,
+    email,
+    createUser: true,
+    passwordHash,
+    userName: name,
+    subdomain: fixedSubdomain || undefined
   });
-  console.log(`  clinic_id:   ${clinicId} (slug: ${clinicSlug})`);
-
-  try {
-    db.createClinicPhoneNumber({
-      id: `phone-${uuidv4()}`,
-      clinic_id: clinicId,
-      phone_number: normalizedPhone,
-      status: 'active'
-    });
-  } catch (e) {
-    console.warn('  (phone link skipped)', e.message);
-  }
-
-  const userId = `user-${uuidv4()}`;
-  try {
-    db.createUser({
-      id: userId,
-      email,
-      password_hash: passwordHash,
-      name,
-      role: 'healthcare_provider',
-      merchant_id: merchantId,
-      clinic_id: clinicId,
-      auth_method: 'email'
-    });
-    console.log(`  user_id:     ${userId}`);
-  } catch (e) {
-    console.warn('  (user row skipped)', e.message);
-  }
+  const resolvedMerchantId = provisioned.merchantId;
+  const clinicId = provisioned.clinicId;
+  const createdMerchant = db.getMerchant(resolvedMerchantId);
+  const subdomain = createdMerchant?.subdomain || fixedSubdomain || null;
+  console.log(`  merchant_id: ${resolvedMerchantId}`);
+  console.log(`  subdomain:   ${subdomain || '(none)'}`);
+  console.log(`  clinic_id:   ${clinicId}`);
 
   try {
     db.allocateFreeCredits(customerId, 250);
@@ -278,7 +203,7 @@ Optional: --subdomain=my-brand   SKIP_RETELL=1
   console.log('');
   console.log('  Login: unified-dashboard login.html with this email + password.');
   console.log('  Landing REACT_APP_MERCHANT_ID should match:');
-  console.log(`    ${merchantId}`);
+  console.log(`    ${resolvedMerchantId}`);
   console.log('');
   console.log('  Subdomain URL (if using doclittle.site):');
   console.log(`    https://${subdomain || 'YOUR_SUBDOMAIN'}.doclittle.site/unified-dashboard/login.html`);

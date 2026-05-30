@@ -1,0 +1,169 @@
+/**
+ * Somo auth pages (login) — extends signup-somo.css
+ */
+
+.login-shell {
+  min-height: 100dvh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.login-main {
+  width: 100%;
+  max-width: var(--signup-max, 520px);
+  margin: 0 auto;
+  padding: max(clamp(2rem, 5vw, 3.75rem), env(safe-area-inset-top, 0px)) 20px
+    max(32px, env(safe-area-inset-bottom, 0px));
+  flex: 1;
+  box-sizing: border-box;
+}
+
+/* Match somo-landing nav logo size and breathing room */
+.login-main .signup-logo-link {
+  display: block;
+  margin-top: 0;
+  margin-bottom: clamp(2.75rem, 7vw, 3.5rem);
+}
+
+.login-main .signup-logo-img {
+  height: 54px;
+  width: auto;
+  max-width: min(220px, 78vw);
+  display: block;
+  object-fit: contain;
+}
+
+.login-password-wrap {
+  position: relative;
+  display: block;
+}
+
+.login-password-wrap input {
+  width: 100%;
+  padding-right: 4.75rem;
+  box-sizing: border-box;
+}
+
+.login-show-password {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--signup-border);
+  border-radius: 8px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--signup-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.login-show-password:hover,
+.login-show-password:focus-visible {
+  border-color: var(--signup-green);
+  color: var(--signup-text);
+  outline: none;
+}
+
+.login-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin: 8px 0 20px;
+  font-size: 0.9rem;
+}
+
+.login-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--signup-muted);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.login-remember input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.login-forgot-link {
+  color: var(--signup-green);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.login-forgot-link:hover {
+  text-decoration: underline;
+}
+
+.login-footer-link {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--signup-muted);
+  line-height: 1.5;
+}
+
+.login-footer-link a {
+  color: var(--signup-green);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-footer-link a:hover {
+  text-decoration: underline;
+}
+
+.login-back-home {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 0.88rem;
+  color: var(--signup-muted);
+  text-decoration: none;
+}
+
+.login-back-home:hover {
+  color: var(--signup-text);
+}
+
+/* Prevent iOS zoom on focus; match signup field sizing */
+.login-main .signup-field input {
+  font-size: 16px;
+}
+
+@media (max-width: 480px) {
+  .login-main {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .login-main .signup-title {
+    font-size: 1.5rem;
+  }
+
+  .login-main .signup-sub {
+    margin-bottom: 24px;
+  }
+
+  .login-options {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .login-forgot-link {
+    align-self: flex-end;
+  }
+}

@@ -2,6 +2,18 @@
 
 **Single file:** All former `docs/runbooks/**/*.md` content is merged here. **Last updated:** 2026-05-25
 
+## Somo voice and tenant runbooks (standalone)
+
+| Runbook | Purpose |
+|---------|---------|
+| [voice-inbound-troubleshooting.md](./voice-inbound-troubleshooting.md) | Twilio → `/voice/incoming` → Retell WS → DB |
+| [prod-preflight-census.md](./prod-preflight-census.md) | Read-only prod tenant census before dev writes |
+| [wipe-tenant-data.md](./wipe-tenant-data.md) | Stripe → Twilio → Retell → DB wipe order |
+
+Database Week 1 steps: [SOMO_FOUNDATION_RUNBOOK.md](../Database/SOMO_FOUNDATION_RUNBOOK.md).
+
+---
+
 ## Table of contents
 
 - [Alert Rules Configuration (Section 20) (`ALERT_RULES.md`)](#alert-rules)

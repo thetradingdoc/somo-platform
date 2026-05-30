@@ -1,5 +1,5 @@
-import { signupUrl } from '../api/somoDemo';
-import TrustBar from './TrustBar';
+import { loginUrl, signupUrl } from '../api/somoDemo';
+import ScrollCue from './ScrollCue';
 
 const HERO_CHECKS = ['No credit card', 'Setup in minutes', 'Cancel anytime'];
 
@@ -37,9 +37,11 @@ export default function Hero() {
             fetchPriority="high"
           />
         </a>
-        <a href={signupUrl()} className="somo-nav-cta">
-          Try for $0
-        </a>
+        <div className="somo-nav-actions">
+          <a href={loginUrl()} className="somo-nav-cta">
+            Try for $0
+          </a>
+        </div>
       </nav>
 
       <div className="somo-hero-grid">
@@ -48,7 +50,7 @@ export default function Hero() {
             <span className="somo-hero-badge-stars" aria-hidden="true">
               ★★★★★
             </span>
-            <span>#1 AI Front Desk Receptionist</span>
+            <span>AI Front Desk | 24/7 Calls &amp; Scheduling</span>
           </div>
 
           <h1>Never answer business calls again.</h1>
@@ -98,8 +100,7 @@ export default function Hero() {
           />
         </div>
       </div>
-
-      <TrustBar />
+      <ScrollCue />
     </header>
   );
 }

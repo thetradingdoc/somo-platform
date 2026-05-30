@@ -1,29 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { USE_CASES, requestDemoCall, saveSignupPrefill, signupUrl } from '../api/somoDemo';
+import CapIcon from './CapIcon';
+import ParticleSphere from './ParticleSphere';
 
-const PERSONAS = [
-  'Receptionist',
-  'Appointment Setter',
-  'Lead Qualification',
-  'Customer Service',
-  'Debt Collection',
-  'Survey'
-];
-
-export default function DemoSection() {
-  const [useCase, setUseCase] = useState('');
+export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
+  const [useCase, setUseCase] = useState(selectedUseCase);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
-  const [activePersona, setActivePersona] = useState(-1);
+  const [activeIndex, setActiveIndex] = useState(-1);
+
+  useEffect(() => {
+    if (!selectedUseCase) return;
+    setUseCase(selectedUseCase);
+    const idx = USE_CASES.findIndex((uc) => uc.id === selectedUseCase);
+    if (idx >= 0) setActiveIndex(idx);
+  }, [selectedUseCase]);
+
+  const selectUseCase = (id, index) => {
+    setUseCase(id);
+    setActiveIndex(index);
+    onUseCaseChange?.(id);
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!useCase) {
-      setError('Please select a use case.');
+      setError('Please select a practice type.');
       return;
     }
     if (!consent) {
@@ -50,6 +56,15 @@ export default function DemoSection() {
     }
   };
 
+  const sphereState =
+    status === 'loading'
+      ? 'loading'
+      : status === 'success'
+        ? 'success'
+        : status === 'error'
+          ? 'error'
+          : 'idle';
+
   return (
     <section id="demo" className="dc-demo">
       <h2 className="dc-demo-title">
@@ -60,20 +75,19 @@ export default function DemoSection() {
 
       <div className="dc-demo-grid">
         <div className="dc-demo-card dc-demo-card-visual">
-          <div className="dc-orb" aria-hidden="true" />
+          <ParticleSphere impulseToken={activeIndex} agentState={sphereState} />
           <div className="dc-persona-pills">
-            {PERSONAS.map((label, i) => (
+            {USE_CASES.map((uc, i) => (
               <button
-                key={label}
+                key={uc.id}
                 type="button"
-                className={`dc-pill ${activePersona === i ? 'dc-pill-active' : ''}`}
-                onClick={() => {
-                  setActivePersona(i);
-                  const id = USE_CASES[i]?.id;
-                  if (id) setUseCase(id);
-                }}
+                className={`dc-pill dc-pill--${uc.tier}${activeIndex === i ? ' dc-pill-active' : ''}`}
+                onClick={() => selectUseCase(uc.id, i)}
               >
-                {label}
+                <span className="dc-pill__icon" aria-hidden="true">
+                  <CapIcon name={uc.icon} />
+                </span>
+                {uc.label}
               </button>
             ))}
           </div>
@@ -81,7 +95,7 @@ export default function DemoSection() {
 
         <div className="dc-demo-card dc-demo-card-form">
           <p className="dc-demo-lead">
-            Receive a live call from our agent and discover how our AI caller transforms customer conversations.
+            Receive a live call from our AI front desk — tailored to dental, medical, specialty, and billing workflows.
           </p>
 
           {status === 'success' ? (
@@ -95,16 +109,22 @@ export default function DemoSection() {
           ) : (
             <form onSubmit={onSubmit} className="dc-form">
               <label className="dc-field dc-field-underline">
-                <span className="dc-label">Use Case</span>
+                <span className="dc-label">Practice type</span>
                 <select
                   value={useCase}
-                  onChange={(e) => setUseCase(e.target.value)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const idx = USE_CASES.findIndex((uc) => uc.id === id);
+                    selectUseCase(id, idx);
+                  }}
                   disabled={status === 'loading'}
                   required
                 >
-                  <option value="">Select your use case</option>
+                  <option value="">Select your practice type</option>
                   {USE_CASES.map((uc) => (
-                    <option key={uc.id} value={uc.id}>{uc.label}</option>
+                    <option key={uc.id} value={uc.id}>
+                      {uc.label}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -149,7 +169,11 @@ export default function DemoSection() {
                 </span>
               </label>
 
-              {error && <p className="dc-alert dc-alert-error" role="alert">{error}</p>}
+              {error && (
+                <p className="dc-alert dc-alert-error" role="alert">
+                  {error}
+                </p>
+              )}
 
               <button type="submit" className="dc-btn dc-btn-navy" disabled={status === 'loading'}>
                 {status === 'loading' ? 'Calling you now…' : 'Get a call'}

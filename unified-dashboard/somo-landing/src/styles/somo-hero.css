@@ -9,7 +9,7 @@
   overflow-x: clip;
   display: flex;
   flex-direction: column;
-  padding-bottom: 0.5rem;
+  padding-bottom: 1rem;
 }
 
 .somo-nav {
@@ -36,6 +36,26 @@
   height: 54px;
   width: auto;
   max-width: 100%;
+}
+
+.somo-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.somo-nav-signin {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--somo-text-muted, #4a4a4a);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
+.somo-nav-signin:hover {
+  color: var(--somo-text);
 }
 
 .somo-nav-cta {
@@ -86,7 +106,7 @@
   padding: 0.45rem 0.9rem;
   margin-bottom: 0.75rem;
   border-radius: 999px;
-  background: #e8f7ed;
+  background: var(--somo-lizard-10, #f4fbe8);
   border: 1px solid #c6eccc;
   color: var(--somo-green-dark);
   font-size: 0.82rem;
@@ -265,6 +285,20 @@
 .somo-btn-secondary:hover {
   border-color: #d4cfc4;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.somo-btn-free {
+  background: #fff;
+  color: var(--somo-msu, #164437);
+  border: 2px solid var(--somo-msu, #164437);
+  box-shadow: none;
+}
+
+.somo-btn-free:hover {
+  background: var(--somo-lizard-20, #e8f7d0);
+  border-color: var(--somo-msu, #164437);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transform: none;
 }
 
 .somo-hero-visual {
@@ -463,13 +497,21 @@
     padding: 1.5rem 1.25rem 0.5rem;
   }
 
-  .somo-logo-img {
-    height: 44px;
+  .somo-nav-actions {
+    gap: 0.65rem;
+  }
+
+  .somo-nav-signin {
+    font-size: 0.88rem;
   }
 
   .somo-nav-cta {
-    padding: 0.55rem 1.15rem;
-    font-size: 0.9rem;
+    padding: 0.55rem 1rem;
+    font-size: 0.88rem;
+  }
+
+  .somo-logo-img {
+    height: 44px;
   }
 
   .somo-hero-checks {

@@ -26,7 +26,8 @@ Landing demo (optional, prefill via sessionStorage somo_signup_prefill)
   → Step 6: Accept terms (wizard) OR /terms
   → POST /api/signup/accept-terms
   → /business/trial-activation.html?welcome=1
-  → Voice agent / settings (60 min / 7 days trial)
+  → /business/voice-setup.html (3-step greeting, hours, call your line)
+  → /business/agent.html (control center; 60 min / 7 days trial)
   → Subscribe later via Stripe
 ```
 
@@ -53,7 +54,7 @@ When `TRIAL_SIM_FLOW_ENABLED` is off, after email verify the wizard skips phone 
 | After email verify | SIM off | `/signup?step=terms` or `/terms` |
 | After phone verify + trial | Trial started | `/signup?step=terms` (inline) |
 | After accept-terms | SIM on, phone not verified | `/signup?step=phone` |
-| After accept-terms | SIM on, trial active | `/business/trial-activation.html?welcome=1` |
+| After accept-terms | SIM on, trial active | `/business/trial-activation.html?welcome=1` → `/business/voice-setup.html` |
 | After accept-terms | SIM off, needs subscription | `/business/settings.html?billing=subscribe` |
 | After accept-terms | Card verified (legacy) | `/signup-complete` |
 | After Stripe success | Paid | `/business/settings.html?billing=success` |
@@ -86,7 +87,14 @@ After verify-email, verify-phone, or accept-terms, the UI hydrates `sessionStora
 
 - Shows dedicated `twilio_phone_number`, trial minutes/days from `GET /api/voice-billing/status`
 - Demo-aware copy when `utm_source` is `somo` or `dodgecall` and `somo_signup_prefill` exists
-- Dismiss → `POST /api/voice-billing/trial-welcome-dismiss` → settings
+- Primary CTA → `/business/voice-setup.html`
+- Dismiss → `POST /api/voice-billing/trial-welcome-dismiss` → voice setup
+
+## Voice agent control center
+
+- [unified-dashboard/business/agent.html](../../unified-dashboard/business/agent.html) — line status, toggle (`PATCH /api/kelly/toggle`), greeting/hours, call KPIs
+- Settings → Voice tab is read-only summary with links to `agent.html`
+- Live calls read `voice_agent_settings` + `customers.custom_prompt` in [retell-websocket.js](../../middleware-platform/webhooks/retell-websocket.js) via [voice-agent-runtime.js](../../middleware-platform/services/voice-agent-runtime.js)
 
 ## Landing → signup prefill
 

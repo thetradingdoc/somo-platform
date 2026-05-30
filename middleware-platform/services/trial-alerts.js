@@ -12,6 +12,8 @@ const {
 } = require('./trial-lifecycle');
 const { getTrialDurationDays } = require('./plan-catalog');
 
+const BRAND = process.env.EMAIL_FROM_NAME || 'Somo';
+
 function portalBase() {
   return (
     process.env.ADMIN_PORTAL_BASE_URL ||
@@ -22,6 +24,10 @@ function portalBase() {
 
 function subscribeUrl() {
   return `${portalBase()}/business/settings.html?billing=subscribe`;
+}
+
+function agentUrl() {
+  return `${portalBase()}/business/agent.html`;
 }
 
 async function sendTrialNudge(customer, nudgeKey, { smsBody, emailSubject, emailText }) {
@@ -59,6 +65,24 @@ async function sendTrialNudge(customer, nudgeKey, { smsBody, emailSubject, email
   return channels;
 }
 
+function maybeSendTrialWelcome(customerId) {
+  const customer = db.getCustomer(customerId);
+  if (!customer || !isTrialSimEnabledForCustomer(customer)) return Promise.resolve([]);
+  if (customer.trial_status !== 'active') return Promise.resolve([]);
+
+  const name = customer.company_name || customer.name || 'there';
+  const url = agentUrl();
+  const number = customer.twilio_phone_number || 'your Somo line';
+  const days = getTrialDurationDays();
+  const minutes = getTrialMinutesAllocated();
+
+  return sendTrialNudge(customer, 'trial_welcome', {
+    smsBody: `${BRAND}: Your trial line ${number} is live. Call it to test your AI front desk: ${url}`,
+    emailSubject: 'Welcome to your Somo trial',
+    emailText: `Hi ${name},\n\nYour Somo trial is active (${days} days, ${minutes} minutes included).\n\nYour line: ${number}\nOpen your voice agent dashboard: ${url}\n\n— ${BRAND}`
+  });
+}
+
 function maybeSendTrialUsageNudges(customerId) {
   const customer = db.getCustomer(customerId);
   if (!customer || !isTrialSimEnabledForCustomer(customer)) return;
@@ -73,17 +97,17 @@ function maybeSendTrialUsageNudges(customerId) {
 
   if (pct >= 0.5 && pct < 0.8) {
     sendTrialNudge(customer, 'usage_50', {
-      smsBody: `DocLittle: You've used half your trial minutes (${consumed}/${allocated}). Subscribe to keep your line: ${url}`,
+      smsBody: `${BRAND}: You've used half your trial minutes (${consumed}/${allocated}). Subscribe to keep your line: ${url}`,
       emailSubject: 'Half your trial minutes used',
-      emailText: `Hi ${name},\n\nYou've used ${consumed} of ${allocated} trial minutes.\n\nActivate your plan: ${url}\n\n— DocLittle`
+      emailText: `Hi ${name},\n\nYou've used ${consumed} of ${allocated} trial minutes.\n\nActivate your plan: ${url}\n\n— ${BRAND}`
     }).catch(() => {});
   }
 
   if (pct >= 0.8) {
     sendTrialNudge(customer, 'usage_80', {
-      smsBody: `DocLittle: Trial almost out (${consumed}/${allocated} min). Your line may stop answering soon. Subscribe: ${url}`,
+      smsBody: `${BRAND}: Trial almost out (${consumed}/${allocated} min). Your line may stop answering soon. Subscribe: ${url}`,
       emailSubject: 'Trial minutes almost gone',
-      emailText: `Hi ${name},\n\nYou've used ${consumed} of ${allocated} trial minutes. Activate before your line pauses:\n${url}\n\n— DocLittle`
+      emailText: `Hi ${name},\n\nYou've used ${consumed} of ${allocated} trial minutes. Activate before your line pauses:\n${url}\n\n— ${BRAND}`
     }).catch(() => {});
   }
 }
@@ -98,9 +122,9 @@ function maybeSendTrialLifecycleNudges(customerId, nudgeKey) {
 
   if (nudgeKey === 'trial_expired') {
     return sendTrialNudge(customer, 'trial_expired', {
-      smsBody: `DocLittle: Your trial line ${number} has been released. Subscribe to get a new dedicated number: ${url}`,
+      smsBody: `${BRAND}: Your trial line ${number} has been released. Subscribe to get a new dedicated number: ${url}`,
       emailSubject: 'Your trial line has expired',
-      emailText: `Hi ${name},\n\nYour trial has ended and your number was released.\n\nSubscribe to restore service: ${url}\n\n— DocLittle`
+      emailText: `Hi ${name},\n\nYour trial has ended and your number was released.\n\nSubscribe to restore service: ${url}\n\n— ${BRAND}`
     });
   }
 
@@ -128,23 +152,24 @@ async function runScheduledTrialNudges() {
 
     if (daysLeft === 2) {
       await sendTrialNudge(customer, 'day_5_warning', {
-        smsBody: `DocLittle: 2 days left on your trial line (${remaining} min left). Keep your number: ${url}`,
+        smsBody: `${BRAND}: 2 days left on your trial line (${remaining} min left). Subscribe: ${url}`,
         emailSubject: '2 days left on your trial',
-        emailText: `Hi ${name},\n\nYour trial expires in 2 days. ${remaining} minutes remain.\n\nSubscribe: ${url}\n\n— DocLittle`
+        emailText: `Hi ${name},\n\nYour trial expires in 2 days. ${remaining} minutes remain.\n\nSubscribe: ${url}\n\n— ${BRAND}`
       });
     }
 
     if (daysLeft === 1) {
       await sendTrialNudge(customer, 'day_7_morning', {
-        smsBody: `DocLittle: Your trial line expires tonight. Subscribe now to keep answering: ${url}`,
+        smsBody: `${BRAND}: Your trial line expires tonight. Subscribe now to keep answering: ${url}`,
         emailSubject: 'Trial expires tonight',
-        emailText: `Hi ${name},\n\nYour dedicated line expires tonight unless you subscribe.\n\n${url}\n\n— DocLittle`
+        emailText: `Hi ${name},\n\nYour dedicated line expires tonight unless you subscribe.\n\n${url}\n\n— ${BRAND}`
       });
     }
   }
 }
 
 module.exports = {
+  maybeSendTrialWelcome,
   maybeSendTrialUsageNudges,
   maybeSendTrialLifecycleNudges,
   runScheduledTrialNudges,

@@ -74,6 +74,25 @@ module.exports = defineConfig({
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
       },
     },
+    {
+      name: 'voice-agent',
+      testDir: './e2e',
+      testMatch: '**/voice-agent-page.spec.cjs',
+      timeout: 60_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+      },
+    },
+    {
+      name: 'somo-login',
+      testDir: './e2e',
+      testMatch: '**/somo-login.spec.cjs',
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+      },
+    },
   ],
   webServer: {
     command: `node "${serveScript}" "${landingBuild}" ${landingPort}`,

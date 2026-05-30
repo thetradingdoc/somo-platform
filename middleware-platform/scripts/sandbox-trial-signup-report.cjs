@@ -14,7 +14,6 @@ const REPO = path.join(__dirname, '..', '..');
 const MP = path.join(REPO, 'middleware-platform');
 const WIP = path.join(REPO, '.sandbox-trial', 'middleware-platform');
 const LOG_PATH = path.join(REPO, '.cursor', 'debug-b1a7cd.log');
-const INGEST = 'http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53';
 
 function agentLog(hypothesisId, location, message, data) {
   const line = JSON.stringify({
@@ -29,11 +28,6 @@ function agentLog(hypothesisId, location, message, data) {
   try {
     fs.appendFileSync(LOG_PATH, line + '\n');
   } catch (_) {}
-  fetch(INGEST, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b1a7cd' },
-    body: line
-  }).catch(() => {});
 }
 
 function envSet(name) {

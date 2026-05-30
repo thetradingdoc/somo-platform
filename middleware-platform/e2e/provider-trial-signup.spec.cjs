@@ -65,6 +65,18 @@ test.describe('Provider SIM trial signup (API)', () => {
     expect(emailBody.success).toBe(true);
     expect(emailBody.customer?.email).toBe(email);
 
+    const acceptTerms = await ctx.post('/api/signup/accept-terms');
+    expect(acceptTerms.ok()).toBeTruthy();
+    const termsBody = await acceptTerms.json();
+    expect(termsBody.success).toBe(true);
+
+    let customerAfterTerms = db.getCustomer(signupBody.customer_id);
+    expect(customerAfterTerms.merchant_id).toBeTruthy();
+    const clinicRow = db.db
+      .prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1')
+      .get(customerAfterTerms.merchant_id);
+    expect(clinicRow?.clinic_id).toBeTruthy();
+
     const session = await ctx.get('/api/signup/session');
     if (session.status() === 404) {
       await ctx.dispose();

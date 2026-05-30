@@ -1,0 +1,261 @@
+/* Voice Agent control center */
+.va-zone {
+  background: #fff;
+  border: 1px solid var(--gray-200, #e2e8f0);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.va-line-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.va-line-number {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.va-line-meta {
+  font-size: 0.85rem;
+  color: var(--gray-600, #64748b);
+  width: 100%;
+  margin-top: -8px;
+  padding-left: 2px;
+}
+
+.va-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.va-badge-active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.va-badge-paused {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.va-toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  background: #cbd5e1;
+  border-radius: 13px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.va-toggle.on {
+  background: var(--primary, #16a637);
+}
+
+.va-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.va-toggle.on::after {
+  transform: translateX(22px);
+}
+
+.va-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.va-kpi {
+  background: var(--gray-50, #f8fafc);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.va-kpi-label {
+  font-size: 0.75rem;
+  color: var(--gray-500, #64748b);
+  margin-bottom: 4px;
+}
+
+.va-kpi-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.va-quick-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .va-quick-grid {
+    grid-template-columns: 1fr;
+  }
+  .va-kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.va-field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray-500, #64748b);
+  margin-bottom: 6px;
+}
+
+.va-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-200, #e2e8f0);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.va-save-hint {
+  font-size: 0.75rem;
+  color: var(--gray-500, #64748b);
+  margin-top: 6px;
+}
+
+.va-save-hint.ok {
+  color: #16a637;
+}
+
+.va-toast {
+  font-size: 0.9rem;
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.va-toast.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.va-toast.success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.va-toast.hidden {
+  display: none;
+}
+
+.vah-hours-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vah-hours-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.vah-hours-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+  font-size: 0.85rem;
+}
+
+.vah-hours-times {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vah-hours-times input[type='time'] {
+  padding: 4px 8px;
+  border: 1px solid var(--gray-200, #e2e8f0);
+  border-radius: 6px;
+}
+
+.vah-hours-sep {
+  font-size: 0.8rem;
+  color: var(--gray-500, #64748b);
+}
+
+.va-call-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.va-call-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--gray-100, #f1f5f9);
+}
+
+.va-call-row:last-child {
+  border-bottom: none;
+}
+
+.va-outcome {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.va-outcome-booked {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.va-outcome-voicemail {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.va-outcome-pa_flagged {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.va-outcome-info,
+.va-outcome-transferred {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.va-prompt-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}

@@ -1,8 +1,15 @@
 # Dependencies
 node_modules/
+
+# Build output
+unified-dashboard/hosting-dist/
+unified-dashboard/somo-landing/build/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local provider sign-in (never commit)
+local/provider-login.credentials
 
 # Environment variables
 .env

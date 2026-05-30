@@ -1499,46 +1499,32 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
     // Log for debugging
     console.log(`📝 Accept-terms: customer_type from DB: ${customer.customer_type || 'null'}, from query: ${customerTypeFromQuery || 'null'}, final: ${customerType}`);
 
-    // CRITICAL: Create merchant record for customer (if doesn't exist)
+    // W2-04: merchant + clinic in one transaction
     let merchantId = customer.merchant_id;
-    if (!merchantId) {
+    let clinicId = null;
+    if (!merchantId || customerType === 'saas') {
       try {
-        // Generate unique merchant ID and API key
-        merchantId = uuidv4();
-        const apiKey = `mk_${crypto.randomBytes(32).toString('hex')}`;
-
-        // Determine enabled platforms based on customer type
-        // SaaS customers use voice platform, API customers use ACP/AP2
+        const { provisionSaasTenant } = require('../services/saas-tenant-provision');
         const enabledPlatforms = customerType === 'saas'
           ? ['voice']
           : ['acp', 'ap2', 'voice'];
-
-        // Create merchant record
-        const merchant = {
-          id: merchantId,
-          name: customer.company_name || customer.name || 'Merchant',
-          api_key: apiKey,
-          api_url: '', // Customer can configure later
-          webhook_url: '', // Customer can configure later
-          enabled_platforms: enabledPlatforms,
-          status: 'active'
-        };
-
-        db.createMerchant(merchant);
-        console.log(`✅ Created merchant ${merchantId} for customer ${customer.id}`);
-
-        // Link customer to merchant
-        db.updateCustomer(customer.id, { merchant_id: merchantId });
-        console.log(`✅ Linked customer ${customer.id} to merchant ${merchantId}`);
-
-      } catch (merchantError) {
-        console.error('❌ Failed to create merchant:', merchantError);
-        // Continue - merchant can be created later, but this is critical
-        // In production, we might want to fail here
+        const provisioned = provisionSaasTenant(db, {
+          customerId: customer.id,
+          clinicName: customer.company_name || customer.name,
+          phone: customer.phone_number || customer.twilio_phone_number,
+          email: customer.email,
+          customerType,
+          enabledPlatforms
+        });
+        merchantId = provisioned.merchantId;
+        clinicId = provisioned.clinicId;
+        customer.merchant_id = merchantId;
+        console.log(`✅ Provisioned tenant merchant=${merchantId} clinic=${clinicId}`);
+      } catch (provisionError) {
+        console.error('❌ Failed to provision SaaS tenant:', provisionError);
         const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
         if (isProduction) {
-          console.error('❌ CRITICAL: Merchant creation failed in production');
-          // Don't exit, but log the error
+          console.error('❌ CRITICAL: Tenant provisioning failed in production');
         }
       }
     } else {

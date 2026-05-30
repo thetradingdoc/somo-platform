@@ -113,6 +113,7 @@ router.get('/prompt', authLimiter, async (req, res) => {
             agent_id: customer.retell_agent_id,
             agent_name: agentData?.agent_name || null,
             has_custom_prompt: !!customer.custom_prompt,
+            prompt_synced_at: customer.prompt_synced_at || customer.prompt_updated_at || null,
             tenant_type: tenantType, // 'shop' or 'clinic'
             can_edit: true // All customers can edit for now
         });
@@ -186,50 +187,53 @@ router.put('/prompt', authLimiter, async (req, res) => {
             }
         }
 
-        // Update customer's custom prompt in database
-        db.updateCustomer(customer.id, {
-            custom_prompt: prompt.trim(),
-            prompt_updated_at: new Date().toISOString()
-        });
+        const trimmed = prompt.trim();
+        const agentName = tenantType === 'shop'
+            ? `${customer.company_name || customer.name || 'Shop'} Voice Commerce Assistant`
+            : `${customer.company_name || customer.name || 'Clinic'} Voice Assistant`;
 
-        // Update Retell agent if exists
+        // Retell first (runtime SSOT), then DB cache
         if (customer.retell_agent_id) {
             try {
-                const tenantType = getTenantType(customer);
-                const agentName = tenantType === 'shop' 
-                    ? `${customer.company_name || customer.name || 'Shop'} Voice Commerce Assistant`
-                    : `${customer.company_name || customer.name || 'Clinic'} Voice Assistant`;
-
                 const updateResult = await retellService.updateAgent(customer.retell_agent_id, {
-                    general_prompt: prompt.trim(), // Retell API v2 uses 'general_prompt'
+                    general_prompt: trimmed,
                     agent_name: agentName
                 });
 
                 if (!updateResult.success) {
                     console.error('⚠️  Failed to update Retell agent:', updateResult.error);
-                    // Still return success since we saved to database
-                    return res.json({
-                        success: true,
-                        message: 'Prompt saved to database. Retell agent update failed - please try again.',
-                        warning: true,
-                        prompt: prompt.trim()
+                    return res.status(502).json({
+                        success: false,
+                        error: 'retell_sync_failed',
+                        message: 'Could not update voice provider. Prompt was not saved.',
+                        details: updateResult.error
                     });
                 }
             } catch (error) {
                 console.error('⚠️  Error updating Retell agent:', error.message);
-                return res.json({
-                    success: true,
-                    message: 'Prompt saved to database. Retell agent update failed - please try again.',
-                    warning: true,
-                    prompt: prompt.trim()
+                return res.status(502).json({
+                    success: false,
+                    error: 'retell_sync_failed',
+                    message: 'Could not update voice provider. Prompt was not saved.',
+                    details: error.message
                 });
             }
         }
 
+        const syncedAt = new Date().toISOString();
+        db.updateCustomer(customer.id, {
+            custom_prompt: trimmed,
+            prompt_updated_at: syncedAt,
+            prompt_synced_at: syncedAt
+        });
+
         res.json({
             success: true,
-            message: 'Prompt updated successfully',
-            prompt: prompt.trim()
+            message: customer.retell_agent_id
+                ? 'Prompt updated and synced with voice provider'
+                : 'Prompt saved (no Retell agent linked yet)',
+            prompt_synced_at: syncedAt,
+            prompt: trimmed
         });
     } catch (error) {
         console.error('❌ Update prompt error:', error);

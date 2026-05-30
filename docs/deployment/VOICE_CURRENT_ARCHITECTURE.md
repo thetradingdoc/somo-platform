@@ -96,6 +96,46 @@ cd middleware-platform && node scripts/make-outbound-call.js 8622307479
 cd middleware-platform && npm run verify:agent-config
 ```
 
+## Per-provider settings (portal → live calls)
+
+Tenant resolution on inbound: `To` (Twilio) → `customers.twilio_phone_number` → `customer_id` / `merchant_id`.
+
+| Setting | Storage | Applied at call time |
+|---------|---------|---------------------|
+| On/off | `customers.kelly_status` + `voice_agent_settings.enabled` | `/voice/incoming` TwiML gate + WebSocket `applyProviderRuntime` |
+| Greeting | `voice_agent_settings.greeting` | First spoken response after `call_details` |
+| Business hours | `voice_agent_settings.business_hours` | After-hours message, then `end_call` (no Kelly) |
+| Custom behavior | `customers.custom_prompt` | Prepended to Kelly system prompt (voice channel) |
+
+**Trial without `merchant_id`:** settings are stored on `voice_agent_settings` with synthetic `merchant_id = cust:{customer_id}` and `customer_id` set. Authenticated `/api/voice-agent/settings` does **not** fall back to the default subdomain merchant.
+
+**Persona defaults:** `voice-prompt-templates.js` maps `customers.use_case` to a default `custom_prompt` on trial provision and `POST /api/voice-agent/setup-complete` when empty.
+
+Implementation: [`voice-agent-runtime.js`](../../middleware-platform/services/voice-agent-runtime.js), [`retell-websocket.js`](../../middleware-platform/webhooks/retell-websocket.js).
+
+Provider UI: [`agent.html`](../../unified-dashboard/business/agent.html); first-run [`voice-setup.html`](../../unified-dashboard/business/voice-setup.html).
+
+### Call outcomes and recent-call labels
+
+| `voice_call_log.outcome` | When set |
+|--------------------------|----------|
+| `booked` | Successful `schedule_appointment` without PA flag |
+| `pa_flagged` | Booking with `requires_prior_auth` or pending PA status |
+| `transferred` | Caller or Kelly phrasing indicates handoff to staff |
+| `voicemail` | Call under ~45s with no prior outcome |
+| `info` | Default completed call |
+
+`caller_label` and `caller_phone` are persisted at call end from the WebSocket session (name capture or formatted PSTN). Stats API returns labels via `GET /api/customer/dashboard/agent/stats`.
+
+**Postgres:** `_syncVoiceCallToPostgres` includes `outcome`, `caller_label`, and `caller_phone`. Run:
+
+```bash
+cd middleware-platform
+DATABASE_URL=postgres://... node scripts/migrate-voice-call-log-postgres.cjs
+```
+
+New exports also get columns via [`export-sqlite-to-postgres.js`](../../middleware-platform/scripts/export-sqlite-to-postgres.js).
+
 ## Related runbooks
 
 - Deploy / rollback: [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md)

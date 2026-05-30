@@ -117,7 +117,9 @@ const merged = {
   MIGRATIONS_STRICT: isStaging ? '1' : '0',
   CLOUDRUN_BOOT_DEBUG: parsed.CLOUDRUN_BOOT_DEBUG || (isStaging ? '0' : '1'),
   TRIAL_SIM_FLOW_ENABLED: parsed.TRIAL_SIM_FLOW_ENABLED || (isStaging ? '1' : parsed.TRIAL_SIM_FLOW_ENABLED || '0'),
-  SOMO_OWNER_EMAIL: parsed.SOMO_OWNER_EMAIL || 'drlittlekids@gmail.com'
+  SOMO_OWNER_EMAIL: parsed.SOMO_OWNER_EMAIL || 'drlittlekids@gmail.com',
+  STAGING: isStaging ? '1' : '0',
+  ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0'
 };
 
 if (isStaging) {

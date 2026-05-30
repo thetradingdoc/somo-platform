@@ -1,13 +1,16 @@
 @import '../../../assets/css/somo-tokens.css';
 @import './somo-hero.css';
 @import './somo-demo.css';
+@import './somo-sections.css';
+@import './capability-explorer.css';
+@import './scroll-cue.css';
 
 :root {
-  /* Marketing landing overrides (light pitch layout) */
+  /* Marketing landing overrides (Image 1 palette) */
   --somo-bg: #ffffff;
-  --somo-green: var(--somo-green-marketing);
-  --somo-green-hover: var(--somo-green-marketing-hover);
-  --somo-green-dark: var(--somo-green-marketing-dark);
+  --somo-green: var(--somo-lizard);
+  --somo-green-hover: var(--somo-lizard-hover);
+  --somo-green-dark: var(--somo-msu);
   --somo-text: var(--somo-text-marketing);
   --somo-muted: var(--somo-muted-marketing);
   --somo-border: var(--somo-border-marketing);

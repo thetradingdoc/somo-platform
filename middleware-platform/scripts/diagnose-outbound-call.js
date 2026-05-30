@@ -156,9 +156,7 @@ async function testRetellAPI() {
         response.data.llm_websocket_url ||
         'N/A';
       logInfo(`WebSocket URL: ${wsUrl}`);
-      // #region agent log
-      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:DEBUG_RUN_ID,hypothesisId:'H2',location:'scripts/diagnose-outbound-call.js:testRetellAPI',message:'retell agent telephony shape',data:{agentId:salesAgentId,agentName:response.data.agent_name||null,hasPhone:!!(response.data.phone_number||response.data.telephony?.phone_number),hasInboundAgent:!!response.data.inbound_agent_id,hasOutboundAgent:!!response.data.outbound_agent_id},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion agent log
+ agent log
       try {
         const phonesResp = await axios.get('https://api.retellai.com/v2/list-phone-numbers', {
           headers: { 'Authorization': `Bearer ${apiKey}` },
@@ -167,9 +165,7 @@ async function testRetellAPI() {
         const items = Array.isArray(phonesResp.data?.items) ? phonesResp.data.items : [];
         const fromNumber = process.env.TWILIO_PHONE_NUMBER;
         const matched = items.find((i) => i.phone_number === fromNumber);
-        // #region agent log
-        fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:DEBUG_RUN_ID,hypothesisId:'H1',location:'scripts/diagnose-outbound-call.js:testRetellAPI',message:'retell imported number mapping',data:{fromNumber:fromNumber||null,totalImportedNumbers:items.length,fromNumberImported:!!matched,inboundAgentId:matched?.inbound_agent_id||null,outboundAgentId:matched?.outbound_agent_id||null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion agent log
+ agent log
       } catch (_) {}
       return true;
     }
@@ -229,9 +225,7 @@ async function testTwilioConfiguration() {
         client.trunking.v1.trunks(trunkSid).credentialLists.list(),
         client.trunking.v1.trunks(trunkSid).ipAccessControlLists.list()
       ]);
-      // #region agent log
-      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:DEBUG_RUN_ID,hypothesisId:'H3',location:'scripts/diagnose-outbound-call.js:testTwilioConfiguration',message:'twilio trunk auth attachments',data:{trunkSid,credentialListCount:credentialLists.length,ipAclCount:ipAccessControlLists.length,hasAuthConfigured:credentialLists.length>0||ipAccessControlLists.length>0},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion agent log
+ agent log
     } catch (_) {}
     
     return true;
@@ -458,9 +452,7 @@ async function monitorCallStatus(callId, duration = 10000) {
     if (finalData.call_cost) {
       logInfo(`   Cost: $${finalData.call_cost.combined_cost || '0.000'}`);
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:DEBUG_RUN_ID,hypothesisId:'H4',location:'scripts/diagnose-outbound-call.js:monitorCallStatus',message:'retell final outbound status',data:{callId,callStatus:finalData.call_status||null,disconnectionReason:finalData.disconnection_reason||null,errorCode:finalData.error_code||null,durationMs:finalData.duration_ms||0},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
+ agent log
   } catch (error) {
     logError(`Failed to get final status: ${error.message}`);
   }
@@ -552,9 +544,7 @@ async function testTwilioDirectCall() {
     logInfo(`Call SID: ${call.sid}`);
     logInfo(`Status: ${call.status}`);
     logInfo(`Direction: ${call.direction}`);
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:DEBUG_RUN_ID,hypothesisId:'H5',location:'scripts/diagnose-outbound-call.js:testTwilioDirectCall',message:'twilio direct fallback call result',data:{twilioCallSid:call.sid,status:call.status||null,direction:call.direction||null,to:TARGET_PHONE,from:fromNumber},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
+ agent log
     
     return call.sid;
   } catch (error) {

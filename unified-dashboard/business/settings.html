@@ -11,6 +11,7 @@
     <script src="../assets/js/auth-utils.js"></script>
     <script src="../assets/js/provider-shell.js"></script>
     <script src="../assets/js/provider-layout.js"></script>
+    <script src="../assets/js/voice-hours-picker.js"></script>
     <style>
         :root {
             --primary: #16a637;
@@ -701,110 +702,58 @@
                 </div>
             </div>
 
-            <!-- Voice Agent Settings -->
+            <!-- Voice Agent (managed on agent.html) -->
             <div class="settings-section settings-panel" data-settings-panel="voice">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                     <div>
-                        <h3>🎛️ Voice Agent Settings</h3>
+                        <h3>Voice Agent</h3>
                         <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 0;">
-                            Control your voice agent availability and messaging. These settings are stored per practice and can be pushed to your Retell agent.
+                            Greeting, hours, on/off, and Kelly customization live on the Voice Agent page. Changes apply on your next call.
                         </p>
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="window.location.href='agent.html'">Open Voice Agent</button>
+                    <a class="btn btn-primary btn-sm" href="agent.html">Open Voice Agent</a>
                 </div>
 
-                <div class="setting-row">
+                <div class="setting-row" style="margin-top:16px;">
                     <div class="setting-info">
-                        <h4>Agent Status</h4>
-                        <p class="setting-description">Enable or disable the voice agent for this tenant.</p>
-                    </div>
-                    <div class="setting-action">
-                        <label style="display:flex;align-items:center;gap:8px;">
-                            <input type="checkbox" id="vaEnabled">
-                            <span id="vaEnabledLabel">Enabled</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <h4>Retell Agent ID</h4>
-                        <p class="setting-description">Agent ID configured in Retell.</p>
-                    </div>
-                    <div class="setting-action">
-                        <input type="text" id="vaAgentId" class="form-input" style="min-width:220px;" placeholder="agent_xxx">
+                        <h4>Status</h4>
+                        <p class="setting-description" id="vaSettingsStatusSummary">Loading…</p>
                     </div>
                 </div>
 
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>Greeting</h4>
-                        <p class="setting-description">Opening greeting used by the agent.</p>
+                        <p class="setting-description" id="vaSettingsGreetingSummary">—</p>
                     </div>
-                    <div class="setting-action" style="flex:1; max-width:100%;">
-                        <textarea id="vaGreeting" rows="3" class="form-input" style="width:100%;"></textarea>
-                    </div>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <h4>After-hours Message</h4>
-                        <p class="setting-description">Message used when outside business hours.</p>
-                    </div>
-                    <div class="setting-action" style="flex:1; max-width:100%;">
-                        <textarea id="vaAfterHours" rows="2" class="form-input" style="width:100%;"></textarea>
+                    <div class="setting-action">
+                        <a class="btn btn-secondary btn-sm" href="agent.html#greeting">Edit greeting</a>
                     </div>
                 </div>
 
                 <div class="setting-row">
                     <div class="setting-info">
-                        <h4>Business Hours (JSON)</h4>
-                        <p class="setting-description">Optional hours object, e.g. {"mon":"9-5","tue":"9-5"}.</p>
+                        <h4>Business hours</h4>
+                        <p class="setting-description" id="vaSettingsHoursSummary">—</p>
                     </div>
-                    <div class="setting-action" style="flex:1; max-width:100%;">
-                        <textarea id="vaBusinessHours" rows="2" class="form-input" style="width:100%;"></textarea>
+                    <div class="setting-action">
+                        <a class="btn btn-secondary btn-sm" href="agent.html#hours">Edit hours</a>
                     </div>
                 </div>
 
-                <div class="setting-row" style="justify-content:flex-end;">
-                    <button class="btn btn-secondary" onclick="loadVoiceAgentSettings()">Reload</button>
-                    <button class="btn btn-primary" onclick="saveVoiceAgentSettings()">Save Settings</button>
-                    <div id="vaStatus" style="font-size:12px;color:var(--gray-600);margin-left:12px;"></div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h4>Kelly prompt</h4>
+                        <p class="setting-description">Advanced behavior instructions for live calls.</p>
+                    </div>
+                    <div class="setting-action">
+                        <a class="btn btn-secondary btn-sm" href="agent.html#prompt">Customize Kelly</a>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Voice Agent Prompt -->
-            <div class="settings-section settings-panel" data-settings-panel="voice">
-                <h3>🎙️ Voice Agent Prompt</h3>
-                <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 20px;">
-                    Customize your AI voice agent's behavior and responses. The agent will use this prompt to handle
-                    patient calls.
+                <p style="font-size:13px;color:var(--gray-500);margin-top:12px;">
+                    First-time setup: <a href="voice-setup.html">Run the 3-step voice setup wizard</a>
                 </p>
-
-                <div id="promptEditorContainer">
-                    <div style="margin-bottom: 16px;">
-                        <label for="agentPrompt" style="display: block; margin-bottom: 8px; font-weight: 600;">Agent
-                            Prompt</label>
-                        <textarea id="agentPrompt" rows="15"
-                            style="width: 100%; padding: 12px; border: 2px solid var(--gray-200); border-radius: 8px; font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; line-height: 1.6; resize: vertical;"
-                            placeholder="Enter your custom prompt here..."></textarea>
-                        <div style="margin-top: 8px; font-size: 12px; color: var(--gray-500);">
-                            <span id="promptCharCount">0</span> / 10,000 characters
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 12px;">
-                        <button class="btn btn-primary" onclick="savePrompt()" id="savePromptBtn">
-                            💾 Save Prompt
-                        </button>
-                        <button class="btn btn-secondary" onclick="resetPrompt()">
-                            🔄 Reset to Default
-                        </button>
-                        <button class="btn btn-secondary" onclick="previewPrompt()">
-                            👁️ Preview
-                        </button>
-                    </div>
-                    <div id="promptStatus" style="margin-top: 12px; display: none;"></div>
-                </div>
             </div>
 
             <!-- Pay-as-you-go Billing -->
@@ -1145,6 +1094,10 @@
                 title: 'Settings'
             });
             setupSettingsTabs();
+            const tabParam = new URLSearchParams(window.location.search).get('tab');
+            if (tabParam === 'voice') {
+                setSettingsTab('voice');
+            }
 
             // Close sidebar on window resize if switching to desktop
             window.addEventListener('resize', () => {
@@ -1163,7 +1116,7 @@
             loadCalendarStatus();
             loadProviderBookingReadiness();
             loadMerchantInfo();
-            loadVoiceAgentSettings();
+            loadVoiceAgentSettingsSummary();
             loadNotificationSettings();
             loadServiceStatuses();
             loadSecurityMeta();
@@ -1358,78 +1311,37 @@
             try { await viewSessions(); } catch (_) {}
         }
 
-        // Voice Agent Settings (UI → backend)
-        async function loadVoiceAgentSettings() {
-            const statusEl = document.getElementById('vaStatus');
-            if (statusEl) statusEl.textContent = 'Loading...';
+        async function loadVoiceAgentSettingsSummary() {
+            const statusEl = document.getElementById('vaSettingsStatusSummary');
+            const greetEl = document.getElementById('vaSettingsGreetingSummary');
+            const hoursEl = document.getElementById('vaSettingsHoursSummary');
             try {
-                const response = await fetch(`${API_BASE}/api/voice-agent/settings`, {
-                    credentials: 'include'
-                });
-                const data = await response.json();
-                if (data.success && data.settings) {
-                    const s = data.settings;
-                    document.getElementById('vaEnabled').checked = !!s.enabled;
-                    document.getElementById('vaEnabledLabel').textContent = s.enabled ? 'Enabled' : 'Disabled';
-                    document.getElementById('vaAgentId').value = s.retell_agent_id || '';
-                    document.getElementById('vaGreeting').value = s.greeting || '';
-                    document.getElementById('vaAfterHours').value = s.after_hours_message || '';
-                    document.getElementById('vaBusinessHours').value = s.business_hours
-                        ? (typeof s.business_hours === 'string' ? s.business_hours : JSON.stringify(s.business_hours))
-                        : '';
-                    if (statusEl) statusEl.textContent = 'Settings loaded';
-                } else {
-                    if (statusEl) statusEl.textContent = 'No settings found';
+                const [settingsRes, kellyRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/voice-agent/settings`, { credentials: 'include' }),
+                    fetch(`${API_BASE}/api/kelly/status`, { credentials: 'include' })
+                ]);
+                const settingsData = await settingsRes.json();
+                const kellyData = kellyRes.ok ? await kellyRes.json() : null;
+                const s = settingsData.success ? settingsData.settings : null;
+                const kellyOn = kellyData?.status !== 'paused';
+                if (statusEl) {
+                    statusEl.textContent = kellyOn
+                        ? (s?.enabled === 0 || s?.enabled === false ? 'Paused in voice settings' : 'Active — taking calls')
+                        : 'Paused — not taking calls';
+                }
+                if (greetEl) {
+                    greetEl.textContent = s?.greeting
+                        ? (s.greeting.length > 120 ? s.greeting.slice(0, 120) + '…' : s.greeting)
+                        : 'Default greeting (edit on Voice Agent page)';
+                }
+                if (hoursEl && window.VoiceHoursPicker) {
+                    hoursEl.textContent = VoiceHoursPicker.formatHoursSummary(s?.business_hours);
+                } else if (hoursEl) {
+                    hoursEl.textContent = s?.business_hours ? 'Configured' : 'Not set';
                 }
             } catch (error) {
-                console.error('Error loading voice agent settings:', error);
-                if (statusEl) statusEl.textContent = 'Failed to load settings';
-            }
-        }
-
-        async function saveVoiceAgentSettings() {
-            const statusEl = document.getElementById('vaStatus');
-            if (statusEl) statusEl.textContent = 'Saving...';
-            try {
-                let businessHours = document.getElementById('vaBusinessHours').value.trim();
-                if (businessHours) {
-                    try {
-                        businessHours = JSON.parse(businessHours);
-                    } catch (e) {
-                        alert('Business hours must be valid JSON, e.g. {"mon":"9-5","tue":"9-5"}');
-                        if (statusEl) statusEl.textContent = 'Invalid business hours JSON';
-                        return;
-                    }
-                } else {
-                    businessHours = null;
-                }
-
-                const payload = {
-                    retell_agent_id: document.getElementById('vaAgentId').value.trim() || null,
-                    enabled: document.getElementById('vaEnabled').checked,
-                    greeting: document.getElementById('vaGreeting').value.trim() || null,
-                    after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
-                    business_hours: businessHours
-                };
-
-                const response = await fetch(`${API_BASE}/api/voice-agent/settings`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await response.json();
-                if (data.success) {
-                    if (statusEl) statusEl.textContent = 'Saved';
-                    alert('Voice agent settings saved.');
-                } else {
-                    if (statusEl) statusEl.textContent = data.message || 'Save failed';
-                    alert(data.error || 'Failed to save settings');
-                }
-            } catch (error) {
-                console.error('Error saving voice agent settings:', error);
-                if (statusEl) statusEl.textContent = 'Error saving';
-                alert('Failed to save voice agent settings');
+                console.error('Voice settings summary:', error);
+                if (statusEl) statusEl.textContent = 'Could not load voice agent summary';
             }
         }
 
@@ -2237,147 +2149,6 @@
             window.location.href = '../login.html';
         }
 
-        // Voice Agent Prompt Management
-        let currentPrompt = null;
-        let originalPrompt = null;
-
-        async function loadPrompt() {
-            try {
-                const response = await fetch(`${API_BASE}/api/customer/agent/prompt`, {
-                    credentials: 'include'
-                });
-                const data = await response.json();
-
-                if (data.success) {
-                    currentPrompt = data.prompt;
-                    originalPrompt = data.prompt;
-                    document.getElementById('agentPrompt').value = data.prompt;
-                    updateCharCount();
-                } else {
-                    showPromptStatus('error', 'Failed to load prompt: ' + (data.error || 'Unknown error'));
-                }
-            } catch (error) {
-                console.error('Load prompt error:', error);
-                showPromptStatus('error', 'Failed to load prompt. Please refresh the page.');
-            }
-        }
-
-        function updateCharCount() {
-            const textarea = document.getElementById('agentPrompt');
-            const count = textarea.value.length;
-            document.getElementById('promptCharCount').textContent = count;
-
-            if (count > 10000) {
-                document.getElementById('promptCharCount').style.color = 'var(--danger)';
-            } else {
-                document.getElementById('promptCharCount').style.color = 'var(--gray-500)';
-            }
-        }
-
-        async function savePrompt() {
-            const prompt = document.getElementById('agentPrompt').value.trim();
-
-            if (!prompt) {
-                showPromptStatus('error', 'Prompt cannot be empty');
-                return;
-            }
-
-            if (prompt.length > 10000) {
-                showPromptStatus('error', 'Prompt is too long. Maximum 10,000 characters.');
-                return;
-            }
-
-            const saveBtn = document.getElementById('savePromptBtn');
-            saveBtn.disabled = true;
-            saveBtn.textContent = '💾 Saving...';
-
-            try {
-                const response = await fetch(`${API_BASE}/api/customer/agent/prompt`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({ prompt })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    currentPrompt = prompt;
-                    showPromptStatus('success', data.message || 'Prompt saved successfully!');
-                    if (data.warning) {
-                        showPromptStatus('warning', 'Prompt saved but Retell agent update failed. Please try again.');
-                    }
-                } else {
-                    showPromptStatus('error', data.error || 'Failed to save prompt');
-                }
-            } catch (error) {
-                console.error('Save prompt error:', error);
-                showPromptStatus('error', 'Failed to save prompt. Please try again.');
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.textContent = '💾 Save Prompt';
-            }
-        }
-
-        function resetPrompt() {
-            if (confirm('Reset to default prompt? This will discard your changes.')) {
-                document.getElementById('agentPrompt').value = originalPrompt || '';
-                updateCharCount();
-                showPromptStatus('info', 'Prompt reset to original');
-            }
-        }
-
-        function previewPrompt() {
-            const prompt = document.getElementById('agentPrompt').value;
-            const previewWindow = window.open('', 'Prompt Preview', 'width=800,height=600');
-            previewWindow.document.write(`
-                <html>
-                    <head>
-                        <title>Prompt Preview</title>
-                        <style>
-                            body { font-family: monospace; padding: 20px; white-space: pre-wrap; }
-                        </style>
-                    </head>
-                    <body>${prompt || 'No prompt entered'}</body>
-                </html>
-            `);
-        }
-
-        function showPromptStatus(type, message) {
-            const statusEl = document.getElementById('promptStatus');
-            statusEl.style.display = 'block';
-            statusEl.style.padding = '12px';
-            statusEl.style.borderRadius = '8px';
-            statusEl.style.marginTop = '12px';
-
-            if (type === 'success') {
-                statusEl.style.background = '#d1fae5';
-                statusEl.style.color = '#065f46';
-                statusEl.style.border = '1px solid #10b981';
-            } else if (type === 'error') {
-                statusEl.style.background = '#fee2e2';
-                statusEl.style.color = '#991b1b';
-                statusEl.style.border = '1px solid #ef4444';
-            } else if (type === 'warning') {
-                statusEl.style.background = '#fef3c7';
-                statusEl.style.color = '#92400e';
-                statusEl.style.border = '1px solid #f59e0b';
-            } else {
-                statusEl.style.background = '#dbeafe';
-                statusEl.style.color = '#16a637';
-                statusEl.style.border = '1px solid #16a637';
-            }
-
-            statusEl.textContent = message;
-            setTimeout(() => {
-                if (type === 'success' || type === 'info') {
-                    statusEl.style.display = 'none';
-                }
-            }, 5000);
-        }
-
         // Pay-as-you-go Billing
         async function loadBillingUsage() {
             try {
@@ -2457,11 +2228,7 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
-            loadPrompt();
             loadBillingUsage();
-
-            // Update char count as user types
-            document.getElementById('agentPrompt').addEventListener('input', updateCharCount);
 
             // Check for payment success/cancel in URL
             const urlParams = new URLSearchParams(window.location.search);

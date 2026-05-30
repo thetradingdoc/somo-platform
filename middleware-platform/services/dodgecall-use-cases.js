@@ -6,7 +6,13 @@ const USE_CASES = new Set([
   'lead_qualification',
   'customer_service',
   'debt_collection',
-  'survey'
+  'survey',
+  'dental_front_desk',
+  'medical_clinic',
+  'specialty_practice',
+  'bilingual_front_desk',
+  'after_hours',
+  'patient_billing'
 ]);
 
 const USE_CASE_LABELS = {
@@ -15,7 +21,13 @@ const USE_CASE_LABELS = {
   lead_qualification: 'Lead Qualification',
   customer_service: 'Customer Service',
   debt_collection: 'Debt Collection',
-  survey: 'Survey'
+  survey: 'Survey',
+  dental_front_desk: 'Dental Front Desk',
+  medical_clinic: 'Medical Clinic',
+  specialty_practice: 'Specialty Practice',
+  bilingual_front_desk: 'Bilingual Front Desk',
+  after_hours: 'After-hours Coverage',
+  patient_billing: 'Patient Billing'
 };
 
 const USE_CASE_OPENERS = {
@@ -24,7 +36,19 @@ const USE_CASE_OPENERS = {
   lead_qualification: 'You are qualifying a lead for a DodgeCall sales demo call.',
   customer_service: 'You are providing helpful customer service on this DodgeCall demo call.',
   debt_collection: 'You are conducting a polite, compliant collections-style DodgeCall demo (fictional balance).',
-  survey: 'You are running a short customer satisfaction survey for this DodgeCall demo.'
+  survey: 'You are running a short customer satisfaction survey for this DodgeCall demo.',
+  dental_front_desk:
+    'You are calling as a friendly dental office front desk for this Somo demo — scheduling, insurance FAQs, and new patient intake.',
+  medical_clinic:
+    'You are calling as a medical clinic front desk for this Somo demo — appointments, prescription refills, and call routing.',
+  specialty_practice:
+    'You are calling as a specialty practice front desk for this Somo demo — referrals, prior auth handoff, and specialist scheduling.',
+  bilingual_front_desk:
+    'You are calling as a bilingual medical front desk for this Somo demo — greet in English or Spanish based on the caller.',
+  after_hours:
+    'You are calling as an after-hours medical line for this Somo demo — nights and weekends without voicemail.',
+  patient_billing:
+    'You are calling as a patient billing representative for this Somo demo — balances, payment plans, and statements.'
 };
 
 function getUseCaseContext(useCase) {

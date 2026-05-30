@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const API_BASE = window.location.origin.replace(/\/$/, '');
+  const API_BASE = (typeof resolveApiBase === 'function' ? resolveApiBase() : window.location.origin.replace(/\/$/, ''));
   const PREFILL_KEY = 'somo_signup_prefill';
   const BRAND_ASSETS = '/unified-dashboard/assets/brand';
   const PERSONA_ICONS = `${BRAND_ASSETS}/signup`;
@@ -53,7 +53,13 @@
     customer_service: 'small_business',
     debt_collection: 'other',
     survey: 'other',
-    healthcare_clinic: 'healthcare_clinic'
+    healthcare_clinic: 'healthcare_clinic',
+    dental_front_desk: 'healthcare_clinic',
+    medical_clinic: 'healthcare_clinic',
+    specialty_practice: 'healthcare_clinic',
+    bilingual_front_desk: 'healthcare_clinic',
+    after_hours: 'healthcare_clinic',
+    patient_billing: 'healthcare_clinic'
   };
 
   const state = {
@@ -159,7 +165,13 @@
       panel.classList.toggle('hidden', panel.dataset.signupStep !== stepId);
     });
     const backBtn = $('signupBack');
-    if (backBtn) backBtn.disabled = stepId === STEPS.persona;
+    if (backBtn) {
+      backBtn.disabled = false;
+      backBtn.setAttribute(
+        'aria-label',
+        stepId === STEPS.persona ? 'Back to home' : 'Previous step'
+      );
+    }
 
     const meta = $('signupProgressMeta');
     const fill = $('signupProgressFill');
@@ -189,10 +201,34 @@
     }
   }
 
+  function landingUrl() {
+    const q = new URLSearchParams();
+    const utm = urlParams.get('utm_source');
+    if (utm) q.set('utm_source', utm);
+    const qs = q.toString();
+    return qs ? `/?${qs}` : '/';
+  }
+
   function prevStep() {
     const list = orderedSteps();
     const idx = list.indexOf(state.step);
-    if (idx > 0) showStep(list[idx - 1]);
+    if (idx > 0) {
+      showStep(list[idx - 1]);
+      return;
+    }
+    const ref = document.referrer;
+    if (ref) {
+      try {
+        const refUrl = new URL(ref);
+        if (refUrl.origin === window.location.origin) {
+          window.location.href = ref;
+          return;
+        }
+      } catch (_) {
+        /* ignore bad referrer */
+      }
+    }
+    window.location.href = landingUrl();
   }
 
   function nextStep() {

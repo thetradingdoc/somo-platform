@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Somo — Set up your AI front desk</title>
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/signup-somo.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/voice-agent.css" />
+  <script src="/assets/js/provider-session.js"></script>
+  <script src="/unified-dashboard/assets/js/voice-hours-picker.js"></script>
+  <script src="/unified-dashboard/assets/js/voice-agent-page.js"></script>
+</head>
+<body class="signup-wizard-body">
+  <div class="activation-wrap" style="max-width:520px">
+    <a href="/" class="signup-logo-link" aria-label="Somo home">
+      <img class="signup-logo-img" src="/unified-dashboard/assets/brand/somo-logo.png" alt="Somo" width="160" height="54" />
+    </a>
+
+    <p class="signup-eyebrow" style="margin-top:20px" id="setupEyebrow">Step 1 of 3</p>
+    <h1 class="signup-title" id="setupTitle">Your greeting</h1>
+    <p class="signup-sub" id="setupSub">This is the first thing callers hear when they dial your line.</p>
+
+    <div id="step1" class="setup-step">
+      <textarea id="setupGreeting" class="va-textarea" rows="4" style="width:100%;margin-top:12px"></textarea>
+      <button type="button" class="signup-btn signup-btn-primary" id="setupNext1" style="margin-top:16px;width:100%">Continue</button>
+    </div>
+
+    <div id="step2" class="setup-step hidden">
+      <div id="setupHoursPicker" style="margin-top:12px"></div>
+      <label class="va-field-label" style="margin-top:12px;display:block">After-hours message</label>
+      <textarea id="setupAfterHours" class="va-textarea" rows="2" style="width:100%"></textarea>
+      <button type="button" class="signup-btn signup-btn-primary" id="setupNext2" style="margin-top:16px;width:100%">Continue</button>
+    </div>
+
+    <div id="step3" class="setup-step hidden">
+      <p style="font-size:0.95rem;color:var(--signup-muted);margin:12px 0">
+        Call your Somo number now. You will hear exactly what patients hear — including your greeting.
+      </p>
+      <div class="signup-reveal" style="margin-top:12px">
+        <p class="signup-reveal-label">Your Somo number</p>
+        <p class="signup-reveal-number" id="setupPhone">Loading…</p>
+        <div class="signup-reveal-actions">
+          <a class="signup-btn signup-btn-primary" id="setupCall" href="#">Call my line</a>
+          <button type="button" class="signup-btn signup-btn-ghost" id="setupCopy">Copy</button>
+        </div>
+      </div>
+      <button type="button" class="signup-btn signup-btn-primary" id="setupFinish" style="margin-top:20px;width:100%">Done — open voice agent</button>
+      <button type="button" class="signup-btn signup-btn-ghost" id="setupSkip" style="margin-top:8px;width:100%">Skip for now</button>
+    </div>
+
+    <div class="signup-toast error hidden" id="setupError"></div>
+  </div>
+
+  <script src="/unified-dashboard/assets/js/voice-agent-page.js"></script>
+  <script src="/unified-dashboard/assets/js/voice-setup.js"></script>
+</body>
+</html>

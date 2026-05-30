@@ -904,147 +904,7 @@ function getPatientStep3Status({ sessionId = null, patientId = null } = {}) {
 }
 
 function ensureBillingTables() {
-  db.db.exec(`
-    CREATE TABLE IF NOT EXISTS patient_billing_documents (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      patient_id TEXT,
-      source_type TEXT DEFAULT 'upload',
-      file_name TEXT,
-      mime_type TEXT,
-      storage_ref TEXT,
-      parse_status TEXT DEFAULT 'queued',
-      confidence_score REAL,
-      notes TEXT,
-      metadata_json TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_docs_session ON patient_billing_documents(session_id, datetime(created_at) DESC);
-    CREATE INDEX IF NOT EXISTS idx_billing_docs_patient ON patient_billing_documents(patient_id, datetime(created_at) DESC);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_events (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      patient_id TEXT,
-      event_type TEXT DEFAULT 'bill',
-      title TEXT NOT NULL,
-      provider_name TEXT,
-      service_date TEXT,
-      amount_cents INTEGER,
-      currency TEXT DEFAULT 'USD',
-      status TEXT DEFAULT 'needs_review',
-      confidence_score REAL,
-      metadata_json TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_events_session ON patient_billing_events(session_id, datetime(created_at) DESC);
-    CREATE INDEX IF NOT EXISTS idx_billing_events_patient ON patient_billing_events(patient_id, datetime(created_at) DESC);
-    CREATE INDEX IF NOT EXISTS idx_billing_events_service_date ON patient_billing_events(service_date);
-    CREATE INDEX IF NOT EXISTS idx_billing_events_session_service_date ON patient_billing_events(session_id, service_date);
-    CREATE INDEX IF NOT EXISTS idx_billing_events_patient_service_date ON patient_billing_events(patient_id, service_date);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_event_documents (
-      id TEXT PRIMARY KEY,
-      billing_event_id TEXT NOT NULL,
-      billing_document_id TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(billing_event_id, billing_document_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_link_event ON patient_billing_event_documents(billing_event_id);
-    CREATE INDEX IF NOT EXISTS idx_billing_link_document ON patient_billing_event_documents(billing_document_id);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_subscriptions (
-      id TEXT PRIMARY KEY,
-      session_id TEXT,
-      patient_id TEXT,
-      tier TEXT NOT NULL DEFAULT 'free',
-      status TEXT NOT NULL DEFAULT 'active',
-      current_period_start TEXT,
-      current_period_end TEXT,
-      metadata_json TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_subs_session ON patient_billing_subscriptions(session_id, datetime(updated_at) DESC);
-    CREATE INDEX IF NOT EXISTS idx_billing_subs_patient ON patient_billing_subscriptions(patient_id, datetime(updated_at) DESC);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_care_episodes (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      patient_id TEXT,
-      episode_key TEXT NOT NULL,
-      title TEXT NOT NULL,
-      status TEXT DEFAULT 'open',
-      start_date TEXT,
-      end_date TEXT,
-      metadata_json TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(session_id, episode_key)
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_episodes_session ON patient_billing_care_episodes(session_id, datetime(updated_at) DESC);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_episode_events (
-      id TEXT PRIMARY KEY,
-      episode_id TEXT NOT NULL,
-      billing_event_id TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(episode_id, billing_event_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_episode_events_episode ON patient_billing_episode_events(episode_id);
-    CREATE INDEX IF NOT EXISTS idx_billing_episode_events_event ON patient_billing_episode_events(billing_event_id);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_payment_attempts (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      patient_id TEXT,
-      billing_event_id TEXT,
-      amount_cents INTEGER,
-      currency TEXT DEFAULT 'USD',
-      status TEXT DEFAULT 'queued',
-      decline_reason TEXT,
-      attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      metadata_json TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_payment_attempts_session ON patient_billing_payment_attempts(session_id, datetime(attempted_at) DESC);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_coverage_contexts (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      patient_id TEXT,
-      coverage_type TEXT,
-      deductible_total_cents INTEGER,
-      deductible_used_cents INTEGER,
-      oop_total_cents INTEGER,
-      oop_used_cents INTEGER,
-      metadata_json TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_coverage_session ON patient_billing_coverage_contexts(session_id, datetime(updated_at) DESC);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_retention_policies (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      patient_id TEXT,
-      retain_days INTEGER DEFAULT 365,
-      auto_delete_enabled INTEGER DEFAULT 0,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_retention_session ON patient_billing_retention_policies(session_id, datetime(updated_at) DESC);
-
-    CREATE TABLE IF NOT EXISTS patient_billing_deletion_requests (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      patient_id TEXT,
-      status TEXT DEFAULT 'queued',
-      reason TEXT,
-      requested_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_billing_deletion_session ON patient_billing_deletion_requests(session_id, datetime(requested_at) DESC);
-  `);
+  db.ensureBillingTables();
 }
 
 function ensureProductsPhase2Tables() {
@@ -2475,11 +2335,6 @@ app.get('/invite/:code', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-  // #region agent log
-  const __dlLoginStart = Date.now();
-  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:entry',message:'/login handler entry',data:{host:String(req.headers.host||''),path:String(req.path||''),hasOrigin:!!req.headers.origin},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion agent log
-
   const hostname = getHostname(req);
   const subdomain = getSubdomain(hostname);
 
@@ -2502,20 +2357,11 @@ app.get('/login', (req, res) => {
     const loginPath = getUnifiedDashboardPath('login.html');
     const fs = require('fs');
     if (fs.existsSync(loginPath)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:localhost:exists',message:'login.html exists; starting fs.readFile',data:{elapsed_ms:Number(Date.now()-__dlLoginStart)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion agent log
       return fs.readFile(loginPath, (readErr, buf) => {
         if (readErr) {
           console.error('[LOGIN ROUTE] readFile failed:', readErr.message);
-          // #region agent log
-          fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:localhost:readFile:error',message:'fs.readFile failed',data:{elapsed_ms:Number(Date.now()-__dlLoginStart)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion agent log
           return res.status(500).send('Login page unavailable');
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:localhost:readFile:ok',message:'fs.readFile ok; sending response',data:{elapsed_ms:Number(Date.now()-__dlLoginStart),bytes:Number(buf?buf.length:0)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion agent log
         res.type('html').send(buf);
       });
     }
@@ -3379,13 +3225,26 @@ app.post(
     const toNumberRaw = req.body.To;
     const normalizedToNumber = normalizePhoneNumber(toNumberRaw);
     let clinicId = null;
-    let customerId = null;
+    let customerId = req.query.customer_id ? String(req.query.customer_id).trim() : null;
     let matchedCustomer = null;
 
     // For outbound sales / DodgeCall demo, use dedicated agents; otherwise use default
     let retellAgentId = isOutboundSales
         ? (process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a')
         : (process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a');
+
+    if (customerId && !isOutboundSales && !isDodgecallDemo) {
+      matchedCustomer = db.getCustomer(customerId);
+      if (matchedCustomer) {
+        console.log(`✅ Matched customer from query customer_id: ${customerId}`);
+        if (matchedCustomer.retell_agent_id) {
+          retellAgentId = matchedCustomer.retell_agent_id;
+        }
+      } else {
+        console.warn(`⚠️  customer_id query param not found: ${customerId}`);
+        customerId = null;
+      }
+    }
 
     if (isDodgecallDemo) {
       try {
@@ -3430,7 +3289,7 @@ app.post(
           clinicId = leadId; // Use lead ID as identifier
         }
       }
-    } else {
+    } else if (!customerId) {
       const customerByNumber = db.getCustomerByTwilioNumber(normalizedToNumber);
       if (customerByNumber) {
         matchedCustomer = customerByNumber;
@@ -3505,6 +3364,29 @@ app.post(
         try {
           db.touchTrialActivity(customerId);
         } catch (_) { /* non-fatal */ }
+      }
+    }
+
+    if (matchedCustomer && !isOutboundSales && !isDodgecallDemo) {
+      try {
+        const VoiceAgentRuntime = require('./services/voice-agent-runtime');
+        const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
+          merchantId: matchedCustomer.merchant_id,
+          customerId: matchedCustomer.id
+        });
+        const admission = VoiceAgentRuntime.evaluateCallAdmission(runtime);
+        if (!admission.allowed) {
+          const msg = admission.message || VoiceAgentRuntime.buildUnavailableMessage();
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${String(msg).replace(/[<>&"']/g, '')}</Say>
+  <Hangup/>
+</Response>`;
+          console.warn(`⚠️  Inbound voice gate (${admission.reason}) for customer ${matchedCustomer.id}`);
+          return res.type('text/xml').send(twiml);
+        }
+      } catch (gateErr) {
+        console.warn('⚠️  Voice runtime inbound gate skipped:', gateErr.message);
       }
     }
 
@@ -3647,8 +3529,8 @@ app.post(
         }
       }
       
-      // Last resort: Use default tenant (akin-dunbar) - this ensures the agent always has a merchant
-      if (!merchantId) {
+      // Last resort: default tenant only when inbound tenant is unknown (not explicit customer_id)
+      if (!merchantId && !customerId) {
         const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
         const defaultMerchant = db.getMerchantBySubdomain(defaultSubdomain);
         if (defaultMerchant) {
@@ -3863,6 +3745,14 @@ app.post(
               function_calls_count: 0,
               status: 'active'
             });
+            if (typeof db.upsertCallState === 'function') {
+              db.upsertCallState(callId, {
+                customer_id: resolvedCustomerId,
+                clinic_id: clinicId || null,
+                current_stage: 'INTAKE',
+                state_data: { twilio_call_sid: req.body.CallSid }
+              });
+            }
             if (clinicId) {
               try {
                 db.db.prepare(`UPDATE voice_call_log SET clinic_id = ? WHERE call_id = ?`).run(clinicId, callId);
@@ -4859,6 +4749,16 @@ async function ensureUniqueClinicSlug(baseSlug) {
 }
 
 app.post('/api/auth/signup', authLimiter, async (req, res) => {
+  // W4-07b: legacy users-table signup → Somo wizard (set ALLOW_LEGACY_USERS_SIGNUP=1 to restore)
+  if (process.env.ALLOW_LEGACY_USERS_SIGNUP !== '1') {
+    return res.status(410).json({
+      success: false,
+      error: 'deprecated',
+      message: 'Provider signup has moved to /signup',
+      redirect: '/signup'
+    });
+  }
+
   try {
     const { name, email, password, clinic_name, clinic_phone } = req.body;
 
@@ -5865,6 +5765,7 @@ registerVoiceAppointmentRoutes(app, {
   resolveClinicIdFromRequest,
   FALLBACK_CLINIC_ID,
   ensureSlotBundles,
+  safeLogRequestBody,
 });
 
 // Voice triage guards: ./services/voice-triage-guards.js (resolveVoiceSessionIdForGuard, requireVoiceSessionIdForTriageParity, enforceVoiceTriageGuardrailsForSession)

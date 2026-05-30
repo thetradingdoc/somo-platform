@@ -3,12 +3,15 @@
  * Smoke test: voice onboarding intake end-to-end.
  *
  * What it does:
- * - (Best-effort) schedules a voice appointment (requires SMOKE_CLINIC_ID or DEFAULT_CLINIC_ID on server)
+ * - (Best-effort) schedules a voice appointment (requires clinic_id in body or env)
  * - submits DOB + country + city via POST /voice/patient/intake
  * - verifies onboarding completeness via POST /voice/patient/intake/status
  *
  * Usage:
  *   API_BASE_URL=http://localhost:4000 node scripts/smoke-voice-onboarding.cjs
+ *
+ * Env:
+ *   SMOKE_CLINIC_ID or DEFAULT_CLINIC_ID — required for schedule step (server may also use DEFAULT_CLINIC_ID)
  */
 
 const axios = require('axios');
@@ -22,8 +25,18 @@ function tomorrowYYYYMMDD() {
   return `${y}-${m}-${day}`;
 }
 
+function resolveSmokeClinicId() {
+  return (
+    process.env.SMOKE_CLINIC_ID ||
+    process.env.DEFAULT_CLINIC_ID ||
+    process.env.PRIMARY_CLINIC_ID ||
+    null
+  );
+}
+
 async function main() {
   const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+  const clinicId = resolveSmokeClinicId();
   const uniq = Date.now();
   const patient = {
     patient_name: `Smoke Test ${uniq}`,
@@ -37,10 +50,15 @@ async function main() {
   };
 
   console.log(`Base URL: ${baseUrl}`);
+  if (!clinicId) {
+    console.warn(
+      '⚠️  SMOKE_CLINIC_ID / DEFAULT_CLINIC_ID not set — schedule step will likely return 400 (continuing)'
+    );
+  }
 
   // Step 1 (best-effort): schedule an appointment so the booking path is exercised too.
   try {
-    const scheduleRes = await axios.post(`${baseUrl}/voice/appointments/schedule`, {
+    const scheduleBody = {
       patient_name: patient.patient_name,
       patient_phone: patient.patient_phone,
       patient_email: patient.patient_email,
@@ -48,14 +66,31 @@ async function main() {
       date: tomorrowYYYYMMDD(),
       time: '10:00',
       timezone: 'America/New_York'
-    }, { timeout: 20000 });
+    };
+    if (clinicId) scheduleBody.clinic_id = clinicId;
 
-    if (scheduleRes.data?.success) {
+    const scheduleRes = await axios.post(`${baseUrl}/voice/appointments/schedule`, scheduleBody, {
+      timeout: 20000,
+      validateStatus: () => true
+    });
+
+    if (scheduleRes.status >= 500) {
+      const errText = JSON.stringify(scheduleRes.data || {});
+      if (/safeLogRequestBody is not defined/i.test(errText)) {
+        throw new Error(
+          'Schedule route crashed: safeLogRequestBody is not defined — restart middleware after voice-appointments fix'
+        );
+      }
+      console.warn(`⚠️  Schedule returned ${scheduleRes.status} (continuing): ${errText.slice(0, 200)}`);
+    } else if (scheduleRes.data?.success) {
       console.log(`✅ Scheduled appointment: ${scheduleRes.data.appointment?.id || '(no id)'}`);
     } else {
-      console.warn(`⚠️  Schedule appointment did not succeed (continuing): ${scheduleRes.data?.error || 'unknown error'}`);
+      console.warn(
+        `⚠️  Schedule appointment did not succeed (continuing): ${scheduleRes.data?.error || scheduleRes.status}`
+      );
     }
   } catch (e) {
+    if (e.message && e.message.includes('safeLogRequestBody')) throw e;
     console.warn(`⚠️  Schedule appointment step failed (continuing): ${e.response?.data?.error || e.message}`);
   }
 
@@ -101,4 +136,3 @@ main().catch((e) => {
   console.error('❌ Smoke test failed:', e.message);
   process.exit(1);
 });
-

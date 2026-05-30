@@ -64,4 +64,20 @@ describe('dodgecall-template-registry', () => {
       /DODGECALL_RETELL_AGENT_ID|RETELL_AGENT_ID/
     );
   });
+
+  test.each([
+    'dental_front_desk',
+    'medical_clinic',
+    'specialty_practice',
+    'bilingual_front_desk',
+    'after_hours',
+    'patient_billing'
+  ])('healthcare use case %s resolves medical template', (useCase) => {
+    process.env.DODGECALL_RETELL_AGENT_ID = 'agent_demo_test';
+    process.env.DODGECALL_TWILIO_FROM_NUMBER = '+15555550100';
+    jest.resetModules();
+    const { resolveTemplate } = require('../services/dodgecall-template-registry');
+    const t = resolveTemplate({ use_case: useCase });
+    expect(t.template_id).toBe('medical');
+  });
 });

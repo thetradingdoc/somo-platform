@@ -345,15 +345,9 @@
       window.__ppKellyStatus = json;
       renderKellyStatus(json);
       renderProvisioningBanner(json);
-      // #region agent log
-      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'ui-audit-pre',hypothesisId:'H3',location:'provider-shell.js:280',message:'fetchKellyStatus_success',data:{path:window.location.pathname,status:json.status||null,provisioningState:json.provisioning_state||null,hasPhone:!!json.phone_number,hasBanner:!!document.getElementById('ppProvisionBanner')},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return json;
     } catch (e) {
       console.warn('[provider-shell] kelly status:', e.message);
-      // #region agent log
-      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'ui-audit-pre',hypothesisId:'H3',location:'provider-shell.js:284',message:'fetchKellyStatus_error',data:{path:window.location.pathname,error:e.message},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return null;
     }
   }
@@ -436,9 +430,6 @@
       clinicCard.href = resolveHref('settings.html');
     }
     normalizeEmojiUi();
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'ui-audit-pre',hypothesisId:'H2',location:'provider-shell.js:366',message:'initProviderShell_state',data:{path:window.location.pathname,title:document.title,activeId:activeId,bodyHasProviderClass:document.body.classList.contains('provider-portal'),navCount:document.querySelectorAll('#ppSidebarNav .pp-nav-item').length,hasKellyToggle:!!document.getElementById('ppKellyToggle')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   }
 
   function initProviderPage(options = {}) {

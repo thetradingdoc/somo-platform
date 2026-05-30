@@ -25,12 +25,12 @@ function maybeSendLowBalanceAlert(customerId) {
   if (!email) return;
 
   const portal = (process.env.ADMIN_PORTAL_BASE_URL || process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
-  const subject = 'DocLittle voice minutes running low';
+  const subject = 'Somo voice minutes running low';
   const body = `Hi ${customer.name || customer.company_name || 'there'},\n\n` +
     `Your voice receptionist has about ${minutes} minute(s) remaining this cycle ` +
     `(alert threshold: ${threshold} min).\n\n` +
     `Add a top-up or review your plan: ${portal}/business/settings.html\n\n` +
-    '— DocLittle';
+    '— Somo';
 
   EmailService.sendEmail({ to: email, subject, text: body, html: `<pre>${body}</pre>` })
     .then(() => {

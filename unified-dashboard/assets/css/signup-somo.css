@@ -5,14 +5,17 @@
 
 :root {
   --font-brand: 'League Spartan', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --somo-green-marketing: #93d33b;
-  --somo-green-marketing-hover: #7fb832;
+  --somo-msu: #164437;
+  --somo-lizard: #b5e930;
+  --somo-lizard-hover: #9fd628;
+  --somo-green-marketing: var(--somo-lizard);
+  --somo-green-marketing-hover: var(--somo-lizard-hover);
   --somo-text-marketing: #1a1a1a;
   --somo-muted-marketing: #6b6b6b;
   --somo-border-marketing: #e8e4dc;
   --signup-bg: #ffffff;
-  --signup-green: var(--somo-green-marketing, #93d33b);
-  --signup-green-hover: var(--somo-green-marketing-hover, #7fb832);
+  --signup-green: var(--somo-lizard, #b5e930);
+  --signup-green-hover: var(--somo-lizard-hover, #9fd628);
   --signup-text: var(--somo-text-marketing, #1a1a1a);
   --signup-muted: var(--somo-muted-marketing, #6b6b6b);
   --signup-border: var(--somo-border-marketing, #e8e4dc);

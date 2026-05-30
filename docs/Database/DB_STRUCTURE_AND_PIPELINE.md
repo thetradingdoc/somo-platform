@@ -1,6 +1,6 @@
 # Database structure and pipeline
 
-> **Last reviewed:** 2026-05-25
+> **Last reviewed:** 2026-05-29
 
 ## Runtime model
 
@@ -25,12 +25,25 @@ Schema changes:
 1. Add `migrate*()` or numbered file under `middleware-platform/migrations/NNN_*.js`
 2. Register in [`run-startup-migrations.js`](../../middleware-platform/database/migrations/run-startup-migrations.js)
 
+## Somo voice SaaS tables
+
+Provider login, trial, and inbound voice use **`customers`** as the SaaS tenant key. See [TENANT_MODEL.md](./TENANT_MODEL.md) and [VOICE_AGENT_STATE.md](./VOICE_AGENT_STATE.md).
+
+| Group | Examples |
+|-------|----------|
+| SaaS tenant | `customers`, `customer_sessions`, `merchants`, `clinics` |
+| Voice config | `voice_agent_settings`, `customers.retell_agent_id` |
+| Voice per-call | `voice_call_log`, `voice_call_states`, `voice_conversation_memory`, `agent_turns` |
+| Phone routing | `customers.twilio_phone_*`, `clinic_phone_numbers` |
+
+Operational Week 1 steps: [SOMO_FOUNDATION_RUNBOOK.md](./SOMO_FOUNDATION_RUNBOOK.md).
+
 ## Major table groups
 
 | Group | Examples |
 |-------|----------|
 | Multi-tenant | clinics, customers, appointments |
-| Voice / triage | triage_sessions, voice_call_state |
+| Voice / triage | triage_sessions, voice_call_states |
 | Medical codes | icd10_codes, cpt_codes, hcpcs_codes, code_embeddings, fee_schedules |
 | Payor / NPPES | provider_registry_entities, provider_payer_networks, payor_* |
 | Patient routine | patient_routine_*, item_logs (see patient timeline doc) |

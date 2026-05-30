@@ -2194,6 +2194,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       commerceCheckout = null,
       checkoutPolicy = null,
       turnAuthority = null,
+      customerId = null,
+      providerInstructions = null,
       onStreamDelta = null,
       onToolStatus = null,
       scanChatMode: scanChatModeParam = false,
@@ -5215,6 +5217,22 @@ Antworten Sie durchgehend auf Deutsch.`,
           buildLegacy: _buildSystemPromptLegacy,
           languageDirective: (pl) => KellyAgentService._languageDirective(pl)
         });
+
+    if (channel === 'voice') {
+      let providerBlock = providerInstructions;
+      if (!providerBlock && customerId && db.getCustomer) {
+        const cust = db.getCustomer(customerId);
+        if (cust?.custom_prompt && String(cust.custom_prompt).trim()) {
+          providerBlock = String(cust.custom_prompt).trim();
+        }
+      }
+      if (providerBlock) {
+        systemContent =
+          `## Provider instructions (follow unless safety or emergency rules override)\n${providerBlock}\n\n` +
+          systemContent;
+      }
+    }
+
     if (
       !useCommerceTools &&
       (context.orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||

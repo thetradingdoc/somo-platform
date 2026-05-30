@@ -8,7 +8,7 @@ See [SOMO_LANDING_HERO.md](./SOMO_LANDING_HERO.md) for hero structure, assets, b
 
 ## Signup handoff
 
-CTAs use `VITE_SIGNUP_URL` or `/signup?utm_source=somo`. The signup wizard ([signup.html](../../unified-dashboard/signup.html)) shares marketing tokens (white background, League Spartan, lime `#93d33b`). After a live demo, name/phone/use case are prefilled via `sessionStorage` key `somo_signup_prefill`. Flow details: [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.md).
+CTAs use `VITE_SIGNUP_URL` or `/signup?utm_source=somo`. The signup wizard ([signup.html](../../unified-dashboard/signup.html)) shares marketing tokens (white background, League Spartan, Image 1 Green Lizard `#b5e930`). Palette and component mapping: [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md). After a live demo, name/phone/use case are prefilled via `sessionStorage` key `somo_signup_prefill`. Flow details: [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.md).
 
 ## Repos / paths
 

@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
 const TwilioPhoneService = require('../services/twilio-phone-service');
+const { updateAgentLifecycleState } = require('../services/agent-lifecycle');
 
 function normalizeLifecycle(customer) {
   const status = String(customer.kelly_status || customer.retell_agent_status || 'pending').toLowerCase();
@@ -61,11 +62,41 @@ router.patch('/toggle', requireCustomerAuth, async (req, res) => {
     const nextStatus = enabled ? 'active' : 'paused';
     const provisioning = normalizeProvisioningState(customer);
 
-    db.updateCustomer(customer.id, {
-      kelly_status: nextStatus,
-      retell_agent_status: nextStatus,
-      provisioning_state: provisioning
+    updateAgentLifecycleState(customer.id, {
+      kelly: nextStatus,
+      retell: nextStatus,
+      enabled
     });
+    db.updateCustomer(customer.id, { provisioning_state: provisioning });
+
+    if (customer.merchant_id || customer.id) {
+      try {
+        const existing = db.getVoiceAgentSettingsForProvider({
+          merchantId: customer.merchant_id,
+          customerId: customer.id
+        });
+        let businessHours = null;
+        if (existing?.business_hours) {
+          try {
+            businessHours =
+              typeof existing.business_hours === 'string'
+                ? JSON.parse(existing.business_hours)
+                : existing.business_hours;
+          } catch (_) {
+            businessHours = null;
+          }
+        }
+        db.upsertVoiceAgentSettings(customer.merchant_id || null, {
+          retell_agent_id: existing?.retell_agent_id || customer.retell_agent_id || null,
+          enabled,
+          greeting: existing?.greeting || null,
+          after_hours_message: existing?.after_hours_message || null,
+          business_hours: businessHours
+        }, customer.id);
+      } catch (syncErr) {
+        console.warn('[Kelly] voice_agent_settings sync:', syncErr.message);
+      }
+    }
 
     const fresh = db.getCustomer(customer.id);
     const payload = buildStatus(fresh);

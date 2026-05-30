@@ -2,462 +2,142 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Somo Provider - Sign In</title>
-    <link rel="stylesheet" href="/assets/css/global.css" />
-    <script src="/assets/js/config.js"></script>
-    <style>
-        :root {
-            color-scheme: light;
-            --bg: #f9fafb;
-            --card: #ffffff;
-            --card-border: #e5e7eb;
-            --text: #0f172a;
-            --muted: #6b7280;
-            --accent: #7c5dfa;
-            --accent-dark: #6d48f2;
-            --shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 32px 16px;
-        }
-        .shell {
-            width: 100%;
-            max-width: 1000px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 32px;
-            align-items: start;
-        }
-        .panel {
-            background: var(--card);
-            border: 1px solid var(--card-border);
-            border-radius: 24px;
-            padding: 32px;
-            box-shadow: var(--shadow);
-        }
-        .hero .muted { margin-bottom: 8px; }
-        .hero h1 { margin: 0; font-size: 2rem; line-height: 1.2; }
-        .hero p { margin: 16px 0 0; color: var(--muted); font-size: 1.05rem; }
-        .auth-form { display: none; }
-        .auth-form.active { display: block; }
-        .form-group { margin-bottom: 18px; }
-        .form-group label {
-            display: block;
-            font-size: 0.9rem;
-            font-weight: 600;
-            margin-bottom: 6px;
-            color: var(--text);
-        }
-        .form-group input {
-            width: 100%;
-            padding: 12px 14px;
-            border-radius: 12px;
-            border: 1px solid var(--card-border);
-            background: #fdfdfd;
-            font-size: 1rem;
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(124, 93, 250, 0.15);
-        }
-        .btn-primary {
-            width: 100%;
-            padding: 14px 18px;
-            border: none;
-            border-radius: 12px;
-            background: var(--accent);
-            color: white;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-        .btn-primary:hover {
-            background: var(--accent-dark);
-            transform: translateY(-1px);
-        }
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .demo-section {
-            margin-top: 24px;
-            padding-top: 24px;
-            border-top: 1px solid var(--card-border);
-        }
-        .demo-section h3 {
-            font-size: 0.8rem;
-            color: var(--muted);
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .demo-btn {
-            width: 100%;
-            padding: 12px 14px;
-            background: #fdfdfd;
-            border: 1px solid var(--card-border);
-            border-radius: 12px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            margin-bottom: 8px;
-            transition: all 0.15s;
-            text-align: left;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .demo-btn:hover {
-            border-color: var(--accent);
-            background: rgba(124, 93, 250, 0.04);
-        }
-        .demo-btn-icon { font-size: 20px; }
-        .demo-btn-title { color: var(--text); font-weight: 600; }
-        .demo-btn-email { font-size: 0.8rem; color: var(--muted); }
-        .error-message, .success-message {
-            padding: 12px 14px;
-            border-radius: 12px;
-            font-size: 0.9rem;
-            margin-bottom: 16px;
-            display: none;
-        }
-        .error-message { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
-        .success-message { background: rgba(22, 163, 74, 0.15); color: #16a34a; }
-        .error-message.show, .success-message.show { display: block; }
-        .password-toggle { position: relative; }
-        .password-toggle-btn {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 18px;
-            padding: 4px;
-        }
-        .link-accent { color: var(--accent); text-decoration: none; font-weight: 600; }
-        .link-accent:hover { text-decoration: underline; }
-        @media (max-width: 768px) {
-            .shell { grid-template-columns: 1fr; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="color-scheme" content="light" />
+  <title>Somo — Sign in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/signup-somo.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/auth-somo.css" />
+  <style>
+    /* Critical: readable even if external stylesheets fail */
+    [data-login-panel].hidden { display: none !important; }
+    body.signup-wizard-body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: 'League Spartan', system-ui, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      -webkit-text-size-adjust: 100%;
+    }
+    .signup-field input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border: 1px solid #e8e4dc;
+      border-radius: 12px;
+      font-size: 16px;
+    }
+    .signup-btn-primary {
+      width: 100%;
+      min-height: 52px;
+      border: none;
+      border-radius: 999px;
+      background: #93d33b;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
 </head>
 
-<body>
-    <div class="shell">
-        <section class="panel hero">
-            <p class="muted">Somo • Provider Operations</p>
-            <h1>Provider Portal</h1>
-            <p>Sign in to your provider account. Use demo accounts below to try without signing up.</p>
-            <div style="margin-top: 24px;">
-                <p class="muted" style="font-size: 0.9rem;">
-                    Don't have an account?
-                    <a href="/signup" class="link-accent">Create provider account</a>
-                </p>
+<body class="signup-wizard-body">
+  <div class="login-shell">
+    <div class="login-main">
+      <a href="/" class="signup-logo-link" aria-label="Somo home">
+        <img
+          class="signup-logo-img"
+          src="/unified-dashboard/assets/brand/somo-logo.png"
+          alt="Somo"
+          width="199"
+          height="68"
+          fetchpriority="high"
+        />
+      </a>
+
+      <div id="loginPanel" data-login-panel="login">
+        <p class="signup-eyebrow">Welcome back</p>
+        <h1 class="signup-title">Sign in to your Somo front desk</h1>
+        <p class="signup-sub">Manage your AI receptionist, calls, and settings.</p>
+
+        <div class="signup-toast error hidden" id="loginToast" role="alert"></div>
+
+        <form id="loginForm">
+          <label class="signup-field">
+            <span>Work email</span>
+            <input type="email" id="loginEmail" required autocomplete="email" placeholder="you@yourbusiness.com" />
+          </label>
+
+          <label class="signup-field">
+            <span>Password</span>
+            <div class="login-password-wrap">
+              <input
+                type="password"
+                id="loginPassword"
+                required
+                autocomplete="current-password"
+                placeholder="Your password"
+              />
+              <button
+                type="button"
+                class="login-show-password"
+                id="loginShowPassword"
+                aria-label="Show password"
+              >
+                Show
+              </button>
             </div>
-            <div style="margin-top: 24px;">
-                <a href="/" class="link-accent" style="font-size: 0.9rem; margin-right: 12px;">
-                    ← Back to Home
-                </a>
-                <a href="/unified-dashboard/portal.html" class="link-accent" style="font-size: 0.9rem;">
-                    Are you a patient? Go to Patient Portal →
-                </a>
-            </div>
-        </section>
+          </label>
 
-        <section class="panel">
-            <h2 style="margin-top: 0; margin-bottom: 4px;">Sign in</h2>
-            <p class="muted" style="font-size: 0.9rem; margin-bottom: 24px;">Enter your credentials to access your provider dashboard</p>
+          <div class="login-options">
+            <label class="login-remember">
+              <input type="checkbox" id="loginRemember" />
+              Remember me
+            </label>
+            <a href="#" class="login-forgot-link" id="loginForgotLink">Forgot password?</a>
+          </div>
 
-            <div class="error-message" id="errorMessage"></div>
-            <div class="success-message" id="successMessage"></div>
+          <button type="submit" class="signup-btn signup-btn-primary" id="loginSubmit" style="width:100%">
+            Sign in
+          </button>
+        </form>
 
-            <form id="loginForm" class="auth-form active">
-                <div class="form-group">
-                    <label for="loginEmail">Email</label>
-                    <input type="email" id="loginEmail" placeholder="you@company.com" required>
-                </div>
-                <div class="form-group">
-                    <label for="loginPassword">Password</label>
-                    <div class="password-toggle">
-                        <input type="password" id="loginPassword" placeholder="••••••••" required>
-                        <button type="button" class="password-toggle-btn" onclick="togglePassword('loginPassword')">Show</button>
-                    </div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem; color: var(--muted); font-weight: 500;">
-                        <input type="checkbox" id="rememberMe" style="width: auto; margin: 0;">
-                        Remember me
-                    </label>
-                    <a href="#" onclick="showForgotPassword(); return false;" class="link-accent" style="font-size: 0.9rem;">Forgot password?</a>
-                </div>
-                <button type="submit" class="btn-primary" id="loginBtn">Sign In</button>
-            </form>
+        <p class="login-footer-link">
+          Don&apos;t have an account?
+          <a href="/signup?utm_source=login">Start your free trial</a>
+        </p>
+        <a href="/" class="login-back-home">← Back to home</a>
+      </div>
 
-            <div class="demo-section">
-                <h3>Demo login (no signup)</h3>
-                <button type="button" class="demo-btn" onclick="useDemoAccount('provider@demo.local','demo123')">
-                    <span class="demo-btn-icon">Provider</span>
-                    <span class="demo-btn-content">
-                        <span class="demo-btn-title">Provider</span>
-                        <span class="demo-btn-email">provider@demo.local</span>
-                    </span>
-                </button>
-                <button type="button" class="demo-btn" onclick="useDemoAccount('patient@Somo.com','demo123')">
-                    <span class="demo-btn-icon">Patient</span>
-                    <span class="demo-btn-content">
-                        <span class="demo-btn-title">Patient</span>
-                        <span class="demo-btn-email">patient@Somo.com</span>
-                    </span>
-                </button>
-                <button type="button" class="demo-btn" onclick="useDemoAccount('insurer@Somo.com','demo123')">
-                    <span class="demo-btn-icon">Insurer</span>
-                    <span class="demo-btn-content">
-                        <span class="demo-btn-title">Insurer</span>
-                        <span class="demo-btn-email">insurer@Somo.com</span>
-                    </span>
-                </button>
-                <p class="muted" style="font-size: 0.75rem; margin-top: 8px;">Password: demo123 (all accounts)</p>
-            </div>
+      <div id="forgotPanel" data-login-panel="forgot" class="hidden">
+        <p class="signup-eyebrow">Password reset</p>
+        <h1 class="signup-title">Forgot your password?</h1>
+        <p class="signup-sub">We&apos;ll email you a link to reset your password.</p>
 
-            <form id="forgotPasswordForm" class="auth-form" style="display: none;">
-                <h2 style="margin-bottom: 12px;">Reset Password</h2>
-                <p class="muted" style="margin-bottom: 20px; font-size: 0.9rem;">Enter your email and we'll send a reset link.</p>
-                <div class="form-group">
-                    <label for="forgotEmail">Email</label>
-                    <input type="email" id="forgotEmail" placeholder="you@company.com" required>
-                </div>
-                <button type="submit" class="btn-primary" id="forgotBtn">Send Reset Link</button>
-                <p style="text-align: center; margin-top: 16px;">
-                    <a href="#" onclick="showLogin(); return false;" class="link-accent">Back to login</a>
-                </p>
-            </form>
-        </section>
+        <form id="forgotForm">
+          <label class="signup-field">
+            <span>Work email</span>
+            <input type="email" id="forgotEmail" required autocomplete="email" placeholder="you@yourbusiness.com" />
+          </label>
+          <button type="submit" class="signup-btn signup-btn-primary" id="forgotSubmit" style="width:100%;margin-top:8px">
+            Send reset link
+          </button>
+        </form>
+
+        <p class="login-footer-link">
+          <a href="#" id="forgotBackLink">← Back to sign in</a>
+        </p>
+      </div>
     </div>
+  </div>
 
-    <script>
-        // Auto-detect API base URL based on current domain
-        function getApiBase() {
-            // If config.js set it, use that
-            if (window.API_BASE) {
-                return window.API_BASE;
-            }
-
-            // Auto-detect based on hostname
-            const hostname = window.location.hostname;
-
-            const host = hostname.toLowerCase();
-            if (
-                host === 'myskinandcare.com' ||
-                host === 'www.myskinandcare.com' ||
-                host.endsWith('.myskinandcare.com') ||
-                host === 'skinandcare.com' ||
-                host === 'www.skinandcare.com' ||
-                host.endsWith('.skinandcare.com') ||
-                host.includes('azurewebsites.net')
-            ) {
-                return 'https://api.myskinandcare.com';
-            }
-
-            // Local development
-            if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                return 'http://localhost:4000';
-            }
-
-            return 'https://api.myskinandcare.com';
-        }
-
-        const API_BASE = getApiBase();
-        console.log('🌐 Using API Base URL:', API_BASE);
-
-        // Demo account: fill form and log in
-        function useDemoAccount(email, password) {
-            document.getElementById('loginEmail').value = email;
-            document.getElementById('loginPassword').value = password;
-            login(email, password);
-        }
-
-        // Login Form Handler
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            await login(email, password);
-        });
-
-        // Signup form removed - redirect to /signup instead
-        // If someone tries to access signup from login page, redirect them
-        if (window.location.hash === '#signup' || window.location.search.includes('signup=true')) {
-            window.location.href = '/signup';
-        }
-
-        async function login(email, password) {
-            const errorMessage = document.getElementById('errorMessage');
-            const loginBtn = document.getElementById('loginBtn');
-            const rememberMe = document.getElementById('rememberMe').checked;
-
-            hideMessages();
-            loginBtn.disabled = true;
-            loginBtn.textContent = 'Signing in...';
-
-            try {
-                const response = await fetch(`${API_BASE}/api/customers/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include', // Important for cookies
-                    body: JSON.stringify({ email, password, remember_me: rememberMe })
-                });
-
-                // Check if response is OK before parsing JSON
-                if (!response.ok) {
-                    let errBody = null;
-                    try {
-                        errBody = await response.json();
-                    } catch (_) { /* non-JSON body */ }
-                    throw new Error(
-                        errBody?.error || errBody?.message || `HTTP ${response.status}: ${response.statusText}`
-                    );
-                }
-
-                const data = await response.json();
-
-                if (data.success) {
-                    // Store auth - use both keys for compatibility across all pages
-                    sessionStorage.setItem('authenticated', 'true');
-                    const customer = data.customer || {};
-                    sessionStorage.setItem('customer', JSON.stringify(customer));
-                    sessionStorage.setItem('user', JSON.stringify({
-                        name: customer.name || customer.company_name || 'User',
-                        role: customer.role || 'Provider',
-                        ...customer
-                    }));
-
-                    console.log('Login successful. Customer data:', customer);
-
-                    // Redirect to business dashboard on current subdomain
-                    // If on tenant subdomain, stay on it; otherwise redirect to subdomain
-                    const currentHostname = window.location.hostname;
-                    const subdomain = data.customer.subdomain;
-
-                    // Localhost: stay on current origin (no subdomain redirect) to avoid SSL errors
-                    const providerHome = '/business/today.html';
-                    if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
-                        window.location.href = providerHome;
-                    } else if (subdomain && currentHostname.toLowerCase().includes(`${subdomain}.myskinandcare.com`)) {
-                        window.location.href = providerHome;
-                    } else if (subdomain) {
-                        const baseDomain = 'myskinandcare.com';
-                        window.location.href = `https://${subdomain}.${baseDomain}/business/today.html`;
-                    } else {
-                        window.location.href = providerHome;
-                    }
-                } else {
-                    throw new Error(data.error || data.message || 'Login failed');
-                }
-            } catch (error) {
-                console.error('Login error:', error);
-                showError(error.message || 'Invalid email or password');
-                loginBtn.disabled = false;
-                loginBtn.textContent = 'Sign In';
-            }
-        }
-
-        // Forgot Password Form Handler
-        document.getElementById('forgotPasswordForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('forgotEmail').value;
-            await forgotPassword(email);
-        });
-
-        async function forgotPassword(email) {
-            const errorMessage = document.getElementById('errorMessage');
-            const forgotBtn = document.getElementById('forgotBtn');
-
-            hideMessages();
-            forgotBtn.disabled = true;
-            forgotBtn.textContent = 'Sending...';
-
-            try {
-                const response = await fetch(`${API_BASE}/api/customers/forgot-password`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showSuccess('Password reset link sent to your email. Please check your inbox.');
-                    setTimeout(() => {
-                        showLogin();
-                    }, 3000);
-                } else {
-                    throw new Error(data.error || data.message || 'Failed to send reset link');
-                }
-            } catch (error) {
-                console.error('Forgot password error:', error);
-                showError(error.message || 'Failed to send reset link');
-            } finally {
-                forgotBtn.disabled = false;
-                forgotBtn.textContent = 'Send Reset Link';
-            }
-        }
-
-        function showForgotPassword() {
-            document.getElementById('loginForm').style.display = 'none';
-            document.getElementById('forgotPasswordForm').style.display = 'block';
-            hideMessages();
-        }
-
-        function showLogin() {
-            document.getElementById('forgotPasswordForm').style.display = 'none';
-            document.getElementById('loginForm').style.display = 'block';
-            hideMessages();
-        }
-
-        // Signup function removed - signup is handled on /signup page
-
-        // Tab switching removed - login only
-        window.addEventListener('DOMContentLoaded', function () {
-            // Always show login form
-            document.getElementById('loginForm').classList.add('active');
-        });
-
-        function togglePassword(inputId) {
-            const input = document.getElementById(inputId);
-            input.type = input.type === 'password' ? 'text' : 'password';
-        }
-
-        function showError(message) {
-            const errorEl = document.getElementById('errorMessage');
-            errorEl.textContent = message;
-            errorEl.classList.add('show');
-        }
-
-        function showSuccess(message) {
-            const successEl = document.getElementById('successMessage');
-            successEl.textContent = message;
-            successEl.classList.add('show');
-        }
-
-        function hideMessages() {
-            document.getElementById('errorMessage').classList.remove('show');
-            document.getElementById('successMessage').classList.remove('show');
-        }
-    </script>
+  <script src="/assets/js/api-base.js"></script>
+  <script src="/unified-dashboard/assets/js/provider-session.js"></script>
+  <script src="/unified-dashboard/assets/js/login-somo.js"></script>
 </body>
 
 </html>

@@ -1,6 +1,6 @@
 # Current State Architecture (Codebase-Derived)
 
-**Last Updated:** 2026-04-21  
+**Last Updated:** 2026-05-29  
 **Scope:** Monorepo-wide snapshot of how the platform is currently built, based on code and docs in this repository.  
 **Audience:** Engineering, product, operations, security/compliance, onboarding developers.
 
@@ -8,7 +8,7 @@
 
 ## 1) Executive Summary
 
-DocLittle is a multi-surface healthcare platform centered on a Node/Express middleware (`middleware-platform`) that orchestrates:
+Somo (myskinandcare.com) and legacy DocLittle surfaces share a Node/Express middleware (`middleware-platform`) that orchestrates:
 
 - Voice workflows (Retell + Twilio + booking/payment/insurance tools)
 - Patient web portal and native mobile app experiences
@@ -21,13 +21,51 @@ The system is intentionally **integration-heavy**, with many optional providers 
 
 ---
 
+## 1b) Somo SaaS tenant and voice (2026 foundation)
+
+Canonical database and ops docs: [`docs/Database/README.md`](../Database/README.md).
+
+```mermaid
+flowchart TB
+  subgraph keys [Tenant keys]
+    M[merchants]
+    C[customers]
+    CL[clinics]
+  end
+  subgraph voicePath [Inbound voice]
+    TW[Twilio DID]
+    VI["/voice/incoming"]
+    RT[Retell WebSocket]
+    VCL[voice_call_log]
+  end
+  C --> M
+  C --> CL
+  TW --> VI --> RT
+  RT --> VCL
+  C --> VCL
+```
+
+| Concern | Source of truth |
+|---------|-----------------|
+| Provider login | `customers` + `customer_sessions` — [`auth-entrypoints.md`](../auth/auth-entrypoints.md) |
+| Inbound phone | `customers.twilio_phone_number` — [VOICE_PHONE_SEMANTICS.md](./VOICE_PHONE_SEMANTICS.md) |
+| Agent greeting/hours | `voice_agent_settings` by `merchant_id` (migrate off `cust:{id}`) |
+| Live prompt runtime | Retell API (Week 3 SSOT) — [VOICE_PROMPT_SSOT.md](./VOICE_PROMPT_SSOT.md) |
+| Per-call tenant FK | `voice_call_log.customer_id` today; state tables gain `customer_id` in migration `053` |
+| RCM / coding tables | Separate merchant context — [VOICE_VS_RCM_TABLES.md](../RCM/VOICE_VS_RCM_TABLES.md) |
+
+Week 1 operational gate: [SOMO_FOUNDATION_RUNBOOK.md](../Database/SOMO_FOUNDATION_RUNBOOK.md).
+
+---
+
 ## 2) Repository Topology
 
 Primary runtime surfaces:
 
 - `middleware-platform/` - Core backend API + orchestration + workers + integrations
 - `unified-dashboard/` - Static/web portals (patient, business, admin, insurer) and shared JS/CSS
-- `unified-dashboard/littlelab-landing/` - React/CRA landing and assistant experience
+- `unified-dashboard/somo-landing/` - Somo marketing SPA (`:5180` dev, proxies `/api` → `:4000`)
+- `unified-dashboard/littlelab-landing/` - Legacy React/CRA landing and assistant experience
 - `patient-app/` - Expo/React Native app (auth + appointments + checkout chat integration)
 - `docs/` - Consolidated canonical documentation
 - `scripts/`, `infra/`, `Knowledge/`, `todos/` - operations, infra, data assets, roadmap state

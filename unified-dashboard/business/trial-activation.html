@@ -74,9 +74,11 @@
 
     <div class="signup-toast error hidden" id="activationError"></div>
 
-    <a class="signup-btn signup-btn-primary" id="activationAgent" href="agent.html"
-      style="text-decoration: none; margin-top: 8px;">Open voice agent settings</a>
-    <button type="button" class="signup-btn signup-btn-ghost" id="activationDismiss">Got it — go to dashboard</button>
+    <a class="signup-btn signup-btn-primary" id="activationAgent" href="voice-setup.html"
+      style="text-decoration: none; margin-top: 8px;">Set up your AI front desk</a>
+    <a class="signup-btn signup-btn-ghost" id="activationSkip" href="agent.html"
+      style="text-decoration: none; margin-top: 8px; display: block; text-align: center;">Skip for now</a>
+    <button type="button" class="signup-btn signup-btn-ghost" id="activationDismiss">Got it — go to settings</button>
   </div>
 
   <script src="/assets/js/provider-session.js"></script>
@@ -178,7 +180,7 @@
           try {
             sessionStorage.removeItem(PREFILL_KEY);
           } catch (_) {}
-          window.location.href = 'settings.html?billing=trial';
+          window.location.href = 'voice-setup.html';
         });
       }
 

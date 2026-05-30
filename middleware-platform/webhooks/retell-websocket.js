@@ -20,6 +20,7 @@ const KellyAgentService = require('../services/kelly-agent-service');
 const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
 const dodgecallDemoHandler = require('./dodgecall-demo-handler');
+const VoiceAgentRuntime = require('../services/voice-agent-runtime');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -70,6 +71,7 @@ class RetellWebSocketHandler {
             nameProvidedAt: null, // Timestamp when name was first provided
             sentInitialGreeting: false, // Send one opening line so silent callers hear agent first
             clinic_id: existingState?.clinic_id || null, // Restore from persisted state
+            customer_id: existingState?.customer_id || null,
             appointment_id: null, // Task 52 (D2): set from room name (appt-{id}) when message.call arrives
             _transcriptSequence: 0, // u-6: barge-in idempotency — increment per transcript; skip stale replies
             _codingState: existingState?.current_stage || 'INTAKE',
@@ -161,15 +163,47 @@ class RetellWebSocketHandler {
                     const applied = usageResult.minutes_applied ?? 0;
 
                     const callLog = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
+                    const callerLabel = VoiceAgentRuntime.formatCallerLabel(activeConnection);
+                    const callerPhone =
+                        activeConnection?.customerPhone ||
+                        activeConnection?.callMetadata?.from_number ||
+                        null;
+                    const outcome = VoiceAgentRuntime.resolveCallEndOutcome({
+                        callLog,
+                        connection: activeConnection,
+                        callDurationSeconds,
+                        db: this.db
+                    });
+                    const callCols = this.db.db.prepare('PRAGMA table_info(voice_call_log)').all();
+                    const colNames = callCols.map((c) => c.name);
                     if (callLog) {
+                        const sets = [
+                            'call_duration_seconds = ?',
+                            'call_duration_minutes = ?',
+                            'credits_deducted = ?',
+                            'status = \'completed\''
+                        ];
+                        const vals = [callDurationSeconds, callDurationMinutes, applied];
+                        if (colNames.includes('outcome')) {
+                            sets.push('outcome = COALESCE(outcome, ?)');
+                            vals.push(outcome);
+                        }
+                        if (colNames.includes('caller_label')) {
+                            sets.push('caller_label = COALESCE(caller_label, ?)');
+                            vals.push(callerLabel);
+                        }
+                        if (colNames.includes('caller_phone')) {
+                            sets.push('caller_phone = COALESCE(caller_phone, ?)');
+                            vals.push(callerPhone);
+                        }
+                        vals.push(callId);
                         this.db.db.prepare(`
-                            UPDATE voice_call_log 
-                            SET call_duration_seconds = ?,
-                                call_duration_minutes = ?,
-                                credits_deducted = ?,
-                                status = 'completed'
-                            WHERE call_id = ?
-                        `).run(callDurationSeconds, callDurationMinutes, applied, callId);
+                            UPDATE voice_call_log SET ${sets.join(', ')} WHERE call_id = ?
+                        `).run(...vals);
+                        if (typeof this.db.syncVoiceCallToPostgres === 'function') {
+                            const updated = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
+                            if (updated) this.db.syncVoiceCallToPostgres(updated);
+                        }
                     } else {
                         const { v4: uuidv4 } = require('uuid');
                         this.db.db.prepare(`
@@ -419,17 +453,24 @@ class RetellWebSocketHandler {
             }
 
             // Persist call state once clinic_id is available (medical coding agent)
-            if (connection.clinic_id && typeof this.db.upsertCallState === 'function') {
+            if ((connection.clinic_id || connection.customer_id) && typeof this.db.upsertCallState === 'function') {
                 try {
-                    this.db.upsertCallState(callId, { clinic_id: connection.clinic_id });
+                    this.db.upsertCallState(callId, {
+                        clinic_id: connection.clinic_id,
+                        customer_id: connection.customer_id || null
+                    });
                 } catch (e) {
                     console.warn('⚠️  Failed to upsert call state:', e.message);
                 }
             }
 
+            // Provider voice runtime (greeting, hours, enabled) — after tenant context exists
+            if (!connection._runtimeApplied && !dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+                this.applyProviderRuntime(callId, connection, callMeta, message.response_id);
+            }
+
             // If the call starts and the caller is silent, proactively greet once.
-            // This avoids "connected but agent never speaks first" behavior.
-            if (!connection.sentInitialGreeting && !dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+            if (!connection.sentInitialGreeting && !dodgecallDemoHandler.isDodgecallDemoConnection(connection) && !connection.agentBlocked) {
                 this.sendInitialGreeting(callId, connection, callMeta, message.response_id);
             }
             if (!connection.sentInitialGreeting && dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
@@ -555,6 +596,10 @@ class RetellWebSocketHandler {
         }
 
         // VOICE_AGENT_ENABLED gate (u-4): when 0, reject voice; redirect to web chat
+        if (connection?.agentBlocked) {
+            return;
+        }
+
         const voiceAgentEnabled = process.env.VOICE_AGENT_ENABLED === '1' || process.env.VOICE_AGENT_ENABLED === 'true';
         if (!voiceAgentEnabled) {
             const baseUrl = this.config?.apiBaseUrl || process.env.BASE_URL || 'http://localhost:4000';
@@ -568,6 +613,11 @@ class RetellWebSocketHandler {
         const userSaid = message.transcript;
 
         console.log(`🗣️  User said: "${userSaid}"`);
+
+        const transferHint = VoiceAgentRuntime.detectTransferHint(userSaid, null);
+        if (transferHint) {
+            connection.voiceOutcomeHint = transferHint;
+        }
 
         // Deterministic name-first voice flow:
         // 1) Initial greeting asks for caller name
@@ -619,7 +669,14 @@ class RetellWebSocketHandler {
         // Persist to voice_conversation_memory (medical coding agent)
         if (typeof this.db.appendConversationMemory === 'function') {
             try {
-                this.db.appendConversationMemory(callId, connection?.clinic_id || null, 'user', userSaid, null);
+                this.db.appendConversationMemory(
+                    callId,
+                    connection?.clinic_id || null,
+                    'user',
+                    userSaid,
+                    null,
+                    connection?.customer_id || null
+                );
             } catch (e) {
                 console.warn('⚠️  Failed to append conversation memory:', e.message);
             }
@@ -679,12 +736,18 @@ class RetellWebSocketHandler {
                     sessionId: callId,
                     channel: 'voice',
                     clinicId: connection?.clinic_id || null,
+                    customerId: connection?.customer_id || null,
                     patientId: resolvedPatientId,
                     callerPhone,
-                    patientName: connection?.customerName || connection?.initialName || null
+                    patientName: connection?.customerName || connection?.initialName || null,
+                    providerInstructions: connection?.voiceRuntime?.customPrompt || null
                 });
                 kellyResult = result;
                 agentReply = result?.reply;
+                const agentTransfer = VoiceAgentRuntime.detectTransferHint(null, agentReply);
+                if (agentTransfer) {
+                    connection.voiceOutcomeHint = agentTransfer;
+                }
                 if (result?.usedFallback) {
                     console.log(`📋 [${callId}] Kelly LLM unavailable, used orchestrator fallback`);
                 }
@@ -1221,20 +1284,19 @@ class RetellWebSocketHandler {
                 }
             }
             
-            // Priority 4: ALWAYS use default tenant (akin-dunbar) as final fallback
-            // This ensures the agent ALWAYS connects to akin-dunbar
-            if (!merchantId) {
+            // Priority 4: default shop only when no SaaS customer context on this connection
+            if (!merchantId && !connection.customer_id) {
                 const constants = require('../utils/constants');
                 const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
                 const defaultMerchant = this.db.getMerchantBySubdomain(defaultSubdomain);
                 if (defaultMerchant) {
                     merchantId = defaultMerchant.id;
                     console.log(`✅ Using default tenant merchant (${defaultSubdomain}): ${merchantId}`);
-                    console.log(`   This ensures the agent always connects to ${defaultSubdomain}`);
                 } else {
                     console.error(`❌ CRITICAL: Default tenant (${defaultSubdomain}) not found in database!`);
-                    console.error(`   Product search will fail. Please check database configuration.`);
                 }
+            } else if (!merchantId && connection.customer_id) {
+                console.warn(`⚠️  No merchant_id for customer ${connection.customer_id}; skipping akin-dunbar fallback`);
             }
             
             // Final validation - merchant_id should NEVER be null at this point
@@ -2204,8 +2266,6 @@ class RetellWebSocketHandler {
     // Helper: send initial websocket readiness/config to Retell (Custom LLM protocol)
     sendInitialHandshake(callId, connection) {
         if (!connection?.ws || connection.ws.readyState !== WebSocket.OPEN) return;
-        const opening = "Hi, my name is Kelly. I'm LittleLabs' voice assistant. Can I start by getting your name?";
-        // Enable optional protocol features up front so Retell can stream richer events.
         this.sendToRetell(connection.ws, {
             response_type: 'config',
             config: {
@@ -2214,22 +2274,63 @@ class RetellWebSocketHandler {
                 transcript_with_tool_calls: true
             }
         });
-        // Per Retell docs, send an initial response event to establish readiness.
-        // Non-empty content makes agent initiate conversation immediately.
-        this.sendToRetell(connection.ws, {
-            response_type: 'response',
-            response_id: 0,
-            content: opening,
-            content_complete: true
-        });
-        connection.sentInitialGreeting = true;
-        connection.conversationHistory.push({
-            role: 'assistant',
-            content: opening,
-            timestamp: Date.now()
-        });
         console.log(`🤝 Sent Retell WS handshake/config for ${callId}`);
-        console.log(`👋 Sent initial greeting (handshake) for call ${callId}`);
+    }
+
+    /**
+     * Load per-provider voice settings after call_details; enforce enabled/hours; send opener.
+     */
+    applyProviderRuntime(callId, connection, callMeta, responseId = null) {
+        if (!connection || connection._runtimeApplied) return;
+        connection._runtimeApplied = true;
+
+        try {
+            const tenant = VoiceAgentRuntime.resolveTenantFromCallMeta(this.db, callMeta);
+            if (tenant.customerId) connection.customer_id = tenant.customerId;
+            if (tenant.merchantId) connection.merchant_id = tenant.merchantId;
+            if (tenant.clinicId && !connection.clinic_id) {
+                connection.clinic_id = tenant.clinicId;
+            }
+
+            const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(this.db, {
+                merchantId: tenant.merchantId,
+                customerId: tenant.customerId
+            });
+            connection.voiceRuntime = runtime;
+
+            const admission = VoiceAgentRuntime.evaluateCallAdmission(runtime);
+            if (!admission.allowed) {
+                connection.agentBlocked = true;
+                connection.awaitingName = false;
+                const blockMsg = admission.message || VoiceAgentRuntime.buildUnavailableMessage();
+                this.sendRetellResponse(connection.ws, blockMsg, responseId, { endCall: true });
+                connection.sentInitialGreeting = true;
+                connection.conversationHistory.push({
+                    role: 'assistant',
+                    content: blockMsg,
+                    timestamp: Date.now()
+                });
+                console.log(`🚫 Provider call blocked (${admission.reason}) for ${callId}`);
+                return;
+            }
+
+            connection.providerGreeting = admission.greeting;
+            connection.agentBlocked = false;
+            if (!connection.sentInitialGreeting && admission.greeting) {
+                connection.awaitingName = false;
+                this.sendRetellResponse(connection.ws, admission.greeting, responseId);
+                connection.sentInitialGreeting = true;
+                connection.conversationHistory.push({
+                    role: 'assistant',
+                    content: admission.greeting,
+                    timestamp: Date.now()
+                });
+                console.log(`👋 Provider greeting sent for ${callId}`);
+            }
+            console.log(`✅ Provider runtime loaded for ${callId} (merchant ${tenant.merchantId || 'n/a'})`);
+        } catch (e) {
+            console.warn('⚠️  applyProviderRuntime failed:', e.message);
+        }
     }
 
     extractLikelyName(transcript) {
@@ -2275,15 +2376,19 @@ class RetellWebSocketHandler {
     }
 
     // Helper: send assistant speech in Retell Custom LLM format
-    sendRetellResponse(ws, content, responseId) {
+    sendRetellResponse(ws, content, responseId, options = {}) {
         if (!content) return;
         const safeResponseId = (responseId === undefined || responseId === null) ? 0 : responseId;
-        this.sendToRetell(ws, {
+        const payload = {
             response_type: 'response',
             response_id: safeResponseId,
             content,
             content_complete: true
-        });
+        };
+        if (options.endCall) {
+            payload.end_call = true;
+        }
+        this.sendToRetell(ws, payload);
     }
 
     // Helper: build and send one-time initial greeting
@@ -2301,11 +2406,17 @@ class RetellWebSocketHandler {
         }
         const isOutboundSales = callMeta?.metadata?.call_type === 'sales_outbound';
         const patientName = callMeta?.dynamic_variables?.patient_name || connection.customerName || null;
-        const opening = isOutboundSales
-            ? "Hi, this is Alex from DocLittle. Is now still a good time to talk?"
-            : (patientName
-                ? `Hi ${patientName}, this is Kelly from DocLittle. How can I help you today?`
-                : 'Hi, this is Kelly from DocLittle. How can I help you today?');
+        let opening = connection.providerGreeting || null;
+        if (opening) {
+            connection.awaitingName = false;
+        }
+        if (!opening) {
+            opening = isOutboundSales
+                ? "Hi, this is Alex from DocLittle. Is now still a good time to talk?"
+                : (patientName
+                    ? `Hi ${patientName}, this is Kelly from DocLittle. How can I help you today?`
+                    : 'Hi, this is Kelly from DocLittle. How can I help you today?');
+        }
 
         this.sendRetellResponse(connection.ws, opening, responseId);
         connection.sentInitialGreeting = true;
@@ -2609,6 +2720,14 @@ class RetellWebSocketHandler {
                 console.log(`✅ Appointment successfully created: ${response.data.appointment.id} (Confirmation: ${response.data.appointment.confirmation_number})`);
                 if (connection && !connection._onboardingStartAt) {
                     connection._onboardingStartAt = Date.now();
+                }
+                if (this.db.setVoiceCallOutcome) {
+                    try {
+                        const oc = VoiceAgentRuntime.outcomeForScheduledAppointment(
+                            response.data.appointment
+                        );
+                        this.db.setVoiceCallOutcome(callId, oc);
+                    } catch (_) {}
                 }
             } else if (!response.data.success) {
                 console.warn(`⚠️  Appointment scheduling failed: ${response.data.error || 'Unknown error'}`);

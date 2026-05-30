@@ -100,6 +100,11 @@ function main() {
     copyFile(termsSrc, path.join(OUT, 'terms.html'));
   }
 
+  const privacySrc = path.join(ROOT, 'middleware-platform', 'public', 'signup', 'privacy.html');
+  if (fs.existsSync(privacySrc)) {
+    copyFile(privacySrc, path.join(OUT, 'privacy.html'));
+  }
+
   if (fs.existsSync(path.join(UD, 'manifest.webmanifest'))) {
     copyFile(path.join(UD, 'manifest.webmanifest'), path.join(OUT, 'manifest.webmanifest'));
   }

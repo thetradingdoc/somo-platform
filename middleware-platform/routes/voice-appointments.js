@@ -11,7 +11,27 @@ function registerVoiceAppointmentRoutes(app, deps) {
     resolveClinicIdFromRequest,
     FALLBACK_CLINIC_ID,
     ensureSlotBundles,
+    safeLogRequestBody: safeLogRequestBodyDep,
   } = deps;
+  const { safeLogRequestBody: safeLogRequestBodyMod } = require('../services/payment-security');
+  const safeLogRequestBody = safeLogRequestBodyDep || safeLogRequestBodyMod;
+  const {
+    resolveVoiceSessionIdForGuard,
+    requireVoiceSessionIdForTriageParity,
+    enforceVoiceTriageGuardrailsForSession
+  } = require('../services/voice-triage-guards');
+  const PaymentFlowService = require('../services/payment-flow-service');
+  const FHIRService = require('../services/fhir-service');
+  const InsuranceService = require('../services/insurance-service');
+  const BookingService = require('../services/booking-service');
+  const PatientIntakeService = require('../services/patient-intake-service');
+  const namesMatch = (a, b) => FHIRService.namesMatch(a, b);
+  function invalidateSlotAvailabilityCache() {
+    try {
+      const cache = require('../services/cache-service');
+      cache.clear('slot_availability');
+    } catch (_) {}
+  }
 
 app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, withIdempotency('voice_checkout'), async (req, res) => {
   try {
@@ -56,7 +76,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     }
     if (!appointmentId) {
       // Search for most recent appointment for this customer
-      const BookingService = require('./services/booking-service');
+      const BookingService = require('../services/booking-service');
       const searchTerm = customerPhone || args.customer_email || args.patient_email;
       if (searchTerm) {
         try {
@@ -269,7 +289,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
           if (amount > 0 && appointmentId) {
             try {
               if (appointment && appointment.patient_id) {
-                const FHIRService = require('./services/fhir-service');
+                const FHIRService = require('../services/fhir-service');
                 const eligibility_checks = db.getEligibilityChecksByPatient?.(appointment.patient_id) || [];
                 const isCopay =
                   eligibility_checks.length > 0 && eligibility_checks[0].copay_amount === amount;
@@ -306,7 +326,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
           if (emailDeliveryQueued) {
             setImmediate(async () => {
               try {
-                const EmailService = require('./services/email-service');
+                const EmailService = require('../services/email-service');
                 await EmailService.sendCheckoutVerificationCode(existingCheckout.customer_email, verificationCode);
                 console.log('[CHECKOUT] Verification email sent to:', String(existingCheckout.customer_email || '').slice(0, 4) + '…');
               } catch (emailError) {
@@ -314,7 +334,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
               }
               try {
                 if (appointmentId && appointment) {
-                  const EmailService = require('./services/email-service');
+                  const EmailService = require('../services/email-service');
                   const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
                   const paymentLink = `${baseUrl}/payment/${paymentToken}`;
                   await EmailService.sendPatientBillingEmail(existingCheckout.customer_email, {
@@ -395,7 +415,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
       try {
         const appointment = await db.getAppointment(appointmentId, clinicId);
         if (appointment && appointment.patient_id) {
-          const FHIRService = require('./services/fhir-service');
+          const FHIRService = require('../services/fhir-service');
           // Guard: fetch eligibility in this scope (was undefined when amount came from pricing)
           const eligibility_checks = db.getEligibilityChecksByPatient?.(appointment.patient_id) || [];
           const eligibilityChecks = eligibility_checks;
@@ -441,7 +461,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     if (emailDeliveryQueued) {
       setImmediate(async () => {
         try {
-          const EmailService = require('./services/email-service');
+          const EmailService = require('../services/email-service');
           await EmailService.sendCheckoutVerificationCode(checkout.customer_email, verificationCode);
           console.log('[CHECKOUT] Verification email sent to:', String(checkout.customer_email || '').slice(0, 4) + '…');
         } catch (emailError) {
@@ -451,7 +471,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
           if (appointmentId) {
             const appointment = await db.getAppointment(appointmentId, clinicId);
             if (appointment) {
-              const EmailService = require('./services/email-service');
+              const EmailService = require('../services/email-service');
               const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
               const paymentLink = `${baseUrl}/payment/${paymentToken}`;
               await EmailService.sendPatientBillingEmail(checkout.customer_email, {
@@ -659,7 +679,7 @@ app.post('/voice/checkout/verify', async (req, res) => {
     let emailResult = { success: false, error: null, queued: emailDeliveryQueued };
     try {
       if (emailDeliveryQueued) {
-        const EmailService = require('./services/email-service');
+        const EmailService = require('../services/email-service');
         let appt = null;
         if (checkout.appointment_id) {
           appt = await db.getAppointment(checkout.appointment_id);
@@ -716,7 +736,7 @@ app.post('/voice/orders/tracking', async (req, res) => {
     console.log('\n📦 VOICE: Order Tracking Request');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    const TrackingService = require('./services/tracking-service');
+    const TrackingService = require('../services/tracking-service');
 
     // Handle both Retell format and direct format
     let order_id, customer_email, customer_phone;
@@ -933,7 +953,7 @@ app.post('/voice/checkout/create', scheduleCheckoutLimiter, async (req, res) => 
     // Create or get customer from checkout (for cannabis e-commerce)
     if (response.isSuccess() && args.customer_phone) {
       try {
-        const CustomerService = require('./services/customer-service');
+        const CustomerService = require('../services/customer-service');
         const merchantId = args.tenantContext?.merchant?.id ||
           args.tenantContext?.clinic?.merchant_id ||
           response.metadata?.merchant_id ||
@@ -978,7 +998,7 @@ app.post('/voice/checkout/create', scheduleCheckoutLimiter, async (req, res) => 
         });
 
         // Link customer to FHIR Patient
-        const CustomerService = require('./services/customer-service');
+        const CustomerService = require('../services/customer-service');
         const checkoutForLink = await db.getVoiceCheckout(response.checkout_id);
         if (checkoutForLink) {
           const customer = CustomerService.getOrCreateCustomerFromCheckout(checkoutForLink, merchantId);
@@ -993,7 +1013,7 @@ app.post('/voice/checkout/create', scheduleCheckoutLimiter, async (req, res) => 
         // Auto-create wallet for patient (if Circle is available)
         if (patient.id && merchantId) {
           try {
-            const CircleService = require('./services/circle-service');
+            const CircleService = require('../services/circle-service');
             const walletResult = await CircleService.getOrCreatePatientWallet(patient.id, {
               createIfNotExists: true,
               merchantId: merchantId
@@ -1207,7 +1227,7 @@ app.post('/voice/patient/intake', async (req, res) => {
     // Normalize phone early so patient resolution is stable
     if (patient_phone) {
       try {
-        const SMSService = require('./services/sms-service');
+        const SMSService = require('../services/sms-service');
         patient_phone = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patient_phone) : patient_phone;
       } catch (_) {}
     }
@@ -1304,7 +1324,7 @@ app.post('/voice/patient/intake/status', async (req, res) => {
     let patient_phone = (args.patient_phone || args.phone || '').toString().trim();
     if (patient_phone) {
       try {
-        const SMSService = require('./services/sms-service');
+        const SMSService = require('../services/sms-service');
         patient_phone = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patient_phone) : patient_phone;
       } catch (_) {}
     }
@@ -1595,7 +1615,7 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
     if (!enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, 'slots')) return;
 
     const practitionerId = args.practitioner_id || null;
-    const cache = require('./services/cache-service');
+    const cache = require('../services/cache-service');
     const cacheSession = sessionIdForGuard || 'no_session';
     // C10: namespace cache when REQUIRE_TRIAGE_FOR_VOICE flips so stale no_session entries are not reused
     const rtfvSeg =
@@ -1610,11 +1630,11 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
 
     // Specialist path: when appointment_type is a specialty, use Resolver + specialist slots
     // W3-S5.3/W3-S5.4: Use language + state from session when call_id provided
-    const { isSpecialtyType } = require('./services/specialist-slot-service');
+    const { isSpecialtyType } = require('../services/specialist-slot-service');
     if (isSpecialtyType(appointmentType)) {
       try {
-        const SpecialistResolverService = require('./services/specialist-resolver-service');
-        const { getAvailableSlotsWithSpecialist } = require('./services/specialist-slot-service');
+        const SpecialistResolverService = require('../services/specialist-resolver-service');
+        const { getAvailableSlotsWithSpecialist } = require('../services/specialist-slot-service');
         let language = 'en';
         let patientState = null;
         const callId = args.call_id || args.session_id || sessionIdForGuard || null;
@@ -1629,7 +1649,7 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
               const row = db.getOrchestrateSessionBySessionId(callId);
               patientState = row?.flow_state?.patient_state || row?.flow_state?.state || null;
             }
-            const ragResult = require('./services/triage-rag-service').getLatestForSession?.(callId);
+            const ragResult = require('../services/triage-rag-service').getLatestForSession?.(callId);
             if (ragResult?.urgency) urgency = ragResult.urgency;
           } catch (_) {}
         }
@@ -1743,7 +1763,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
     let patientPhone = (args.patient_phone || args.phone || '').toString().trim();
     if (patientPhone) {
       try {
-        const SMSService = require('./services/sms-service');
+        const SMSService = require('../services/sms-service');
         patientPhone = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patientPhone) : patientPhone.replace(/\D/g, '');
       } catch (_) {
         patientPhone = patientPhone.replace(/\D/g, '');
@@ -1861,7 +1881,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
 
           // Verify name matches if provided (for fraud detection)
           if (patientName && foundPatient.name) {
-            const FHIRService = require('./services/fhir-service');
+            const FHIRService = require('../services/fhir-service');
             if (!FHIRService.namesMatch(patientName, foundPatient.name)) {
               console.warn(`⚠️  Name mismatch: Provided "${patientName}" but patient record has "${foundPatient.name}"`);
               // Still use the patient found by phone (phone is more reliable)
@@ -2036,7 +2056,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
     // If still no patient and we have patient info, create patient
     if (!finalPatientId && (patientName || patientPhone || patientEmail)) {
       try {
-        const FHIRService = require('./services/fhir-service');
+        const FHIRService = require('../services/fhir-service');
         console.log('   📝 Creating/finding patient record for insurance collection...');
 
         const patientResult = await FHIRService.getOrCreatePatient({
@@ -2104,7 +2124,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
     let eligibilityResult = null;
     if (payerId && args.member_id) {
       try {
-        const InsuranceService = require('./services/insurance-service');
+        const InsuranceService = require('../services/insurance-service');
 
         // Get patient info for eligibility check
         let finalPatientName = patientName || 'Patient';
@@ -2138,7 +2158,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
         let serviceCode = args.service_code;
         if (!serviceCode && args.call_id) {
           try {
-            const TriageRAGService = require('./services/triage-rag-service');
+            const TriageRAGService = require('../services/triage-rag-service');
             const { getCptCodeForVisit } = require('./utils/cpt-helper');
             const triage = TriageRAGService.getLatestForSession(args.call_id);
             if (triage?.target_specialty) {
@@ -2655,7 +2675,7 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
     // Send insurance billing email if claim was submitted successfully
     if (result.success && result.claimId) {
       try {
-        const EmailService = require('./services/email-service');
+        const EmailService = require('../services/email-service');
         const insurerEmail = args.insurer_email || process.env.INSURER_BILLING_EMAIL || 'gigtogigdev@gmail.com';
 
         await EmailService.sendInsuranceBillingEmail(insurerEmail, {

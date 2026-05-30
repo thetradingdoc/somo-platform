@@ -47,7 +47,6 @@
 .dc-demo {
   background: #fff;
   padding: 5rem 2rem 6rem;
-  border-top: 1px solid var(--somo-border);
 }
 
 .dc-demo-title {
@@ -87,57 +86,174 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 360px;
+  min-height: 460px;
 }
 
-.dc-orb {
-  width: 200px;
-  height: 200px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 32% 28%,
-    #d4f07a 0%,
-    #b8e85a 18%,
-    var(--somo-green) 42%,
-    #7fb832 68%,
-    var(--somo-green-dark) 100%
-  );
-  box-shadow:
-    0 24px 60px rgba(147, 211, 59, 0.35),
-    0 0 72px rgba(147, 211, 59, 0.22);
+.dc-sphere-wrap,
+.dc-sphere-static {
+  position: relative;
+  width: 352px;
+  height: 352px;
   margin-bottom: 2rem;
+  flex-shrink: 0;
+}
+
+.dc-sphere-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  cursor: grab;
+}
+
+.dc-sphere-host:active {
+  cursor: grabbing;
+}
+
+.dc-sphere-host canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.dc-sphere-static {
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #b5e930, #238108 50%, #164437 100%);
+}
+
+.dc-orb-wrap,
+.dc-orb-static {
+  position: relative;
+  width: 300px;
+  height: 300px;
+  margin-bottom: 2rem;
+  flex-shrink: 0;
+}
+
+.dc-orb-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -4%;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow:
+    0 20px 48px rgba(15, 23, 42, 0.08),
+    0 8px 24px rgba(15, 23, 42, 0.05);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dc-orb-canvas-host {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--dc-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  cursor: grab;
+}
+
+.dc-orb-canvas-host:active {
+  cursor: grabbing;
+}
+
+.dc-orb-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  clip-path: circle(50%);
+}
+
+.dc-orb-static {
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--dc-border);
+  box-shadow:
+    0 20px 48px rgba(15, 23, 42, 0.08),
+    0 8px 24px rgba(15, 23, 42, 0.05);
 }
 
 .dc-persona-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.55rem;
   justify-content: center;
-  max-width: 340px;
+  max-width: 400px;
 }
 
 .dc-pill {
-  font-size: 0.8rem;
-  padding: 0.45rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  padding: 0.55rem 1rem;
   border-radius: 999px;
-  border: 1px solid var(--dc-border);
-  background: #fafafa;
-  color: var(--dc-muted);
+  border: 1px solid transparent;
   cursor: pointer;
   font-family: inherit;
+  font-weight: 600;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.dc-pill__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dc-pill__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dc-pill--light {
+  background: var(--somo-lizard-10, #f4fbe8);
+  color: var(--somo-msu, #164437);
+  border-color: color-mix(in srgb, var(--somo-msu) 12%, transparent);
+}
+
+.dc-pill--light:hover {
+  background: var(--somo-lizard-20, #e8f7d0);
+}
+
+.dc-pill--medium {
+  background: var(--somo-grass, #238108);
+  color: #ffffff;
+  border-color: var(--somo-grass, #238108);
+}
+
+.dc-pill--medium:hover {
+  filter: brightness(1.08);
+}
+
+.dc-pill--dark {
+  background: var(--somo-msu, #164437);
+  color: var(--somo-lizard, #b5e930);
+  border-color: var(--somo-msu, #164437);
+}
+
+.dc-pill--dark:hover {
+  filter: brightness(1.12);
 }
 
 .dc-pill-active {
-  border-color: var(--somo-green);
-  color: var(--somo-text);
-  background: rgba(147, 211, 59, 0.18);
-  font-weight: 600;
+  background: var(--somo-lizard, #b5e930) !important;
+  color: var(--somo-msu, #164437) !important;
+  border-color: var(--somo-msu, #164437) !important;
+  box-shadow: 0 0 0 2px var(--somo-msu, #164437);
 }
 
-.dc-pill:hover {
-  border-color: var(--somo-green-hover);
-  color: var(--somo-text);
-  background: rgba(147, 211, 59, 0.1);
+.dc-pill-active:hover {
+  filter: none;
+  background: var(--somo-lizard-hover, #9fd628) !important;
 }
 
 .dc-demo-lead {

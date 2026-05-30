@@ -320,21 +320,72 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
         const today = new Date().toISOString().split('T')[0];
         const callsToday = calls.filter(c => c.created_at && c.created_at.startsWith(today));
 
-        // Get recent calls (last 10)
-        const recentCalls = calls.slice(0, 10).map(call => ({
-            id: call.id,
-            call_id: call.call_id,
-            status: call.status,
-            duration: call.call_duration_seconds,
-            cost: call.total_cost_usd || 0,
-            created_at: call.created_at
-        }));
+        const durationsToday = callsToday
+            .map(c => c.call_duration_seconds)
+            .filter((d) => d != null && d > 0);
+        const avgDurationSecondsToday = durationsToday.length
+            ? Math.round(durationsToday.reduce((a, b) => a + b, 0) / durationsToday.length)
+            : 0;
+
+        let apptsBookedToday = 0;
+        try {
+            const bookedRows = db.db.prepare(`
+                SELECT COUNT(*) AS cnt FROM function_call_log
+                WHERE customer_id = ?
+                  AND function_name = 'schedule_appointment'
+                  AND success = 1
+                  AND created_at >= ?
+            `).get(customer.id, `${today}T00:00:00`);
+            apptsBookedToday = bookedRows?.cnt || 0;
+        } catch (_) {}
+
+        if (apptsBookedToday === 0 && customer.merchant_id) {
+            try {
+                const clinicRow = db.db.prepare(
+                    'SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1'
+                ).get(customer.merchant_id);
+                if (clinicRow?.clinic_id) {
+                    const apptRow = db.db.prepare(`
+                        SELECT COUNT(*) AS cnt FROM appointments
+                        WHERE clinic_id = ?
+                          AND date(created_at) = date('now', 'localtime')
+                    `).get(clinicRow.clinic_id);
+                    apptsBookedToday = apptRow?.cnt || 0;
+                }
+            } catch (_) {}
+        }
+
+        const hasOutcomeCol = db.db.prepare('PRAGMA table_info(voice_call_log)').all()
+            .some((c) => c.name === 'outcome');
+
+        const VoiceAgentRuntime = require('../services/voice-agent-runtime');
+
+        const recentCalls = calls.slice(0, 10).map(call => {
+            let outcome = hasOutcomeCol ? call.outcome : null;
+            if (!outcome) {
+                if (call.status === 'completed') outcome = 'info';
+                else outcome = 'info';
+            }
+            return {
+                id: call.id,
+                call_id: call.call_id,
+                status: call.status,
+                outcome,
+                duration: call.call_duration_seconds,
+                duration_seconds: call.call_duration_seconds,
+                cost: call.total_cost_usd || 0,
+                created_at: call.created_at,
+                caller_label: VoiceAgentRuntime.formatCallerLabelFromCallRow(call)
+            };
+        });
 
         res.json({
             success: true,
             stats: {
                 total_calls: calls.length,
                 calls_today: callsToday.length,
+                avg_duration_seconds_today: avgDurationSecondsToday,
+                appts_booked_today: apptsBookedToday,
                 total_cost: calls.reduce((sum, c) => sum + (c.total_cost_usd || 0), 0),
                 cost_today: callsToday.reduce((sum, c) => sum + (c.total_cost_usd || 0), 0)
             },

@@ -12,6 +12,12 @@
  */
 
 require('dotenv').config();
+
+if (process.env.ALLOW_DEMO_SEED !== '1') {
+  console.error('Set ALLOW_DEMO_SEED=1 to run seed-demo-accounts (prevents accidental prod seed).');
+  process.exit(1);
+}
+
 const crypto = require('crypto');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');

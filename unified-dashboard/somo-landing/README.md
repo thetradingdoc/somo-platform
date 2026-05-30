@@ -38,3 +38,4 @@ Hero behavior: [docs/deployment/SOMO_LANDING_HERO.md](../../docs/deployment/SOMO
 |----------|-------------|-------|
 | `VITE_API_BASE` | empty | Same-origin `/api/public/dodgecall/...` (internal path) |
 | `VITE_SIGNUP_URL` | `http://127.0.0.1:4000/signup?utm_source=somo` | Set in `.env.development` |
+| `VITE_LOGIN_URL` | `/login?utm_source=somo` (proxied to :4000 in `npm run dev`) | Provider sign-in |

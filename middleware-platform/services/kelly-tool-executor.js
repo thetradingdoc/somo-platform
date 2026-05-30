@@ -576,6 +576,15 @@ class KellyToolExecutor {
               session_id: sessionId
             });
             if (scheduleResultRoutine?.success && scheduleResultRoutine?.appointment?.id) {
+              if (channel === 'voice' && sessionId && db.setVoiceCallOutcome) {
+                try {
+                  const VoiceAgentRuntime = require('./voice-agent-runtime');
+                  const oc = VoiceAgentRuntime.outcomeForScheduledAppointment(
+                    scheduleResultRoutine.appointment
+                  );
+                  db.setVoiceCallOutcome(sessionId, oc);
+                } catch (_) {}
+              }
               try {
                 const { autoCheckoutAfterSchedule } = require('./auto-checkout-after-schedule');
                 const base = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
@@ -785,6 +794,15 @@ class KellyToolExecutor {
           // Auto-chain schedule -> checkout through shared helper so all entry points
           // use one deduped checkout path (A2).
           if (scheduleResult?.success && scheduleResult?.appointment?.id) {
+            if (channel === 'voice' && sessionId && db.setVoiceCallOutcome) {
+              try {
+                const VoiceAgentRuntime = require('./voice-agent-runtime');
+                const oc = VoiceAgentRuntime.outcomeForScheduledAppointment(
+                  scheduleResult.appointment
+                );
+                db.setVoiceCallOutcome(sessionId, oc);
+              } catch (_) {}
+            }
             try {
               const appointmentId = scheduleResult.appointment.id;
               const patientEmail =

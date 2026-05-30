@@ -14,6 +14,12 @@
     "lead_qualification": "medical",
     "customer_service": "medical",
     "debt_collection": "medical",
-    "survey": "medical"
+    "survey": "medical",
+    "dental_front_desk": "medical",
+    "medical_clinic": "medical",
+    "specialty_practice": "medical",
+    "bilingual_front_desk": "medical",
+    "after_hours": "medical",
+    "patient_billing": "medical"
   }
 }

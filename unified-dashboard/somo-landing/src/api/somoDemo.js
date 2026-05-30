@@ -1,12 +1,12 @@
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
 
 export const USE_CASES = [
-  { id: 'receptionist', label: 'Receptionist' },
-  { id: 'appointment_setter', label: 'Appointment Setter' },
-  { id: 'lead_qualification', label: 'Lead Qualification' },
-  { id: 'customer_service', label: 'Customer Service' },
-  { id: 'debt_collection', label: 'Debt Collection' },
-  { id: 'survey', label: 'Survey' }
+  { id: 'dental_front_desk', label: 'Dental', tier: 'light', icon: 'specialties' },
+  { id: 'medical_clinic', label: 'Medical', tier: 'medium', icon: 'appointments' },
+  { id: 'specialty_practice', label: 'Specialty', tier: 'dark', icon: 'specialties' },
+  { id: 'bilingual_front_desk', label: 'Bilingual', tier: 'light', icon: 'multilingual' },
+  { id: 'after_hours', label: 'After-hours', tier: 'medium', icon: 'after_hours' },
+  { id: 'patient_billing', label: 'Billing', tier: 'dark', icon: 'rcm' }
 ];
 
 export async function requestDemoCall({ name, phone, use_case, consent }) {
@@ -42,6 +42,14 @@ export function saveSignupPrefill({ name, phone, use_case }) {
   }
 }
 
-export function signupUrl() {
-  return import.meta.env.VITE_SIGNUP_URL || '/signup?utm_source=somo';
+/** Same-origin signup wizard — never the login page. */
+export function signupUrl(tier) {
+  const params = new URLSearchParams({ utm_source: 'somo' });
+  if (tier) params.set('tier', tier);
+  return `/signup?${params.toString()}`;
+}
+
+/** Provider login for returning customers. */
+export function loginUrl() {
+  return '/login?utm_source=somo';
 }
