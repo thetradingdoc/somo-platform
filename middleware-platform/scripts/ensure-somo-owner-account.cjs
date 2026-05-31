@@ -118,6 +118,18 @@ See local/README.md
     if (updated.twilio_phone_number) {
       console.log(`  line:        ${updated.twilio_phone_number}`);
     }
+    if (!updated.retell_agent_id) {
+      const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent');
+      const retell = await ensureCustomerRetellAgent(db, updated.id);
+      if (retell.agentId) {
+        updated = db.getCustomer(updated.id);
+        console.log(`  retell_agent_id: ${updated.retell_agent_id} (created)`);
+      } else if (retell.error) {
+        console.warn(`  retell_agent_id: (none) — ${retell.error}`);
+      }
+    } else {
+      console.log(`  retell_agent_id: ${updated.retell_agent_id}`);
+    }
     console.log(`\nSign in: ${process.env.BASE_URL || 'http://localhost:4000'}/login`);
     return;
   }

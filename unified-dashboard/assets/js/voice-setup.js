@@ -1,5 +1,9 @@
 (function () {
-  const API_BASE = window.location.origin.replace(/\/$/, '');
+  const API_BASE = (
+    typeof resolveApiBase === 'function'
+      ? resolveApiBase()
+      : (window.API_BASE || window.location.origin)
+  ).replace(/\/$/, '');
   let step = 1;
   let hoursApi = null;
   let customer = null;

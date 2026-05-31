@@ -54,6 +54,10 @@ Schedule daily (UTC example in [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.
 
 ## E2E
 
+**Staging (live hosts):** [STAGING_DIAGNOSTIC_RUNBOOK.md](../testing/STAGING_DIAGNOSTIC_RUNBOOK.md) — `npm run test:e2e:staging-signup`, `staging:trial-provision`, `staging:call-verify`.
+
+**Local API:**
+
 ```bash
 cd middleware-platform
 TRIAL_SIM_FLOW_ENABLED=1 npm start

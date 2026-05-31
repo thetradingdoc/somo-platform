@@ -6,6 +6,7 @@ const RetellService = require('../services/retell-service');
 const { hasValidSession } = require('../middleware/admin-auth');
 const { optionalCustomerAuth } = require('../middleware/customer-auth');
 const { updateAgentLifecycleState } = require('../services/agent-lifecycle');
+const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent');
 
 const retellService = new RetellService();
 
@@ -125,9 +126,17 @@ router.post('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async
             ? business_hours
             : null;
 
-        const agentId = retell_agent_id ||
+        let agentId = retell_agent_id ||
             (customerId && db.getCustomer(customerId)?.retell_agent_id) ||
             null;
+
+        let retellEnsure = null;
+        if (!agentId && customerId) {
+            retellEnsure = await ensureCustomerRetellAgent(db, customerId, { retellService });
+            if (retellEnsure.agentId) {
+                agentId = retellEnsure.agentId;
+            }
+        }
 
         if (agentId) {
             try {
@@ -173,11 +182,20 @@ router.post('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async
             });
         }
 
+        const retellLinked = !!agentId;
+        let message = retellLinked
+            ? 'Voice agent settings saved and synced with voice provider'
+            : 'Voice agent settings saved (no Retell agent linked)';
+        if (!retellLinked && retellEnsure?.error) {
+            message = `Voice agent settings saved (Retell unavailable: ${retellEnsure.error})`;
+        }
+
         return res.json({
             success: true,
-            message: agentId
-                ? 'Voice agent settings saved and synced with voice provider'
-                : 'Voice agent settings saved (no Retell agent linked)',
+            message,
+            retell_agent_id: agentId || null,
+            retell_created: retellEnsure?.created || false,
+            retell_error: retellLinked ? null : (retellEnsure?.error || null),
             merchant_id: merchantId || null,
             customer_id: customerId || null,
             prompt_synced_at: syncedAt

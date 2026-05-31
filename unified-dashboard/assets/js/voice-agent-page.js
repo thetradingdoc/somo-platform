@@ -139,6 +139,17 @@
     return trial === 'active';
   }
 
+  function formatPromptSyncedAt(iso) {
+    if (!iso) return 'never';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return 'unknown';
+      return d.toLocaleString();
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
   global.VoiceAgentPage = {
     API_BASE,
     fetchKellyStatus,

@@ -18,6 +18,7 @@
 - [Testing Documentation (`README.md`)](#readme)
 - [Scan Results UI Audit Evidence (`SCAN_RESULTS_UI_AUDIT_EVIDENCE.md`)](#scan-results-ui-audit-evidence)
 - [Staging verification — commerce quote parity and chat → pay (`STAGING_PRODUCT_VERIFICATION.md`)](#staging-product-verification)
+- [Staging diagnostic — signup, Twilio, agent, calls (`STAGING_DIAGNOSTIC_RUNBOOK.md`)](#staging-diagnostic-runbook)
 - [TELEMEDICINE_E2E (`TELEMEDICINE_E2E.md`)](#telemedicine-e2e)
 - [Phase 10 Task 63 — Transcript-only path: end-to-end test (`TRANSCRIPT_ONLY_E2E.md`)](#transcript-only-e2e)
 ---
@@ -233,6 +234,28 @@ CI proves **static** contracts (syntax, Jest smoke, agentic checkout file checks
 ## Chat → quote → pay (manual / staging)
 
 Follow **[AGENTIC_CHECKOUT_E2E_CHECKLIST.md](./README.md#agentic-checkout-e2e-checklist)** with real Stripe test keys. Record the run in your release notes when promoting builds.
+
+
+---
+
+<a id="staging-diagnostic-runbook"></a>
+
+## Staging diagnostic — signup, Twilio, agent, calls
+
+**Runbook:** [STAGING_DIAGNOSTIC_RUNBOOK.md](./STAGING_DIAGNOSTIC_RUNBOOK.md) — Playwright on `myskinandcare.com`, live Twilio provision smoke, post-call `voice_call_log` verification.
+
+| npm script (`middleware-platform`) | Purpose |
+|-----------------------------------|---------|
+| `staging:preflight` | Phase 0 HTTP + manifest |
+| `test:e2e:staging` | Shallow smoke (4 tests) |
+| `test:e2e:staging-signup` | Full signup wizard S1–S8 |
+| `test:e2e:staging-voice` | Agent + voice-setup (real APIs) |
+| `test:e2e:staging-full` | All staging Playwright projects |
+| `staging:trial-provision` | Live API trial + Twilio number |
+| `staging:db-assert` | DB trial/Twilio fields |
+| `staging:call-verify` | After manual inbound PSTN call |
+
+Requires `STAGING_DB_PATH`, `TRIAL_E2E_PHONE`, and `STAGING_SMS_CODE` for full signup path. See [STAGING_SIGNOFF.md](../deployment/STAGING_SIGNOFF.md).
 
 
 ---

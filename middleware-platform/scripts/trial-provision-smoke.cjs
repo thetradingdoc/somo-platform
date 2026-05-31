@@ -17,7 +17,11 @@ const https = require('https');
 const db = require('../database');
 
 const API = (process.env.API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
-const LIVE = process.env.TRIAL_E2E_LIVE_TWILIO === '1';
+const LIVE =
+  process.env.TRIAL_E2E_LIVE_TWILIO === '1' ||
+  /api\.myskinandcare\.com/i.test(API) ||
+  process.env.STAGING_REMOTE === '1';
+const IS_REMOTE_STAGING = /api\.myskinandcare\.com/i.test(API) || process.env.STAGING_REMOTE === '1';
 
 function request(method, path, body, cookie, baseUrl = API) {
   return new Promise((resolve, reject) => {
@@ -146,16 +150,32 @@ async function main() {
   const customerId = signup.json.customer_id;
   cookie = signup.cookie || cookie;
 
-  const codeRow = db.getActiveEmailVerificationCode(email);
-  if (!codeRow?.code) {
-    console.error('No email verification code in DB');
-    process.exit(1);
+  let emailCode = process.env.STAGING_EMAIL_CODE || '';
+  if (!emailCode) {
+    try {
+      const { getEmailCode, resolveDbPath } = require('./staging-db-utils.cjs');
+      emailCode = getEmailCode(email);
+      console.log('Email code from DB:', resolveDbPath());
+    } catch (e) {
+      if (IS_REMOTE_STAGING) {
+        console.error(
+          'Remote staging: set STAGING_DB_PATH (GCS snapshot) or STAGING_EMAIL_CODE for verify-email'
+        );
+        process.exit(1);
+      }
+      const codeRow = db.getActiveEmailVerificationCode(email);
+      if (!codeRow?.code) {
+        console.error('No email verification code in DB');
+        process.exit(1);
+      }
+      emailCode = codeRow.code;
+    }
   }
 
   const verifyEmail = await request(
     'POST',
     '/api/signup/verify-email',
-    { email, code: codeRow.code },
+    { email, code: emailCode },
     cookie
   );
   if (!verifyEmail.json?.success) {
@@ -176,10 +196,18 @@ async function main() {
     process.exit(1);
   }
 
+  const smsCode =
+    process.env.STAGING_SMS_CODE ||
+    (IS_REMOTE_STAGING ? '' : '000000');
+  if (!smsCode) {
+    console.error('Remote staging: set STAGING_SMS_CODE from Twilio Verify SMS on TRIAL_E2E_PHONE');
+    process.exit(1);
+  }
+
   const checkPhone = await request(
     'POST',
     '/api/signup/verify-phone/check',
-    { phone_number: phone, code: '000000' },
+    { phone_number: phone, code: smsCode.replace(/\D/g, '') },
     cookie
   );
   if (!checkPhone.json?.success) {
@@ -187,7 +215,13 @@ async function main() {
     process.exit(1);
   }
 
-  const customer = db.getCustomer(customerId);
+  let customer;
+  try {
+    const { getCustomerById } = require('./staging-db-utils.cjs');
+    customer = getCustomerById(customerId);
+  } catch (_) {
+    customer = db.getCustomer(customerId);
+  }
   console.log('\n--- Result ---');
   console.log('trial_status:', customer.trial_status);
   console.log('twilio_phone_number:', customer.twilio_phone_number || '(none)');

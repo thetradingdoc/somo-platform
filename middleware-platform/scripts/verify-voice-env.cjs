@@ -13,6 +13,11 @@ const checks = [
   { key: 'TWILIO_ACCOUNT_SID', required: true },
   { key: 'TWILIO_AUTH_TOKEN', required: true },
   { key: 'RETELL_API_KEY', required: true },
+  {
+    key: 'RETELL_LLM_WEBSOCKET_URL',
+    required: false,
+    hint: 'staging: wss://api.myskinandcare.com/webhook/retell/llm'
+  },
   { key: 'RETELL_WEBHOOK_SECRET', required: false },
   { key: 'API_BASE_URL', required: false, hint: 'or NGROK_URL for local inbound' },
   { key: 'NGROK_URL', required: false },

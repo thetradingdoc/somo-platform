@@ -12,6 +12,7 @@ const constants = require('../utils/constants');
 
 const router = express.Router();
 const retellService = new RetellService();
+const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent');
 
 /**
  * Helper to determine tenant type (shop vs clinic)
@@ -192,10 +193,19 @@ router.put('/prompt', authLimiter, async (req, res) => {
             ? `${customer.company_name || customer.name || 'Shop'} Voice Commerce Assistant`
             : `${customer.company_name || customer.name || 'Clinic'} Voice Assistant`;
 
+        let retellEnsure = null;
+        let workingCustomer = customer;
+        if (!workingCustomer.retell_agent_id) {
+            retellEnsure = await ensureCustomerRetellAgent(db, workingCustomer.id, { retellService });
+            if (retellEnsure.agentId) {
+                workingCustomer = db.getCustomer(workingCustomer.id);
+            }
+        }
+
         // Retell first (runtime SSOT), then DB cache
-        if (customer.retell_agent_id) {
+        if (workingCustomer.retell_agent_id) {
             try {
-                const updateResult = await retellService.updateAgent(customer.retell_agent_id, {
+                const updateResult = await retellService.updateAgent(workingCustomer.retell_agent_id, {
                     general_prompt: trimmed,
                     agent_name: agentName
                 });
@@ -227,11 +237,20 @@ router.put('/prompt', authLimiter, async (req, res) => {
             prompt_synced_at: syncedAt
         });
 
+        const retellLinked = !!workingCustomer.retell_agent_id;
+        let message = retellLinked
+            ? 'Prompt updated and synced with voice provider'
+            : 'Prompt saved (no Retell agent linked yet)';
+        if (!retellLinked && retellEnsure?.error) {
+            message = `Prompt saved (Retell unavailable: ${retellEnsure.error})`;
+        }
+
         res.json({
             success: true,
-            message: customer.retell_agent_id
-                ? 'Prompt updated and synced with voice provider'
-                : 'Prompt saved (no Retell agent linked yet)',
+            message,
+            retell_agent_id: workingCustomer.retell_agent_id || null,
+            retell_created: retellEnsure?.created || false,
+            retell_error: retellLinked ? null : (retellEnsure?.error || null),
             prompt_synced_at: syncedAt,
             prompt: trimmed
         });
