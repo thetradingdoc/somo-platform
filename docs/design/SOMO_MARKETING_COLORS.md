@@ -1,5 +1,7 @@
 # Somo marketing colors (Image 1)
 
+**Last Updated:** 2026-05-30
+
 Canonical palette for the Somo landing, signup wizard, and related light marketing surfaces. Product/app UI continues to use `--somo-green` (`#16a637`) in `somo-tokens.css`.
 
 ## Core swatches
@@ -37,6 +39,9 @@ Canonical palette for the Somo landing, signup wizard, and related light marketi
 | How it works panels | `data-theme`: **setup** (lizard-10, MSU title), **assist** (grass border/title, lizard gradient), **control** (lizard border + outer ring via `box-shadow`, lizard-20 → white gradient) |
 | Pricing — Free trial | White card, MSU top border, `.somo-pricing-badge-start`, CTA `.somo-btn-free` |
 | Pricing — Practice (hero) | `.somo-pricing-card-popular`, 2px lizard border, lizard shadow; sole `.somo-btn-primary` in the pricing grid |
+| How it works | Per-step `data-theme` on active panel (setup / assist / control) |
+| ROI section | Old way (rose) vs new way (lizard) + savings column |
+| Scroll cue | Hero mouse indicator; hidden on mobile and `prefers-reduced-motion` |
 
 On the landing SPA, legacy aliases in `somo-landing/src/styles/somo.css` map `--somo-green` → lizard and `--somo-green-dark` → MSU so older class names still resolve to Image 1.
 

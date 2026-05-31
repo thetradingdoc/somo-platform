@@ -1,8 +1,11 @@
 # Middleware platform documentation (consolidated)
-> Last reviewed: 2026-05-21
+> Last reviewed: 2026-05-30
 
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-30
 
+**Somo marketing landing** at `/` is [`somo-landing`](../../unified-dashboard/somo-landing/). Kelly/LiveKit CRA client paths below refer to [`_archive/littlelab-landing`](../../unified-dashboard/_archive/littlelab-landing/) unless noted.
+
+**Voice runtime (2026):** [`services/voice-agent-runtime.js`](../../middleware-platform/services/voice-agent-runtime.js), migrations `053`/`054`, [VOICE_PROMPT_SSOT.md](../architecture/VOICE_PROMPT_SSOT.md), [voice-inbound troubleshooting](../runbooks/voice-inbound-troubleshooting.md).
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
 
@@ -225,7 +228,7 @@ Current implementation references:
 - `middleware-platform/services/result-summary-retrieval-grounding-service.js`
 - `middleware-platform/services/product-summary-service.js`
 - `middleware-platform/services/session-result-snapshot-service.js`
-- `unified-dashboard/littlelab-landing/src/AssistantResultsPage.jsx`
+- `unified-dashboard/_archive/littlelab-landing/src/AssistantResultsPage.jsx`
 
 ## 3) Non-technical system description
 
@@ -1055,7 +1058,7 @@ Think of **three layers** that must agree on contracts only:
 - Extend the **thread context** or **session snapshot** with a short structured block, e.g. “Photo read (model vX): apparent estimate ~52; user stated age 30; wellness-only.”  
 - Prompt guardrails: Kelly must treat this as **one soft signal** among many, not a directive to diagnose.
 
-### 4.3 Client (`unified-dashboard/littlelab-landing`)
+### 4.3 Client (`unified-dashboard/_archive/littlelab-landing`)
 
 **Role:** Honest UX and a clean handoff to middleware.
 
@@ -1461,7 +1464,7 @@ Action checklist for the **phase-aligned prompts** work (Skin & Care landing + f
 
 - **Symptom:** Skin & Care / routine intake conversations pick up **clinical triage** tone (OPQRST loops, “annual visit,” “any symptoms?” when acne was already stated) and **re-ask** fields we already stored.
 - **Cause:** `filterKellyToolsByPhase` already **restricts tools** per phase, but **`buildSystemPrompt`** is a **single large** instruction block for almost all non-commerce turns — the model **reads** every job (scheduling, billing, triage, intake) even when it **cannot** call those tools.
-- **Landing gap:** `littlelab-landing` often **does not send** `kelly_flow`, so `routine_intake_active` may never flip and users stay in default triage behavior.
+- **Landing gap:** `_archive/littlelab-landing` often **does not send** `kelly_flow`, so `routine_intake_active` may never flip and users stay in default triage behavior.
 
 ---
 
@@ -1515,7 +1518,7 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 
 ### Phase A — Entry & activation
 
-- [x] **A1.** Add `kelly_flow` (or `routine_intake_active`) to `sendLandingAssistantTurn` in `unified-dashboard/littlelab-landing/src/landingAssistantApi.js` for Skin & Care. (Default `kelly_flow: 'skincare'`; pass `kellyFlow: null` to omit.)
+- [x] **A1.** Add `kelly_flow` (or `routine_intake_active`) to `sendLandingAssistantTurn` in `unified-dashboard/_archive/littlelab-landing/src/landingAssistantApi.js` for Skin & Care. (Default `kelly_flow: 'skincare'`; pass `kellyFlow: null` to omit.)
 - [x] **A2.** Smoke-test **two-turn minimum**: (1) confirm `routine_intake_active` / meta after first turn; (2) second turn with a fact stated on turn 1 — verify the model still “knows” it once **D2** exists (or file a known gap if D2 is not shipped yet). **Automation:** `npm run smoke:landing-assistant` in `middleware-platform` (optional `DB_PATH` for SQLite meta assert).
 - [x] **A3.** Document required values for Retell `dynamic_variables` (server already reads flow in `webhooks/retell-websocket.js`). **Doc:** retell-kelly-flow.md (`./retell-kelly-flow.md`).
 - [x] **A4 / Task 1.** **Option A meta contract:** who sets/clears/reads `routine_intake_active`, `intake_complete`, and `skincare_post_intake` (single-writer rule). Documented in **Skin & Care session meta contract** earlier in this file; code header in `services/kelly-orchestrator-phase.js` stays the implementation anchor.
@@ -1632,7 +1635,7 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 | Phase-dispatched prompts + `formatRoutineIntakeSummaryFromTriageRow` | `services/kelly-prompt-builder.js` |
 | Landing HTTP + triage wrapper | `routes/public-landing-assistant.js`, `routes/patient-booking.js`, `services/kelly-triage-turn-service.js` |
 | Voice | `webhooks/retell-websocket.js` |
-| Landing client | `unified-dashboard/littlelab-landing/src/landingAssistantApi.js` |
+| Landing client | `unified-dashboard/_archive/littlelab-landing/src/landingAssistantApi.js` |
 | Skin assessment spec + Task 22 lock | skincare-assessment-product-spec.md (`./skincare-assessment-product-spec.md`), `migrations/021_skincare_assessment_columns.js` |
 | Deterministic Skin & Care regression suite | `__tests__/kelly-skincare-assessment.test.js` |
 
@@ -1682,7 +1685,7 @@ On the **Skin & Care** landing assistant, users report:
 | **Tools** | `filterKellyToolsByPhase()` in `kelly-orchestrator-phase.js` **prunes** tools per phase (e.g. no scheduling in triage, narrow set in `ROUTINE_INTAKE`). | The model **cannot** call forbidden tools — good hard boundary. |
 | **System prompt** | For the **non-commerce** path, `buildSystemPrompt(context)` in `kelly-agent-service.js` is a **single large instruction block** (~1400+ lines of concerns) sent **regardless of phase**. | The model still **reads** booking / triage / routine-visit objectives and **talks** like that phase even when tools are trimmed → **“god object” agent**. |
 | **Commerce path** | When `commerceContext` has `productId` + `providerId`, Kelly uses `buildCommerceCheckoutSystemPrompt` + `COMMERCE_CHECKOUT_TOOLS` — **separate prompt + tools**. | This **already proves** the pattern: **narrow prompt + matching tools** works. |
-| **Landing entry** | `POST /api/public/landing-assistant/turn` does **not** send `kelly_flow` from `littlelab-landing` by default. | `routine_intake_active` may never be set → user stays on **default triage** behavior even when the UI says “Skin & Care.” |
+| **Landing entry** | `POST /api/public/landing-assistant/turn` does **not** send `kelly_flow` from `_archive/littlelab-landing` by default. | `routine_intake_active` may never be set → user stays on **default triage** behavior even when the UI says “Skin & Care.” |
 
 **Bottom line:** Phase fixes **tools** but not **instructions**. Fixing only one paragraph (`buildOrchestrationPromptSection`) is insufficient because the **main system prompt** still contains competing jobs.
 
@@ -1975,7 +1978,7 @@ The module exports:
 
 ### 4.3 Landing client
 
-- **`littlelab-landing/src/landingAssistantApi.js`**: include **`kelly_flow: 'skincare'`** (or another value in `kellyFlowActivatesRoutineIntake`) on **every** `POST .../landing-assistant/turn` so `ROUTINE_INTAKE` can apply.
+- **`_archive/littlelab-landing/src/landingAssistantApi.js`**: include **`kelly_flow: 'skincare'`** (or another value in `kellyFlowActivatesRoutineIntake`) on **every** `POST .../landing-assistant/turn` so `ROUTINE_INTAKE` can apply.
 
 ### 4.4 Durable intake / triage state
 
@@ -2031,7 +2034,7 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 
 ### Phase A — Entry & activation
 
-- [x] **A1.** Add `kelly_flow` to `sendLandingAssistantTurn` (default `skincare`; `kellyFlow: null` omits). See `littlelab-landing/src/landingAssistantApi.js`.
+- [x] **A1.** Add `kelly_flow` to `sendLandingAssistantTurn` (default `skincare`; `kellyFlow: null` omits). See `_archive/littlelab-landing/src/landingAssistantApi.js`.
 - [x] **A2.** Two-turn smoke: `npm run smoke:landing-assistant` in `middleware-platform` (+ optional `DB_PATH` meta assert). See `scripts/smoke-landing-assistant-two-turn.cjs`.
 - [x] **A3.** Retell / HTTP values: retell-kelly-flow.md (`./retell-kelly-flow.md`).
 
@@ -2094,7 +2097,7 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 | Tool execution, session meta | `services/kelly-tool-executor.js` |
 | Landing HTTP | `routes/public-landing-assistant.js`, `services/kelly-triage-turn-service.js` |
 | Voice | `webhooks/retell-websocket.js` |
-| Landing client API | `unified-dashboard/littlelab-landing/src/landingAssistantApi.js` |
+| Landing client API | `unified-dashboard/_archive/littlelab-landing/src/landingAssistantApi.js` |
 | Baseline + Skin & Care suite | `__tests__/kelly-phase-validation.test.js`, `__tests__/kelly-skincare-assessment.test.js`, `__tests__/kelly-prompt-builder.test.js` |
 | Clinical text guardrails | `services/clinical-recommendation-policy.js` |
 
@@ -3165,7 +3168,7 @@ Implementation: `extractKellyFlowFromRetellCall` in `kelly-orchestrator-phase.js
 - Body: `kelly_flow` (string), or `routine_intake_active` (`1` / `true`)
 - Or `meta.kelly_flow` / `meta.routine_intake_active` inside the JSON body
 
-The littlelab client sends **`kelly_flow: 'skincare'`** by default from `sendLandingAssistantTurn` (`unified-dashboard/littlelab-landing/src/landingAssistantApi.js`).
+The littlelab client sends **`kelly_flow: 'skincare'`** by default from `sendLandingAssistantTurn` (`unified-dashboard/_archive/littlelab-landing/src/landingAssistantApi.js`).
 
 ## Narrow system prompt (ROUTINE_INTAKE)
 

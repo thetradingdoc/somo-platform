@@ -13,7 +13,7 @@
   - Responsibilities: domain logic, state transitions, integration orchestration
 
 - **Landing web UX**
-  - Owner files: `unified-dashboard/littlelab-landing/src/*`
+  - Owner files: `unified-dashboard/somo-landing/src/*` (marketing); `_archive/littlelab-landing/src/*` (legacy)
   - Responsibilities: user flows, API calling patterns, presentation state
 
 - **Patient app UX**

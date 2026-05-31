@@ -1,7 +1,9 @@
 # architecture - Unified Architecture and System Design
-> Last reviewed: 2026-05-25
+> Last reviewed: 2026-05-30
 
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-30
+
+> **Marketing landing:** Active SPA is [`unified-dashboard/somo-landing/`](../../unified-dashboard/somo-landing/) at `/`. Legacy CRA + Kelly/LiveKit assistant lives in [`unified-dashboard/_archive/littlelab-landing/`](../../unified-dashboard/_archive/littlelab-landing/) (retired 2026-05-29). See [`SURFACE_OWNERSHIP_MAP.md`](../meta/SURFACE_OWNERSHIP_MAP.md).
 
 > **Medical coding:** Canonical architecture and operations live in **[docs/Medical Coding/ARCHITECTURE.md](../Medical%20Coding/ARCHITECTURE.md)** and **[OPERATIONS.md](../Medical%20Coding/OPERATIONS.md)**. Do **not** expand this 12k-line file for codebook/RAG updates — patch the Medical Coding docs and link from here. The [#voice-agent-runbook](#voice-agent-runbook) section below is partially refreshed; older tables elsewhere may still reference `getCodeCandidates` or `localhost:4000` RAG defaults.
 
@@ -927,7 +929,7 @@ Operational checks:
 
 ## 5. Landing Try now (Skin & Care) vs this doc
 
-The **marketing landing** (`littlelab-landing`) can open a **public** LiveKit room (`try-landing-*`) for camera preview + optional real-time session. That path uses **`POST /api/livekit/token` only** — it does **not** feed `video-consult` agent events, transcripts, or YOLO unless you add a separate agent/worker.
+The **archived Skin & Care assistant** (`_archive/littlelab-landing`) could open a **public** LiveKit room (`try-landing-*`) for camera preview + optional real-time session. That path uses **`POST /api/livekit/token` only** — it does **not** feed `video-consult` agent events, transcripts, or YOLO unless you add a separate agent/worker.
 
 **Canonical detail:** [LANDING_TRY_NOW_LIVEKIT.md](./README.md#experience-landing-try-now-livekit).
 
@@ -1074,7 +1076,7 @@ If issues occur:
 ## Public agentic checkout (catalog → quote → pay)
 
 
-Unauthenticated flows for retail products on the patient portal and the Skin & Care marketing landing (`littlelab-landing`). **Charge amounts are never taken from the browser alone** for capture: they come from the product row in SQLite (`products.price`) × quantity, via `PaymentOrchestrator` or payment-link fallback.
+Unauthenticated flows for retail products on the patient portal and the Somo marketing landing (`somo-landing`; legacy Skin & Care commerce in `_archive/littlelab-landing`). **Charge amounts are never taken from the browser alone** for capture: they come from the product row in SQLite (`products.price`) × quantity, via `PaymentOrchestrator` or payment-link fallback.
 
 ## Endpoints
 
@@ -1098,7 +1100,7 @@ Unauthenticated flows for retail products on the patient portal and the Skin & C
 
 ## UI rollout
 
-- **Skin & Care marketing landing** (`littlelab-landing`): `REACT_APP_CHAT_FIRST_CHECKOUT` (default: on). Set to `false` to hide the chat-first “Ask about this product” CTA and emphasize buy-now only for gradual rollout.
+- **Archived Skin & Care marketing landing** (`_archive/littlelab-landing`): `REACT_APP_CHAT_FIRST_CHECKOUT` (default: on). Set to `false` to hide the chat-first “Ask about this product” CTA and emphasize buy-now only for gradual rollout.
 
 ## References
 
@@ -1537,7 +1539,7 @@ Accepted.
 
 ## Context
 
-Patients may start from the **Skin & Care marketing landing** (`littlelab-landing`), **deep links**, or the **Expo app**. Checkout must feel chat-first while using **server-locked quotes** and **Stripe** for payment.
+Patients may start from the **Somo marketing landing** (`somo-landing`), **deep links**, or the **Expo app** (legacy Skin & Care chat-first funnel: `_archive/littlelab-landing`). Checkout must feel chat-first while using **server-locked quotes** and **Stripe** for payment.
 
 ## Decision
 
@@ -1911,7 +1913,7 @@ Authenticated HTTP tests: obtain a patient session (e.g. demo login flow), then 
 
 
 
-This doc describes the **marketing landing assistant** (`unified-dashboard/littlelab-landing`) and how **LiveKit** is used for optional live video. It complements **[VIDEO_CONSULT.md](./README.md#care-delivery-video-consult)** (provider/telehealth pipeline with agents, transcript, vision events).
+This doc describes the **archived marketing landing assistant** (`unified-dashboard/_archive/littlelab-landing`) and how **LiveKit** was used for optional live video. It complements **[VIDEO_CONSULT.md](./README.md#care-delivery-video-consult)** (provider/telehealth pipeline with agents, transcript, vision events).
 
 ---
 
@@ -1942,12 +1944,12 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 
 | Area | Path |
 |------|------|
-| Shell / session | `littlelab-landing/src/AssistantExperience.jsx` |
-| Voice UI + scan layout | `littlelab-landing/src/AssistantVoicePage.jsx` |
-| LiveKit hook | `littlelab-landing/src/useLandingLiveKit.js` |
-| Token API client | `littlelab-landing/src/landingLiveKitApi.js` |
-| LiveKit toolbar / invite | `littlelab-landing/src/LiveKitPanel.jsx` |
-| Orb (shared) | `littlelab-landing/src/AgentSphereCanvas.jsx`, `MagicPlasmaSphere.jsx` |
+| Shell / session | `_archive/littlelab-landing/src/AssistantExperience.jsx` |
+| Voice UI + scan layout | `_archive/littlelab-landing/src/AssistantVoicePage.jsx` |
+| LiveKit hook | `_archive/littlelab-landing/src/useLandingLiveKit.js` |
+| Token API client | `_archive/littlelab-landing/src/landingLiveKitApi.js` |
+| LiveKit toolbar / invite | `_archive/littlelab-landing/src/LiveKitPanel.jsx` |
+| Orb (shared) | `_archive/littlelab-landing/src/AgentSphereCanvas.jsx`, `MagicPlasmaSphere.jsx` |
 | Styles | `assistant-voice.css`, `assistant-livekit.css` |
 
 ---
@@ -2018,16 +2020,16 @@ See `patient-app/.env.example` and `patient-app/config.ts`.
 
 | Variable | Purpose |
 |----------|---------|
-| `REACT_APP_MERCHANT_ID` | Merchant id on littlelab-landing catalog |
+| `REACT_APP_MERCHANT_ID` | Merchant id on archived littlelab catalog |
 | `REACT_APP_PATIENT_PORTAL_PREFIX` | Patient HTML base path |
 | `REACT_APP_CHAT_FIRST_CHECKOUT` | `false` to hide Ask-first CTA |
 | `REACT_APP_PUBLIC_SITE_URL` | Marketing origin (production: `https://myskinandcare.com`) |
 
 ### Brand assets
 
-- **S&C mark & wordmark:** `unified-dashboard/littlelab-landing/public/images/branding/` (`logo-mark.svg`, `favicon.svg`, `logo-wordmark-stacked.svg`)
+- **S&C mark & wordmark:** `unified-dashboard/_archive/littlelab-landing/public/images/branding/` (`logo-mark.svg`, `favicon.svg`, `logo-wordmark-stacked.svg`)
 - **Shared copy for static HTML:** `unified-dashboard/assets/images/logo-mark.svg`
-- **Landing media:** `unified-dashboard/littlelab-landing/public/images/`
+- **Landing media:** `unified-dashboard/_archive/littlelab-landing/public/images/`
 
 ## Related
 
@@ -9764,7 +9766,7 @@ API at `http://localhost:4000`.
 
 ---
 
-## 3. Option B: Landing + Portal (Skin & Care marketing — `littlelab-landing`)
+## 3. Option B: Landing + Portal (archived Skin & Care marketing — `_archive/littlelab-landing`)
 
 1. **Seed data:**
    ```bash
@@ -12189,7 +12191,8 @@ Primary runtime surfaces:
 
 - `middleware-platform/` - Core backend API + orchestration + workers + integrations
 - `unified-dashboard/` - Static/web portals (patient, business, admin, insurer) and shared JS/CSS
-- `unified-dashboard/littlelab-landing/` - React/CRA landing and assistant experience
+- `unified-dashboard/somo-landing/` - Somo marketing SPA at `/`
+- `unified-dashboard/_archive/littlelab-landing/` - Archived React/CRA landing and assistant experience
 - `patient-app/` - Expo/React Native app (auth + appointments + checkout chat integration)
 - `docs/` - Consolidated canonical documentation
 - `scripts/`, `infra/`, `Knowledge/`, `todos/` - operations, infra, data assets, roadmap state
@@ -12234,7 +12237,7 @@ flowchart TB
       U1[unified-dashboard/patients]
       U2[unified-dashboard/business]
       U3[unified-dashboard/admin]
-      U4[littlelab-landing React app]
+      U4[somo-landing Vite SPA]
       M1[patient-app Expo RN]
     end
 
@@ -12322,7 +12325,7 @@ Characteristics:
 - Calls middleware APIs directly
 - Implements multiple patient/payment experiences including Stripe checkout redirects
 
-## 6.2 Landing Experience (`littlelab-landing`)
+## 6.2 Landing Experience (`somo-landing`)
 
 - React/CRA app for marketing + assistant funnel
 - Includes assistant pages, scan/ingredient/product experiences, tests, and media assets
@@ -12642,7 +12645,7 @@ These are intentionally implementation-aligned and can be expanded into C4 Level
 
 ## Runtime entrypoints (canonical)
 
-**Last reviewed:** 2026-05-02
+**Last reviewed:** 2026-05-30
 
 Authoritative route + SPA map aligned with `server.js`: **[RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md](./RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)**.
 

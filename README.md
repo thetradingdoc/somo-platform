@@ -1,9 +1,9 @@
 # Somo Platform — AI Front Desk + RCM
-> Last reviewed: May 29, 2026
+> Last reviewed: May 30, 2026
 
 **Version**: 3.1.0  
 **Status**: Production Ready  
-**Last Updated:** 2026-05-29
+**Last Updated:** 2026-05-30
 
 > **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production UI/API hosts remain **myskinandcare.com** until **somopay.ai** cutover — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
@@ -65,7 +65,8 @@
 somo/
 ├── middleware-platform/     # Backend API (Express, Stripe, Retell, voice LLM, FHIR, …)
 ├── unified-dashboard/       # Provider/patient HTML dashboards + static assets
-│   └── littlelab-landing/   # CRA marketing / Skin & Care landing (build → served as static)
+│   ├── somo-landing/        # Somo marketing SPA (Vite → build served at /)
+│   └── _archive/littlelab-landing/  # Retired CRA landing + assistant (2026-05-29)
 ├── patient-app/             # Expo (React Native) patient app
 ├── livekit-agents/          # Python transcription / agent workers
 ├── docs/                    # Canonical documentation (start at docs/README.md)
@@ -124,7 +125,7 @@ With `middleware-platform` running (`npm start`), visit:
 
 | Surface                      | Local URL                       | Served From                              |
 |------------------------------|---------------------------------|------------------------------------------|
-| Athlete shop (marketing)     | http://localhost:4000/          | `littlelab-landing` build                |
+| Somo marketing landing       | http://localhost:4000/          | `somo-landing/build`                     |
 | Admin landing                | http://localhost:4000/admin     | `unified-dashboard/admin/index.html`     |
 | Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
 | API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |
@@ -581,5 +582,5 @@ For issues and questions:
 
 ---
 
-**Last Updated:** 2026-05-02  
-**Version**: 3.0.0
+**Last Updated:** 2026-05-30  
+**Version**: 3.1.0

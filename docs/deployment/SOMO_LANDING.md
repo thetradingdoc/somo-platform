@@ -1,5 +1,7 @@
 # Somo landing
 
+**Last Updated:** 2026-05-30
+
 Single marketing SPA for **Somo** — voice demo + provider signup CTA.
 
 ## Hero UI

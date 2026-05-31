@@ -131,7 +131,7 @@ Moved to `docs/archive/`:
 
 *Former path: `docs/meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md`*
 
-**Last Updated:** April 6, 2026
+**Last Updated:** 2026-05-30
 
 **See also:** [meta/CANONICAL_DOC_MAP.md](./meta/README.md#canonical-doc-map) — **where to read first** when Kelly, checkout, and voice docs overlap (living index; update when you add a new “source of truth” doc).
 

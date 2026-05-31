@@ -1,7 +1,7 @@
-# Skin & Care Platform Documentation
-> Last reviewed: 2026-05-25
+# Somo Platform Documentation
+> Last reviewed: 2026-05-30
 
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-30
 
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
@@ -62,7 +62,18 @@
 - **[Runbooks index](./runbooks/README.md)** - operational playbooks and incident response
 
 #### Documentation health and gap tracking
+- **[Surface ownership map](./meta/SURFACE_OWNERSHIP_MAP.md)** — code paths vs doc owners (marketing, archive, middleware)
 - **[Codebase Batch Review And Documentation Gaps](./meta/README.md#codebase-batch-review-and-documentation-gaps)** - tracked gap list by batch (`all codebase`, `routes`, `services`)
+
+#### Marketing landing (Somo)
+- **[Somo landing runbook](./deployment/SOMO_LANDING.md)** — build, hosts, demo API, local dev
+- **[Image 1 marketing colors](./design/SOMO_MARKETING_COLORS.md)** — lizard / MSU / grass palette and UI mapping
+- **[Hero layout](./deployment/SOMO_LANDING_HERO.md)** — nav, copy, breakpoints
+
+#### Database and voice foundation (2026)
+- **[Database index](./Database/README.md)** — SSOT, migrations, tenant model
+- **[Somo foundation runbook](./Database/SOMO_FOUNDATION_RUNBOOK.md)** — Week 1 gate
+- **[Voice inbound troubleshooting](./runbooks/voice-inbound-troubleshooting.md)**
 
 #### Architecture
 - **[Patient Timeline & billing (mobile + APIs)](./architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)** — Expo tabs, routine APIs, `calendar-range`, billing events, SQLite vs Postgres scope

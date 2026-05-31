@@ -1,7 +1,7 @@
 # testing — consolidated documentation
 > Last reviewed: 2026-05-25
 
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-30
 
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
@@ -72,7 +72,7 @@ Use this when validating **landing → login → checkout-chat → quote → pay
 
 - Middleware running with Stripe test keys and seed products (e.g. demo serums).
 - Patient portal reachable at `REACT_APP_PATIENT_PORTAL_PREFIX` (default `/unified-dashboard/patients`).
-- Skin & Care marketing landing (`littlelab-landing`) built with `REACT_APP_API_BASE` pointing at the same middleware.
+- Somo marketing landing (`somo-landing`) built with `VITE_API_BASE` (empty = same-origin). Legacy Skin & Care CRA tests used `_archive/littlelab-landing` + `REACT_APP_API_BASE`.
 
 ## Flow
 

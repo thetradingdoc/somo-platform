@@ -1,6 +1,6 @@
 # Canonical documentation map
 
-**Last Updated:** 2026-05-25
+**Last Updated:** 2026-05-30
 
 Use this table to avoid maintaining the same story in multiple folders. **Edit this file** when you add a new major runtime surface or split ownership.
 
@@ -8,7 +8,9 @@ Use this table to avoid maintaining the same story in multiple folders. **Edit t
 |-------|------------|----------------------------------|
 | **Repo overview & contributing** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
 | **Deploy / CI / GCP** | [`docs/deployment/README.md`](../deployment/README.md) | [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md), [`docs/runbooks/PROD_MONITORING_WORKFLOWS.md`](../runbooks/PROD_MONITORING_WORKFLOWS.md) |
-| **Environment variables** | [`docs/setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md`](../setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md) | [`docs/setup/README.md`](../setup/README.md), [`unified-dashboard/littlelab-landing/.env.example`](../../unified-dashboard/littlelab-landing/.env.example) |
+| **Environment variables** | [`docs/setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md`](../setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md) | [`docs/setup/README.md`](../setup/README.md), [`somo-landing/.env.development`](../../unified-dashboard/somo-landing/.env.development) |
+| **Marketing UI / palette (Image 1)** | [`docs/design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md) | [`deployment/SOMO_LANDING.md`](../deployment/SOMO_LANDING.md), [`SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) |
+| **Surface ownership (code vs docs)** | [`docs/meta/SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) | This map |
 | **HTTP routes & static SPA mounts** | [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md), [`docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) | [`middleware-platform/server.js`](../../middleware-platform/server.js) (~11k compose), [`middleware-platform/routes/`](../../middleware-platform/routes/), [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js), [`bootstrap/static-hosting.js`](../../middleware-platform/bootstrap/static-hosting.js) |
 | **Kelly triage (patient + landing)** | [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js) | [`routes/patient-booking.js`](../../middleware-platform/routes/patient-booking.js), [`routes/public-landing-assistant.js`](../../middleware-platform/routes/public-landing-assistant.js) |
 | **Medicare plan search (payor)** | [`docs/Payor/README.md`](../Payor/README.md) | [`middleware-platform/routes/public-plan-search.js`](../../middleware-platform/routes/public-plan-search.js) |

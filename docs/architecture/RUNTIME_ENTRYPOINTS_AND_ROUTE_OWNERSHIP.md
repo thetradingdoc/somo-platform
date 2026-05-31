@@ -1,6 +1,6 @@
 # Runtime entrypoints and route ownership (middleware)
 
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-30
 
 Single map for “what listens where” on the main Node process. **Compose entry:** [`middleware-platform/server.js`](../../middleware-platform/server.js). **Decomposition map:** [`SERVER_DECOMPOSITION.md`](./SERVER_DECOMPOSITION.md).
 
@@ -32,23 +32,30 @@ Single map for “what listens where” on the main Node process. **Compose entr
 - **Entry:** `node server.js` from [`middleware-platform/package.json`](../../middleware-platform/package.json).
 - **Default port:** `4000` (or `PORT`).
 
-## Patient Navigator & Skin & Care SPA (HTML)
+## Somo marketing landing (`somo-landing`)
 
-The Skin & Care marketing CRA bundle (`unified-dashboard/littlelab-landing/build`) is served for:
+The Somo marketing Vite bundle (`unified-dashboard/somo-landing/build`) is served at:
 
 | Pattern | Notes |
 |---------|--------|
-| `GET /` | Host-based routing (local dev hosts serve SPA via `sendLittleLabOrApiRunningStub` / `trySendCanonicalLanding`). |
-| `GET /find-provider`, `GET /find-provider/*` | `app.use('/find-provider', serveLittleLabSpaGetHead)` — Patient Navigator Medicaid provider page. |
-| `GET /shop`, `GET /shop/*` | Same SPA shell for Skin & Care marketing (`Root`). |
-| `GET /how-it-works` | Legacy; serves same SPA stub as above. |
-| `/static`, `/images`, `/videos` | CRA assets. |
+| `GET /` | Somo landing SPA (hero, capabilities, demo, pricing). See [SOMO_LANDING.md](../deployment/SOMO_LANDING.md). |
 
-Client-side routing (hash and paths) lives in [`unified-dashboard/littlelab-landing/src/index.js`](../../unified-dashboard/littlelab-landing/src/index.js). Plan/results UX uses **`/?view=results`** or **`/results`** (pathname), not **`/results/:sessionId`** as a client route. Session snapshots are loaded via **`GET /api/public/landing-assistant/results/:sessionId`**.
+Legacy Skin & Care CRA + Kelly assistant (`_archive/littlelab-landing/build`) is **not** mounted at `/` (archived 2026-05-29). Historical routes (`/shop`, `/find-provider`, landing-assistant APIs) referred to that bundle — see archive README.
+
+## Patient Navigator (legacy CRA, archived)
+
+When the archived CRA is mounted for dev only:
+
+| Pattern | Notes |
+|---------|--------|
+| `GET /find-provider`, `GET /find-provider/*` | Patient Navigator Medicaid provider page (legacy). |
+| `GET /shop`, `GET /shop/*` | Archived Skin & Care marketing shell. |
+
+Client-side routing for the archived app: [`unified-dashboard/_archive/littlelab-landing/src/index.js`](../../unified-dashboard/_archive/littlelab-landing/src/index.js). Landing-assistant APIs: `POST /api/public/landing-assistant/turn`, etc.
 
 ## Static dashboards
 
-SPA static mounts (`/unified-dashboard`, `/patients`, `/business`, `/insurer`, `/littlelab-landing`, CRA assets) are registered via [`bootstrap/static-hosting.js`](../../middleware-platform/bootstrap/static-hosting.js) from `server.js`. Host-based HTML routes for `/`, `/shop`, `/find-provider` remain in `server.js`.
+SPA static mounts (`/unified-dashboard`, `/patients`, `/business`, `/insurer`, somo-landing build) are registered via [`bootstrap/static-hosting.js`](../../middleware-platform/bootstrap/static-hosting.js) from `server.js`.
 
 ## Public catalog / consumer APIs (representative)
 

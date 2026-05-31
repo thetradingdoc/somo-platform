@@ -36,7 +36,7 @@ Expected query params (when route exists): taxonomy code, geo, payor entity id, 
 
 ## Landing UI
 
-Find-provider E2E: `npm run test:e2e-landing:find-provider` (Playwright). Landing page historically referenced `FindProvider.js` in littlelab-landing.
+Find-provider E2E: `npm run test:e2e-landing:find-provider` (Playwright). Historically referenced `FindProvider.js` in archived `_archive/littlelab-landing`.
 
 ## Feature flags
 

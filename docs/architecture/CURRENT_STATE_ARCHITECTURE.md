@@ -1,6 +1,6 @@
 # Current State Architecture (Codebase-Derived)
 
-**Last Updated:** 2026-05-29  
+**Last Updated:** 2026-05-30  
 **Scope:** Monorepo-wide snapshot of how the platform is currently built, based on code and docs in this repository.  
 **Audience:** Engineering, product, operations, security/compliance, onboarding developers.
 
@@ -64,8 +64,8 @@ Primary runtime surfaces:
 
 - `middleware-platform/` - Core backend API + orchestration + workers + integrations
 - `unified-dashboard/` - Static/web portals (patient, business, admin, insurer) and shared JS/CSS
-- `unified-dashboard/somo-landing/` - Somo marketing SPA (`:5180` dev, proxies `/api` → `:4000`)
-- `unified-dashboard/littlelab-landing/` - Legacy React/CRA landing and assistant experience
+- `unified-dashboard/somo-landing/` - Somo marketing SPA at `/` (`:5180` dev, proxies `/api` → `:4000`)
+- `unified-dashboard/_archive/littlelab-landing/` - Archived CRA landing + Kelly/LiveKit assistant (retired 2026-05-29)
 - `patient-app/` - Expo/React Native app (auth + appointments + checkout chat integration)
 - `docs/` - Consolidated canonical documentation
 - `scripts/`, `infra/`, `Knowledge/`, `todos/` - operations, infra, data assets, roadmap state
@@ -110,7 +110,7 @@ flowchart TB
       U1[unified-dashboard/patients]
       U2[unified-dashboard/business]
       U3[unified-dashboard/admin]
-      U4[littlelab-landing React app]
+      U4[somo-landing Vite SPA]
       M1[patient-app Expo RN]
     end
 
@@ -198,11 +198,12 @@ Characteristics:
 - Calls middleware APIs directly
 - Implements multiple patient/payment experiences including Stripe checkout redirects
 
-## 6.2 Landing Experience (`littlelab-landing`)
+## 6.2 Landing Experience (`somo-landing`)
 
-- React/CRA app for marketing + assistant funnel
-- Includes assistant pages, scan/ingredient/product experiences, tests, and media assets
-- Integrates with middleware endpoints for public catalog/quote/assistant workflows
+- Vite + React marketing SPA at `/` (hero, capabilities, demo, ROI, pricing, languages, FAQ)
+- Image 1 palette via `somo-tokens.css` + `somo-landing/src/styles/somo.css`
+- Public demo: `POST /api/public/dodgecall/request-call`
+- Legacy CRA + Kelly/LiveKit assistant funnel: `_archive/littlelab-landing/` (archived 2026-05-29)
 
 ## 6.3 Patient Mobile App (`patient-app`)
 

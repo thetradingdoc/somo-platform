@@ -1,6 +1,6 @@
 # Voice inbound troubleshooting
 
-> **Last reviewed:** 2026-05-29  
+> **Last reviewed:** 2026-05-30  
 > **When:** Call connects but is silent, wrong tenant, or no `voice_call_log` row.
 
 ## Path

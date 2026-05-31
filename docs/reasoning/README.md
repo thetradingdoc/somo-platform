@@ -29,7 +29,7 @@ Architecture reference for reasoning-related behavior in the landing assistant s
 
 ### System boundaries
 
-- **Frontend app**: `unified-dashboard/littlelab-landing`
+- **Frontend app (archived)**: `unified-dashboard/_archive/littlelab-landing`
 - **Backend API/orchestration**: `middleware-platform/server.js` + Kelly services
 - **Snapshot/reasoning services**: `session-result-snapshot-service`, `product-summary-service`, `result-summary-reasoning-service`, `result-summary-retrieval-grounding-service`
 - **Catalog providers**: Open Beauty Facts / Open Food Facts
@@ -514,7 +514,7 @@ Correlate with **`result_summary.reasoning.status.*`** and **`reasoning.fsm.tran
 
 - `npm run test:reasoning-regression` (reasoning pipeline Jest + food-route landing Jest)
 - Middleware Jest suite
-- On **Node 20.x**, the **Playwright scan-chat two-turn gate** (`playwright-chat-scan-two-turn-gate.cjs`) against a static `littlelab-landing` build and the test API (see `.github/workflows/ci.yml`)
+- On **Node 20.x**, the **Playwright scan-chat two-turn gate** (`playwright-chat-scan-two-turn-gate.cjs`) against a static `_archive/littlelab-landing` build and the test API (see `.github/workflows/ci.yml`)
 
 **Before production ramp**, from repo root:
 
@@ -590,8 +590,8 @@ Status: engineering checklist.
 | Atomic merge + lineage | `middleware-platform/__tests__/reasoning-merge-lineage.test.js`, `session-result-snapshot-versioning.test.js` |
 | Shadow worker | `middleware-platform/__tests__/reasoning-shadow-worker.test.js` |
 | Job queue | `middleware-platform/__tests__/reasoning-job-queue-service.test.js` |
-| Frontend reasoning policy | `unified-dashboard/littlelab-landing/src/AssistantResultsPage.reasoning-policy.test.jsx` |
-| Pinned / merged chat context | `unified-dashboard/littlelab-landing/src/scanInsights.test.js` |
+| Frontend reasoning policy | `unified-dashboard/_archive/littlelab-landing/src/AssistantResultsPage.reasoning-policy.test.jsx` |
+| Pinned / merged chat context | `unified-dashboard/_archive/littlelab-landing/src/scanInsights.test.js` |
 
 **CI:** `.github/workflows/ci.yml` runs middleware Jest, `test:reasoning-regression`, and `eval:reasoning:harness` (see [Rollout gate](#rollout-gate-shadow-canary-ci-rollback)).
 

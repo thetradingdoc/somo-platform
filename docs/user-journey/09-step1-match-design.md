@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-05-21
 
-Wireframe-level spec for `/start` after biological age confirm. Implementation: `unified-dashboard/littlelab-landing/src/pages/funnel/`.
+Wireframe-level spec for `/start` after biological age confirm. Implementation (archived): `unified-dashboard/_archive/littlelab-landing/src/pages/funnel/`.
 
 ## Funnel steps
 

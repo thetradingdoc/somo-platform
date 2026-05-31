@@ -1,11 +1,12 @@
 # Runtime Entrypoints And Call Paths
 
-**Last Updated:** 2026-04-29
+**Last Updated:** 2026-05-30
 
 ## Primary Entrypoints
 
 - **API runtime:** `middleware-platform/server.js`
-- **Landing web app:** `unified-dashboard/littlelab-landing/src/index.js`
+- **Marketing landing:** `unified-dashboard/somo-landing/src/main.jsx`
+- **Archived landing assistant:** `unified-dashboard/_archive/littlelab-landing/src/index.js`
 - **Patient app (Expo Router):** `patient-app/app/_layout.tsx`
 - **Ops/verification scripts:** `scripts/` (repo root), `middleware-platform/scripts/`
 
@@ -13,7 +14,7 @@
 
 ### 1) Public landing assistant
 
-1. Browser UI in `littlelab-landing` calls `/api/public/landing-assistant/turn`
+1. Archived browser UI in `_archive/littlelab-landing` calls `/api/public/landing-assistant/turn`
 2. `server.js` routes to public assistant turn handler
 3. Kelly/reasoning orchestration runs in `middleware-platform/services/*`
 4. Snapshot/metrics persistence updates DB tables

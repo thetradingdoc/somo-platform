@@ -1,6 +1,8 @@
 # Somo landing — hero section
 
-Marketing hero at `/` (`unified-dashboard/somo-landing/`). Styles: `src/styles/somo-hero.css` (imported via `somo.css`).
+**Last Updated:** 2026-05-30
+
+Marketing hero at `/` (`unified-dashboard/somo-landing/`). Styles: `src/styles/somo-hero.css` (imported via `somo.css`). Palette: [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md).
 
 ## Structure
 

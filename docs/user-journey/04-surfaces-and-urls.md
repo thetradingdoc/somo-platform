@@ -1,6 +1,6 @@
 # Surfaces and URLs
 
-**Last updated:** 2026-05-21
+**Last updated:** 2026-05-30
 
 ## Local development
 
@@ -8,10 +8,10 @@
 # 1. Inference (optional for /start photo step)
 ./scripts/start-face-scan-stack.sh   # teamkelly :8765
 
-# 2. Build marketing + funnel SPA
-cd unified-dashboard/littlelab-landing && npm install && npm run build
+# 2. Build Somo marketing landing
+cd unified-dashboard/somo-landing && npm install && npm run build
 
-# 3. Middleware (serves landing build + patient static + APIs)
+# 3. Middleware (serves somo-landing build + patient static + APIs)
 cd middleware-platform && npm start   # :4000
 
 # 4. Patient app
@@ -24,8 +24,8 @@ Open `http://127.0.0.1:4000/`
 
 | URL | Surface | Purpose |
 |-----|---------|---------|
-| `/` | littlelab-landing | Landing: **Guess my age** + **Signup** |
-| `/start` | littlelab-landing | Face-age → match → week-1 preview or specialist list → inline save (OTP) → done handoff |
+| `/` | somo-landing | Somo marketing (hero, demo, pricing, signup CTA) |
+| `/start` | _archive/littlelab-landing | Legacy funnel: face-age → match → OTP (archived CRA) |
 | `/patients/patient-login.html` | unified-dashboard (static on middleware) | **Consumer signup/login** — email + 6-digit code (`?intent=signup` opens Sign Up tab) |
 | `/app` | middleware redirect | **302** → `patient-login.html` (legacy; not a bridge page) |
 | `/join` | middleware redirect | **302** → `patient-login.html` (legacy alias) |
@@ -54,9 +54,10 @@ Open `http://127.0.0.1:4000/`
 
 | Path | Role |
 |------|------|
-| `unified-dashboard/littlelab-landing/` | Consumer web funnel (landing, `/start`) |
+| `unified-dashboard/somo-landing/` | Somo marketing SPA (`/`) |
+| `unified-dashboard/_archive/littlelab-landing/` | Archived consumer funnel (`/start`, Kelly) |
 | `unified-dashboard/patients/` | Web patient login + legacy dashboard |
-| `middleware-platform/` | API + serves littlelab `build/` + patient static |
+| `middleware-platform/` | API + serves `somo-landing/build/` + patient static |
 | `patient-app/` | Routine picker, daily loop, prescriptions, bills |
 | `teamkelly/` | Inference (gitignored in parent repo) |
 

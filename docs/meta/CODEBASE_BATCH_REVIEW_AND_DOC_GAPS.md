@@ -1,7 +1,7 @@
 # Codebase Batch Review And Documentation Gaps
 
-**Last Updated:** April 29, 2026 (gap closure executed)  
-**Purpose:** Tracked documentation gap list from a batched code review:
+**Last Updated:** 2026-05-30  
+**Purpose:** Tracked documentation gap list from a batched code review. **Surface map:** [`SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md).
 1) whole codebase, 2) `routes/`, 3) `services/`.
 
 ---
@@ -10,7 +10,7 @@
 
 - Reviewed code inventory from:
   - `middleware-platform/`
-  - `unified-dashboard/littlelab-landing/src/`
+  - `unified-dashboard/somo-landing/src/` (marketing); `_archive/littlelab-landing/src/` (legacy)
   - `patient-app/`
   - `scripts/`
 - Coverage heuristic used for this pass:
@@ -31,7 +31,7 @@
 
 - A canonical runtime map from entrypoints to subsystems:
   - API entry (`middleware-platform/server.js`)
-  - Landing app entry (`unified-dashboard/littlelab-landing/src/index.js`)
+  - Landing app entry (`unified-dashboard/somo-landing/src/main.jsx`; legacy `/_archive/littlelab-landing/src/index.js`)
   - Patient app entry (`patient-app/app/_layout.tsx`)
   - ops script control plane (`scripts/`)
 - A stable "where to change what" map for high-risk features:

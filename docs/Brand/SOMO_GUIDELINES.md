@@ -2,7 +2,7 @@
 
 
 
-> **Last reviewed:** 2026-05-29
+> **Last reviewed:** 2026-05-30
 
 
 
@@ -64,27 +64,20 @@ Legacy `skin-care-tokens.css` re-exports Somo tokens for backward-compatible imp
 
 
 
-### Palette (marketing landing — light pitch layout)
+### Palette (marketing landing — Image 1)
 
-
-
-Used by [`unified-dashboard/somo-landing/`](../../unified-dashboard/somo-landing/). Tokens defined in `somo-tokens.css`, applied via `somo.css` overrides.
-
-
+Used by [`unified-dashboard/somo-landing/`](../../unified-dashboard/somo-landing/). **Canonical table:** [`docs/design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md). Tokens in `unified-dashboard/assets/css/somo-tokens.css`; landing overrides in `somo-landing/src/styles/somo.css` (`--somo-green` → lizard).
 
 | Token | Value | Use |
-
 |-------|-------|-----|
+| `--somo-lizard` | `#b5e930` | Primary CTA, demo sphere, progress accents |
+| `--somo-msu` | `#164437` | Headings, dark pills, free-tier emphasis |
+| `--somo-grass` | `#238108` | Capability panel titles (assist step) |
+| `--somo-lizard-10` / `--somo-lizard-20` | `#f4fbe8` / `#e8f7d0` | Capability strips, hovers |
+| `--somo-bg` (landing) | `#ffffff` | Page and active capability panel |
+| `--somo-text-marketing` | `#1a1a1a` | Body on light surfaces |
 
-| `--somo-bg-marketing` | `#fbf9f4` | Hero / page background (cream) |
-
-| `--somo-green-marketing` | `#93d33b` | Primary CTA, demo orb, accents |
-
-| `--somo-green-marketing-hover` | `#7fb832` | Hover states |
-
-| `--somo-text-marketing` | `#1a1a1a` | Headlines and body on cream |
-
-| `--somo-muted-marketing` | `#6b6b6b` | Subcopy |
+Legacy `#93d33b` is **not** the current marketing CTA color.
 
 
 
@@ -136,7 +129,7 @@ Wordmark: gecko lockup PNG in nav; uppercase **S** + lowercase **omo** in vector
 
 
 
-- **Marketing:** Vite app at `/` (`unified-dashboard/somo-landing/`) — **white page** (`#ffffff`), dark ink text, **lime green** CTAs (`#93d33b`), gecko wordmark in nav. Hero layout: [SOMO_LANDING_HERO.md](../deployment/SOMO_LANDING_HERO.md).
+- **Marketing:** Vite app at `/` (`unified-dashboard/somo-landing/`) — white page, Image 1 lizard CTAs (`#b5e930`), MSU headings, gecko in nav. Sections: hero, capabilities explorer, how-it-works, live demo + sphere, ROI, pricing, languages, FAQ. Docs: [SOMO_LANDING.md](../deployment/SOMO_LANDING.md), [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md), [SOMO_LANDING_HERO.md](../deployment/SOMO_LANDING_HERO.md). Legacy Kelly/LiveKit CRA: `_archive/littlelab-landing/`.
 
 - **Provider:** `business/*.html` + `provider-portal.css` — canonical green `#16a637`.
 

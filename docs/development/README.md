@@ -1,7 +1,7 @@
 # development - Unified Architecture and System Design
 > Last reviewed: 2026-05-21
 
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-30
 
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
@@ -2599,7 +2599,7 @@ Pass custom variables via `context.variables` when calling `AutomationService.ch
   - Responsibilities: domain logic, state transitions, integration orchestration
 
 - **Landing web UX**
-  - Owner files: `unified-dashboard/littlelab-landing/src/*`
+  - Owner files: `unified-dashboard/somo-landing/src/*` (marketing); `_archive/littlelab-landing/src/*` (legacy)
   - Responsibilities: user flows, API calling patterns, presentation state
 
 - **Patient app UX**
