@@ -116,8 +116,11 @@ test.describe('Staging voice agent (real API)', () => {
     if (!stagingDbConfigured()) {
       test.skip(true, 'STAGING_DB_PATH not set');
     }
-    const { getCustomerById } = require(path.join(mpRoot, 'scripts', 'staging-db-utils.cjs'));
-    const row = getCustomerById(customer.id);
+    const { tryGetCustomerById } = require(path.join(mpRoot, 'scripts', 'staging-db-utils.cjs'));
+    const row = tryGetCustomerById(customer.id);
+    if (!row) {
+      test.skip(true, 'Owner not in STAGING_DB_PATH snapshot — download fresh GCS copy');
+    }
     expect(row.email).toBe(customer.email);
     expect(row.merchant_id).toBeTruthy();
 

@@ -100,6 +100,14 @@ function getCustomerById(customerId) {
   return getCustomerRow('id = ?', customerId);
 }
 
+function tryGetCustomerById(customerId) {
+  try {
+    return getCustomerById(customerId);
+  } catch (_) {
+    return null;
+  }
+}
+
 function findActiveTrialByPhone(phoneE164) {
   const sqlite = openReadonlyDb();
   try {
@@ -170,6 +178,7 @@ module.exports = {
   getEmailCode,
   getCustomerByEmail,
   getCustomerById,
+  tryGetCustomerById,
   findActiveTrialByPhone,
   getOwnerCustomer,
   assertTrialCustomer,

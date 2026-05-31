@@ -12,7 +12,7 @@ function uniqueStagingEmail() {
 }
 
 function stagingDbConfigured() {
-  return !!(process.env.STAGING_DB_PATH || process.env.DB_PATH);
+  return !!(process.env.STAGING_DB_PATH || '').trim();
 }
 
 function fetchEmailCodeFromDb(email) {
