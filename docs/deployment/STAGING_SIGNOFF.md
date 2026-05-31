@@ -17,7 +17,8 @@ Full step IDs, env vars, and failure matrix: **[STAGING_DIAGNOSTIC_RUNBOOK.md](.
 
 ```bash
 cd middleware-platform
-export STAGING_DB_PATH=...          # GCS download of middleware-staging.db
+export STAGING_DB_PATH=...          # GCS download of middleware-staging.db (optional for A5 asserts)
+export STAGING_EMAIL_CODE=...       # inbox OTP for signup S2–S7 (or POSTGRES_URL for live SQL)
 export TRIAL_E2E_PHONE=+1...        # receives Twilio Verify SMS
 export STAGING_SMS_CODE=...         # after SMS (phone step)
 export SOMO_OWNER_EMAIL=...
