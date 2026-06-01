@@ -1283,12 +1283,23 @@
         const cartCount = Number((cartState && cartState.item_count) || 0);
         const stage = String((latestCheckoutContract && latestCheckoutContract.checkout_stage) || '');
         const preparedByContract = stage === 'checkout_prepared';
+        const contractCartSub =
+          latestCheckoutContract &&
+          latestCheckoutContract.commerce_checkout &&
+          latestCheckoutContract.commerce_checkout.cart_summary &&
+          Number.isFinite(Number(latestCheckoutContract.commerce_checkout.cart_summary.subtotal))
+            ? Number(latestCheckoutContract.commerce_checkout.cart_summary.subtotal)
+            : null;
         const displayAmt =
-          cartState && Number.isFinite(Number(cartState.subtotal))
+          preparedByContract && contractCartSub != null
+            ? contractCartSub
+            : cartState && Number.isFinite(Number(cartState.subtotal))
             ? Number(cartState.subtotal)
-            : (lastQuotedAmount != null && Number.isFinite(Number(lastQuotedAmount))
+            : lastQuotedAmount != null && Number.isFinite(Number(lastQuotedAmount))
               ? Number(lastQuotedAmount)
-              : (product && Number.isFinite(Number(product.price)) ? Number(product.price) : null));
+              : product && Number.isFinite(Number(product.price))
+                ? Number(product.price)
+                : null;
 
         // UX fix: in some cart-first flows `quoteId` arrives late (or not at all),
         // but we can still let the user proceed using the known amount.
@@ -1889,6 +1900,17 @@
 
             const stripe = await ensureStripeClient();
             const returnUrl = window.location.href;
+            try {
+              sessionStorage.setItem(
+                'checkout_chat_return',
+                JSON.stringify({
+                  href: returnUrl,
+                  kelly_session_id: ensureKellySessionId(),
+                  product_id: currentProductId || null,
+                  merchant_id: merchantId || null
+                })
+              );
+            } catch (_) {}
             let error;
             let paymentIntent;
             if (stripeElementMode === 'card' && stripeCardElementRef) {
@@ -3282,6 +3304,20 @@
           if (assistantTextDone) {
             maybeShowConversionChip(assistantTextDone);
             maybeShowTurnNudgeStrip();
+          }
+          if (!assistantTextDone && donePayload && Array.isArray(donePayload.toolsUsed) && donePayload.toolsUsed.length) {
+            const toolNames = donePayload.toolsUsed.map(String).join(', ');
+            const feedback =
+              (donePayload.toolsUsed.indexOf('prepare_commerce_checkout') >= 0)
+                ? 'Secure checkout is ready — use the payment button above.'
+                : (donePayload.toolsUsed.indexOf('save_shipping_address') >= 0)
+                  ? 'Got it — shipping address saved.'
+                  : (donePayload.toolsUsed.some(function (t) {
+                      return ['add_to_cart', 'update_cart_item', 'remove_cart_item'].indexOf(String(t)) >= 0;
+                    }))
+                    ? 'Cart updated.'
+                    : 'Done (' + toolNames.replace(/_/g, ' ') + ').';
+            appendChatBubble('assistant', feedback);
           }
           setComposerStatus('', '');
           if (donePayload) {

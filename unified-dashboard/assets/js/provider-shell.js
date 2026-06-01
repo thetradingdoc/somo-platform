@@ -383,6 +383,10 @@
   }
 
   function initProviderShell(options = {}) {
+    if (typeof window.requireAuth === 'function') {
+      const user = window.requireAuth(options.loginPath || '../login.html');
+      if (!user) return;
+    }
     const activeId = options.activeId || 'today';
     document.body.classList.add('provider-portal');
 

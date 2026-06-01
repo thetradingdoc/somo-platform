@@ -156,8 +156,6 @@ Alert definitions: `docs/runbooks/README.md#alert-rules`. Per-gate dashboard pan
 
 - `npm run test:reasoning-regression`
 - `npm run eval:reasoning:harness --prefix middleware-platform`
-- `npm run test:e2e-chat-scan-gate --prefix middleware-platform`
-- `npm run test:e2e-full-scan-chat --prefix middleware-platform`
 - `node ./middleware-platform/scripts/check-reasoning-flag-state.cjs`
 
 Full matrix: [Test plan and rollout checklist](#test-plan-and-rollout-checklist).
@@ -531,13 +529,10 @@ npm run test:reasoning-release-gates
 REASONING_RELEASE_SKIP_E2E=1 npm run test:reasoning-release-gates   # regression + eval only
 ```
 
-**Full scan-chat E2E** (requires local UI + API):
+**Reasoning release gates** (no legacy scan-chat browser E2E; retired with archived littlelab landing):
 
 ```bash
-# Terminal 1: API + landing per project docs
-# Terminal 2:
-npm run test:e2e-chat-scan-gate --prefix middleware-platform
-npm run test:e2e-full-scan-chat --prefix middleware-platform   # optional deeper pass
+npm run test:reasoning-release-gates
 ```
 
 Record pass/fail in the change ticket.
@@ -584,14 +579,9 @@ Status: engineering checklist.
 
 | Area | Representative tests / paths |
 |------|-------------------------------|
-| Planner / policy | `middleware-platform/__tests__/landing-route-intent-planner.test.js` |
 | Gate stack (schema, semantic, confidence, safety) | `middleware-platform/__tests__/reasoning-gates-fsm.test.js`, `middleware-platform/__tests__/reasoning-pipeline.test.js` |
 | FSM helpers | `reasoning-gates-fsm.test.js` (`canTransition`, `computePostPatchSnapshotState`) |
-| Atomic merge + lineage | `middleware-platform/__tests__/reasoning-merge-lineage.test.js`, `session-result-snapshot-versioning.test.js` |
-| Shadow worker | `middleware-platform/__tests__/reasoning-shadow-worker.test.js` |
-| Job queue | `middleware-platform/__tests__/reasoning-job-queue-service.test.js` |
-| Frontend reasoning policy | `unified-dashboard/_archive/littlelab-landing/src/AssistantResultsPage.reasoning-policy.test.jsx` |
-| Pinned / merged chat context | `unified-dashboard/_archive/littlelab-landing/src/scanInsights.test.js` |
+| Contract guards | `middleware-platform/__tests__/result-summary-contract-guards.test.js` |
 
 **CI:** `.github/workflows/ci.yml` runs middleware Jest, `test:reasoning-regression`, and `eval:reasoning:harness` (see [Rollout gate](#rollout-gate-shadow-canary-ci-rollback)).
 
@@ -599,10 +589,8 @@ Status: engineering checklist.
 
 | Flow | How it is covered |
 |------|-------------------|
-| Snapshot build + `reasoning_state=pending` | `session-result-snapshot-versioning.test.js` |
-| `applySessionResultReasoningPatch` → `complete` / `fallback` | Same file + `reasoning-merge-lineage.test.js` |
-| Stale lineage / superseded jobs | `reasoning-merge-lineage.test.js`, versioning stale-patch test |
-| End-to-end scan → results (where wired) | `npm run test:e2e-chat-scan-gate` / full scan-chat scripts under `middleware-platform/scripts/` (manual or staging) |
+| Offline eval harness | `npm run eval:reasoning:harness --prefix middleware-platform` |
+| Regression slice | `npm run test:reasoning-regression` (reasoning-pipeline Jest) |
 
 **Gap to watch:** full multi-tenant DB + provider live calls are **not** in default CI; use staging + manual E2E for provider path.
 
@@ -610,8 +598,7 @@ Status: engineering checklist.
 
 | Risk | Tests / mitigations |
 |------|---------------------|
-| Double enqueue | `reasoning-job-queue-service.test.js` (dedupe by job key) |
-| Parallel merge / stale snapshot | `reasoning-merge-lineage.test.js`, versioning stale-patch guard |
+| Double enqueue / parallel merge | Covered by `eval:reasoning:harness` and production metrics; restore focused Jest if regressions appear |
 | Burst jobs | Local SQLite smoke: `npm run load:reasoning-queue-smoke --prefix middleware-platform`. Staging soak: k6/Artillery when needed; watch `reasoning.worker.*` and merge metrics in [Observability dashboards](#observability-dashboards) |
 
 ### 4) Rollout guard — deploy behind flags only

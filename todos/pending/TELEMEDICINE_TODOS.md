@@ -6,10 +6,9 @@ This section tracks the open gaps from the architecture review. Each item has a 
 
 ### P0 — Appointment completion (case report trigger)
 
-- **Gap**: Case reports never run because `trigger_case_report` only fires when `appointment.status === 'completed'`, and no code sets that status on video `end_session`.
-- **Action**:
-  - Implement `BookingService.completeAppointment(appointmentId, clinicId)` (wrapper around `db.updateAppointmentStatus(…, 'completed', …)`).
-  - In `routes/video-consult.js`, when `event === 'end_session'` and `room` is `appt-{id}`, call `BookingService.completeAppointment(appointmentId)` **before** calling `videoConsultGraph.processEvent(...)`.
+- **Status (May 2026):** **Implemented** — `BookingService.completeAppointment` in `services/booking-service.js`; `routes/video-consult.js` calls it on `end_session` before `videoConsultGraph.processEvent`.
+- **Verify:** `SKIP_STARTUP_MIGRATIONS=1 npx jest __tests__/booking-complete-appointment.test.js`
+- **Remaining:** E2E smoke book → video → case report; runbook BAAs (P3).
 
 ---
 

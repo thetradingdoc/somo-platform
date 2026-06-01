@@ -2,8 +2,8 @@
 > Last reviewed: May 30, 2026
 
 **Version**: 3.1.0  
-**Status**: Production Ready  
-**Last Updated:** 2026-05-30
+**Status**: Production ready for defined surfaces — see [`docs/meta/PO_SURFACE_SCORECARD.md`](docs/meta/PO_SURFACE_SCORECARD.md)  
+**Last Updated:** 2026-05-31
 
 > **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production UI/API hosts remain **myskinandcare.com** until **somopay.ai** cutover — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
@@ -558,6 +558,7 @@ All documentation has been organized in the [`docs/`](./docs/) folder:
 - **Setup Guides**: [Setup](./docs/setup/README.md#getting-started-setup), [Stripe Issuing](./docs/integrations/README.md#stripe-issuing-stripe-issuing)
 - **Routine tracker**: [User journey](./docs/user-journey/README.md)
 - **Architecture**: [Vision](./docs/architecture/README.md#vision-vision), [Payment Architecture](./docs/architecture/README.md#payments-payment-architecture)
+- **RCM patient pay (Kelly)**: [RCM Patient Pay Gateway](./docs/RCM/RCM_PATIENT_PAY_GATEWAY.md)
 - **API**: [API Documentation](./docs/api/README.md#api-documentation)
 - **Deployment**: [Security](./docs/deployment/README.md#security-security-improvements), [Backup Strategy](./docs/deployment/README.md#guides-backup-strategy)
 - **Voice Agent**: [Main voice agent prompt](./docs/voice-agent/prompts/kelly-voice-agent-prompt.md)

@@ -6472,6 +6472,7 @@ function migrateSoftDeleteColumns() {
   addColIfMissing('voice_checkouts', 'shipping_address TEXT');
   /** Commerce: link voice_checkout to checkout_sessions quote row for PI metadata / webhooks */
   addColIfMissing('voice_checkouts', 'commerce_quote_id TEXT');
+  addColIfMissing('checkout_sessions', 'kelly_session_id TEXT');
   addColIfMissing('payment_receipts', 'deleted_at DATETIME');
   addColIfMissing('patient_documents', 'deleted_at DATETIME');
   addColIfMissing('patient_portal_sessions', 'emergency_flag BOOLEAN DEFAULT 0');
@@ -8745,16 +8746,36 @@ module.exports = {
   // CHECKOUT SESSIONS
   // ============================================
   createCheckoutSession: (session) => {
-    return db.prepare(`
-      INSERT INTO checkout_sessions (id, merchant_id, platform, session_data, status, expires_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now', '+1 hour'))
-    `).run(
-      session.id,
-      session.merchant_id,
-      session.platform,
-      safeStringify(session.session_data),
-      session.status || 'pending'
-    );
+    const kellySessionId =
+      session.kelly_session_id ||
+      (session.session_data && typeof session.session_data === 'object'
+        ? session.session_data.kelly_session_id
+        : null) ||
+      null;
+    try {
+      return db.prepare(`
+        INSERT INTO checkout_sessions (id, merchant_id, platform, session_data, status, expires_at, kelly_session_id)
+        VALUES (?, ?, ?, ?, ?, datetime('now', '+1 hour'), ?)
+      `).run(
+        session.id,
+        session.merchant_id,
+        session.platform,
+        safeStringify(session.session_data),
+        session.status || 'pending',
+        kellySessionId
+      );
+    } catch (_) {
+      return db.prepare(`
+        INSERT INTO checkout_sessions (id, merchant_id, platform, session_data, status, expires_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now', '+1 hour'))
+      `).run(
+        session.id,
+        session.merchant_id,
+        session.platform,
+        safeStringify(session.session_data),
+        session.status || 'pending'
+      );
+    }
   },
 
   getCheckoutSession: (id) => {
@@ -8767,6 +8788,39 @@ module.exports = {
       SET status = ?, session_data = ?
       WHERE id = ?
     `).run(status, safeStringify(sessionData), id);
+  },
+
+  /** Remove stale commerce_flow progress rows older than ttl (orphan cleanup). */
+  purgeOrphanedCommerceFlowSessions: (maxAgeDays = 30) => {
+    try {
+      const days = Math.max(1, Number(maxAgeDays) || 30);
+      const r = db.prepare(`
+        DELETE FROM checkout_sessions
+        WHERE platform = 'commerce_flow'
+          AND status = 'active'
+          AND datetime(created_at) < datetime('now', ?)
+      `).run(`-${days} days`);
+      return r.changes || 0;
+    } catch (_) {
+      return 0;
+    }
+  },
+
+  getCheckoutSessionsByKellySessionId: (kellySessionId) => {
+    if (!kellySessionId) return [];
+    try {
+      return db.prepare(`
+        SELECT * FROM checkout_sessions
+        WHERE kelly_session_id = ?
+        ORDER BY created_at DESC
+      `).all(kellySessionId);
+    } catch (_) {
+      return db.prepare(`
+        SELECT * FROM checkout_sessions
+        WHERE json_extract(session_data, '$.kelly_session_id') = ?
+        ORDER BY created_at DESC
+      `).all(kellySessionId);
+    }
   },
 
   /** Remove expired pending/quoted commerce sessions (scheduled cleanup). */

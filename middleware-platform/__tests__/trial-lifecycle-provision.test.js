@@ -5,7 +5,8 @@ const TwilioPhoneService = require('../services/twilio-phone-service');
 const {
   TrialProvisionError,
   startTrialTenant,
-  canStartTrial
+  canStartTrial,
+  syncTwilioProvisionFlags
 } = require('../services/trial-lifecycle');
 
 describe('trial-lifecycle provision', () => {
@@ -24,7 +25,11 @@ describe('trial-lifecycle provision', () => {
       status: 'active',
       email_verified: 1
     });
-    db.updateCustomer(customerId, { customer_type: 'saas' });
+    db.updateCustomer(customerId, {
+      customer_type: 'saas',
+      phone_verified: 1,
+      phone_verified_at: new Date().toISOString()
+    });
   });
 
   beforeEach(() => {
@@ -93,6 +98,28 @@ describe('trial-lifecycle provision', () => {
     });
     const gate = canStartTrial(db, legacyId, '+12025558878');
     expect(gate.allowed).toBe(true);
+  });
+});
+
+describe('syncTwilioProvisionFlags', () => {
+  test('clears twilio_provisioned when DID columns are missing', () => {
+    const provision = { twilio_provisioned: true, twilio_search_strategy: 'nationwide' };
+    syncTwilioProvisionFlags(provision, {
+      twilio_phone_number: null,
+      twilio_phone_sid: null
+    });
+    expect(provision.twilio_provisioned).toBe(false);
+    expect(provision.twilio_provision_error).toBeTruthy();
+  });
+
+  test('sets twilio_provisioned when DID columns are present', () => {
+    const provision = {};
+    syncTwilioProvisionFlags(provision, {
+      twilio_phone_number: '+12025550199',
+      twilio_phone_sid: 'PN_test'
+    });
+    expect(provision.twilio_provisioned).toBe(true);
+    expect(provision.twilio_provision_error).toBeUndefined();
   });
 });
 

@@ -316,6 +316,41 @@ class KellyToolExecutor {
     return true;
   }
 
+  /** Build structured shipping payload from session meta for PaymentOrchestrator / voice_checkouts. */
+  static _buildShippingAddressFromMeta(sessionId) {
+    const line1 = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_line1') || '').trim();
+    const line2 = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_line2') || '').trim();
+    const city = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_city') || '').trim();
+    const state = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_state') || '').trim();
+    const postal = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_postal_code') || '').trim();
+    const country = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_country') || 'US').trim();
+    if (line1 && city && state && postal) {
+      return JSON.stringify({ line1, line2, city, state, postal_code: postal, country });
+    }
+    const full = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_address') || '').trim();
+    return full || null;
+  }
+
+  /**
+   * Refresh shipping TTL when fields/version are aligned but timestamp expired (Step10 bug 2).
+   */
+  static _refreshStaleShippingTtlIfEligible(sessionId) {
+    try {
+      if (KellyToolExecutor._isShippingReadyForCurrentContext(sessionId)) return;
+      const complete = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_complete') || '') === '1';
+      if (!complete) return;
+      const line1 = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_line1') || '').trim();
+      const city = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_city') || '').trim();
+      const state = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_state') || '').trim();
+      const postal = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_postal_code') || '').trim();
+      if (!line1 || !city || !state || !postal) return;
+      const cv = KellyToolExecutor._getCheckoutContextVersion(sessionId);
+      const sv = parseInt(String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_context_version') || '0'), 10);
+      if (!Number.isFinite(sv) || sv !== cv) return;
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', String(Date.now()));
+    } catch (_) {}
+  }
+
   static _computeCartFingerprint(sessionId, merchantId) {
     try {
       if (!sessionId || !merchantId) return '';
@@ -469,6 +504,33 @@ class KellyToolExecutor {
     const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
     const n = parseFloat(v);
     return Number.isFinite(n) ? n : 0.7;
+  }
+
+  /** KELLY_E2E_SKIP_TRIAGE=1 + session meta — relaxes RAG confidence/differential gates in E2E only. */
+  static _kellyE2eSkipTriageForSession(sessionId) {
+    if (String(process.env.KELLY_E2E_SKIP_TRIAGE || '').trim() !== '1') return false;
+    try {
+      const v = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_e2e_skip_triage');
+      return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** True when triage is complete and not reopened — block re-run_triage_rag. */
+  static _triageLockedForRerag(sessionId) {
+    if (!sessionId || !db.getTriageSession) return false;
+    const sessionRow = db.getTriageSession(sessionId);
+    if (!sessionRow) return false;
+    const triageComplete = KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete);
+    if (!triageComplete) return false;
+    try {
+      const v = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_triage_reopen');
+      const reopen = String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+      return !reopen;
+    } catch (_) {
+      return true;
+    }
   }
 
   /** Missing/invalid DB rag_confidence → 0 for gating (do not default to threshold). */
@@ -673,7 +735,7 @@ class KellyToolExecutor {
             };
           }
 
-          const triageForNotes = TriageRAGService.getLatestForSession(sessionId);
+          const triageForNotes = TriageRAGService.getAuthoritativeForSession(sessionId);
           if (!triageForNotes) {
             bump('voice_agent_misuse_schedule_appointment_no_rag_result');
             return {
@@ -970,6 +1032,77 @@ class KellyToolExecutor {
             });
           }
 
+        case 'request_patient_payment': {
+          const paymentRequestService = require('./rcm-payment-request-service');
+          const resolvedPatientId = args.patient_id || patientId || null;
+          const result = paymentRequestService.createRcmPaymentRequest({
+            clinicId,
+            amount: args.amount,
+            journeyId: args.journey_id || null,
+            patientId: resolvedPatientId,
+            method: 'kelly_request',
+          });
+          if (!result.success) return result;
+
+          let patientEmail = args.patient_email || args.customer_email || null;
+          let patientPhone = args.patient_phone || callerPhone || null;
+          if (resolvedPatientId && (!patientEmail || !patientPhone)) {
+            try {
+              const fhir = db.getFHIRPatient(resolvedPatientId);
+              if (fhir) {
+                patientEmail = patientEmail || fhir.email || null;
+                patientPhone = patientPhone || fhir.phone || null;
+              }
+            } catch (_) {}
+          }
+
+          const delivery = args.delivery || 'both';
+          const notify = await paymentRequestService.notifyPatientPaymentLink({
+            payUrl: result.pay_url,
+            amount: result.amount,
+            patientEmail,
+            patientPhone,
+            delivery,
+            clinicId,
+          });
+
+          if (sessionId) {
+            KellyToolExecutor._setSessionMeta(sessionId, 'rcm_pay_token', result.pay_token);
+            KellyToolExecutor._setSessionMeta(sessionId, 'rcm_payment_id', result.payment_id);
+          }
+
+          const journeyId = args.journey_id || null;
+          if (result.success && journeyId && clinicId) {
+            try {
+              const orchestrator = require('./rcm-journey-orchestrator');
+              orchestrator.advanceStage({
+                journeyId,
+                clinicId,
+                stageTo: 'patient_collection',
+                eventType: 'payment_link_sent',
+                payload: { payment_id: result.payment_id, pay_token: result.pay_token, amount: result.amount },
+                options: { skipGates: true },
+              });
+            } catch (advErr) {
+              console.warn('[request_patient_payment] journey advance:', advErr.message);
+            }
+          }
+
+          const sentParts = [];
+          if (patientEmail && (delivery === 'email' || delivery === 'both')) sentParts.push('email');
+          if (patientPhone && (delivery === 'sms' || delivery === 'both')) sentParts.push('text');
+
+          return {
+            ...result,
+            email_sent: sentParts.includes('email'),
+            sms_sent: sentParts.includes('text'),
+            message:
+              `Secure payment link for $${Number(result.amount).toFixed(2)}` +
+              (sentParts.length ? ` sent via ${sentParts.join(' and ')}` : '') +
+              '. Ask the patient to open the link to pay with card or USDC wallet. Do not collect card numbers on the call.',
+          };
+        }
+
         case 'get_patient_claims':
           return await this._getPatientClaims(args, sessionId);
 
@@ -1016,6 +1149,14 @@ class KellyToolExecutor {
           return { success: true, end_call: true };
 
         case 'return_to_triage': {
+          if (KellyToolExecutor._triageLockedForRerag(sessionId)) {
+            return {
+              success: true,
+              skipped_reopen: true,
+              message:
+                'Clinical triage is already complete for this visit. Continue with booking, or describe new or changed symptoms if something has changed since triage.'
+            };
+          }
           try {
             KellyToolExecutor._setSessionMeta(sessionId, 'kelly_triage_reopen', '1');
             KellyToolExecutor._setSessionMeta(sessionId, 'skincare_post_intake', '0');
@@ -1639,6 +1780,11 @@ class KellyToolExecutor {
                 message: 'Your cart is empty. Add items first.'
               }));
             }
+            const shippingFromMeta = KellyToolExecutor._buildShippingAddressFromMeta(sessionId);
+            const commerceQuoteId =
+              String(KellyToolExecutor._getSessionMeta(sessionId, 'last_commerce_quote_id') || quoteId || '').trim() ||
+              null;
+            KellyToolExecutor._refreshStaleShippingTtlIfEligible(sessionId);
             const checkoutResult = await PaymentOrchestrator.createCheckout({
               merchant_id: merchantId,
               customer: {
@@ -1654,8 +1800,13 @@ class KellyToolExecutor {
                 total: Number(it.total)
               })),
               payment: { method: args.payment_method || 'direct_stripe', currency: 'USD' },
-              shipping_address: args.shipping_address || undefined,
-              metadata: { kelly_session_id: sessionId || undefined, cart_session_id: sessionId }
+              shipping_address: args.shipping_address || shippingFromMeta || undefined,
+              metadata: {
+                kelly_session_id: sessionId || undefined,
+                cart_session_id: sessionId,
+                commerce_quote_id: commerceQuoteId,
+                shipping_address: shippingFromMeta || undefined
+              }
             });
             if (!checkoutResult || checkoutResult.success === false) {
               return guardedReturn(KellyToolExecutor._normalizePrepareCommerceCheckoutForChat(
@@ -1667,6 +1818,20 @@ class KellyToolExecutor {
             try {
               if (checkoutResult.checkout_id) {
                 db.setCommerceCartCheckoutLock(sessionId, merchantId, checkoutResult.checkout_id);
+              }
+              db.upsertCommerceCheckoutProgress({
+                session_id: sessionId,
+                merchant_id: merchantId,
+                stage: 'checkout_prepared',
+                quote_id: commerceQuoteId,
+                checkout_id: checkoutResult.checkout_id || null
+              });
+              if (commerceQuoteId) {
+                try {
+                  db.db.prepare(
+                    `UPDATE checkout_sessions SET kelly_session_id = ? WHERE id = ?`
+                  ).run(sessionId, commerceQuoteId);
+                } catch (_) {}
               }
             } catch (_) {}
             KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.CHECKOUT_PREPARED, {
@@ -1698,17 +1863,23 @@ class KellyToolExecutor {
             } catch (_) {}
             return guardedReturn(norm, { consumeTransition: true });
           }
-          const raw = await this._post('/api/public/checkout/start', {
-            quote_id: quoteId,
-            checkout_session_id: quoteId,
-            provider_id: merchantId,
-            email: String(email).trim(),
-            phone: normalizedPhone || rawPhone || undefined,
-            name: args.customer_name || args.name || undefined,
-            shipping_address: args.shipping_address || undefined,
-            kelly_session_id: sessionId || undefined,
-            payment_method: args.payment_method || 'direct_stripe'
-          });
+            const commerceQuoteId =
+              String(KellyToolExecutor._getSessionMeta(sessionId, 'last_commerce_quote_id') || quoteId || '').trim() ||
+              null;
+            const shippingFromMeta = KellyToolExecutor._buildShippingAddressFromMeta(sessionId);
+            KellyToolExecutor._refreshStaleShippingTtlIfEligible(sessionId);
+            const raw = await this._post('/api/public/checkout/start', {
+              quote_id: quoteId,
+              checkout_session_id: quoteId,
+              provider_id: merchantId,
+              email: String(email).trim(),
+              phone: normalizedPhone || rawPhone || undefined,
+              name: args.customer_name || args.name || undefined,
+              shipping_address: args.shipping_address || shippingFromMeta || undefined,
+              kelly_session_id: sessionId || undefined,
+              commerce_quote_id: commerceQuoteId,
+              payment_method: args.payment_method || 'direct_stripe'
+            });
           const normHttp = KellyToolExecutor._normalizePrepareCommerceCheckoutForChat(raw);
           try {
             KellyToolExecutor._setSessionMeta(
@@ -1866,9 +2037,11 @@ class KellyToolExecutor {
     const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
     const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
     const routineNoSymptoms = KellyToolExecutor._routineNoSymptomsEffective(sessionId);
+    const e2eSkipTriage = KellyToolExecutor._kellyE2eSkipTriageForSession(sessionId);
+    const sessionRowEarly = db.getTriageSession ? db.getTriageSession(sessionId) : null;
 
     // gap1: block slots until run_triage_rag has completed
-    const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+    const sessionRow = sessionRowEarly;
     const isSafetyRed =
       sessionRow &&
       ((sessionRow.safety_level === 'red') ||
@@ -1904,7 +2077,7 @@ class KellyToolExecutor {
       };
     }
 
-    let triageResult = TriageRAGService.getLatestForSession(sessionId);
+    let triageResult = TriageRAGService.getAuthoritativeForSession(sessionId);
     let usingRoutineBypass = false;
     if (!triageResult && routineNoSymptoms) {
       usingRoutineBypass = true;
@@ -1949,7 +2122,7 @@ class KellyToolExecutor {
     // W3-S5.1: Assert differentials or target_specialty before resolver
     const hasDifferentials = (triageResult.differentials || []).length >= 1;
     const hasSpecialty = !!(triageResult.target_specialty);
-    if (!hasDifferentials && !hasSpecialty) {
+    if (!e2eSkipTriage && !hasDifferentials && !hasSpecialty) {
       return {
         success: false,
         error: 'DIFFERENTIALS_REQUIRED',
@@ -1979,7 +2152,7 @@ class KellyToolExecutor {
       hasSpecialty &&
       confidenceNearThreshold
     );
-    const bypassConfidenceForRoutine = routineNoSymptoms || usingRoutineBypass;
+    const bypassConfidenceForRoutine = routineNoSymptoms || usingRoutineBypass || e2eSkipTriage;
     if (confidence < THRESHOLD && !allowBorderlineProgress && !bypassConfidenceForRoutine) {
       bump('voice_agent_misuse_get_available_slots_low_confidence');
       return {
@@ -2129,16 +2302,21 @@ class KellyToolExecutor {
     // The legacy /api/appointments/available-slots route can be disabled and diverges
     // from triage/session parity behavior, causing 403s in chat while voice succeeds.
     const slotsEndpoint = '/voice/appointments/available-slots';
-    const fallbackOut = await this._post(slotsEndpoint, {
-      date,
-      appointment_type: appointmentType,
-      timezone,
-      lane,
-      clinic_id: clinicId,
-      // Backend safety-guard (when implemented) and for consistent triage-session traceability.
-      metadata: { session_id: sessionId },
-      session_id: sessionId
-    });
+    let fallbackOut;
+    try {
+      fallbackOut = await this._post(slotsEndpoint, {
+        date,
+        appointment_type: appointmentType,
+        timezone,
+        lane,
+        clinic_id: clinicId,
+        // Backend safety-guard (when implemented) and for consistent triage-session traceability.
+        metadata: { session_id: sessionId },
+        session_id: sessionId
+      });
+    } catch (slotsErr) {
+      throw slotsErr;
+    }
     if (fallbackOut?.slot_bundles && Array.isArray(fallbackOut.slot_bundles)) {
       fallbackOut.slot_bundles = fallbackOut.slot_bundles.map((s) => ({
         ...s,
@@ -2738,7 +2916,7 @@ class KellyToolExecutor {
       }
     }
 
-    const triageResult = TriageRAGService.getLatestForSession(sessionId);
+    const triageResult = TriageRAGService.getAuthoritativeForSession(sessionId);
     if (!triageResult) {
       bump('voice_agent_misuse_collect_insurance_no_rag_result');
       return {
@@ -2848,6 +3026,22 @@ class KellyToolExecutor {
   // ─────────────────────────────────────────────────────────────
   static async _runTriageRAG(args, sessionId, patientId, clinicId) {
     try {
+      const forceRerun = args?.force_rerun === true || args?.force_rerun === 'true';
+      if (!forceRerun && KellyToolExecutor._triageLockedForRerag(sessionId)) {
+        const existing = TriageRAGService.getAuthoritativeForSession(sessionId);
+        if (existing) {
+          return {
+            success: true,
+            skipped_rerun: true,
+            triage_complete: true,
+            target_specialty: existing.target_specialty,
+            patient_friendly_summary: existing.patient_friendly_summary,
+            rag_confidence: existing.rag_confidence,
+            safety_level: existing.safety_level || 'green',
+            urgency: existing.urgency || 'routine'
+          };
+        }
+      }
       const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
       const stored = sessionRow || {};
       const opqrst = {
@@ -2920,7 +3114,8 @@ class KellyToolExecutor {
         opqrst,
         richIntake,
         patientId,
-        clinicId
+        clinicId,
+        force_rerun: forceRerun
       });
 
       const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();

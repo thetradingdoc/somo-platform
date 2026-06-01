@@ -3,7 +3,7 @@
 **Last updated:** 2026-05-31  
 **Purpose:** Phased, foundation-safe refactors from the 2026 codebase review. One route group per PR; identical URLs and JSON contracts.
 
-**Related:** [SERVER_DECOMPOSITION.md](./SERVER_DECOMPOSITION.md) · [STAGING_DIAGNOSTIC_RUNBOOK.md](../testing/STAGING_DIAGNOSTIC_RUNBOOK.md) · [SOMO_FOUNDATION_RUNBOOK.md](../Database/SOMO_FOUNDATION_RUNBOOK.md)
+**Related:** [SERVER_DECOMPOSITION.md](./SERVER_DECOMPOSITION.md) · [STAGING_DIAGNOSTIC_RUNBOOK.md](../testing/STAGING_DIAGNOSTIC_RUNBOOK.md) · [SOMO_FOUNDATION_RUNBOOK.md](../Database/SOMO_FOUNDATION_RUNBOOK.md) · [PO surface scorecard](../meta/PO_SURFACE_SCORECARD.md) · [Staging profile](../STAGING_PROFILE.md)
 
 ---
 
@@ -14,25 +14,25 @@
 | Lines | File | Risk |
 |------:|------|------|
 | 20,588 | `database.js` | God module — P2 only |
-| 11,157 | `server.js` | Boot + inline routes — extract incrementally |
+| ~10,400 | `server.js` | Boot + routes — P1 voice-incoming extracted |
 | 6,450 | `services/kelly-agent-service.js` | Kelly monolith — P2 |
 | 3,624 | `routes/admin-platform.js` | Admin — out of scope |
 | 3,487 | `services/kelly-tool-executor.js` | Tools — P2 |
 | 3,417 | `webhooks/retell-websocket.js` | Voice WS — P2 |
-| 3,360 | `routes/signup.js` | **P1 split** |
+| ~17 | `routes/signup.js` | Composite router — **P1 done** |
 | 2,738 | `routes/voice-appointments.js` | Voice booking |
 
 ### Frontend
 
 | Lines | File | Risk |
 |------:|------|------|
-| 3,660 | `unified-dashboard/patients/checkout-chat.js` | **P1 split** |
+| ~3,565 | `unified-dashboard/patients/checkout-chat.js` | Modules extracted — **P1 done** |
 | 2,246 | `unified-dashboard/business/settings.html` | Inline JS — P2 |
 | ~169 | `unified-dashboard/assets/js/voice-agent-page.js` | Good pattern |
 
 ---
 
-## Phase P0 — Multitenancy correctness (done in code)
+## Phase P0 — Multitenancy correctness (**shipped** — commit `139f424`)
 
 | PR | Change | Verify |
 |----|--------|--------|
@@ -44,13 +44,13 @@
 
 ---
 
-## Phase P1 — Reviewability extractions
+## Phase P1 — Reviewability extractions (**shipped** — commit `139f424`)
 
 | PR | Change | Verify |
 |----|--------|--------|
-| P1-1 | `routes/voice-incoming.js` + handler extract from `server.js` | `billing:test-gate` |
-| P1-2 | Split `signup.js` → `signup-trial`, `customer-auth`, `customer-account` | `test:e2e:staging-signup`, staging-voice |
-| P1-3 | Split `checkout-chat.js` → `assets/js/checkout-chat/*` | Manual checkout-chat smoke |
+| P1-1 | `routes/voice-incoming.js` + `services/voice-incoming-handler.js` | `billing:test-gate` |
+| P1-2 | Split `signup.js` → `signup-trial`, `customer-auth`, `customer-account`, `lib/signup-shared.js` | `test:e2e:staging-signup`, staging-voice |
+| P1-3 | Split `checkout-chat.js` → `assets/js/checkout-chat/{journey-state,catalog,sse-turns,payment-poll}.js` | Manual checkout-chat smoke |
 
 ---
 

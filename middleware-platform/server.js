@@ -10012,6 +10012,10 @@ function onServerListening() {
         if (n > 0) console.log(`🧹 checkout_sessions purge: removed ${n} expired row(s)`);
       }, 6 * 60 * 60 * 1000);
     }
+    if (db.purgeOrphanedCommerceFlowSessions) {
+      const orphaned = db.purgeOrphanedCommerceFlowSessions(30);
+      if (orphaned > 0) console.log(`🧹 commerce_flow purge: removed ${orphaned} stale row(s)`);
+    }
   } catch (e) {
     console.warn('⚠️  checkout_sessions purge disabled:', e.message);
   }

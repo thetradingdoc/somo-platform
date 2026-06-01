@@ -23,24 +23,24 @@ const mockSettings = {
   business_hours: { mon: '09:00-17:00' }
 };
 
-let updatedCustomer = null;
-let upsertPayload = null;
+let mockUpdatedCustomer = null;
+let mockUpsertPayload = null;
 
 jest.mock('../database', () => ({
-  getCustomer: jest.fn((id) => (id === mockCustomer.id ? { ...mockCustomer, ...updatedCustomer } : null)),
+  getCustomer: jest.fn((id) => (id === mockCustomer.id ? { ...mockCustomer, ...mockUpdatedCustomer } : null)),
   updateCustomer: jest.fn((id, patch) => {
-    updatedCustomer = { ...updatedCustomer, ...patch };
-    return { ...mockCustomer, ...updatedCustomer };
+    mockUpdatedCustomer = { ...mockUpdatedCustomer, ...patch };
+    return { ...mockCustomer, ...mockUpdatedCustomer };
   }),
   getVoiceAgentSettingsForProvider: jest.fn(() => ({ ...mockSettings })),
   upsertVoiceAgentSettings: jest.fn((merchantId, payload) => {
-    upsertPayload = { merchantId, payload };
+    mockUpsertPayload = { merchantId, payload };
   })
 }));
 
 jest.mock('../middleware/customer-auth', () => ({
   requireCustomerAuth: (req, res, next) => {
-    req.customer = { ...mockCustomer, ...updatedCustomer };
+    req.customer = { ...mockCustomer, ...mockUpdatedCustomer };
     next();
   }
 }));
@@ -49,8 +49,8 @@ describe('PATCH /api/kelly/toggle', () => {
   let app;
 
   beforeAll(() => {
-    updatedCustomer = null;
-    upsertPayload = null;
+    mockUpdatedCustomer = null;
+    mockUpsertPayload = null;
     const kellyRoutes = require('../routes/kelly');
     app = express();
     app.use(express.json());
@@ -58,8 +58,8 @@ describe('PATCH /api/kelly/toggle', () => {
   });
 
   beforeEach(() => {
-    updatedCustomer = null;
-    upsertPayload = null;
+    mockUpdatedCustomer = null;
+    mockUpsertPayload = null;
     mockCustomer.kelly_status = 'active';
     mockCustomer.retell_agent_status = 'active';
     jest.clearAllMocks();
@@ -73,14 +73,14 @@ describe('PATCH /api/kelly/toggle', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.status).toBe('paused');
-    expect(updatedCustomer.kelly_status).toBe('paused');
-    expect(upsertPayload).toBeTruthy();
-    expect(upsertPayload.payload.enabled).toBe(false);
+    expect(mockUpdatedCustomer.kelly_status).toBe('paused');
+    expect(mockUpsertPayload).toBeTruthy();
+    expect(mockUpsertPayload.payload.enabled).toBe(false);
   });
 
   test('activates Kelly and syncs voice_agent_settings.enabled=true', async () => {
     mockCustomer.kelly_status = 'paused';
-    updatedCustomer = { kelly_status: 'paused', retell_agent_status: 'paused' };
+    mockUpdatedCustomer = { kelly_status: 'paused', retell_agent_status: 'paused' };
 
     const res = await request(app)
       .patch('/api/kelly/toggle')
@@ -89,7 +89,7 @@ describe('PATCH /api/kelly/toggle', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.status).toBe('active');
-    expect(updatedCustomer.kelly_status).toBe('active');
-    expect(upsertPayload.payload.enabled).toBe(true);
+    expect(mockUpdatedCustomer.kelly_status).toBe('active');
+    expect(mockUpsertPayload.payload.enabled).toBe(true);
   });
 });

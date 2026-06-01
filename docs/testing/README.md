@@ -109,7 +109,7 @@ Use this when validating **landing → login → checkout-chat → quote → pay
 - **Learn / explore:** `intent=learn_more` and `phase3=1` → body `mode-learn`; checkout stepper/cart emphasis stays off until the user converts.
 - **Checkout-first:** `intent=checkout_chat` (and optional `source=landing`) → body `mode-checkout`; cart + stepper visible.
 
-**Automated (checkout-related):** there is **no** `npm run test:e2e-checkout-modes` or dedicated commerce-checkout Playwright script in [`middleware-platform/package.json`](../../middleware-platform/package.json). Use the Node-driven Playwright scripts that exist today, e.g. `npm run test:e2e-chat-conversation --prefix middleware-platform`, `npm run test:e2e-chat-scan-gate --prefix middleware-platform`, or add a new npm script when a dedicated checkout Playwright suite lands.
+**Automated (checkout-related):** run repo-root `npm run verify:agentic-checkout` (static contract checks). There is no dedicated checkout Playwright suite yet; add one under `middleware-platform/e2e/` when browser coverage is needed.
 
 ## Copy source of truth
 

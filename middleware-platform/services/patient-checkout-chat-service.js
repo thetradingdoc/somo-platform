@@ -434,21 +434,8 @@ function _mapAlreadyInProgressCopyByStage(sessionId) {
  * timestamp so prepare_commerce_checkout can proceed (matches tool path behavior).
  */
 function _refreshStaleShippingTtlIfEligible(sessionId) {
-  try {
-    const KellyToolExecutor = require('./kelly-tool-executor');
-    if (KellyToolExecutor._isShippingReadyForCurrentContext?.(sessionId)) return;
-    const complete = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_complete') || '') === '1';
-    if (!complete) return;
-    const line1 = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_line1') || '').trim();
-    const city = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_city') || '').trim();
-    const state = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_state') || '').trim();
-    const postal = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_postal_code') || '').trim();
-    if (!line1 || !city || !state || !postal) return;
-    const cv = KellyToolExecutor._getCheckoutContextVersion?.(sessionId) ?? 1;
-    const sv = parseInt(String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_context_version') || '0'), 10);
-    if (!Number.isFinite(sv) || sv !== cv) return;
-    KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', String(Date.now()));
-  } catch (_) {}
+  const KellyToolExecutor = require('./kelly-tool-executor');
+  KellyToolExecutor._refreshStaleShippingTtlIfEligible(sessionId);
 }
 
 function _extractShippingAddressParts(input) {
@@ -535,34 +522,14 @@ async function _maybeHandleDeterministicCommerceVerificationTurn({
         { sessionId, clinicId, patientId, callerPhone: null, channel }
       );
       if (!saveViaTool?.success) {
-        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_address', shipping.raw);
-        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_line1', shipping.line1);
-        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_city', shipping.city);
-        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_state', shipping.state);
-        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_postal_code', shipping.postal_code);
-        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_complete', '1');
-        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', String(Date.now()));
-        KellyToolExecutor._setSessionMeta(
-          sessionId,
-          'commerce_shipping_context_version',
-          String(KellyToolExecutor._getCheckoutContextVersion?.(sessionId) || '1')
-        );
-        try {
-          const merchantIdForFp = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'checkout_stage_meta_merchant_id') || '').trim();
-          if (merchantIdForFp) {
-            const cartForFp = db.getCommerceCart(sessionId, merchantIdForFp);
-            const fpItems = Array.isArray(cartForFp?.items) ? [...cartForFp.items] : [];
-            fpItems.sort((a, b) => String(a.product_id || '').localeCompare(String(b.product_id || '')));
-            const fp = JSON.stringify(
-              fpItems.map((it) => ({
-                product_id: String(it.product_id || ''),
-                quantity: Number(it.quantity || 0),
-                unit_price: Number(it.unit_price || 0)
-              }))
-            );
-            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_cart_fingerprint', fp);
+        return {
+          handled: true,
+          result: {
+            reply: saveViaTool?.message || 'I could not save that address. Please send street, city, state, and ZIP on one line.',
+            endCall: false,
+            toolsUsed: ['save_shipping_address']
           }
-        } catch (_) {}
+        };
       }
       shippingCaptured = true;
       if (stage !== 'code_verified') {

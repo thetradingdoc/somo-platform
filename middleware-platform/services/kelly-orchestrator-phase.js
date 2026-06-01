@@ -90,6 +90,7 @@ const TRIAGE_TRIAGE_TOOL_NAMES = new Set([
 
 const BILLING_TRIAGE_TOOL_NAMES = new Set([
   'get_patient_claims',
+  'request_patient_payment',
   'get_triage_session',
   'query_patient_records',
   'search_medical_literature',
@@ -122,6 +123,55 @@ function orchestratorEnabled() {
   const v = process.env.KELLY_ORCHESTRATOR_PHASE;
   if (v === undefined || v === null || v === '') return true;
   return String(v).toLowerCase() !== '0' && String(v).toLowerCase() !== 'false';
+}
+
+function kellyE2eSkipTriageEnabled() {
+  return String(process.env.KELLY_E2E_SKIP_TRIAGE || '').trim() === '1';
+}
+
+/**
+ * A1a-spec: clinic derm minimum intake before booking-intent can skip Step1 clarifier.
+ * Requires Step1 skin confirmed AND triage OPQRST minimum (chief_complaint, body site, severity, timeline/onset).
+ */
+function clinicDermMinimumIntakeMet({ sessionRow, metaGet }) {
+  const get = typeof metaGet === 'function' ? metaGet : () => null;
+  const skinStatus = String(get('step1_skin_type_status') || '').toLowerCase();
+  const skinValue = String(get('step1_skin_type_value') || '').trim();
+  const skinConf = String(get('step1_confidence_band') || get('step1_skin_type_confidence') || '').toLowerCase();
+  const skinOk =
+    skinStatus === 'confirmed' ||
+    (skinValue && skinValue !== 'unknown' && skinConf !== 'low' && skinConf !== 'unknown');
+
+  const chiefComplaint =
+    (sessionRow && String(sessionRow.quality || sessionRow.chief_complaint || '').trim()) ||
+    String(get('chief_complaint') || '').trim();
+  const bodySite =
+    (sessionRow && String(sessionRow.region || sessionRow.body_site || '').trim()) ||
+    String(get('body_sites') || '').trim();
+  const severity =
+    sessionRow &&
+    (sessionRow.severity != null ||
+      sessionRow.severity_score != null ||
+      String(sessionRow.severity || '').trim());
+  const timeline =
+    (sessionRow && String(sessionRow.onset || sessionRow.timeline || '').trim()) ||
+    String(get('timeline') || get('onset') || '').trim();
+
+  return !!(skinOk && chiefComplaint && bodySite && severity && timeline);
+}
+
+function isExplicitBookingIntent(message) {
+  const t = String(message || '').toLowerCase();
+  return (
+    /\b(book|booking|schedule|appointment|available slot|available time|first available|soonest)\b/i.test(t) &&
+    !/\b(not an emergency|no emergency)\b/i.test(t)
+  );
+}
+
+/** B2: reschedule / cancel intent — routes to scheduling tools in BOOKING phase. */
+function isRescheduleCancelIntent(message) {
+  const t = String(message || '').toLowerCase();
+  return /\b(reschedule|cancel my appointment|cancel the appointment|change my appointment|move my appointment)\b/i.test(t);
 }
 
 /**
@@ -288,7 +338,21 @@ function resolveOrchestrationPhase(opts) {
 
   const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
   const triageComplete = !!(sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true));
-  const hasRag = !!getLatestRag(sessionId);
+  const metaGet = (key) => _metaGet(KellyToolExecutor, sessionId, key);
+  let hasRag = !!getLatestRag(sessionId);
+  if (
+    !hasRag &&
+    kellyE2eSkipTriageEnabled() &&
+    metaTrue('kelly_e2e_skip_triage') &&
+    sessionRow?.rag_result_id
+  ) {
+    hasRag = true;
+  }
+  const bookingIntentSeen = metaTrue('booking_intent_seen') || isExplicitBookingIntent(message);
+  const clinicIntakeMet = clinicDermMinimumIntakeMet({ sessionRow, metaGet });
+  if (bookingIntentSeen && clinicIntakeMet) {
+    _metaSet(KellyToolExecutor, sessionId, 'booking_intent_seen', '1');
+  }
   let triageReopen = metaTrue('kelly_triage_reopen');
   const paymentToken = _metaGet(KellyToolExecutor, sessionId, 'payment_token');
   const lastPersisted = _metaGet(KellyToolExecutor, sessionId, 'kelly_orchestrator_phase');
@@ -359,6 +423,14 @@ function resolveOrchestrationPhase(opts) {
     phase = KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE;
   } else if (triageComplete && hasRag) {
     phase = KELLY_ORCHESTRATOR_PHASE.BOOKING;
+  } else if (
+    bookingIntentSeen &&
+    clinicIntakeMet &&
+    sessionRow &&
+    (sessionRow.opqrst_complete === 1 || sessionRow.opqrst_complete === true)
+  ) {
+    // A1b: booking intent + minimum intake + OPQRST done — stay in triage until RAG completes
+    phase = KELLY_ORCHESTRATOR_PHASE.TRIAGE_ACTIVE;
   } else if (sessionRow || hasRag) {
     phase = KELLY_ORCHESTRATOR_PHASE.TRIAGE_ACTIVE;
   } else {
@@ -579,6 +651,10 @@ module.exports = {
   mapToolDescriptionsForRoutineIntake,
   buildOrchestrationPromptSection,
   orchestratorEnabled,
+  kellyE2eSkipTriageEnabled,
+  clinicDermMinimumIntakeMet,
+  isExplicitBookingIntent,
+  isRescheduleCancelIntent,
   SCHEDULING_TOOL_NAMES,
   TRIAGE_TRIAGE_TOOL_NAMES,
   ROUTINE_INTAKE_TOOL_NAMES

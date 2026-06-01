@@ -21,11 +21,11 @@ Tracking rule:
 - [x] Stage only approved files with explicit `git add <path>` (no broad adds).
 - [x] Run staged diff review before commit (scope + secrets + artifacts).
 - [x] Write focused commit message (why + impact).
-- [ ] Verify post-commit cleanliness with `git status`.
-- [ ] Choose deploy path: code push, hosting deploy, or both.
+- [x] Verify post-commit cleanliness with `git status`.
+- [x] Choose deploy path: code push, hosting deploy, or both — see [`docs/deployment/GCP_DEPLOY_ROLLBACK.md`](../../docs/deployment/GCP_DEPLOY_ROLLBACK.md).
 - [ ] Execute deploy with checklist and capture output.
 - [ ] Run post-deploy smoke (`/health`, `/api`, payor/public routes, critical UI flow).
-- [ ] Record rollback plan: prior commit SHA + rollback command.
+- [ ] Record rollback plan: prior commit SHA + rollback command (template in GCP_DEPLOY_ROLLBACK.md).
 
 ## Summary
 

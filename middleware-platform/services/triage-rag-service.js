@@ -184,7 +184,32 @@ class TriageRAGService {
    * @param {string} [params.clinicId]
    * @returns {Promise<TriageRAGResult>}
    */
-  static async enrichFromSymptoms({ sessionId, symptomText, opqrst = {}, richIntake = {}, patientId = null, clinicId = null, _ragResultOverride = null, _skipKnowledgeService = false }) {
+  static async enrichFromSymptoms({
+    sessionId,
+    symptomText,
+    opqrst = {},
+    richIntake = {},
+    patientId = null,
+    clinicId = null,
+    _ragResultOverride = null,
+    _skipKnowledgeService = false,
+    force_rerun = false
+  }) {
+    // Do not overwrite the linked authoritative row after triage is complete unless explicitly forced.
+    const forceOverwrite = force_rerun === true || force_rerun === 'true';
+    if (!forceOverwrite && sessionId && db.getTriageSession) {
+      const sessionRow = db.getTriageSession(sessionId);
+      const triageDone =
+        sessionRow &&
+        (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
+      if (triageDone && sessionRow.rag_result_id) {
+        const preserved = this.getById(sessionRow.rag_result_id);
+        if (preserved) {
+          return { ...preserved, skipped_overwrite: true, success: true };
+        }
+      }
+    }
+
     let combinedText = this._buildCombinedText(symptomText, opqrst, richIntake);
     combinedText = normalizeForRAG(combinedText);
 
@@ -736,6 +761,31 @@ class TriageRAGService {
     return note.join('\n');
   }
 
+  static getById(ragId) {
+    if (ragId == null || String(ragId).trim() === '') return null;
+    try {
+      const row = db.db.prepare(`
+        SELECT * FROM triage_rag_results WHERE id = ? LIMIT 1
+      `).get(String(ragId));
+      return _normalizeRagRow(row);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /** Linked RAG row from triage_sessions.rag_result_id; falls back to newest row. */
+  static getAuthoritativeForSession(sessionId) {
+    if (!sessionId) return null;
+    try {
+      const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+      if (sessionRow?.rag_result_id) {
+        const byId = this.getById(sessionRow.rag_result_id);
+        if (byId) return byId;
+      }
+    } catch (_) {}
+    return this.getLatestForSession(sessionId);
+  }
+
   static getLatestForSession(sessionId) {
     try {
       const row = db.db.prepare(`
@@ -744,24 +794,34 @@ class TriageRAGService {
         ORDER BY created_at DESC
         LIMIT 1
       `).get(sessionId);
-      if (!row) return null;
-      const diffs = _safeParseDifferentials(row.differentials);
-      const icds = JSON.parse(row.icd_codes || '[]');
-      const primaryIcd10 = (diffs?.[0]?.icd10 || icds?.[0]?.code || '').trim() || null;
-      return {
-        ...row,
-        icd_codes: icds,
-        cpt_codes: JSON.parse(row.cpt_codes || '[]'),
-        secondary_specialties: JSON.parse(row.secondary_specialties || '[]'),
-        red_flags: JSON.parse(row.red_flags || '[]'),
-        differentials: diffs,
-        primary_icd10: primaryIcd10,
-        // null = not persisted / unknown — callers must not treat as passing threshold
-        rag_confidence: row.rag_confidence != null && row.rag_confidence !== ''
+      return _normalizeRagRow(row);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+function _normalizeRagRow(row) {
+  if (!row) return null;
+  try {
+    const diffs = _safeParseDifferentials(row.differentials);
+    const icds = JSON.parse(row.icd_codes || '[]');
+    const primaryIcd10 = (diffs?.[0]?.icd10 || icds?.[0]?.code || '').trim() || null;
+    return {
+      ...row,
+      icd_codes: icds,
+      cpt_codes: JSON.parse(row.cpt_codes || '[]'),
+      secondary_specialties: JSON.parse(row.secondary_specialties || '[]'),
+      red_flags: JSON.parse(row.red_flags || '[]'),
+      differentials: diffs,
+      primary_icd10: primaryIcd10,
+      rag_confidence:
+        row.rag_confidence != null && row.rag_confidence !== ''
           ? parseFloat(row.rag_confidence)
           : null
-      };
-    } catch (_) { return null; }
+    };
+  } catch (_) {
+    return null;
   }
 }
 

@@ -310,7 +310,7 @@
       sendBtn.disabled = true;
       try {
         const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort(), 120000);
+        const to = setTimeout(() => ctrl.abort(), 900000);
         const r = await fetch(`${API_BASE}/api/patient/triage/message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' },

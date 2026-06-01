@@ -44,14 +44,14 @@ Source map: `/Users/ojrichard/Downloads/kelly_rcm_todo_map.html`
 | TODO-09 | Keep | P1 | Phase 3 | Ledger is required before serious money automation. |
 | TODO-10 | Keep | P1 | Phase 3 | Canonical payment API required for orchestration. |
 | TODO-11 | Keep | P1 | Phase 3 | Eligibility normalization drives patient responsibility logic. |
-| TODO-12 | Keep | P2 | Phase 4 | Patient->provider copay flow after payments/ledger. |
+| TODO-12 | Keep | P2 | Phase 4 | Patient→provider copay flow. **Tool + pay.html shipped; conversation E2E (`test:e2e:rcm:conversation`) scores 67% — booking phase + `request_patient_payment` not invoked by LLM yet.** |
 | TODO-13 | Keep | P2 | Phase 4 | Remittance posting + overpayment/refund logic. |
 | TODO-14 | Keep | P2 | Phase 4 | A/R days metric job and API. |
 | TODO-15 | Keep | P2 | Phase 2 | Today-page money widget once summary API exists. |
 | TODO-16 | Keep | P2 | Phase 2 | Billing payments section should be real data. |
 | TODO-17 | Already done (verify) | P3 | Verification | EOB modal flow appears implemented; retain as regression check only. |
 | TODO-18 | Keep (defer) | P3 | Phase 5 | New `rcm.html` command center after core APIs are stable. |
-| TODO-19 | Keep (defer) | P3 | Phase 5 | Public patient payment page after payment request token APIs. |
+| TODO-19 | Done (verify) | P3 | Phase 5 | Public patient payment page — `unified-dashboard/patients/pay.html` + Playwright `patient-rcm-pay-ui.spec.cjs`. |
 | TODO-20 | Keep | P3 | Phase 4 | A/R KPI card after metrics API. |
 | TODO-21 | Already done (verify) | P3 | Verification | Patient terminology updates appear implemented; keep as QA checklist item. |
 | TODO-22 | Already done (verify) | P3 | Verification | Agent KPI label changes appear implemented; keep as QA checklist item. |

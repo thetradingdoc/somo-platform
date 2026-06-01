@@ -11,7 +11,7 @@ function createVoiceIncomingHandler(deps) {
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
-    const { isDemoTwilioNumber, resolveTemplate: resolveDodgecallTemplate } = require('./services/dodgecall-template-registry');
+    const { isDemoTwilioNumber, resolveTemplate: resolveDodgecallTemplate } = require('./dodgecall-template-registry');
 
     // Check if this is an outbound sales call (from query params) or inbound to demo line
     let isDodgecallDemo = req.query.call_type === 'dodgecall_demo';
@@ -166,7 +166,7 @@ function createVoiceIncomingHandler(deps) {
     const {
       resolveInboundRetellAgent,
       buildMissingRetellTwiml
-    } = require('./services/voice-inbound-tenant');
+    } = require('./voice-inbound-tenant');
     const retellResolution = resolveInboundRetellAgent({
       matchedCustomer,
       customerId,
@@ -184,7 +184,7 @@ function createVoiceIncomingHandler(deps) {
     retellAgentId = retellResolution.retellAgentId;
 
     if (customerId && !isOutboundSales && !isDodgecallDemo) {
-      const { canAcceptInboundCall, buildBlockedTwiml } = require('./services/billing-access');
+      const { canAcceptInboundCall, buildBlockedTwiml } = require('./billing-access');
       const access = canAcceptInboundCall(db, customerId);
       if (!access.allowed) {
         console.warn(`⚠️  Inbound blocked for customer ${customerId}: ${access.reason}`);
@@ -199,7 +199,7 @@ function createVoiceIncomingHandler(deps) {
 
     if (matchedCustomer && !isOutboundSales && !isDodgecallDemo) {
       try {
-        const VoiceAgentRuntime = require('./services/voice-agent-runtime');
+        const VoiceAgentRuntime = require('./voice-agent-runtime');
         const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
           merchantId: matchedCustomer.merchant_id,
           customerId: matchedCustomer.id
@@ -226,7 +226,7 @@ function createVoiceIncomingHandler(deps) {
       : clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
     let tierRateLimit;
     if (matchedCustomer) {
-      const { getRateLimitForCustomer } = require('./services/billing-access');
+      const { getRateLimitForCustomer } = require('./billing-access');
       tierRateLimit = getRateLimitForCustomer(matchedCustomer);
     }
     const rateLimit = clinicRateLimitCheck(tenantKey, tierRateLimit);
@@ -405,7 +405,7 @@ function createVoiceIncomingHandler(deps) {
 
     // DodgeCall public demo — per-use-case opener for Retell
     if (isDodgecallDemo) {
-      const { getUseCaseContext } = require('./services/dodgecall-demo-service');
+      const { getUseCaseContext } = require('./dodgecall-demo-service');
       const useCaseKey = dodgecallUseCase || 'receptionist';
       const ctx = getUseCaseContext(useCaseKey);
       dynamicVariables.company_name = 'DodgeCall';
@@ -590,7 +590,7 @@ function createVoiceIncomingHandler(deps) {
             }
             if (clinicId) {
               try {
-                const orchestrator = require('./services/rcm-journey-orchestrator');
+                const orchestrator = require('./rcm-journey-orchestrator');
                 const started = orchestrator.startJourney({
                   clinicId,
                   callId,

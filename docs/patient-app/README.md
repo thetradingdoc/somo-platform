@@ -340,7 +340,7 @@ New contracts required:
 - [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)
 - `docs/middleware-platform/README.md`
 - `docs/voice-agent/README.md`
-- `todos/pending/PATIENT_APP_JOURNAL_REDESIGN_TODOS.md`
+- `todos/archive/PATIENT_APP_JOURNAL_REDESIGN_V1_COMPLETED_2026-05-31.md` (V1 complete; optional follow-ups in product backlog)
 
 
 

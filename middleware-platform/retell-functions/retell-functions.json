@@ -369,6 +369,40 @@
     },
     {
       "type": "function",
+      "name": "request_patient_payment",
+      "description": "Create a secure pay link for patient copay or balance due (RCM). Sends link by email and/or SMS. Use when patient owes copay after eligibility or when collecting an outstanding balance — never collect card numbers on the call.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "Amount in USD (optional if journey or eligibility has copay_amount)"
+          },
+          "journey_id": {
+            "type": "string",
+            "description": "RCM journey id when known"
+          },
+          "patient_id": {
+            "type": "string",
+            "description": "FHIR patient id when known"
+          },
+          "patient_email": {
+            "type": "string",
+            "description": "Patient email for pay link delivery"
+          },
+          "patient_phone": {
+            "type": "string",
+            "description": "Patient phone for SMS pay link"
+          },
+          "delivery": {
+            "type": "string",
+            "description": "email, sms, or both (default both)"
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
       "name": "get_patient_claims",
       "description": "Get patient's medical claims and billing information. Use when caller asks about recent claims, bills, or medical services they received. For billing inquiries, ask for insurance number (member_id) first, NOT phone number or email.",
       "parameters": {

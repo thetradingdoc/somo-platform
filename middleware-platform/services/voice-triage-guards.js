@@ -131,7 +131,7 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
   const providerOverrideEmergency =
     args?.provider_override_emergency === true || args?.provider_override_emergency === 'true';
 
-  const triageResult = require('./triage-rag-service').getLatestForSession?.(sessionIdForGuard) || null;
+  const triageResult = require('./triage-rag-service').getAuthoritativeForSession?.(sessionIdForGuard) || null;
   const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
   const triageComplete = sessionRow.triage_complete === 1 || sessionRow.triage_complete === true;
 

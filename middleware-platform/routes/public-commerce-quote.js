@@ -141,7 +141,8 @@ router.post('/quote', (req, res) => {
       merchant_id: merchantId,
       platform: 'commerce_quote',
       session_data: sessionData,
-      status: 'quoted'
+      status: 'quoted',
+      kelly_session_id: kellySessionId || null
     });
 
     const row = db.getCheckoutSession(id);

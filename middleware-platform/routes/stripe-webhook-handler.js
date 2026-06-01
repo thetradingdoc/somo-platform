@@ -139,6 +139,9 @@ router.post(
         case 'payment_intent.payment_failed':
           await handlePaymentFailed(event.data.object);
           break;
+        case 'payment_intent.canceled':
+          await handlePaymentCanceled(event.data.object);
+          break;
         case 'refund.created':
         case 'refund.updated':
         case 'charge.refunded':
@@ -217,6 +220,26 @@ async function handleRefundEvent(event) {
 
 async function handlePaymentSucceeded(paymentIntent) {
   const { id: stripePaymentIntentId, amount, metadata } = paymentIntent;
+
+  const rcmPaymentId = metadata?.rcm_payment_id;
+  const payToken = metadata?.pay_token;
+  if (rcmPaymentId || payToken) {
+    try {
+      const settlement = require('../services/rcm-payment-settlement');
+      const token = payToken || null;
+      if (token) {
+        const result = await settlement.settleStripe(token, stripePaymentIntentId);
+        console.log('[StripeWebhook] RCM payment settled:', {
+          rcm_payment_id: rcmPaymentId || null,
+          pay_token: token.slice(0, 8) + '…',
+          success: result?.success,
+        });
+      }
+    } catch (e) {
+      console.warn('[StripeWebhook] RCM settle (non-fatal):', e.message);
+    }
+    return;
+  }
 
   await reconcileMerchantOrderPaymentSucceeded(paymentIntent);
 
@@ -367,6 +390,35 @@ async function handlePaymentFailed(paymentIntent) {
     `).run(appointmentId);
     console.log('[StripeWebhook] Payment failed recorded for:', appointmentId);
   } catch (_) {}
+}
+
+async function handlePaymentCanceled(paymentIntent) {
+  const checkoutId = paymentIntent?.metadata?.checkout_id;
+  if (!checkoutId) return;
+  try {
+    await db.updateVoiceCheckout(checkoutId, {
+      status: 'cancelled',
+      payment_intent_id: paymentIntent.id
+    });
+    const checkout = await db.getVoiceCheckout(checkoutId);
+    if (checkout && db.createTransaction) {
+      const { v4: uuidv4 } = require('uuid');
+      db.createTransaction({
+        id: uuidv4(),
+        merchant_id: checkout.merchant_id,
+        platform: 'voice',
+        platform_order_id: checkoutId,
+        product_id: checkout.product_id,
+        amount: checkout.amount,
+        status: 'cancelled',
+        customer_email: checkout.customer_email || checkout.customer_phone,
+        completed_at: null
+      });
+    }
+    console.log('[StripeWebhook] Voice checkout cancelled:', checkoutId);
+  } catch (err) {
+    console.warn('[StripeWebhook] payment_intent.canceled handler (non-fatal):', err.message);
+  }
 }
 
 async function reconcileMerchantOrderPaymentFailed(paymentIntent) {

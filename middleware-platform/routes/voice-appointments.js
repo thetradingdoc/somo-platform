@@ -1,5 +1,7 @@
 'use strict';
 
+const { isValidIanaTimezone } = require('../lib/is-valid-iana-timezone');
+
 function registerVoiceAppointmentRoutes(app, deps) {
   const {
     apiLimiter,
@@ -1649,7 +1651,7 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
               const row = db.getOrchestrateSessionBySessionId(callId);
               patientState = row?.flow_state?.patient_state || row?.flow_state?.state || null;
             }
-            const ragResult = require('../services/triage-rag-service').getLatestForSession?.(callId);
+            const ragResult = require('../services/triage-rag-service').getAuthoritativeForSession?.(callId);
             if (ragResult?.urgency) urgency = ragResult.urgency;
           } catch (_) {}
         }

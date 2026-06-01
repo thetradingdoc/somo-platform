@@ -326,7 +326,38 @@ function startJourney({
   });
 
   const journey = getJourney(clinic, id);
+  if (patientId) {
+    try {
+      syncCopayFromEligibility({ clinicId: clinic, patientId, journeyId: id });
+    } catch (_) {}
+  }
   return { journey: enrichJourney(journey), created: true, journey_id: id };
+}
+
+/** TODO-11: copy latest eligibility copay onto journey events for Kelly/RCM UI. */
+function syncCopayFromEligibility({ clinicId, patientId, journeyId }) {
+  if (!patientId || !journeyId || !clinicId) return null;
+  ensureKellyRcmTables();
+  const row = db.db
+    .prepare(
+      `SELECT copay_amount, eligible, payer_id FROM eligibility_checks
+       WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(String(patientId));
+  if (!row || row.copay_amount == null) return null;
+  appendEvent({
+    journeyId,
+    clinicId,
+    eventType: 'eligibility_copay_normalized',
+    stageTo: null,
+    payload: {
+      copay_amount: row.copay_amount,
+      eligible: row.eligible,
+      payer_id: row.payer_id || null,
+    },
+    dedupeKey: `eligibility_copay:${patientId}:${row.copay_amount}`,
+  });
+  return row.copay_amount;
 }
 
 function advanceStage({
@@ -663,4 +694,5 @@ module.exports = {
   onClaimAdjudication,
   onRemittancePosted,
   safeJsonParse,
+  syncCopayFromEligibility,
 };

@@ -11,6 +11,9 @@ yarn-error.log*
 # Local provider sign-in (never commit)
 local/provider-login.credentials
 
+# PR worktrees (local only — not source of truth)
+.pr-worktrees/
+
 # Environment variables
 .env
 .env.local

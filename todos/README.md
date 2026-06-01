@@ -1,36 +1,72 @@
 # Todos
 
-**Last Updated:** April 13, 2026
+**Last updated:** May 31, 2026
 
-This folder holds todo indexes and active checklists. **Pending** tracking is centralized in [`pending/README.md`](./pending/README.md). **Fully completed** lists are in [`archive/`](./archive/README.md#readme).
+Operational checklists live under **`pending/`** (active) and **`archive/`** (completed history). **Single SSOT for what to do next:** [`pending/README.md`](./pending/README.md).
 
-**Convention:** Add new operational checklists here and list them below. For overlap with architecture docs, see [`docs/meta/README.md#canonical-doc-map`](../docs/meta/README.md#canonical-doc-map).
+For overlap with architecture docs, see [`docs/meta/CANONICAL_DOC_MAP.md`](../docs/meta/CANONICAL_DOC_MAP.md).
 
-## Pending
+---
 
-See [`pending/README.md`](./pending/README.md) for the current pending backlog list.
+## Recently completed (not todo files)
 
-## Pending Files
+| Work | Reference |
+|------|-----------|
+| P0+P1 codebase hardening (voice fail-closed, signup split, checkout-chat modules) | [`docs/architecture/CODEBASE_REVIEW_ROADMAP.md`](../docs/architecture/CODEBASE_REVIEW_ROADMAP.md) — commit `139f424` |
+| Staging voice diagnostics + lazy Retell | [`docs/testing/STAGING_DIAGNOSTIC_RUNBOOK.md`](../docs/testing/STAGING_DIAGNOSTIC_RUNBOOK.md) |
+
+---
+
+## Tier 1 — Start here (product)
 
 | Document | Purpose |
 |----------|---------|
-| [pending/PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md](pending/PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md) | Phase 0 trust layer checklist: security, financial integrity, impact verification, reliability |
-| [pending/PRODUCTION_READINESS_TASKS.md](pending/PRODUCTION_READINESS_TASKS.md) | Production readiness, Azure, security, telemedicine, payments, monitoring |
-| [pending/TELEMEDICINE_TODOS.md](pending/TELEMEDICINE_TODOS.md) | Telemedicine production tasks (P0–P2) |
-| [pending/TELEMEDICINE_ARCHITECTURE_REVIEW.md](pending/TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: video consult → case report |
-| [pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout backend audit; open items mixed with implemented fixes |
-| [pending/Orchestration-todos.md](pending/Orchestration-todos.md) | Hybrid orchestration context + **pending** QA/parity/debt items |
-| [pending/Step10-LangChain-LangGraph-LangSmith-todos.md](pending/Step10-LangChain-LangGraph-LangSmith-todos.md) | Step 10: LangChain/LangGraph/LangSmith, provider cards |
-| [pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm patient Q&A pipeline: UI, eval, corpus ops (many items still open) |
+| [pending/KELLY_CONVERSATION_RAILS_TODOS.md](./pending/KELLY_CONVERSATION_RAILS_TODOS.md) | Kelly rails — F2 visit, provider UI, money maturity |
+| [pending/KELLY_RCM_PIPELINE_TODOS.md](./pending/KELLY_RCM_PIPELINE_TODOS.md) | RCM pipeline roadmap (TODO-01–24) |
+| [pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](./pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Checkout open items (P0 blockers done) |
+| [pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](./pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm Q&A UI + eval + ops |
+| [pending/Step10-LangChain-LangGraph-LangSmith-todos.md](./pending/Step10-LangChain-LangGraph-LangSmith-todos.md) | Step 10 LangGraph backlog |
 
-## Archived (completed history)
+---
 
-See [`archive/README.md`](./archive/README.md#readme) — includes triage phased roadmap (all complete), agentic checkout **frontend** spec (all complete), orchestration completed checklist extract, and the completed landing-consolidation set.
+## Tier 2 — Production / infra
+
+| Document | Purpose |
+|----------|---------|
+| [pending/PRODUCTION_READINESS_TASKS.md](./pending/PRODUCTION_READINESS_TASKS.md) | Azure, HIPAA, deploy checklist |
+| [pending/TELEMEDICINE_TODOS.md](./pending/TELEMEDICINE_TODOS.md) | Telemedicine P0–P2 gaps |
+| [pending/CLEAN_PUSH_GCP_TODOS.md](./pending/CLEAN_PUSH_GCP_TODOS.md) | GCP deploy + smoke |
+| [pending/PAYOR_ENTITY_RESOLUTION_TODOS.md](./pending/PAYOR_ENTITY_RESOLUTION_TODOS.md) | Payor entity-resolution pipeline |
+
+---
+
+## Tier 3 — Hygiene / launch
+
+| Document | Purpose |
+|----------|---------|
+| [pending/Orchestration-todos.md](./pending/Orchestration-todos.md) | Ongoing orchestration QA |
+| [pending/DODGECALL_DEMO_LAUNCH_CHECKLIST.md](./pending/DODGECALL_DEMO_LAUNCH_CHECKLIST.md) | DodgeCall ops before first call |
+| [pending/LANDING_NAVIGATOR_REGRESSION_TODOS.md](./pending/LANDING_NAVIGATOR_REGRESSION_TODOS.md) | Geo ZIP regression tests |
+| [pending/PHOTO_TO_BILL_EXTRACTION_TODOS.md](./pending/PHOTO_TO_BILL_EXTRACTION_TODOS.md) | Key rotation + rollout |
+
+---
+
+## Archive (May 31, 2026 batch)
+
+See [`archive/README.md`](./archive/README.md) — includes:
+
+- [archive/AGENTIC_REASONING_TODOS_COMPLETED_2026-05-31.md](./archive/AGENTIC_REASONING_TODOS_COMPLETED_2026-05-31.md)
+- [archive/LANDING_NAVIGATOR_UI_UX_TODOS_COMPLETED_2026-05-31.md](./archive/LANDING_NAVIGATOR_UI_UX_TODOS_COMPLETED_2026-05-31.md)
+- [archive/DODGECALL_DEMO_AGENT_TODOS_COMPLETED_2026-05-31.md](./archive/DODGECALL_DEMO_AGENT_TODOS_COMPLETED_2026-05-31.md)
+- [archive/DERM_PATIENT_QA_BACKEND_COMPLETED_2026-05-31.md](./archive/DERM_PATIENT_QA_BACKEND_COMPLETED_2026-05-31.md)
+- [archive/VOICE_BILLING_SUBSCRIPTION_TODOS_COMPLETED_2026-05-31.md](./archive/VOICE_BILLING_SUBSCRIPTION_TODOS_COMPLETED_2026-05-31.md)
+- [archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md](./archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md)
+
+---
 
 ## Related in `docs/`
 
-- [PATIENT_ARCHITECTURE.md](../docs/architecture/README.md#patients-patient-architecture)
-- [VOICE_AGENT_TODO_AND_STATUS.md](../docs/architecture/README.md#voice-agent-voice-agent-todo-and-status)
-- [MASTER_TODO_FULL.md](../docs/development/README.md#master-todo-full)
+- [CODEBASE_REVIEW_ROADMAP.md](../docs/architecture/CODEBASE_REVIEW_ROADMAP.md)
+- [PATIENT_TIMELINE_ROUTINE_AND_BILLING.md](../docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)
 
-Add new todo documents to this folder and update the **Active** table above.
+Add new todo documents under `pending/` and update `pending/README.md`.

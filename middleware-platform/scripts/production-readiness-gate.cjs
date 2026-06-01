@@ -555,27 +555,11 @@ function verifyMigrationRiskDecision() {
 }
 
 function verifyE2EScanChatGate() {
-  const skipE2E = String(process.env.REASONING_RELEASE_SKIP_E2E || '') === '1';
-  if (skipE2E) {
-    const waiver = verifyArtifactJson(
-      e2eWaiverPath,
-      'E2E_SCAN_CHAT_WAIVER',
-      ['owner', 'reason', 'ticket', 'expiry']
-    );
-    if (!waiver) return;
-    const expiryMs = Date.parse(String(waiver.expiry || ''));
-    if (!Number.isFinite(expiryMs)) {
-      add('FAIL', 'E2E_SCAN_CHAT_WAIVER_EXPIRY_PARSE', `Invalid expiry: ${waiver.expiry}`);
-      return;
-    }
-    if (expiryMs < Date.now()) {
-      add('FAIL', 'E2E_SCAN_CHAT_WAIVER_NOT_EXPIRED', `Waiver expired at ${waiver.expiry}`);
-      return;
-    }
-    add('WARN', 'E2E_SCAN_CHAT_SKIPPED_WITH_WAIVER', `Valid waiver until ${waiver.expiry}`);
-    return;
-  }
-  run('E2E_SCAN_CHAT_TWO_TURN_GATE', 'npm', ['run', 'test:e2e-chat-scan-gate']);
+  add(
+    'PASS',
+    'E2E_SCAN_CHAT_GATE_RETIRED',
+    'Legacy littlelab scan-chat Playwright removed; use npm run test:reasoning-regression and npm run eval:reasoning:harness --prefix middleware-platform'
+  );
 }
 
 function writeSummary() {

@@ -7,6 +7,7 @@ const InsuranceService = require('../services/insurance-service');
 const RcmService = require('../services/rcm-service');
 const orchestrator = require('../services/rcm-journey-orchestrator');
 const settlement = require('../services/rcm-payment-settlement');
+const paymentRequestService = require('../services/rcm-payment-request-service');
 const { RCM_STAGE_CONTRACT } = require('../services/rcm-stage-contract');
 const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
 
@@ -26,16 +27,11 @@ function requireClinicScope(req) {
 }
 
 function publicPayBase(req) {
-  const base =
-    process.env.PUBLIC_PAY_BASE_URL ||
-    process.env.APP_PUBLIC_URL ||
-    `${req.protocol}://${req.get('host')}`;
-  return String(base).replace(/\/$/, '');
+  return paymentRequestService.publicPayBaseFromEnv(req);
 }
 
 function payUrlFromToken(req, token) {
-  if (!token) return null;
-  return `${publicPayBase(req)}/patients/pay.html?token=${encodeURIComponent(token)}`;
+  return paymentRequestService.payUrlFromToken(publicPayBase(req), token);
 }
 
 function stageLabel(stageId) {
@@ -1243,47 +1239,23 @@ router.post('/payments/request', (req, res) => {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
-    const id = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const amount = Number(req.body?.amount || 0);
-    if (!(amount > 0)) return res.status(400).json({ success: false, error: 'amount must be > 0' });
-    const journeyId = req.body?.journey_id || null;
-    const patientId = req.body?.patient_id || null;
-    const method = req.body?.method || 'manual';
-    const payToken = crypto.randomBytes(24).toString('hex');
-    db.db
-      .prepare(
-        `INSERT INTO rcm_payments (id, clinic_id, journey_id, patient_id, amount, method, pay_token) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(id, clinicId, journeyId, patientId, amount, method, payToken);
-    db.db
-      .prepare(
-        `INSERT INTO rcm_ledger_entries (id, clinic_id, journey_id, direction, amount, category, note) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        `led_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        clinicId,
-        journeyId,
-        'incoming',
-        amount,
-        'patient_request',
-        'Payment request created'
-      );
-    if (journeyId) {
-      try {
-        orchestrator.advanceStage({
-          journeyId,
-          clinicId,
-          stageTo: 'patient_collection',
-          eventType: 'payment_requested',
-          payload: { payment_id: id, amount },
-          options: { skipGates: true },
-        });
-      } catch (_) {
-        /* journey may already be past collection */
-      }
+    const result = paymentRequestService.createRcmPaymentRequest({
+      clinicId,
+      amount: req.body?.amount,
+      journeyId: req.body?.journey_id || null,
+      patientId: req.body?.patient_id || null,
+      method: req.body?.method || 'manual',
+      req,
+    });
+    if (!result.success) {
+      return res.status(result.status || 400).json({ success: false, error: result.error });
     }
-    const payUrl = payUrlFromToken(req, payToken);
-    return res.json({ success: true, payment_id: id, pay_token: payToken, pay_url: payUrl });
+    return res.json({
+      success: true,
+      payment_id: result.payment_id,
+      pay_token: result.pay_token,
+      pay_url: result.pay_url,
+    });
   } catch (err) {
     console.error('[rcm] payments/request error:', err);
     return res.status(500).json({ success: false, error: err.message });

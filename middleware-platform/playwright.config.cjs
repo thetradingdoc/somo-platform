@@ -65,9 +65,23 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'kelly-golden',
+      testDir: './e2e',
+      testMatch: '**/kelly-rcm-golden-path.spec.cjs',
+      timeout: 600_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+      },
+      env: {
+        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+      },
+    },
+    {
       name: 'provider-rcm',
       testDir: './e2e',
       testMatch: ['**/*rcm*.spec.cjs', '**/patient-wallet-bills.spec.cjs'],
+      testIgnore: '**/kelly-rcm-golden-path.spec.cjs',
       timeout: 120_000,
       use: {
         browserName: 'chromium',

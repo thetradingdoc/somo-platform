@@ -159,6 +159,96 @@ function formatPayment(row) {
   };
 }
 
+function recordCopayAfterRcmPayment(row, paidMethod, referenceNumber) {
+  try {
+    if (!db.createCopayPayment) return;
+    let claimId = null;
+    let appointmentId = null;
+    let invoiceId = null;
+    let patientId = row.patient_id || null;
+
+    if (row.journey_id) {
+      const journey = db.db
+        .prepare(`SELECT claim_id, patient_id FROM rcm_journeys WHERE id = ? LIMIT 1`)
+        .get(row.journey_id);
+      claimId = journey?.claim_id || null;
+      patientId = patientId || journey?.patient_id || null;
+    }
+
+    if (claimId && db.getInvoicesByClaim) {
+      const invoices = db.getInvoicesByClaim(claimId) || [];
+      if (invoices[0]) {
+        invoiceId = invoices[0].id;
+        const amt = Number(row.amount || 0);
+        if (amt > 0 && db.addInvoicePayment) {
+          db.addInvoicePayment({
+            invoice_id: invoiceId,
+            payment_date: new Date().toISOString().split('T')[0],
+            amount: amt,
+            payment_method: paidMethod,
+            reference_number: referenceNumber || row.id,
+            notes: 'RCM public pay link',
+          });
+        }
+      }
+      if (claimId && !appointmentId) {
+        const claim = db.getInsuranceClaim?.(claimId) || null;
+        appointmentId = claim?.appointment_id || null;
+      }
+    }
+
+    db.createCopayPayment({
+      appointment_id: appointmentId,
+      claim_id: claimId,
+      invoice_id: invoiceId,
+      patient_id: patientId,
+      amount: Number(row.amount || 0),
+      currency: row.currency || 'USD',
+      payment_method: paidMethod,
+      reference_number: referenceNumber || row.stripe_payment_intent_id || row.circle_transfer_id || row.id,
+      notes: 'Recorded after RCM payment settlement',
+      received_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('[rcm] recordCopayAfterRcmPayment:', err.message);
+  }
+}
+
+function sendRcmPaymentReceiptEmail(row, paidMethod) {
+  try {
+    const EmailService = require('./email-service');
+    if (typeof EmailService.sendPaymentLinkEmail !== 'function') return;
+    const fhirId = resolveFhirPatientId(row.patient_id);
+    if (!fhirId) return;
+    const patient = db.getFHIRPatient(fhirId);
+    const email =
+      patient?.email ||
+      patient?.telecom?.find((t) => t.system === 'email')?.value ||
+      null;
+    if (!email) return;
+    const base = publicPayBaseFromEnv();
+    const receiptNote = `${base}/patients/wallet.html`;
+    EmailService.sendPaymentLinkEmail(email, receiptNote, {
+      product_name: 'Payment receipt — copay / balance',
+      amount: Number(row.amount || 0),
+    }).catch((err) => {
+      console.warn('[rcm] receipt email failed:', err.message);
+    });
+  } catch (err) {
+    console.warn('[rcm] sendRcmPaymentReceiptEmail:', err.message);
+  }
+}
+
+function publicPayBaseFromEnv() {
+  return String(
+    process.env.PUBLIC_PAY_BASE_URL ||
+      process.env.APP_PUBLIC_URL ||
+      process.env.API_BASE_URL ||
+      process.env.BASE_URL ||
+      'http://localhost:4000'
+  ).replace(/\/$/, '');
+}
+
 function markPaid(row, { method, circleTransferId, stripePaymentIntentId, note }) {
   if (row.status === 'paid') {
     return { success: true, payment_id: row.id, status: 'paid', alreadyPaid: true };
@@ -213,6 +303,11 @@ function markPaid(row, { method, circleTransferId, stripePaymentIntentId, note }
     } catch (_) {
       /* stage may already be bill */
     }
+  }
+
+  if (paidMethod !== 'manual') {
+    recordCopayAfterRcmPayment(row, paidMethod, stripePaymentIntentId || circleTransferId);
+    sendRcmPaymentReceiptEmail(row, paidMethod);
   }
 
   return { success: true, payment_id: row.id, status: 'paid', method: paidMethod };

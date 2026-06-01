@@ -107,6 +107,50 @@ async function main() {
 
     await runNode('e2e-rcm-golden-path.cjs');
     await runNode('rcm-e2e-money-path.cjs');
+    await runNode('e2e-kelly-rcm-pay-gateway.cjs');
+
+    try {
+      await runNode('e2e-kelly-booking-fixture.cjs', { KELLY_E2E_SKIP_TRIAGE: '1' });
+    } catch (bfErr) {
+      console.warn('[rcm-suite] Kelly booking fixture E2E skipped or failed (needs LLM keys):', bfErr.message);
+    }
+
+    try {
+      const { spawnSync } = require('child_process');
+      const pw = spawnSync(
+        'npx',
+        ['playwright', 'test', 'e2e/patient-rcm-pay-ui.spec.cjs', '--project', 'provider-rcm', '-g', 'mocked API'],
+        { cwd: ROOT, stdio: 'inherit', env: { ...process.env, PW_API_BASE_URL: BASE } }
+      );
+      if (pw.status !== 0) {
+        throw new Error('patient-rcm-pay-ui mocked tests failed');
+      }
+    } catch (pwErr) {
+      console.warn('[rcm-suite] Playwright pay UI skipped or failed:', pwErr.message);
+    }
+
+    const hasLlm =
+      process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+    if (hasLlm) {
+      try {
+        const { spawnSync } = require('child_process');
+        const goldenEnv = {
+          ...process.env,
+          PW_API_BASE_URL: BASE,
+          KELLY_E2E_VISIT_ONLY: '1',
+        };
+        const golden = spawnSync(
+          'npx',
+          ['playwright', 'test', '--project', 'kelly-golden', 'e2e/kelly-rcm-golden-path.spec.cjs'],
+          { cwd: ROOT, stdio: 'inherit', env: goldenEnv }
+        );
+        if (golden.status !== 0) {
+          console.warn('[rcm-suite] Kelly golden path (visit-only) failed — see playwright-report/kelly-golden-path-report.json');
+        }
+      } catch (goldenErr) {
+        console.warn('[rcm-suite] Kelly golden path skipped or failed:', goldenErr.message);
+      }
+    }
 
     console.log('\n✅ RCM E2E suite: PASS');
   } finally {

@@ -573,7 +573,7 @@ router.post('/agent-events', async (req, res) => {
         // Also expose appointment_id in session_metadata for downstream nodes.
         options.session_metadata.appointment_id = appointmentId;
         try {
-          const appt = db.getAppointment ? db.getAppointment(appointmentId) : null;
+          const appt = db.getAppointment ? await db.getAppointment(appointmentId) : null;
           if (appt?.patient_id) {
             db.enqueueEhrSyncJob({
               event_type: 'video_ended',

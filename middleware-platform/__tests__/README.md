@@ -1,21 +1,25 @@
 # Middleware automated tests
 
+## Coverage map (revenue paths)
+
+| Path | Jest / Playwright | Notes |
+|------|-------------------|-------|
+| Voice multitenancy | `voice-inbound-tenant.test.js`, `voice-incoming-handler.test.js`, `voice-call-tenant-scope.test.js` | HTTP T2.6 in `billing:test-gate` (restart server after gate changes) |
+| Signup / trial | `trial-lifecycle.test.js`, `billing-access-gate.test.js` | Staging: `test:e2e:staging-signup` |
+| Checkout / commerce | `stripe-webhook-canceled.test.js`, repo `verify-agentic-checkout.cjs` | Staging-dependent HTTP gates documented as norm |
+| RCM / Kelly | `rcm-tenant-isolation.test.js`, `rcm-payment-idempotency.test.js`, `e2e/kelly-rcm-golden-path.spec.cjs` | Conversation E2E: `test:e2e:rcm:conversation` |
+| Payor | `payor-*.test.js` suites | HTTP smoke optional with `RUN_PAYOR_HTTP_SMOKE=1` |
+| Reasoning | `reasoning-pipeline.test.js`, `reasoning-gates-fsm.test.js`, `result-summary-contract-guards.test.js` | CI: `npm run test:reasoning-regression` + `eval:reasoning:harness` |
+
+See [`docs/meta/PO_SURFACE_SCORECARD.md`](../docs/meta/PO_SURFACE_SCORECARD.md) for RAG per surface.
+
 ## Jest (`npm test`)
 
 - **Environment:** `jest.config.js` + `jest.setup.js` (`NODE_ENV=test`, in-memory DB via `DB_PATH=:memory:`).
-- **Scope:** `__tests__/*.test.js` only (not `__tests__/manual/` or `e2e/`).
-- **CI:** `.github/workflows/ci.yml` runs `npm test` (~53 suites / 306 tests, no skipped payor HTTP cases).
+- **Scope:** `__tests__/*.test.js` (not `__tests__/smoke/` or `e2e/`).
+- **CI:** `.github/workflows/ci.yml` runs `npm test` plus voice/booking smoke and `test:reasoning-regression`.
 
-## Manual Node harnesses (`__tests__/manual/`)
-
-Run with **Node** when changing conflict graph, INCI resolve, retriever, or full routine reasoning pipeline:
-
-| File | Run |
-|------|-----|
-| `manual/inci-resolve.test.js` | `node __tests__/manual/inci-resolve.test.js` |
-| `manual/ingredient-conflict-graph.test.js` | `node __tests__/manual/ingredient-conflict-graph.test.js` |
-| `manual/retriever-vector-merge.test.js` | `node __tests__/manual/retriever-vector-merge.test.js` |
-| `manual/routine-reasoning-eval.test.js` | `node __tests__/manual/routine-reasoning-eval.test.js` |
+Retired landing-scan / littlelab-assistant Jest and Playwright were removed (2026-06); services remain, regression is reasoning harness + revenue-path suites above.
 
 ## HTTP smoke (optional server)
 
@@ -27,14 +31,10 @@ See `PAYOR_SEARCH_TEST_GUIDE.md`.
 
 ## Other runners
 
-- **Playwright (landing / scan):** `e2e/*.spec.cjs` — see `package.json` scripts (`test:e2e-landing`, etc.).
-- **Funnel API E2E (middleware on :4000):** `npm run test:e2e-funnel` — `landing-funnel-match` + `landing-funnel-preview` specs only (no CRA build).
+- **Playwright (Somo landing):** `npm run test:e2e-somo-landing` or `test:e2e-landing` — `e2e/somo-landing.spec.cjs`.
+- **Staging:** `test:e2e:staging`, `test:e2e:staging-signup`, `test:e2e:staging-voice` (see `playwright.staging.config.cjs`).
 - **Acne journey eval (plain Node):** `npm run test:eval-engine` → `tests/e2e/eval-engine.unit.test.js`.
-- **Reasoning eval (CI):** `npm run eval:reasoning:harness` (not the manual routine-reasoning file).
-
-## Repo root
-
-- `scripts/check-get-app.spec.js` is **Playwright**; requires a running server (e.g. `localhost:4000`). Not part of `middleware-platform` Jest.
+- **Reasoning eval (CI):** `npm run eval:reasoning:harness`.
 
 ## What not to add under `__tests__/`
 

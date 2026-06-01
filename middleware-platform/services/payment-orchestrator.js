@@ -109,7 +109,9 @@ class PaymentOrchestrator {
             const commerceQuoteId =
                 (paymentRequest.metadata && paymentRequest.metadata.commerce_quote_id) || null;
             const shippingAddr =
-                (paymentRequest.metadata && paymentRequest.metadata.shipping_address) || null;
+                paymentRequest.shipping_address ||
+                (paymentRequest.metadata && paymentRequest.metadata.shipping_address) ||
+                null;
 
             // Create checkout record
             const checkoutId = uuidv4();

@@ -17,7 +17,7 @@ Why this matters for checkout:
 - The current Kelly loop already has orchestration, but it is policy/loop orchestration (soft control), not full state-machine orchestration (hard control).
 - The target evolution is: LangGraph as host controller, Kelly as a bounded sub-node for conversational UX within strict graph guardrails.
 
-**Completed work (checkout graph, tool-event pipeline, doc/CI review backlog)** is archived: [`archive/Orchestration-todos-completed-2026-04.md`](./archive/Orchestration-todos-completed-2026-04.md).
+**Completed work (checkout graph, tool-event pipeline, doc/CI review backlog)** is archived: [`../archive/Orchestration-todos-completed-2026-04.md`](../archive/Orchestration-todos-completed-2026-04.md).
 
 ---
 

@@ -216,6 +216,19 @@ function _defersStep1SkinTypeClarifier(message) {
   return false;
 }
 
+/** Skip Step1 skin-type clarifier for clinic derm / booking when not in skincare routine intake (F2 E2E). */
+function _skipStep1SkinClarifierForClinicVisit(sessionId, message) {
+  if (_sessionMetaBool(sessionId, 'routine_intake_active')) return false;
+  const msg = String(message || '').toLowerCase();
+  const clinicalDerm =
+    /\b(rash|itch|dermat|skin concern|mole|eczema|psoriasis|hives|spot|lesion|forearm|scaly)\b/.test(msg);
+  const booking =
+    KellyOrchestratorPhase.isExplicitBookingIntent(message) ||
+    /\b(appointment|book|visit|clinic|see a doctor|dermatolog)\b/.test(msg);
+  const phase = String(KellyToolExecutor._getSessionMeta(sessionId, 'kelly_orchestrator_phase') || '').toUpperCase();
+  return clinicalDerm || booking || phase === 'BOOKING' || phase === 'TRIAGE_ACTIVE' || phase === 'TRIAGE_DISCOVERY';
+}
+
 function _looksLikeScanConversation(message) {
   const t = String(message || '').trim().toLowerCase();
   if (!t) return false;
@@ -977,6 +990,39 @@ function _isBookingProgressIntent(text) {
   );
 }
 
+function _triageLockedForRerag(sessionId) {
+  try {
+    const KellyToolExecutor = require('./kelly-tool-executor');
+    return KellyToolExecutor._triageLockedForRerag(sessionId);
+  } catch (_) {
+    return false;
+  }
+}
+
+function _resolveAppointmentTypeForSession(sessionId, sessionRow, matched, fallback = 'General Consult') {
+  const TriageRAGService = require('./triage-rag-service');
+  return (
+    matched?.appointment_type ||
+    sessionRow?.target_specialty ||
+    TriageRAGService.getAuthoritativeForSession(sessionId)?.target_specialty ||
+    fallback
+  );
+}
+
+function _markSlotsPresentedForSession(sessionId, slotOut) {
+  if (!sessionId || !slotOut?.success) return;
+  try {
+    const KellyToolExecutor = require('./kelly-tool-executor');
+    const bundles = Array.isArray(slotOut.slot_bundles) ? slotOut.slot_bundles : [];
+    const available = Array.isArray(slotOut.available_slots) ? slotOut.available_slots : [];
+    if (!bundles.length && !available.length) return;
+    KellyToolExecutor._setSessionMeta(sessionId, 'slot_presented', '1');
+    if (bundles.length) {
+      KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_bundles', JSON.stringify(bundles.slice(0, 12)));
+    }
+  } catch (_) {}
+}
+
 function _getBillingReply(message) {
   const t = String(message || '').toLowerCase();
   if (t.includes('receipt')) return 'I can help you with your receipt. Could you share the email address associated with your appointment so I can look that up?';
@@ -984,6 +1030,11 @@ function _getBillingReply(message) {
   if (t.includes('refund')) return 'I can help with a refund question. Can you tell me which appointment or charge this is about?';
   if (t.includes('copay') || t.includes('deductible')) return "I can check your coverage details. What's your insurance member ID?";
   return 'I can help with your billing question. Can you give me a bit more detail about what you need — for example, a receipt, a claim, or a charge on your account?';
+}
+
+function _isPayNowIntent(message) {
+  const t = String(message || '').toLowerCase();
+  return /\b(pay (the )?copay|pay now|send (me )?(a )?(secure )?payment link|pay before (the )?appointment|secure pay link|pay with card)\b/i.test(t);
 }
 
 // Truncate tool payloads that get embedded into the next Groq request.
@@ -1601,6 +1652,26 @@ const KELLY_TOOLS = [
           payer_name: { type: 'string' }
         },
         required: ['member_id', 'patient_name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'request_patient_payment',
+      description:
+        'Create a secure RCM copay/balance payment link for the patient (email/SMS). Use when patient agrees to pay copay or balance now. Never collect card numbers on the call.',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: { type: 'number', description: 'Amount in USD (e.g. copay from eligibility)' },
+          journey_id: { type: 'string', description: 'RCM journey id when available' },
+          patient_id: { type: 'string' },
+          patient_email: { type: 'string' },
+          patient_phone: { type: 'string' },
+          delivery: { type: 'string', enum: ['email', 'sms', 'both'], description: 'How to send the link' }
+        },
+        required: ['amount']
       }
     }
   },
@@ -3141,6 +3212,29 @@ Antworten Sie durchgehend auf Deutsch.`,
         escapeTriggered: orchestration.escapeTriggered
       });
     }
+
+    // TODO-06: auto-start/link RCM journey on Kelly voice call when patient + clinic known.
+    try {
+      if (patientId && clinicId && (channel === 'voice' || channel === 'chat')) {
+        const existingJourney = KellyToolExecutor._getSessionMeta(sessionId, 'rcm_journey_id');
+        if (!existingJourney) {
+          const rcmOrchestrator = require('./rcm-journey-orchestrator');
+          rcmOrchestrator.ensureKellyRcmTables?.();
+          const started = rcmOrchestrator.startJourney({
+            clinicId,
+            patientId,
+            source: 'kelly_call',
+            stage: 'registration',
+            skipGates: true,
+          });
+          const jid = started.journey?.id || started.journey_id;
+          if (jid) KellyToolExecutor._setSessionMeta(sessionId, 'rcm_journey_id', String(jid));
+        }
+      }
+    } catch (journeyErr) {
+      console.warn('[KellyAgent] RCM journey auto-start:', journeyErr.message);
+    }
+
     let routineIntakeSummaryMarkdown = '';
     try {
       if (
@@ -3443,8 +3537,25 @@ Antworten Sie durchgehend auf Deutsch.`,
       skinTypeResult &&
       (skinTypeResult.value === 'unknown' || skinTypeResult.confidence === 'low') &&
       !_defersStep1SkinTypeClarifier(message) &&
+      !_skipStep1SkinClarifierForClinicVisit(sessionId, message) &&
       !scanChatMode &&
-      !plannerBypassSkincareClarifier
+      !plannerBypassSkincareClarifier &&
+      !(function skipSkinForBooking() {
+        const sessionRowSkin = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+        const metaGetSkin = (key) => KellyToolExecutor._getSessionMeta(sessionId, key);
+        const phase = String(metaGetSkin('kelly_orchestrator_phase') || '').toUpperCase();
+        if (phase === 'BOOKING') return true;
+        if (
+          KellyOrchestratorPhase.kellyE2eSkipTriageEnabled() &&
+          String(metaGetSkin('kelly_e2e_skip_triage') || '').toLowerCase() === '1'
+        ) {
+          return true;
+        }
+        return (
+          (_isBookingProgressIntent(message) || KellyOrchestratorPhase.isExplicitBookingIntent(message)) &&
+          KellyOrchestratorPhase.clinicDermMinimumIntakeMet({ sessionRow: sessionRowSkin, metaGet: metaGetSkin })
+        );
+      })()
     ) {
       const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
         ? history[history.length - 1].content
@@ -3471,8 +3582,25 @@ Antworten Sie durchgehend auf Deutsch.`,
       skinTypeResult.status === 'tentative' &&
       skinTypeResult.needs_confirmation &&
       !_defersStep1SkinTypeClarifier(message) &&
+      !_skipStep1SkinClarifierForClinicVisit(sessionId, message) &&
       !scanChatMode &&
-      !plannerBypassSkincareClarifier
+      !plannerBypassSkincareClarifier &&
+      !(function skipSkinConfirmForBooking() {
+        const sessionRowSkin = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+        const metaGetSkin = (key) => KellyToolExecutor._getSessionMeta(sessionId, key);
+        const phase = String(metaGetSkin('kelly_orchestrator_phase') || '').toUpperCase();
+        if (phase === 'BOOKING') return true;
+        if (
+          KellyOrchestratorPhase.kellyE2eSkipTriageEnabled() &&
+          String(metaGetSkin('kelly_e2e_skip_triage') || '').toLowerCase() === '1'
+        ) {
+          return true;
+        }
+        return (
+          (_isBookingProgressIntent(message) || KellyOrchestratorPhase.isExplicitBookingIntent(message)) &&
+          KellyOrchestratorPhase.clinicDermMinimumIntakeMet({ sessionRow: sessionRowSkin, metaGet: metaGetSkin })
+        );
+      })()
     ) {
       const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
         ? history[history.length - 1].content
@@ -3640,7 +3768,9 @@ Antworten Sie durchgehend auf Deutsch.`,
         patientId,
         callerPhone,
         sessionId,
-        channel
+        channel,
+        customerId,
+        providerInstructions,
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('LLM_TURN_TIMEOUT')), turnTimeoutMs))
       ]);
@@ -3729,7 +3859,7 @@ Antworten Sie durchgehend auf Deutsch.`,
           reply = "I have that slot available. To confirm your booking, I need your email address. What's the best email for the confirmation?";
         }
 
-        if (triageComplete && askedToProceed && !alreadyLookedUpSlots && replyLooksLikeSummaryLoop) {
+        if (triageComplete && askedToProceed && !alreadyLookedUpSlots) {
           const requestedSpecialty = _extractRequestedSpecialty(message);
           const appointmentType = requestedSpecialty || sessionRow?.target_specialty || 'PrimaryCare';
           const today = (() => {
@@ -3754,7 +3884,7 @@ Antworten Sie durchgehend auf Deutsch.`,
           // E2E harness: count triage as satisfied if RAG row exists but the model did not
           // emit run_triage_rag this turn (guardrail-only slot fetch).
           const nextTools = Array.isArray(toolsUsed) ? [...toolsUsed] : [];
-          if (TriageRAGService.getLatestForSession(sessionId) && !nextTools.includes('run_triage_rag')) {
+          if (TriageRAGService.getAuthoritativeForSession(sessionId) && !nextTools.includes('run_triage_rag')) {
             nextTools.push('run_triage_rag');
           }
           nextTools.push('get_available_slots');
@@ -3818,11 +3948,12 @@ Antworten Sie durchgehend auf Deutsch.`,
               ? (_resolveSlotBundleFromUserMessage(bundles, userMsg) || bundles[0])
               : null;
             if (matched) {
+              const scheduleSessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
               const scheduleArgs = {
                 patient_name: collectedName,
                 patient_email: collectedEmail,
                 patient_phone: collectedPhone,
-                appointment_type: 'Primary Care',
+                appointment_type: _resolveAppointmentTypeForSession(sessionId, scheduleSessionRow, matched),
                 date: resolvedDate || matched?.date || new Date().toISOString().slice(0, 10),
                 time: matched?.time || matched?.start_time || matched?.start || '11:30',
                 practitioner_id: matched?.practitioner_id || null
@@ -3865,7 +3996,9 @@ Antworten Sie durchgehend auf Deutsch.`,
             callerPhone,
             sessionId,
             channel,
-            forceProvider: 'groq'
+            forceProvider: 'groq',
+            customerId,
+            providerInstructions,
           });
           reply = groqResult.reply;
           toolsUsed = groqResult.toolsUsed || [];
@@ -4080,11 +4213,15 @@ Antworten Sie durchgehend auf Deutsch.`,
 
             if (opqrstComplete && intakeComplete) {
               try {
+                const askedToProceed = _isBookingProgressIntent(message);
+                const selectedSlotLikeInput = _looksLikeSlotChoice(message);
+                const triageLocked = _triageLockedForRerag(sessionId);
+                let triageOut = null;
+
+                if (!triageLocked) {
                 // When Groq is down we still re-run triage RAG server-side.
                 // However, during specialty/slot routing turns the latest user message is often
                 // just a confirmation (e.g. "Dermatology first"), which can produce low rag_confidence.
-                const askedToProceed = _isBookingProgressIntent(message);
-                const selectedSlotLikeInput = _looksLikeSlotChoice(message);
                 // Build a stable symptom_text by including stored OPQRST fields.
                 const symptomParts = [];
                 if (refreshed.onset) symptomParts.push(`Onset: ${refreshed.onset}`);
@@ -4097,16 +4234,11 @@ Antworten Sie durchgehend auf Deutsch.`,
                 if (refreshed.timing) symptomParts.push(`Timing: ${refreshed.timing}`);
                 if (refreshed.associated_sx) symptomParts.push(`Associated symptoms: ${refreshed.associated_sx}`);
 
-                // Use recent user history so we keep stable "symptom context"
-                // (e.g. "lower back pain") even when the latest user message
-                // is just a confirmation like "Both sides".
                 const userMessages = (history || [])
                   .filter(m => m && m.role === 'user')
                   .map(m => String(m.content || ''))
                   .filter(Boolean);
 
-                // Keep the first user symptom intake (where location like "back pain" lives),
-                // plus the most recent confirmations so we don't lose new details.
                 const stableUserText = [
                   userMessages[0],
                   ...userMessages.slice(-2)
@@ -4118,7 +4250,7 @@ Antworten Sie durchgehend auf Deutsch.`,
                   `${symptomParts.join('. ')}${symptomParts.length ? '. ' : ''}${stableUserText}`.trim()
                 );
 
-                const triageOut = await KellyToolExecutor.execute(
+                triageOut = await KellyToolExecutor.execute(
                   'run_triage_rag',
                   { symptom_text: symptomTextForRag },
                   { sessionId, clinicId, patientId, callerPhone, channel }
@@ -4127,9 +4259,16 @@ Antworten Sie durchgehend auf Deutsch.`,
                 if (triageOut?.suggested_next_step) reply = _sanitizeSuggestedNextStep(triageOut.suggested_next_step);
                 else if (triageOut?.patient_friendly_summary) reply = triageOut.patient_friendly_summary;
                 else reply = _replyForTriageIncomplete('TRIAGE_REQUIRED', channel, preferredLanguage, refreshed, message);
+                }
 
-                // Even when the LLM is unreachable, allow explicit "proceed to slots" intent
-                // to move forward by calling get_available_slots server-side.
+                // When triage is locked, skip re-RAG; proceed to slots on booking intent.
+                if (triageLocked && askedToProceed) {
+                  const authRag = TriageRAGService.getAuthoritativeForSession(sessionId);
+                  if (authRag?.patient_friendly_summary) {
+                    reply = authRag.patient_friendly_summary;
+                  }
+                }
+
                 if (askedToProceed) {
                   try {
                     const refreshedAfterRag = db.getTriageSession ? db.getTriageSession(sessionId) : refreshed;
@@ -4152,6 +4291,7 @@ Antworten Sie durchgehend auf Deutsch.`,
                       { sessionId, clinicId, patientId, callerPhone, channel }
                     );
                     if (slotOut?.success) {
+                      _markSlotsPresentedForSession(sessionId, slotOut);
                       const bundles = Array.isArray(slotOut.slot_bundles) ? slotOut.slot_bundles : [];
                       const available = Array.isArray(slotOut.available_slots) ? slotOut.available_slots : [];
                       const source = bundles.length ? bundles : available;
@@ -4678,7 +4818,7 @@ Antworten Sie durchgehend auf Deutsch.`,
     if (
       mergedTools.includes('get_available_slots') &&
       !mergedTools.includes('run_triage_rag') &&
-      TriageRAGService.getLatestForSession(sessionId)
+      TriageRAGService.getAuthoritativeForSession(sessionId)
     ) {
       mergedTools.push('run_triage_rag');
     }
@@ -5124,7 +5264,9 @@ Antworten Sie durchgehend auf Deutsch.`,
           channel,
           checkoutPolicy: checkoutPolicy || null,
           onStreamDelta,
-          onToolStatus
+          onToolStatus,
+          customerId,
+          providerInstructions,
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('LLM_TURN_TIMEOUT')), turnTimeoutMs))
       ]);
@@ -5177,7 +5319,9 @@ Antworten Sie durchgehend auf Deutsch.`,
     forceProvider,
     checkoutPolicy,
     onStreamDelta,
-    onToolStatus
+    onToolStatus,
+    customerId = null,
+    providerInstructions = null,
   }) {
     const groq = getGroq();
     const effectiveProvider = forceProvider || resolvePrimaryProvider();
@@ -5626,6 +5770,63 @@ Antworten Sie durchgehend auf Deutsch.`,
             );
             KellyToolExecutor._setSessionMeta(sessionId, 'slot_presented', '1');
           } catch (_) {}
+        }
+
+        if (
+          toolName === 'get_available_slots' &&
+          toolResult &&
+          toolResult.success === false &&
+          (toolResult.error_code === 'TRIAGE_REQUIRED' || toolResult.error === 'TRIAGE_REQUIRED')
+        ) {
+          /* no-op: guard below handles loop break */
+        } else if (
+          toolName === 'get_available_slots' &&
+          toolResult?.success &&
+          !(Array.isArray(toolResult.slot_bundles) && toolResult.slot_bundles.length) &&
+          !(Array.isArray(toolResult.available_slots) && toolResult.available_slots.length)
+        ) {
+          reply =
+            reply ||
+            "I don't see openings that day — would you like me to try another day or time?";
+        }
+
+        if (toolName === 'schedule_appointment' && toolResult && toolResult.success === false) {
+          reply =
+            toolResult.message ||
+            'Something went wrong booking that slot — I can try again or offer a different time.';
+        }
+
+        // A2a-rag: auto-run triage RAG synchronously after OPQRST stored when no RAG row yet.
+        if (
+          (toolName === 'store_triage_opqrst' || toolName === 'store_triage_rich_intake') &&
+          toolResult?.success !== false
+        ) {
+          try {
+            const rowAfterOpqrst = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+            const ragExists =
+              TriageRAGService.getAuthoritativeForSession(sessionId) ||
+              (rowAfterOpqrst?.rag_result_id && String(rowAfterOpqrst.rag_result_id).trim());
+            const opqrstDone =
+              rowAfterOpqrst &&
+              (rowAfterOpqrst.opqrst_complete === 1 || rowAfterOpqrst.opqrst_complete === true);
+            if (opqrstDone && !ragExists) {
+              const ragOut = await KellyToolExecutor.execute(
+                'run_triage_rag',
+                { symptom_text: String(context?.message || message || rowAfterOpqrst.quality || 'derm visit') },
+                { sessionId, clinicId, patientId, callerPhone, channel }
+              );
+              if (!toolsUsed.includes('run_triage_rag')) {
+                toolsUsed = Array.isArray(toolsUsed) ? [...toolsUsed, 'run_triage_rag'] : ['run_triage_rag'];
+              }
+              if (ragOut?.low_confidence && ragOut?.suggested_next_step) {
+                reply = _sanitizeSuggestedNextStep(ragOut.suggested_next_step);
+              } else if (ragOut && ragOut.success === false) {
+                reply = 'I need a bit more detail before we can schedule — can you tell me more about the rash?';
+              }
+            }
+          } catch (autoRagErr) {
+            console.warn('[KellyAgent] auto run_triage_rag:', autoRagErr.message);
+          }
         }
 
         if (_kellyDebugVerbose()) {
@@ -6087,6 +6288,9 @@ Antworten Sie durchgehend auf Deutsch.`,
    */
   static async _handleFastIntentPrecheck({ intent, message, sessionId, patientId, clinicId, callerPhone, channel }) {
     if (intent === 'billing') {
+      if (_isPayNowIntent(message)) {
+        return null;
+      }
       const billingReply = _getBillingReply(message);
       this._appendToHistory(sessionId, 'user', message);
       this._appendToHistory(sessionId, 'assistant', billingReply);

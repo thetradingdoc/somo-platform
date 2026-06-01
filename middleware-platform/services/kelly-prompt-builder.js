@@ -172,6 +172,8 @@ function buildBillingPhasePrompt() {
     'Help with **claims, charges, receipts, and coverage questions** for this patient when identifiers are available.',
     '### Rules',
     '- Prefer **get_patient_claims** (or allowed billing tools) over guessing amounts or payer behavior.',
+    '- When the patient owes a **copay or balance**, call **request_patient_payment** — it creates a secure pay link (email/SMS). Tell them to open the link; **never collect card numbers on the call or in chat**.',
+    '- Use **create_appointment_checkout** / **verify_checkout_code** only for **new appointment** checkout, not for RCM balance already on a journey.',
     '- Do not book appointments or run **run_triage_rag** unless the patient clearly changes intent to a new medical concern — then use **return_to_triage** if available.',
     '- Never collect card numbers in chat; direct to secure flows when applicable.'
   ].join('\n');

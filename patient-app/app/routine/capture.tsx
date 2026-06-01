@@ -204,7 +204,9 @@ export default function RoutineCaptureScreen() {
       <View style={styles.cameraWrap}>
         <CameraView ref={camRef} style={styles.camera} facing="front" />
         {ghostUrl ? (
-          <Image source={{ uri: ghostUrl }} style={styles.ghostOverlay} resizeMode="cover" pointerEvents="none" />
+          <View style={styles.ghostOverlayWrap} pointerEvents="none">
+            <Image source={{ uri: ghostUrl }} style={styles.ghostOverlay} resizeMode="cover" />
+          </View>
         ) : null}
         <View style={styles.guideFrame} pointerEvents="none" />
         <SafeAreaView edges={['top']} style={styles.hintBar}>
@@ -249,6 +251,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: JournalTokens.color.cream },
   cameraWrap: { flex: 1, position: 'relative' },
   camera: { flex: 1 },
+  ghostOverlayWrap: {
+    ...StyleSheet.absoluteFillObject,
+  },
   ghostOverlay: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.35,

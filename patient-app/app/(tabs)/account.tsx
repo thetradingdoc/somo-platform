@@ -51,7 +51,7 @@ export default function AccountScreen() {
     setSignedIn(false);
     setEmail(null);
     setProgramName(null);
-    router.replace('/(tabs)/index');
+    router.replace('/(tabs)');
   }, [router]);
 
   return (
@@ -67,7 +67,7 @@ export default function AccountScreen() {
             <Text style={styles.cardBody}>
               Sign in with your email to sync your routine, progress photos, and clinic visits.
             </Text>
-            <PrimaryButton label="Sign in" onPress={() => router.push('/(tabs)/index')} />
+            <PrimaryButton label="Sign in" onPress={() => router.push('/(tabs)')} />
           </View>
         ) : (
           <>

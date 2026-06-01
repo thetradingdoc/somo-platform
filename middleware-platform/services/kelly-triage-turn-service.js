@@ -16,9 +16,9 @@ function isUnifiedChannelAdapterShadowEnabled() {
 }
 
 async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId }) {
-  const KellyAgentService = require('./services/kelly-agent-service');
-  const KellyToolExecutor = require('./services/kelly-tool-executor');
-  const { shouldSkipLandingTurnSeq } = require('./services/landing-turn-seq');
+  const KellyAgentService = require('./kelly-agent-service');
+  const KellyToolExecutor = require('./kelly-tool-executor');
+  const { shouldSkipLandingTurnSeq } = require('./landing-turn-seq');
   const extractEmailFromText = (text) => {
     const m = String(text || '').match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
     return m ? String(m[0]).toLowerCase() : null;
@@ -136,7 +136,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   let scanChatModeActive = false;
   if (req.path === '/api/public/landing-assistant/turn') {
     try {
-      const { buildLandingRouteIntentPlan } = require('./services/landing-route-intent-planner');
+      const { buildLandingRouteIntentPlan } = require('./landing-route-intent-planner');
       plannerDecision = buildLandingRouteIntentPlan({
         message: trimmedMessage,
         shortTermThread: preThread,
@@ -200,7 +200,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
 
   if (req.path === '/api/public/landing-assistant/turn') {
     try {
-      const { appendLandingContextEvent } = require('./services/landing-context-ingest-service');
+      const { appendLandingContextEvent } = require('./landing-context-ingest-service');
       appendLandingContextEvent({
         sessionId: session_id,
         eventType: 'chat_turn_input',
@@ -337,8 +337,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
 
   // Skincare / routine intake: same meta key as voice (Retell kelly_flow)
   try {
-    const KellyToolExecutor = require('./services/kelly-tool-executor');
-    const KellyOrchestratorPhase = require('./services/kelly-orchestrator-phase');
+    const KellyToolExecutor = require('./kelly-tool-executor');
+    const KellyOrchestratorPhase = require('./kelly-orchestrator-phase');
     const rawFlow = (req.body?.kelly_flow || meta?.kelly_flow || '').toString().trim();
     const bodyRia = req.body?.routine_intake_active ?? meta?.routine_intake_active;
     const flowFromFlag =
@@ -360,7 +360,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const detectPreferredLanguage = () => {
     if (preferredLanguageFromBody) return preferredLanguageFromBody;
     try {
-      const { detectLanguageFromText } = require('./services/patient-orchestrator-service');
+      const { detectLanguageFromText } = require('./patient-orchestrator-service');
       const detected = detectLanguageFromText(trimmedMessage)?.code || '';
       return String(detected || '').trim().toLowerCase() || '';
     } catch (_) {
@@ -454,7 +454,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     isGuidanceComplete || result?.next_ui_step === 'skincare_report' || forceSnapshotForBarcodeSession;
   try {
     if (shouldBuildSnapshot) {
-      const SnapshotService = require('./services/session-result-snapshot-service');
+      const SnapshotService = require('./session-result-snapshot-service');
       const built = SnapshotService.buildSessionResultSnapshot({
         sessionId: session_id,
         source: 'landing_turn_complete'
@@ -594,7 +594,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     }
     // orch-4: Persist preferred_language from first 1–2 turns or explicit language request
     try {
-      const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./services/patient-orchestrator-service');
+      const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./patient-orchestrator-service');
       const langReq = detectLanguagePreferenceRequest(trimmedMessage);
       if (langReq?.isLanguageRequest && langReq?.code) {
         preferredLanguage = langReq.code;
@@ -625,7 +625,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   // Rebuild snapshot after persistence so report payload includes the just-finished turn.
   try {
     if (shouldBuildSnapshot) {
-      const SnapshotService = require('./services/session-result-snapshot-service');
+      const SnapshotService = require('./session-result-snapshot-service');
       const rebuilt = SnapshotService.buildSessionResultSnapshot({
         sessionId: session_id,
         source: 'landing_turn_post_persist'
@@ -672,7 +672,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
 }
 
 async function handlePatientTriageMessage(req) {
-  const PatientPortalService = require('./services/patient-portal-service');
+  const PatientPortalService = require('./patient-portal-service');
   const sid = req.patientSessionId;
   const sessionValidation = PatientPortalService.validateSession(sid);
   const email = sessionValidation?.email || null;
@@ -682,7 +682,7 @@ async function handlePatientTriageMessage(req) {
 
 /** Anonymous Skin & Care landing assistant — same Kelly triage stack as /api/patient/triage/message (rate-limited). */
 async function handlePublicLandingAssistantMessage(req) {
-  const { startTrace, endTrace } = require('./services/langsmith-trace-service');
+  const { startTrace, endTrace } = require('./langsmith-trace-service');
   const sessionId = String(req.body?.session_id || '').trim() || null;
   const traceCtx = await startTrace({
     name: 'landing_assistant_turn',

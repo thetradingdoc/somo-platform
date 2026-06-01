@@ -12,6 +12,13 @@ export async function getPatientSessionId(): Promise<string | null> {
   }
 }
 
+export async function setPatientSession(sessionId: string, email?: string): Promise<void> {
+  await SecureStore.setItemAsync(SESSION_KEY, sessionId);
+  if (email) {
+    await SecureStore.setItemAsync(EMAIL_KEY, email);
+  }
+}
+
 export async function clearPatientSession(): Promise<void> {
   await Promise.allSettled([
     SecureStore.deleteItemAsync(SESSION_KEY),

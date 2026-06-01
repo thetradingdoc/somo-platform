@@ -1,16 +1,44 @@
 # Agentic checkout — open TODOs (backend & integration)
 
-> **Status (March 2026):** Revised after full code-path audit of `stripe-webhook-handler.js`,
-> `payment-orchestrator.js`, `ensure-merchant-order-from-voice-checkout.js`, and
-> `routes/payment.js`. Two **undocumented P0 blockers** were found (items #0a and #0b below)
-> that prevent commerce payment links from being completable at all — fix these before any
-> other work matters. The remaining items are re-verified against the live code.
+> **Status (May 2026):** P0 commerce paths **partially hardened** (shipping meta, quote linkage, webhook canceled, UI amount alignment). Remaining: full webhook convergence, portal orders UI, E2E proof.
 
-> **Frontend / Skin & Care UI only (archived, all done):** [`archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md`](./archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md).
+> **Frontend / Skin & Care UI (archived, all done):** [`../archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md`](../archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md).
 
 ---
 
-## P0 — Commerce payment is completely broken (newly discovered, not in previous TODO)
+## Completed (Mar–May 2026)
+
+| Item | Summary |
+|------|---------|
+| **#0a** | Commerce bypass of `appointment_id` gate in `/api/payment/process` |
+| **#0b** | `customer_phone` NOT NULL + `commerce_quote_id` on `voice_checkouts` |
+| **#0c** | `commerce_quote_id` in Stripe PI metadata |
+| **#1** | Order creation via webhook + sync safety net on commerce success |
+| **#3** | 3DS `return_url` → `/api/payment/success` |
+| **#8** | Orchestrator sync path calls `ensureMerchantOrderFromVoiceCheckout` when enabled |
+| **#11** | Partial unique indexes for idempotent `merchant_orders` |
+
+---
+
+## Open backlog
+
+| # | Item | Files |
+|---|------|-------|
+| **12** | Unify legacy vs canonical Stripe webhook paths | P0 partial | `payment_intent.canceled` on canonical handler; legacy remains 410 unless `ALLOW_LEGACY_STRIPE_WEBHOOK=1` |
+| **2** | Align manual pay button vs Kelly agent quote amounts | P0 partial | Cart subtotal preferred in `renderPayCTAInChat`; Kelly prepare passes `commerce_quote_id` |
+| **4** | Collect and store shipping address end-to-end | P0 partial | `_buildShippingAddressFromMeta` → orchestrator metadata + voice_checkouts |
+| **5** | Link Kelly thread ↔ quote row at DB level | P0 partial | `checkout_sessions.kelly_session_id` column + progress upsert on prepare |
+| **6** | Orphaned `checkout_sessions` rows grow unbounded | `database.js` |
+| **7** | Provider portal hides data that exists in DB | `merchant-orders.html` |
+| **9** | Tool-only turns show silence in chat thread | `server.js`, `checkout-chat.html` |
+| **10** | After payment redirect, chat context is lost | Partial | `sessionStorage.checkout_chat_return` + Return to chat on `payment-success.html` |
+
+---
+
+## Reference — completed fix details (historical)
+
+<details>
+<summary>P0 fixes (#0a–#0c) — implemented</summary>
 
 ### 0a. `/api/payment/process` rejects all commerce checkouts with 400
 
@@ -141,25 +169,20 @@ when `checkout_id` is in PI metadata. **Fixes applied:**
 
 ---
 
-## Suggested fix order (updated)
+</details>
+
+## Suggested fix order (open items)
 
 | # | Item | Why first |
 |---|------|-----------|
-| 1 | **#0a** appointment_id gate | Commerce payment literally cannot complete |
-| 2 | **#0b** customer_phone NOT NULL | Agent checkout cannot create voice_checkout row without phone |
-| 3 | **#0c** commerce_quote_id in PI metadata | Quote → order audit trail |
-| 4 | **#1** (revised) + sync safety net | Order creation reliable even without webhook |
-| 5 | **#11** DB unique constraint | Idempotency at DB layer for webhook retries |
-| 6 | **#3** 3DS return_url | Blocks 3DS card payments |
-| 7 | **#2** Dual quote coordination | Wrong amount risk |
-| 8 | **#4** Shipping address | Fulfillment |
-| 9 | **#8** Orchestrator single authoritative createOrder | Consistency |
-| 10 | **#14** Quote/checkout/PI ids on merchant_orders | Support + audit |
-| 11 | **#5** Link Kelly session to quote | Debugging |
-| 12 | **#7** + **#16** Portal display | Polish |
-| 13 | **#6** Orphan checkout_sessions cleanup | Hygiene |
-| 14 | **#9** Tool status events | UX polish |
-| 15 | **#10** Post-payment session resume | UX polish |
+| 1 | **#2** Dual quote coordination | Wrong amount risk |
+| 2 | **#4** Shipping address | Fulfillment |
+| 3 | **#5** Link Kelly session to quote | Debugging |
+| 4 | **#12** Webhook path divergence | Revenue integrity |
+| 5 | **#7** Portal display | Operator visibility |
+| 6 | **#6** Orphan checkout_sessions cleanup | Hygiene |
+| 7 | **#9** Tool status events | UX polish |
+| 8 | **#10** Post-payment session resume | UX polish |
 
 ---
 

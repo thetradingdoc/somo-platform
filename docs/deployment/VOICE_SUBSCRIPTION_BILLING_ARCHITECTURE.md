@@ -3,7 +3,7 @@
 > **Last reviewed:** 2026-05-28  
 > **Status:** Target architecture (implementation in progress)  
 > **Voice telephony:** [VOICE_CURRENT_ARCHITECTURE.md](./VOICE_CURRENT_ARCHITECTURE.md)  
-> **Task tracker:** [todos/pending/VOICE_BILLING_SUBSCRIPTION_TODOS.md](../../todos/pending/VOICE_BILLING_SUBSCRIPTION_TODOS.md)
+> **Task tracker (archived v1):** [todos/archive/VOICE_BILLING_SUBSCRIPTION_TODOS_COMPLETED_2026-05-31.md](../../todos/archive/VOICE_BILLING_SUBSCRIPTION_TODOS_COMPLETED_2026-05-31.md)
 
 ![Voice subscription billing architecture](./assets/voice-subscription-architecture.svg)
 

@@ -5,20 +5,20 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const db = require('../database');
-const EmailService = require('../services/email-service');
-const ProviderService = require('../services/provider-service');
-const RetellService = require('../services/retell-service');
-const TwilioPhoneService = require('../services/twilio-phone-service');
+const db = require('../../database');
+const EmailService = require('../../services/email-service');
+const ProviderService = require('../../services/provider-service');
+const RetellService = require('../../services/retell-service');
+const TwilioPhoneService = require('../../services/twilio-phone-service');
 const { v4: uuidv4 } = require('uuid');
-const { authLimiter: rateLimiter, lenientAuthLimiter } = require('../middleware/rate-limiter');
-const { generateSimplePassword } = require('../utils/password-generator');
-const { requireCustomerAuth } = require('../middleware/customer-auth');
+const { authLimiter: rateLimiter, lenientAuthLimiter } = require('../../middleware/rate-limiter');
+const { generateSimplePassword } = require('../../utils/password-generator');
+const { requireCustomerAuth } = require('../../middleware/customer-auth');
 const {
   ensureClaimSessionTables,
   claimLandingSessionToCustomer,
   listCustomerProducts
-} = require('../services/landing-session-claim-service');
+} = require('../../services/landing-session-claim-service');
 
 let bcrypt;
 try {
@@ -28,7 +28,7 @@ try {
   bcrypt = null;
 }
 
-const stripeConfig = require('../utils/stripe-config');
+const stripeConfig = require('../../utils/stripe-config');
 let stripe = null;
 try {
   stripe = stripeConfig.initializeStripe();

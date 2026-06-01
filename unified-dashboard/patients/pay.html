@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Pay Balance · Somo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gloock&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://js.stripe.com/v3/"></script>
+  <!-- config.js sets window.API_BASE; served from unified-dashboard/assets/js/ -->
+  <script src="../assets/js/config.js" defer></script>
+
+  <style>
+    /* ── Design tokens (match Somo patient portal) ─────────────────── */
+    :root {
+      --primary:        #16a637;
+      --primary-dark:   #128f2f;
+      --primary-light:  #ecfdf3;
+      --danger:         #dc2626;
+      --danger-light:   #fef2f2;
+      --warning:        #d97706;
+      --warning-light:  #fffbeb;
+      --text:           #111827;
+      --text-muted:     #6b7280;
+      --border:         #e5e7eb;
+      --bg:             #f9fafb;
+      --card-bg:        #ffffff;
+      --radius:         16px;
+      --radius-sm:      10px;
+      --shadow:         0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+      --shadow-lg:      0 8px 32px rgba(0,0,0,.12);
+      --font-display:   'Gloock', Georgia, serif;
+      --font-ui:        'DM Sans', system-ui, sans-serif;
+      --stripe-radius:  8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      font-family: var(--font-ui);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: 24px 16px env(safe-area-inset-bottom);
+    }
+
+    /* ── Brand header ───────────────────────────────────────────────── */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .brand-icon {
+      width: 36px; height: 36px;
+      background: var(--primary);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .brand-icon svg { width: 20px; height: 20px; fill: #fff; }
+
+    .brand-name {
+      font-family: var(--font-display);
+      font-size: 22px;
+      letter-spacing: -.3px;
+      color: var(--text);
+    }
+
+    /* ── Card ───────────────────────────────────────────────────────── */
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      width: 100%;
+      max-width: 460px;
+      overflow: hidden;
+    }
+
+    /* ── Amount banner ──────────────────────────────────────────────── */
+    .amount-banner {
+      background: linear-gradient(135deg, var(--primary) 0%, #12913a 100%);
+      padding: 28px 28px 24px;
+      color: #fff;
+    }
+
+    .amount-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      opacity: .85;
+      margin-bottom: 6px;
+    }
+
+    .amount-value {
+      font-family: var(--font-display);
+      font-size: 44px;
+      line-height: 1;
+      letter-spacing: -.5px;
+    }
+
+    .amount-context {
+      margin-top: 10px;
+      font-size: 13px;
+      opacity: .8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .amount-context svg { width: 14px; height: 14px; fill: currentColor; opacity: .7; }
+
+    /* ── Card body ──────────────────────────────────────────────────── */
+    .card-body { padding: 28px; }
+
+    /* ── Rail selector ──────────────────────────────────────────────── */
+    .rail-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .rail-tab {
+      flex: 1;
+      padding: 10px 12px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      cursor: pointer;
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all .18s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .rail-tab svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .rail-tab.active {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      color: var(--primary-dark);
+    }
+
+    .rail-tab:hover:not(.active):not(:disabled) {
+      border-color: #c3d8c7;
+      color: var(--text);
+    }
+
+    .rail-tab:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    /* ── Stripe element wrapper ──────────────────────────────────────── */
+    #payment-element {
+      margin-bottom: 20px;
+    }
+
+    /* ── USDC panel ──────────────────────────────────────────────────── */
+    .usdc-panel { display: none; }
+    .usdc-panel.visible { display: block; }
+
+    .usdc-info {
+      background: var(--primary-light);
+      border: 1px solid #bbf7d0;
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .usdc-icon {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #fff;
+      border: 2px solid #bbf7d0;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 18px;
+    }
+
+    .usdc-text { font-size: 13px; line-height: 1.5; color: var(--text); }
+    .usdc-text strong { display: block; font-size: 14px; margin-bottom: 2px; }
+    .balance-line { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+    .balance-line span { font-weight: 600; color: var(--text); }
+
+    .usdc-insufficient {
+      background: var(--warning-light);
+      border-color: #fcd34d;
+    }
+
+    /* ── Button ─────────────────────────────────────────────────────── */
+    .btn-pay {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 15px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-ui);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .18s ease, transform .1s ease, opacity .15s;
+      min-height: 52px;
+    }
+
+    .btn-pay:hover:not(:disabled) { background: var(--primary-dark); }
+    .btn-pay:active:not(:disabled) { transform: scale(.985); }
+    .btn-pay:disabled { opacity: .6; cursor: not-allowed; }
+
+    .btn-pay .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+
+    .btn-pay.loading .spinner { display: block; }
+    .btn-pay.loading .btn-text { display: none; }
+
+    /* ── Inline error ────────────────────────────────────────────────── */
+    .inline-error {
+      display: none;
+      align-items: flex-start;
+      gap: 8px;
+      background: var(--danger-light);
+      border: 1px solid #fca5a5;
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--danger);
+      line-height: 1.45;
+    }
+
+    .inline-error.visible { display: flex; }
+    .inline-error svg { width: 16px; height: 16px; fill: currentColor; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Security note ───────────────────────────────────────────────── */
+    .security-note {
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .security-note svg { width: 13px; height: 13px; fill: currentColor; }
+
+    /* ── Full-page state overlays ────────────────────────────────────── */
+    .page-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 360px;
+    }
+
+    .page-state.visible { display: flex; }
+
+    .state-icon {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 20px;
+      font-size: 32px;
+    }
+
+    .state-icon.success { background: var(--primary-light); }
+    .state-icon.error   { background: var(--danger-light); }
+    .state-icon.paid    { background: var(--primary-light); }
+
+    .state-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .state-body {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .state-amount {
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .btn-secondary {
+      padding: 12px 24px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      font-family: var(--font-ui);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color .18s, background .18s;
+    }
+
+    .btn-secondary:hover { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); }
+
+    /* ── Loading skeleton ────────────────────────────────────────────── */
+    #loading-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .loading-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      width: 100%;
+      max-width: 460px;
+      overflow: hidden;
+    }
+
+    .skel {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 6px;
+    }
+
+    .skel-banner {
+      height: 120px;
+      border-radius: 0;
+    }
+
+    .skel-body { padding: 28px; display: flex; flex-direction: column; gap: 12px; }
+    .skel-line { height: 14px; }
+    .skel-line.w75 { width: 75%; }
+    .skel-line.w50 { width: 50%; }
+    .skel-btn  { height: 52px; border-radius: var(--radius-sm); margin-top: 8px; }
+
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Fade-in ─────────────────────────────────────────────────────── */
+    .fade-in {
+      animation: fadeIn .3s ease both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Responsive ─────────────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      body { padding: 16px 12px env(safe-area-inset-bottom); justify-content: flex-start; padding-top: 24px; }
+      .brand { margin-bottom: 20px; }
+      .amount-value { font-size: 36px; }
+      .card-body { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Brand ─────────────────────────────────────────────── -->
+  <div class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+    </div>
+    <span class="brand-name">Somo</span>
+  </div>
+
+  <!-- ══ LOADING STATE ════════════════════════════════════════ -->
+  <div id="loading-state">
+    <div class="loading-card">
+      <div class="skel skel-banner"></div>
+      <div class="skel-body">
+        <div class="skel skel-line w50"></div>
+        <div class="skel skel-line w75"></div>
+        <div class="skel skel-line w50"></div>
+        <div class="skel skel-btn"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PAYMENT FORM ══════════════════════════════════════════ -->
+  <div id="payment-form" style="display:none; width:100%; max-width:460px;">
+    <div class="card fade-in">
+
+      <!-- Amount banner -->
+      <div class="amount-banner">
+        <div class="amount-label">Amount Due</div>
+        <div class="amount-value" id="amount-display">—</div>
+        <div class="amount-context" id="context-line">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          <span id="context-text">Secure payment · Powered by Stripe</span>
+        </div>
+      </div>
+
+      <div class="card-body">
+
+        <!-- Rail selector (hidden if only one rail) -->
+        <div class="rail-tabs" id="rail-tabs" style="display:none;">
+          <button class="rail-tab active" id="tab-card" onclick="switchRail('card')">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>
+            Card
+          </button>
+          <button class="rail-tab" id="tab-usdc" onclick="switchRail('usdc')">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/></svg>
+            USDC Wallet
+          </button>
+        </div>
+
+        <!-- Card (Stripe) panel -->
+        <div id="card-panel">
+          <div id="payment-element"></div>
+          <button class="btn-pay" id="btn-pay-card" onclick="handleCardPay()">
+            <div class="spinner"></div>
+            <span class="btn-text">Pay <span id="btn-amount">now</span></span>
+          </button>
+        </div>
+
+        <!-- USDC panel -->
+        <div id="usdc-panel" class="usdc-panel">
+          <div class="usdc-info" id="usdc-info">
+            <div class="usdc-icon">💵</div>
+            <div class="usdc-text">
+              <strong>Pay with USDC Wallet</strong>
+              Funds transfer instantly from your Circle wallet to the provider.
+              <div class="balance-line" id="balance-line" style="display:none;">
+                Balance: <span id="balance-display">—</span>
+              </div>
+            </div>
+          </div>
+          <button class="btn-pay" id="btn-pay-usdc" onclick="handleUsdcPay()">
+            <div class="spinner"></div>
+            <span class="btn-text">Pay with USDC wallet</span>
+          </button>
+        </div>
+
+        <!-- Inline error -->
+        <div class="inline-error" id="inline-error" role="alert">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          <span id="inline-error-msg"></span>
+        </div>
+
+        <!-- Security note -->
+        <div class="security-note">
+          <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+          Secure · 256-bit SSL · PCI compliant
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ALREADY PAID STATE ═══════════════════════════════════ -->
+  <div id="already-paid-state" class="page-state" role="status">
+    <div class="state-icon paid">✅</div>
+    <div class="state-title">Already paid</div>
+    <p class="state-body">
+      This balance of <span class="state-amount" id="paid-amount">—</span> has already been settled.
+      No further action is needed.
+    </p>
+    <a class="btn-secondary" href="wallet.html">← View wallet</a>
+  </div>
+
+  <!-- ══ SUCCESS STATE ═════════════════════════════════════════ -->
+  <div id="success-state" class="page-state" role="status">
+    <div class="state-icon success">🎉</div>
+    <div class="state-title">Payment received</div>
+    <p class="state-body">
+      Your payment of <span class="state-amount" id="success-amount">—</span> was successful.
+      The provider has been notified and your balance is now settled.
+    </p>
+    <a class="btn-secondary" href="wallet.html">← View wallet</a>
+  </div>
+
+  <!-- ══ FATAL ERROR STATE ════════════════════════════════════ -->
+  <div id="error-state" class="page-state" role="alert">
+    <div class="state-icon error">⚠️</div>
+    <div class="state-title">Unable to load</div>
+    <p class="state-body" id="fatal-error-msg">
+      This payment link is invalid or has expired. Please contact your provider for a new link.
+    </p>
+    <a class="btn-secondary" href="wallet.html">← View wallet</a>
+  </div>
+
+
+  <script>
+  /* ═══════════════════════════════════════════════════════════
+     Somo · Patient RCM Pay Page
+     Target: unified-dashboard/patients/pay.html
+     API:    /api/public/rcm/pay/:token  (public, no auth)
+  ════════════════════════════════════════════════════════════ */
+
+  'use strict';
+
+  // ── Helpers ──────────────────────────────────────────────────
+  const API  = () => (window.API_BASE || '').replace(/\/$/, '');
+  const $    = id  => document.getElementById(id);
+  const esc  = s   => String(s).replace(/[<>&"']/g, c =>
+    ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function fmtMoney(dollars, currency = 'USD') {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency', currency, minimumFractionDigits: 2
+    }).format(Number(dollars) || 0);
+  }
+
+  // ── State ─────────────────────────────────────────────────────
+  let token        = null;
+  let ctx          = null;   // GET /pay/:token response
+  let stripe       = null;
+  let elements     = null;
+  let paymentEl    = null;
+  let intentId     = null;   // pi_xxx from create-intent
+  let activeRail   = 'card';
+
+  // ── Boot ──────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(location.search);
+    token = params.get('token');
+
+    // Handle 3DS redirect return
+    if (params.get('redirect_status') === 'succeeded') {
+      intentId = params.get('payment_intent') || intentId;
+      // Restore token from state param if present (3DS flow)
+      token = token || params.get('rcm_token');
+      if (token) {
+        show('loading-state');
+        completeStripePayment(intentId || params.get('payment_intent'));
+        return;
+      }
+    }
+
+    if (!token) {
+      showFatalError('No payment token found. Please use the link from your provider or wallet.');
+      return;
+    }
+
+    loadContext();
+  });
+
+  // ── Load payment context ──────────────────────────────────────
+  async function loadContext() {
+    try {
+      const res  = await fetch(`${API()}/api/public/rcm/pay/${encodeURIComponent(token)}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        showFatalError(data.error || 'Payment link not found or has expired.');
+        return;
+      }
+
+      ctx = data;
+
+      if (data.already_paid) {
+        $('paid-amount').textContent = fmtMoney(data.payment.amount, data.payment.currency);
+        show('already-paid-state');
+        hide('loading-state');
+        return;
+      }
+
+      renderForm(data);
+    } catch (err) {
+      showFatalError('Unable to load payment details. Please check your connection and try again.');
+    }
+  }
+
+  // ── Render form ───────────────────────────────────────────────
+  async function renderForm(data) {
+    const amt = data.payment.amount;
+    const cur = data.payment.currency || 'USD';
+    const cardOk = data.rails.card?.available;
+    const usdcOk = data.rails.usdc?.available;
+
+    // Amount banner
+    $('amount-display').textContent = fmtMoney(amt, cur);
+    $('btn-amount').textContent = fmtMoney(amt, cur);
+    $('context-text').textContent = `Copay / balance · Secure payment`;
+
+    // Rail selector visibility
+    if (cardOk && usdcOk) {
+      $('rail-tabs').style.display = 'flex';
+    }
+
+    // USDC balance
+    const usdc = data.rails.usdc;
+    if (usdcOk && usdc.balance != null) {
+      $('balance-line').style.display = 'block';
+      $('balance-display').textContent = fmtMoney(usdc.balance, cur);
+      if (usdc.sufficient === false) {
+        $('usdc-info').classList.add('usdc-insufficient');
+        $('btn-pay-usdc').disabled = true;
+        $('btn-pay-usdc').querySelector('.btn-text').textContent =
+          `Insufficient balance (need ${fmtMoney(amt, cur)})`;
+      }
+    }
+
+    // Show correct initial panel
+    if (!cardOk && usdcOk) {
+      switchRail('usdc');
+    } else if (!cardOk && !usdcOk) {
+      showFatalError(
+        data.rails.card?.reason || data.rails.usdc?.reason ||
+        'No payment methods are available for this link.'
+      );
+      return;
+    }
+
+    // Mount Stripe Elements if card available
+    if (cardOk) {
+      await mountStripe(data.rails.card.publishable_key, amt, cur);
+    }
+
+    hide('loading-state');
+    show('payment-form');
+  }
+
+  // ── Stripe Elements mount ─────────────────────────────────────
+  async function mountStripe(publishableKey, amountDollars, currency) {
+    if (!publishableKey) {
+      setInlineError('Card payments are not configured. Please contact your provider.');
+      return;
+    }
+
+    stripe = Stripe(publishableKey);
+
+    try {
+      const res  = await fetch(`${API()}/api/public/rcm/pay/${encodeURIComponent(token)}/create-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        if (res.status === 409) {
+          // Already paid — show paid state
+          $('paid-amount').textContent = fmtMoney(amountDollars, currency);
+          show('already-paid-state');
+          hide('loading-state');
+          return;
+        }
+        setInlineError(data.error || 'Could not initialise payment. Please try again.');
+        return;
+      }
+
+      intentId = data.payment_intent_id;
+
+      const appearance = {
+        theme: 'stripe',
+        variables: {
+          colorPrimary:       '#16a637',
+          colorBackground:    '#ffffff',
+          colorText:          '#111827',
+          colorDanger:        '#dc2626',
+          fontFamily:         'DM Sans, system-ui, sans-serif',
+          borderRadius:       '8px',
+          spacingUnit:        '4px',
+        }
+      };
+
+      elements = stripe.elements({ clientSecret: data.client_secret, appearance });
+      paymentEl = elements.create('payment', { layout: 'tabs' });
+      paymentEl.mount('#payment-element');
+
+      // Build return_url for 3DS → payment-success after settle
+      const returnUrl = new URL(`${location.origin}/patients/payment-success.html`);
+      returnUrl.searchParams.set('rcm', '1');
+      returnUrl.searchParams.set('token', token);
+      returnUrl.searchParams.set('rcm_token', token);
+      returnUrl.searchParams.set('payment_intent', intentId);
+
+      $('btn-pay-card').dataset.returnUrl = returnUrl.toString();
+
+    } catch (err) {
+      setInlineError('Payment initialisation failed. Please refresh and try again.');
+    }
+  }
+
+  // ── Card pay handler ──────────────────────────────────────────
+  async function handleCardPay() {
+    if (!stripe || !elements) return;
+
+    clearInlineError();
+    setBtnLoading('btn-pay-card', true);
+
+    const returnUrl = $('btn-pay-card').dataset.returnUrl || location.href;
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: returnUrl }
+    });
+
+    if (error) {
+      setBtnLoading('btn-pay-card', false);
+      setInlineError(
+        error.type === 'card_error' || error.type === 'validation_error'
+          ? error.message
+          : 'An unexpected error occurred. Please try again.'
+      );
+      return;
+    }
+
+    // Non-3DS success: confirmPayment resolved without redirect
+    await completeStripePayment(intentId);
+  }
+
+  // ── 3DS return → complete ─────────────────────────────────────
+  async function completeStripePayment(paymentIntentId) {
+    try {
+      const res  = await fetch(`${API()}/api/public/rcm/pay/${encodeURIComponent(token)}/complete`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ method: 'stripe', payment_intent_id: paymentIntentId })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const amt = ctx?.payment?.amount;
+        if (amt == null) {
+          try {
+            const ctxRes = await fetch(`${API()}/api/public/rcm/pay/${encodeURIComponent(token)}`);
+            const ctxData = await ctxRes.json();
+            if (ctxData?.payment?.amount != null) ctx = ctxData;
+          } catch (_) {}
+        }
+        showSuccess(ctx?.payment?.amount ?? amt);
+        return;
+      }
+
+      // 402 — payment still pending
+      if (res.status === 402) {
+        showFatalError('Payment could not be confirmed. Please contact your provider.');
+        return;
+      }
+
+      showFatalError(data.error || 'Payment confirmation failed.');
+    } catch (err) {
+      showFatalError('Unable to confirm payment. Please contact your provider.');
+    }
+  }
+
+  // ── USDC pay handler ──────────────────────────────────────────
+  async function handleUsdcPay() {
+    clearInlineError();
+    setBtnLoading('btn-pay-usdc', true);
+
+    try {
+      const res  = await fetch(`${API()}/api/public/rcm/pay/${encodeURIComponent(token)}/complete`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ method: 'usdc' })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showSuccess(ctx?.payment?.amount);
+        return;
+      }
+
+      setBtnLoading('btn-pay-usdc', false);
+      setInlineError(
+        data.error ||
+        (data.current_balance != null
+          ? `Insufficient USDC balance (have ${fmtMoney(data.current_balance)}, need ${fmtMoney(data.required)})`
+          : 'USDC payment failed. Please try card instead.')
+      );
+    } catch (err) {
+      setBtnLoading('btn-pay-usdc', false);
+      setInlineError('USDC payment failed. Please check your connection and try again.');
+    }
+  }
+
+  // ── Rail switcher ─────────────────────────────────────────────
+  function switchRail(rail) {
+    activeRail = rail;
+    clearInlineError();
+
+    $('card-panel').style.display  = rail === 'card'  ? 'block' : 'none';
+    $('usdc-panel').classList.toggle('visible', rail === 'usdc');
+
+    $('tab-card') && $('tab-card').classList.toggle('active', rail === 'card');
+    $('tab-usdc') && $('tab-usdc').classList.toggle('active', rail === 'usdc');
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────
+  function show(id) {
+    const el = $(id);
+    if (!el) return;
+    if (el.classList.contains('page-state')) {
+      el.classList.add('visible');
+    } else {
+      el.style.display = el.tagName === 'DIV' &&
+        (id === 'payment-form') ? 'block' : 'flex';
+    }
+  }
+
+  function hide(id) {
+    const el = $(id);
+    if (!el) return;
+    if (el.classList.contains('page-state')) {
+      el.classList.remove('visible');
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  function showFatalError(msg) {
+    $('fatal-error-msg').textContent = msg;
+    hide('loading-state');
+    hide('payment-form');
+    ['already-paid-state','success-state'].forEach(hide);
+    show('error-state');
+  }
+
+  function showSuccess(amountDollars) {
+    const display = amountDollars != null
+      ? fmtMoney(amountDollars, ctx?.payment?.currency || 'USD')
+      : 'your balance';
+    $('success-amount').textContent = display;
+
+    hide('loading-state');
+    hide('payment-form');
+    show('success-state');
+
+    // Optional analytics
+    try {
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({ event: 'rcm_pay_success', token, amount: amountDollars });
+    } catch (_) {}
+  }
+
+  function setBtnLoading(id, loading) {
+    const btn = $(id);
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.classList.toggle('loading', loading);
+  }
+
+  function setInlineError(msg) {
+    $('inline-error-msg').textContent = msg;
+    $('inline-error').classList.add('visible');
+    $('inline-error').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function clearInlineError() {
+    $('inline-error').classList.remove('visible');
+    $('inline-error-msg').textContent = '';
+  }
+  </script>
+</body>
+</html>

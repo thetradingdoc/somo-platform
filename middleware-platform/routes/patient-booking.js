@@ -1,6 +1,7 @@
 'use strict';
 
 const { handlePatientTriageFromRequest } = require('../services/kelly-triage-turn-service');
+const { isValidIanaTimezone } = require('../lib/is-valid-iana-timezone');
 
 function registerPatientBookingRoutes(app, deps) {
   const {
@@ -43,6 +44,7 @@ function registerPatientBookingRoutes(app, deps) {
     validatePatientBookingScheduleBody,
     validatePatientTriageBody,
     requireCsrfForCookieAuth,
+    rotatePatientSessionIfNeeded,
     auditBookingEvent,
     botGuard,
     authLimiter,

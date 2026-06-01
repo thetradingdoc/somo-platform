@@ -44,6 +44,10 @@ AAA codes **79** (invalid participant) and **71** (DOB mismatch) appear in eligi
 | `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` | Card on `patients/pay.html` |
 | `RCM_E2E_STRIPE_LIVE=1` | Money path probes Stripe intent |
 | `CIRCLE_*` + `RCM_E2E_USDC_LIVE=1` | USDC settlement path |
+| `PUBLIC_PAY_BASE_URL` | Base URL for `/patients/pay.html?token=` links |
+| `RCM_PAY_PROBE_CIRCLE_BALANCE=1` | Show USDC balance on pay page |
+
+See also: [RCM_PATIENT_PAY_GATEWAY.md](./RCM_PATIENT_PAY_GATEWAY.md) (Kelly `request_patient_payment` flow).
 
 ## Automated test commands
 
@@ -53,7 +57,25 @@ node scripts/stedi-sandbox-integration.cjs
 npm run test:rcm
 npm run test:e2e:rcm:all
 npm run test:e2e:rcm:playwright
+npm run test:e2e:rcm:pay-ui
 ```
+
+Kelly agentic pay gateway (tool only — no conversation):
+
+```bash
+RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:pay-gateway
+RCM_E2E_STRIPE_LIVE=1 RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:pay-gateway
+```
+
+Kelly **conversation** diagnostic (multi-turn `processTurn` — derm → book → copay → pay):
+
+```bash
+# Requires ANTHROPIC_API_KEY or GROQ_API_KEY
+RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:conversation
+RCM_E2E_STRIPE_LIVE=1 RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:conversation
+```
+
+See scorecard and failure categories in [RCM_PATIENT_PAY_GATEWAY.md](./RCM_PATIENT_PAY_GATEWAY.md#conversation-e2e--scorecard-interpretation-2026-05-31-run).
 
 ## Manual UI verification
 

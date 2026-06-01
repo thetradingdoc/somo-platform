@@ -173,4 +173,4 @@ New contracts required:
 - `docs/architecture/CURRENT_STATE_ARCHITECTURE.md`
 - `docs/middleware-platform/README.md`
 - `docs/voice-agent/README.md`
-- `todos/pending/PATIENT_APP_JOURNAL_REDESIGN_TODOS.md`
+- `todos/archive/PATIENT_APP_JOURNAL_REDESIGN_V1_COMPLETED_2026-05-31.md`

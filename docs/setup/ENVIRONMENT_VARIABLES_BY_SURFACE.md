@@ -16,6 +16,7 @@ Quick reference. Full narrative: [`docs/setup/README.md`](./README.md). Copy fro
 | Stedi / claims | `STEDI_*`, `STEDI_WEBHOOK_SECRET`, `STEDI_CLAIM_SUBMISSION_MODE` | 837P professional claims + webhook |
 | Payor ingest | `PAYOR_*`, `NPPES_*` | CMS NPPES pipeline, resolver flags |
 | Stripe / Twilio | `STRIPE_*`, `TWILIO_*` | Payments and voice webhooks |
+| RCM patient pay | `PUBLIC_PAY_BASE_URL`, `RCM_E2E_STRIPE_LIVE`, `RCM_E2E_USDC_LIVE`, `RCM_PAY_PROBE_CIRCLE_BALANCE`, `CIRCLE_*` | Kelly pay link + Stripe/USDC rails — [RCM_PATIENT_PAY_GATEWAY.md](../RCM/RCM_PATIENT_PAY_GATEWAY.md) |
 | Commerce | `PUBLIC_CATALOG_*`, `COMMERCE_*`, `CATALOG_MASTER_SYNC_*` | Public catalog and checkout |
 | OpenAI | `OPENAI_API_KEY` | Embeddings (semantic search, Pinecone query embed) |
 

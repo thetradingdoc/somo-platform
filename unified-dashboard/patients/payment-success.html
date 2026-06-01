@@ -16,6 +16,8 @@
   <script src="../assets/js/config.js" defer></script>
   <script>
     (function () {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('rcm') === '1') return;
       const sid = localStorage.getItem('patient_session_id');
       if (!sid) {
         const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
@@ -231,6 +233,7 @@
       <a class="btn btn-shop" id="btnReturnShop" href="/">Return to Somo</a>
       <a class="btn btn-primary" id="walletCtaBtn" href="wallet.html">View Wallet</a>
       <a class="btn btn-secondary" href="appointments.html">Appointments</a>
+      <a class="btn btn-secondary" id="btnReturnChat" href="checkout-chat.html" style="display:none">Return to chat</a>
       <a class="btn btn-secondary" href="patient-dashboard.html">Dashboard</a>
     </div>
   </div>
@@ -243,35 +246,27 @@
         if (b) b.href = window.LANDING_BASE;
       }
       const params = new URLSearchParams(window.location.search);
-      const appointmentId = params.get('appointment_id');
-      const walletCtaBtn = document.getElementById('walletCtaBtn');
       try {
-        if (typeof window !== 'undefined' && Array.isArray(window.dataLayer)) {
-          window.dataLayer.push({ event: 'pay_success', appointment_id: appointmentId || undefined });
+        const rawReturn = sessionStorage.getItem('checkout_chat_return');
+        if (rawReturn) {
+          const ret = JSON.parse(rawReturn);
+          const chatBtn = document.getElementById('btnReturnChat');
+          if (chatBtn && ret && ret.href) {
+            chatBtn.style.display = '';
+            chatBtn.href = ret.href;
+          }
         }
-        window.dispatchEvent(
-          new CustomEvent('checkout-funnel', {
-            detail: { name: 'pay_success', appointment_id: appointmentId || undefined }
-          })
-        );
       } catch (_) {}
+      const API_BASE = window.API_BASE || 'http://localhost:4000';
+      const appointmentId = params.get('appointment_id');
+      const rcmMode = params.get('rcm') === '1';
+      const rcmToken = params.get('token') || params.get('rcm_token');
+      const walletCtaBtn = document.getElementById('walletCtaBtn');
+      const sid = localStorage.getItem('patient_session_id');
       const paymentPill = document.getElementById('paymentStatePill');
       const successSub = document.getElementById('successSub');
       const retailBox = document.getElementById('retailDetails');
-      if (!appointmentId) {
-        if (paymentPill) {
-          paymentPill.classList.remove('pill-warn');
-          paymentPill.textContent = '✅ Payment confirmed';
-        }
-        if (successSub) {
-          successSub.textContent =
-            'Thank you — your payment went through. Your receipt is in Wallet; order confirmations are emailed to you.';
-        }
-        if (retailBox) retailBox.classList.remove('hidden');
-        return;
-      }
-      const API_BASE = window.API_BASE || 'http://localhost:4000';
-      const sid = localStorage.getItem('patient_session_id');
+
       async function maybeHideWalletCta() {
         if (!sid || !walletCtaBtn) return;
         try {
@@ -285,6 +280,62 @@
         } catch (_) {}
       }
       maybeHideWalletCta();
+
+      if (rcmMode && rcmToken) {
+        const redirectStatus = params.get('redirect_status');
+        const paymentIntent = params.get('payment_intent');
+
+        async function settleRcmIfNeeded() {
+          if (redirectStatus !== 'succeeded' || !paymentIntent) return true;
+          try {
+            const r = await fetch(`${API_BASE}/api/public/rcm/pay/${encodeURIComponent(rcmToken)}/complete`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ method: 'stripe', payment_intent_id: paymentIntent }),
+            });
+            const data = await r.json();
+            return data.success;
+          } catch (_) {
+            return false;
+          }
+        }
+
+        settleRcmIfNeeded().then(function (ok) {
+          if (paymentPill) {
+            paymentPill.classList.remove('pill-warn');
+            paymentPill.textContent = ok ? '✅ Payment confirmed' : '✅ Payment received (processing confirmation)';
+          }
+          if (successSub) {
+            successSub.textContent =
+              'Your copay or balance payment was received. View your receipt and bill status in Wallet.';
+          }
+        });
+        return;
+      }
+
+      try {
+        if (typeof window !== 'undefined' && Array.isArray(window.dataLayer)) {
+          window.dataLayer.push({ event: 'pay_success', appointment_id: appointmentId || undefined });
+        }
+        window.dispatchEvent(
+          new CustomEvent('checkout-funnel', {
+            detail: { name: 'pay_success', appointment_id: appointmentId || undefined }
+          })
+        );
+      } catch (_) {}
+
+      if (!appointmentId) {
+        if (paymentPill) {
+          paymentPill.classList.remove('pill-warn');
+          paymentPill.textContent = '✅ Payment confirmed';
+        }
+        if (successSub) {
+          successSub.textContent =
+            'Thank you — your payment went through. Your receipt is in Wallet; order confirmations are emailed to you.';
+        }
+        if (retailBox) retailBox.classList.remove('hidden');
+        return;
+      }
       if (!sid) return;
       async function pollPaymentStatus() {
         const maxAttempts = 15;

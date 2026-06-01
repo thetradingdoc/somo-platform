@@ -33,7 +33,7 @@ sqlite3 /path/to/payor.db "SELECT COUNT(*) AS c FROM zip_county_crosswalk;"
 npm run verify:payor-navigator:local
 ```
 
-Runs crosswalk count script, full **middleware-platform** Jest suite, then **littlelab-landing** production build.
+Runs crosswalk count script, full **middleware-platform** Jest suite, then **somo-landing** production build.
 
 ---
 

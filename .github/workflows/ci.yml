@@ -79,6 +79,11 @@ jobs:
         working-directory: ./middleware-platform
         run: npm test
 
+      - name: Voice inbound + booking smoke (Jest)
+        working-directory: ./middleware-platform
+        run: |
+          SKIP_STARTUP_MIGRATIONS=1 npx jest __tests__/voice-inbound-tenant.test.js __tests__/voice-incoming-handler.test.js __tests__/booking-complete-appointment.test.js --runInBand
+
       - name: Run reasoning regression guard suites
         run: npm run test:reasoning-regression
 

@@ -32,8 +32,11 @@ export function BillingBadge({ label, tone }: { label: string; tone?: string }) 
   );
 }
 
-export function StatusDot({ color }: { color: string }) {
-  return <View style={[styles.dot, { backgroundColor: color }]} />;
+export function StatusDot({ color, state }: { color?: string; state?: 'completed' | 'pending' | 'default' }) {
+  const resolved =
+    color ??
+    (state === 'completed' ? '#3D8A5A' : state === 'pending' ? '#BA7517' : '#94a3b8');
+  return <View style={[styles.dot, { backgroundColor: resolved }]} />;
 }
 
 const styles = StyleSheet.create({

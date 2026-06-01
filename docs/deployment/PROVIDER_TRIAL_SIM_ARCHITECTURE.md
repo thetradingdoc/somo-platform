@@ -4,7 +4,7 @@
 **Status:** Implemented (feature-flagged)  
 **Signup flow:** [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.md)  
 **Voice billing:** [VOICE_SUBSCRIPTION_BILLING_ARCHITECTURE.md](./VOICE_SUBSCRIPTION_BILLING_ARCHITECTURE.md)  
-**Task tracker:** [todos/pending/PROVIDER_TRIAL_SIM_TODOS.md](../../todos/pending/PROVIDER_TRIAL_SIM_TODOS.md)
+**Task tracker (archived v1):** [todos/archive/PROVIDER_TRIAL_SIM_TODOS_COMPLETED_2026-05-31.md](../../todos/archive/PROVIDER_TRIAL_SIM_TODOS_COMPLETED_2026-05-31.md)
 
 ## Product contract
 

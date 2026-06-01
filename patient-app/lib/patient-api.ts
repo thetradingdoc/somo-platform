@@ -73,3 +73,14 @@ export async function publicGet(path: string) {
   if (!res.ok || !data?.success) throw new Error(data?.error || 'Request failed');
   return data;
 }
+
+export async function patientPostPublic(path: string, body: unknown) {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: API_HEADERS,
+    body: JSON.stringify(body ?? {}),
+  });
+  const data = await parseJson(res);
+  if (!res.ok || !data?.success) throw new Error(data?.error || 'Request failed');
+  return data;
+}
