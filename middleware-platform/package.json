@@ -52,6 +52,8 @@
         "trial:nudge-sweep": "node -e \"require('./services/trial-alerts').runScheduledTrialNudges().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
         "trial:provision-smoke": "node scripts/trial-provision-smoke.cjs",
         "trial:release-test-numbers": "node scripts/release-trial-test-numbers.cjs",
+        "audit:twilio-orphans": "node scripts/audit-twilio-orphan-numbers.cjs",
+        "audit:trial-provision-drift": "node scripts/audit-trial-provision-drift.cjs",
         "test:e2e:trial": "playwright test --project provider-trial",
         "test:e2e:voice-agent": "playwright test --project voice-agent",
         "test:e2e:login": "playwright test --project somo-login",

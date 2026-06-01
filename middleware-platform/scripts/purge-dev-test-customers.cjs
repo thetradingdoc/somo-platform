@@ -24,6 +24,33 @@ function isTestRow(row) {
   return PATTERNS.some((fn) => fn(email));
 }
 
+function tablesWithCustomerId() {
+  return db.db
+    .prepare(
+      `SELECT DISTINCT m.name AS name
+       FROM sqlite_master m
+       JOIN pragma_table_info(m.name) p ON p.name = 'customer_id'
+       WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'
+       ORDER BY m.name`
+    )
+    .all()
+    .map((r) => r.name);
+}
+
+function deleteCustomerCascade(customerId, email) {
+  for (const table of tablesWithCustomerId()) {
+    try {
+      db.db.prepare(`DELETE FROM ${table} WHERE customer_id = ?`).run(customerId);
+    } catch (e) {
+      console.warn(`  warn: ${table}: ${e.message}`);
+    }
+  }
+  try {
+    db.db.prepare(`DELETE FROM email_verification_codes WHERE email = ?`).run(email);
+  } catch (_) {}
+  db.db.prepare(`DELETE FROM customers WHERE id = ?`).run(customerId);
+}
+
 function main() {
   const rows = db.db.prepare(`SELECT id, email FROM customers`).all();
   const targets = rows.filter(isTestRow);
@@ -35,10 +62,7 @@ function main() {
   for (const t of targets) {
     console.log(`  - ${t.email} (${t.id})`);
     if (!DRY) {
-      try {
-        db.db.prepare(`DELETE FROM customer_sessions WHERE customer_id = ?`).run(t.id);
-      } catch (_) {}
-      db.db.prepare(`DELETE FROM customers WHERE id = ?`).run(t.id);
+      deleteCustomerCascade(t.id, t.email);
     }
   }
   console.log('Done.');

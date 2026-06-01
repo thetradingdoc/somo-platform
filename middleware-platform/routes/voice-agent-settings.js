@@ -32,6 +32,11 @@ function resolveVoiceSettingsContext(req) {
         customerId = req.customer.id;
     }
 
+    // Authenticated SaaS — never fall back to default shop tenant
+    if (req.customer && !merchantId && !customerId) {
+        return { merchantId: null, customerId: null, tenantError: true };
+    }
+
     // Unauthenticated / unresolved only — never use default shop for logged-in SaaS owner
     if (!merchantId && !customerId && !req.customer) {
         const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
@@ -76,7 +81,15 @@ function parseSettingsRow(settings, { merchantId, customerId }) {
 
 router.get('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
     try {
-        const { merchantId, customerId } = resolveVoiceSettingsContext(req);
+        const ctx = resolveVoiceSettingsContext(req);
+        if (ctx.tenantError) {
+            return res.status(400).json({
+                success: false,
+                error: 'tenant_required',
+                message: 'Unable to resolve provider for voice settings.'
+            });
+        }
+        const { merchantId, customerId } = ctx;
         if (!merchantId && !customerId) {
             return res.status(400).json({
                 success: false,
@@ -91,10 +104,25 @@ router.get('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async 
         if (customer?.prompt_synced_at) {
             row.prompt_synced_at = customer.prompt_synced_at;
         }
+        if (!row.retell_agent_id && customer?.retell_agent_id) {
+            row.retell_agent_id = customer.retell_agent_id;
+        }
+
+        let retellError = null;
+        if (customerId && !row.retell_agent_id) {
+            const ensure = await ensureCustomerRetellAgent(db, customerId, { retellService });
+            if (ensure.agentId) {
+                row.retell_agent_id = ensure.agentId;
+            } else if (ensure.error) {
+                retellError = ensure.error;
+            }
+        }
 
         return res.json({
             success: true,
-            settings: row
+            settings: row,
+            retell_agent_id: row.retell_agent_id || null,
+            retell_error: retellError
         });
     } catch (error) {
         console.error('Voice agent settings GET error:', error);
@@ -104,7 +132,15 @@ router.get('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async 
 
 router.post('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
     try {
-        const { merchantId, customerId } = resolveVoiceSettingsContext(req);
+        const ctx = resolveVoiceSettingsContext(req);
+        if (ctx.tenantError) {
+            return res.status(400).json({
+                success: false,
+                error: 'tenant_required',
+                message: 'Unable to resolve provider for voice settings.'
+            });
+        }
+        const { merchantId, customerId } = ctx;
         if (!merchantId && !customerId) {
             return res.status(400).json({
                 success: false,

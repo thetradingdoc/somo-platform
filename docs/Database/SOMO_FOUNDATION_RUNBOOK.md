@@ -45,6 +45,9 @@ Reference: [ENV_AND_DB_SSOT.md](./ENV_AND_DB_SSOT.md) · [Verification matrix](#
 | D3-05 | Set `NGROK_URL` or public `API_BASE_URL`; restart middleware | URL reachable from internet |
 | D3-06 | Twilio voice URL: `{PUBLIC}/voice/incoming?customer_id={OWNER_ID}` | Saved in Twilio |
 | D3-07 | Deploy akin-dunbar guards in settings + Retell WS | Owner never hits default shop |
+
+**Staging DB vs Twilio:** If a GCS SQLite export shows empty `twilio_phone_number` / `twilio_phone_sid` for the owner but Twilio console lists an active inbound line, **trust Twilio + live API session** (and `npm run staging:call-verify`) over the snapshot. Attach/bind via `attach-existing-twilio-number.cjs` against the live DB path Cloud Run uses, not a stale local copy.
+
 | D3-08 | Upsert `voice_agent_settings` on real `merchant_id` | GET `/api/voice-agent/settings` = owner |
 | D3-09 | Change greeting in UI | Row updates owner `merchant_id` — **V-07** |
 

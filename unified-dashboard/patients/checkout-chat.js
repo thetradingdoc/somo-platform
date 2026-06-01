@@ -6,12 +6,7 @@
       const productImageHint = params.get('product_image') || params.get('image_url') || '';
       const checkoutSessionId = params.get('checkout_session_id') || '';
 
-      const STRIP_IMAGE_FALLBACK_BY_ID = {
-        'prod-vitamin-b3-serum-pore-sebum-control': '/images/products/vitamin-b3-serum.png',
-        'prod-retinol-peptide-night-serum': '/images/products/retinol-brightening-night-serum.png',
-        'prod-skin-hydration-serum-snail-mucin': '/images/products/dark-spot-repair-snail-mucin-serum.png',
-        'prod-vitamin-c-serum-antioxidant-pro-shield': '/images/products/vitamin-c-serum.png'
-      };
+      const STRIP_IMAGE_FALLBACK_BY_ID = window.SomoCheckoutChat.STRIP_IMAGE_FALLBACK_BY_ID;
 
       const API_BASE = window.API_BASE || 'http://localhost:4000';
       const sid = localStorage.getItem('patient_session_id');
@@ -27,71 +22,21 @@
         if (storedFlag === '0') phase3Enabled = false;
         if (storedFlag === '1') phase3Enabled = true;
       } catch (_) {}
-      function journeyStateKey() {
-        return 'cc_journey_state:' + String(currentProductId || 'none');
-      }
-      function readJourneyState() {
-        const fallback = { hasChatted: false, checkoutStarted: false, quoteReady: false };
-        try {
-          const raw = sessionStorage.getItem(journeyStateKey());
-          if (!raw) return fallback;
-          const parsed = JSON.parse(raw);
-          return {
-            hasChatted: !!(parsed && parsed.hasChatted),
-            checkoutStarted: !!(parsed && parsed.checkoutStarted),
-            quoteReady: !!(parsed && parsed.quoteReady)
-          };
-        } catch (_) {
-          return fallback;
-        }
-      }
-      let journeyState = readJourneyState();
-      function persistJourneyState() {
-        try {
-          sessionStorage.setItem(journeyStateKey(), JSON.stringify(journeyState));
-        } catch (_) {}
-      }
-      function markJourneyFlag(key, value) {
-        if (!Object.prototype.hasOwnProperty.call(journeyState, key)) return;
-        journeyState[key] = value === undefined ? true : !!value;
-        persistJourneyState();
-      }
-      function resolveJourneyType() {
-        if (isLearnIntent) {
-          return journeyState.hasChatted && !journeyState.checkoutStarted
-            ? 'learn_returning_no_checkout'
-            : 'learn_first_time';
-        }
-        if (isCheckoutIntent) {
-          return journeyState.checkoutStarted ? 'checkout_returning' : 'checkout_first_time';
-        }
-        return journeyState.hasChatted && !journeyState.checkoutStarted
-          ? 'learn_returning_no_checkout'
-          : 'learn_first_time';
-      }
+      const journeyApi = window.SomoCheckoutChat.createJourneyState({
+        getProductId: function () { return currentProductId; },
+        isLearnIntent: function () { return isLearnIntent; },
+        isCheckoutIntent: function () { return isCheckoutIntent; }
+      });
+      const journeyStateKey = journeyApi.journeyStateKey;
+      const readJourneyState = journeyApi.readJourneyState;
+      const persistJourneyState = journeyApi.persistJourneyState;
+      const markJourneyFlag = journeyApi.markJourneyFlag;
+      const resolveJourneyType = journeyApi.resolveJourneyType;
+      let journeyState = journeyApi.getState();
       let journeyType = resolveJourneyType();
       let uiMode = journeyType.indexOf('checkout') === 0 ? 'checkout' : 'learn';
       if (!phase3Enabled && !isLearnIntent) uiMode = 'checkout';
-      function fetchWith429Retry(url, init, options) {
-        init = init || {};
-        options = options || {};
-        const maxAttempts = options.maxAttempts != null ? options.maxAttempts : 5;
-        const baseMs = options.baseMs != null ? options.baseMs : 350;
-        function sleep(ms) {
-          return new Promise(function (r) { setTimeout(r, ms); });
-        }
-        function attempt(i) {
-          return fetch(url, init).then(function (res) {
-            if (res.status !== 429 || i >= maxAttempts - 1) return res;
-            const ra = res.headers.get('Retry-After');
-            let delayMs = ra ? parseInt(ra, 10) * 1000 : baseMs * Math.pow(2, i);
-            if (!Number.isFinite(delayMs) || delayMs < 0) delayMs = baseMs * Math.pow(2, i);
-            delayMs += Math.random() * 300;
-            return sleep(delayMs).then(function () { return attempt(i + 1); });
-          });
-        }
-        return attempt(0);
-      }
+      const fetchWith429Retry = window.SomoCheckoutChat.fetchWith429Retry;
 
       const elTitle = document.getElementById('productTitle');
       const elPrice = document.getElementById('productPrice');
@@ -397,21 +342,7 @@
       }
 
       async function pollVoiceCheckoutUntilComplete(checkoutId, opts) {
-        const maxMs = (opts && opts.maxMs) || 60000;
-        const started = Date.now();
-        while (Date.now() - started < maxMs) {
-          const res = await fetch(API_BASE + '/voice/checkout/status/' + encodeURIComponent(String(checkoutId)), {
-            headers: { 'ngrok-skip-browser-warning': 'true' }
-          });
-          const payload = await res.json();
-          if (res.ok && payload && payload.success && payload.status === 'completed') {
-            return payload;
-          }
-          await new Promise(function (r) {
-            setTimeout(r, 750);
-          });
-        }
-        return null;
+        return window.SomoCheckoutChat.pollVoiceCheckoutUntilComplete(API_BASE, checkoutId, opts);
       }
 
       function appendReceiptBubble(opts) {
@@ -3303,66 +3234,40 @@
           if (!reader) {
             throw new Error('Streaming not supported in this browser.');
           }
-          const decoder = new TextDecoder();
-          let buffer = '';
-          let donePayload = null;
-          let doneHandled = false;
-          while (true) {
-            const chunk = await reader.read();
-            if (chunk.done) break;
-            buffer += decoder.decode(chunk.value, { stream: true });
-            const parts = buffer.split('\n\n');
-            buffer = parts.pop() || '';
-            for (let i = 0; i < parts.length; i++) {
-              const line = parts[i].trim();
-              if (!line.startsWith('data:')) continue;
-              const jsonStr = line.replace(/^data:\s*/, '');
-              let d;
-              try {
-                d = JSON.parse(jsonStr);
-              } catch (_) {
-                continue;
-              }
-              if (d.type === 'tool_status' && d.text) {
-                removeTypingIndicator();
-                setComposerStatus(String(d.text), 'tool');
-              }
-              if (d.type === 'delta' && d.text) {
-                removeTypingIndicator();
-                setComposerStatus('', '');
-                if (!assistantEl) {
-                  assistantEl = document.createElement('div');
-                  assistantEl.className = 'cc-msg cc-msg-assistant cc-msg-streaming';
-                  assistantEl.textContent = '';
-                  const log = document.getElementById('chatLog');
-                  if (log) {
-                    log.appendChild(assistantEl);
-                    log.scrollTop = log.scrollHeight;
-                  }
-                }
-                assistantEl.textContent += d.text;
-                const log2 = document.getElementById('chatLog');
-                if (log2) log2.scrollTop = log2.scrollHeight;
-              }
-              if (d.type === 'done') {
-                if (doneHandled) continue;
-                doneHandled = true;
-                donePayload = d;
-                if (donePayload && donePayload.reply) {
-                  donePayload.reply = normalizeKellyCheckoutReply(donePayload.reply);
-                }
-                if (assistantEl && d.reply && !assistantEl.textContent.trim()) {
-                  assistantEl.textContent = String(d.reply).trim();
-                }
-                if (!assistantEl && d.reply) {
-                  appendChatBubble('assistant', String(d.reply).trim());
+          let assistantElRef = null;
+          const donePayload = await window.SomoCheckoutChat.consumeCheckoutChatSseStream(reader, {
+            normalizeReply: normalizeKellyCheckoutReply,
+            onToolStatus: function (text) {
+              removeTypingIndicator();
+              setComposerStatus(text, 'tool');
+            },
+            onDelta: function (text) {
+              removeTypingIndicator();
+              setComposerStatus('', '');
+              if (!assistantEl) {
+                assistantEl = document.createElement('div');
+                assistantEl.className = 'cc-msg cc-msg-assistant cc-msg-streaming';
+                assistantEl.textContent = '';
+                const log = document.getElementById('chatLog');
+                if (log) {
+                  log.appendChild(assistantEl);
+                  log.scrollTop = log.scrollHeight;
                 }
               }
-              if (d.type === 'error') {
-                throw new Error(d.error || 'Stream error');
+              assistantEl.textContent += text;
+              const log2 = document.getElementById('chatLog');
+              if (log2) log2.scrollTop = log2.scrollHeight;
+            },
+            onDone: function (d) {
+              if (d && d.reply && assistantEl && !assistantEl.textContent.trim()) {
+                assistantEl.textContent = String(d.reply).trim();
+              }
+              if (!assistantEl && d && d.reply) {
+                appendChatBubble('assistant', String(d.reply).trim());
               }
             }
-          }
+          });
+          assistantElRef = assistantEl;
           removeTypingIndicator();
           if (assistantEl) {
             assistantEl.classList.remove('cc-msg-streaming');

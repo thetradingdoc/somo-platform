@@ -12,9 +12,9 @@ This runbook implements the four-pillar staging audit: **signup**, **Twilio prov
 
 | Variable | Purpose |
 |----------|---------|
-| `STAGING_DB_PATH` | Local copy of staging SQLite (GCS download or Cloud SQL export) — email OTP + post-run asserts |
-| `STAGING_EMAIL_CODE` | **Required for S2–S7** browser signup (inbox); GCS snapshot often lags live API |
-| `POSTGRES_URL` | Optional: read `email_verification_codes` from live Cloud SQL (see `staging-email-code-pg.cjs`) |
+| `STAGING_DB_PATH` | Local copy of staging SQLite (**GCS export snapshot** — not live Cloud Run state) — email OTP + post-run asserts when fresh |
+| `STAGING_EMAIL_CODE` | **Required for S2–S7** browser signup (inbox); prefer live `POSTGRES_URL` or manual code when GCS lags |
+| `POSTGRES_URL` | **Preferred for OTP/asserts:** read `email_verification_codes` from live Cloud SQL (see `staging-email-code-pg.cjs`) |
 | `TRIAL_E2E_PHONE` | Handset that receives **real** Twilio Verify SMS on staging |
 | `STAGING_SMS_CODE` | Latest SMS code (set before phone step / `staging:trial-provision`) |
 | `SOMO_OWNER_EMAIL` / `SOMO_OWNER_PASSWORD` | Owner login for voice-agent tests (GCP secret locally) |
@@ -29,6 +29,8 @@ GCS_DB_BUCKET=somo-staging-db GCS_DB_OBJECT=middleware-staging.db \
   node scripts/cloudrun-db-sync.cjs download
 export STAGING_DB_PATH=/var/data/middleware-staging.db   # or path printed by script
 ```
+
+**GCS SQLite truth:** The bucket object is an **export snapshot**, not a live mirror. Empty DIDs or stale OTP rows in a downloaded file do not disprove Twilio or Cloud Run state. Re-download to a **fresh path** if the file is corrupted or truncated (malformed downloads fail SQLite open). For sign-off, prefer `POSTGRES_URL`, manual `STAGING_EMAIL_CODE`, Twilio console, and live API session checks.
 
 ---
 

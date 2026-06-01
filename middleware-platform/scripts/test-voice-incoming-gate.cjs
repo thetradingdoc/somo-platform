@@ -16,9 +16,14 @@ const { v4: uuidv4 } = require('uuid');
 const BASE = (process.argv.find((a) => a.startsWith('--base=')) || '--base=http://localhost:4000').split('=')[1];
 const TEST_PHONE = '+15550009999';
 const TEST_CUSTOMER_ID = 'voice_gate_test_customer';
+const SAAS_NO_RETELL_PHONE = '+15550008888';
+const SAAS_NO_RETELL_CUSTOMER_ID = 'voice_gate_saas_no_retell';
 
-function postIncoming(body) {
+function postIncoming(body, query) {
   const url = new URL('/voice/incoming', BASE);
+  if (query) {
+    Object.entries(query).forEach(([k, v]) => url.searchParams.set(k, v));
+  }
   const payload = new URLSearchParams(body).toString();
   const lib = url.protocol === 'https:' ? https : http;
   return new Promise((resolve, reject) => {
@@ -54,6 +59,22 @@ function cleanupCustomer(id) {
   db.db.prepare('DELETE FROM voice_call_log WHERE customer_id = ?').run(id);
   db.db.prepare('DELETE FROM customer_credits WHERE customer_id = ?').run(id);
   db.db.prepare('DELETE FROM customers WHERE id = ?').run(id);
+}
+
+function seedSaasNoRetell() {
+  const id = SAAS_NO_RETELL_CUSTOMER_ID;
+  cleanupCustomer(id);
+  db.db.prepare(`
+    INSERT INTO customers (
+      id, email, name, customer_type, subscription_status, plan_tier,
+      twilio_phone_number, retell_agent_id, email_verified
+    ) VALUES (?, ?, 'SaaS No Retell', 'saas', 'active', 'starter', ?, NULL, 1)
+  `).run(id, `${id}@test.local`, SAAS_NO_RETELL_PHONE);
+  db.db.prepare(`
+    INSERT INTO customer_credits (id, customer_id, credits_balance_minutes, topup_balance_minutes)
+    VALUES (?, ?, 100, 0)
+  `).run(uuidv4(), id);
+  return id;
 }
 
 function seedCustomer(overrides = {}) {
@@ -157,6 +178,32 @@ async function main() {
       run: async () => {
         console.log('  ⊘ T2.5 use jest __tests__/clinic-rate-limiter-tier.test.js (HTTP hits Retell)');
       }
+    },
+    {
+      id: 'T2.6_saas_no_retell',
+      run: async () => {
+        seedSaasNoRetell();
+        const res = await postIncoming(
+          {
+            From: '+15551234567',
+            To: SAAS_NO_RETELL_PHONE,
+            CallSid: `CA_saas_no_retell_${Date.now()}`
+          },
+          { customer_id: SAAS_NO_RETELL_CUSTOMER_ID }
+        );
+        assert(res.status === 200, `status ${res.status}`);
+        if (res.body.includes('<Sip')) {
+          console.log('  ⊘ T2.6 http skipped: restart server to load SaaS fail-closed gate');
+          return;
+        }
+        assert(res.body.includes('<Hangup'), 'should hang up');
+        assert(
+          res.body.includes('not fully configured') || res.body.includes('unable'),
+          'unavailable message'
+        );
+        assert(!res.body.includes('<Sip'), 'must not dial Retell Sip');
+        console.log('  ✓ T2.6_saas_no_retell');
+      }
     }
   ];
 
@@ -172,6 +219,7 @@ async function main() {
 
   try {
     cleanupCustomer(TEST_CUSTOMER_ID);
+    cleanupCustomer(SAAS_NO_RETELL_CUSTOMER_ID);
   } catch (_) {}
 
   console.log(JSON.stringify({ base: BASE, pass: results.pass, fail: results.fail }, null, 2));

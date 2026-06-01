@@ -125,6 +125,25 @@ function parseProvisionJson(customer) {
 }
 
 /**
+ * Keep trial_provision_json.twilio_provisioned aligned with persisted DID columns.
+ */
+function syncTwilioProvisionFlags(provision, customer) {
+  const hasDid =
+    !!(customer?.twilio_phone_number && String(customer.twilio_phone_number).trim()) &&
+    !!(customer?.twilio_phone_sid && String(customer.twilio_phone_sid).trim());
+  if (hasDid) {
+    provision.twilio_provisioned = true;
+    delete provision.twilio_provision_error;
+  } else {
+    provision.twilio_provisioned = false;
+    if (!provision.twilio_provision_error) {
+      provision.twilio_provision_error = 'Dedicated line not persisted on customer record';
+    }
+  }
+  return provision;
+}
+
+/**
  * Purchase dedicated inbound number before trial activates.
  * @returns {{ phoneNumber: string, sid: string, searchStrategy?: string }}
  */
@@ -246,7 +265,6 @@ async function startTrialTenant(db, customerId, options = {}) {
   const purchased = await provisionDedicatedNumber(db, customerId, {
     phoneE164: phone
   });
-  provision.twilio_provisioned = true;
   if (purchased.searchStrategy) provision.twilio_search_strategy = purchased.searchStrategy;
 
   if (!purchased.phoneNumber) {
@@ -301,11 +319,12 @@ async function startTrialTenant(db, customerId, options = {}) {
     provision.merchant_deferred = true;
   }
 
+  const final = db.getCustomer(customerId);
+  syncTwilioProvisionFlags(provision, final);
+
   db.updateCustomer(customerId, {
     trial_provision_json: JSON.stringify(provision)
   });
-
-  const final = db.getCustomer(customerId);
   if (db.upsertVoiceAgentSettings && (final.merchant_id || final.id)) {
     try {
       const VoiceAgentRuntime = require('./voice-agent-runtime');
@@ -436,6 +455,7 @@ module.exports = {
   isTrialTimeExpired,
   isTrialAccessAllowed,
   canStartTrial,
+  syncTwilioProvisionFlags,
   provisionDedicatedNumber,
   startTrialTenant,
   expireTrial,

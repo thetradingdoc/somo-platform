@@ -396,6 +396,43 @@ class TwilioPhoneService {
       throw error;
     }
   }
+
+  /**
+   * List all incoming phone numbers on the Twilio account.
+   * @returns {Promise<Array<{ sid: string, phoneNumber: string, voiceUrl: string|null }>>}
+   */
+  async listIncomingPhoneNumbers() {
+    if (!this.isConfigured) {
+      throw new Error('Twilio not configured');
+    }
+
+    const out = [];
+    let pageUri = `${this.apiBaseUrl}/IncomingPhoneNumbers.json?PageSize=50`;
+
+    while (pageUri) {
+      const response = await axios.get(pageUri, {
+        auth: {
+          username: this.accountSid,
+          password: this.authToken
+        },
+        timeout: 30000
+      });
+      const items = response.data?.incoming_phone_numbers || [];
+      for (const n of items) {
+        out.push({
+          sid: n.sid,
+          phoneNumber: n.phone_number,
+          voiceUrl: n.voice_url || null,
+          friendlyName: n.friendly_name || null
+        });
+      }
+      pageUri = response.data?.next_page_uri
+        ? `${this.apiBaseUrl.replace(/\/$/, '')}${response.data.next_page_uri}`
+        : null;
+    }
+
+    return out;
+  }
 }
 
 module.exports = TwilioPhoneService;
