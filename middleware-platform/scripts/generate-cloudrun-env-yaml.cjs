@@ -113,13 +113,13 @@ const merged = {
   DB_PATH: isStaging
     ? process.env.CLOUDRUN_DB_PATH || '/var/data/middleware-staging.db'
     : parsed.DB_PATH || './middleware-dev.db',
-  GCS_DB_BUCKET: isStaging ? process.env.GCS_DB_BUCKET || 'somo-staging-db' : parsed.GCS_DB_BUCKET || '',
+  GCS_DB_BUCKET: isStaging ? process.env.GCS_DB_BUCKET || 'somo-staging-db-somo-callsomo' : parsed.GCS_DB_BUCKET || '',
   SKIP_STARTUP_MIGRATIONS: isStaging ? '0' : parsed.SKIP_STARTUP_MIGRATIONS || '1',
   MIGRATIONS_STRICT: isStaging ? '1' : '0',
   CLOUDRUN_BOOT_DEBUG: parsed.CLOUDRUN_BOOT_DEBUG || (isStaging ? '0' : '1'),
   TRIAL_SIM_FLOW_ENABLED: parsed.TRIAL_SIM_FLOW_ENABLED || (isStaging ? '1' : parsed.TRIAL_SIM_FLOW_ENABLED || '0'),
   SAAS_VOICE_FAIL_CLOSED: parsed.SAAS_VOICE_FAIL_CLOSED || (isStaging ? '1' : parsed.SAAS_VOICE_FAIL_CLOSED || '1'),
-  SOMO_OWNER_EMAIL: parsed.SOMO_OWNER_EMAIL || 'drlittlekids@gmail.com',
+  SOMO_OWNER_EMAIL: parsed.SOMO_OWNER_EMAIL || 'richard@callsomo.com',
   STAGING: isStaging ? '1' : '0',
   ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0'
 };

@@ -1,15 +1,21 @@
 # Canonical documentation map
 
-**Last Updated:** 2026-06-01
+**Last Updated:** 2026-06-02
 
 Use this table to avoid maintaining the same story in multiple folders. **Edit this file** when you add a new major runtime surface or split ownership.
+
+**Onboarding / doc hygiene:** [ENGINEERING_DOC_HYGIENE.md](./ENGINEERING_DOC_HYGIENE.md) — what to read first; when to stub vs archive.
 
 | Topic | Read first | Also useful (do not duplicate) |
 |-------|------------|----------------------------------|
 | **Repo overview & contributing** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
-| **Deploy / CI / GCP** | [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md) | [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md), [`docs/deployment/README.md`](../deployment/README.md) (historical bulk), [`docs/runbooks/PROD_MONITORING_WORKFLOWS.md`](../runbooks/PROD_MONITORING_WORKFLOWS.md) |
+| **Deploy / CI / GCP** | [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md) | [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md) (not `deployment/GCP_DEPLOY_ROLLBACK.md` stub), [`docs/deployment/README.md`](../deployment/README.md) (historical bulk), [`docs/runbooks/PROD_MONITORING_WORKFLOWS.md`](../runbooks/PROD_MONITORING_WORKFLOWS.md) |
+| **Retell agent inventory** | [`docs/deployment/retell-agent-inventory.md`](../deployment/retell-agent-inventory.md) + [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) | `npm run verify:agent-config` |
+| **Architecture snapshot (onboarding)** | [`docs/architecture/CURRENT_STATE_ARCHITECTURE.md`](../architecture/CURRENT_STATE_ARCHITECTURE.md) | Not the 12k-line [`architecture/README.md`](../architecture/README.md) first |
 | **Environment variables** | [`docs/setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md`](../setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md) | [`docs/setup/README.md`](../setup/README.md), [`somo-landing/.env.development`](../../unified-dashboard/somo-landing/.env.development) |
-| **Logo, icon, favicon** | [`docs/Brand/LOGO_AND_ICON_SSOT.md`](../Brand/LOGO_AND_ICON_SSOT.md) | [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md), `npm run brand:sync` |
+| **Logo, icon, favicon, transactional email HTML** | [`docs/Brand/LOGO_AND_ICON_SSOT.md`](../Brand/LOGO_AND_ICON_SSOT.md) | [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md), [`middleware-platform/lib/somo-email-layout.js`](../../middleware-platform/lib/somo-email-layout.js), `npm run brand:sync` |
+| **Email (SMTP local + templates)** | [`docs/email/README.md`](../email/README.md) | [`email-service.js`](../../middleware-platform/services/email-service.js), [`invoice-service.js`](../../middleware-platform/services/invoice-service.js) |
+| **Infra vs consumer brand** | [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](../Brand/INFRA_BRAND_DEFERRAL.md) | `npm run check:legacy-hosts`, `npm run check:brand-consumer-strings` |
 | **Marketing UI / palette (Image 1)** | [`docs/design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md) | [`deployment/SOMO_LANDING.md`](../deployment/SOMO_LANDING.md), [`SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) |
 | **Surface ownership (code vs docs)** | [`docs/meta/SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) | This map |
 | **HTTP routes & static SPA mounts** | [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md), [`docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) | [`middleware-platform/server.js`](../../middleware-platform/server.js) (~11k compose), [`middleware-platform/routes/`](../../middleware-platform/routes/), [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js), [`bootstrap/static-hosting.js`](../../middleware-platform/bootstrap/static-hosting.js) |
@@ -20,7 +26,7 @@ Use this table to avoid maintaining the same story in multiple folders. **Edit t
 | **Medicare plan search (payor)** | [`docs/Payor/README.md`](../Payor/README.md) | [`middleware-platform/routes/public-plan-search.js`](../../middleware-platform/routes/public-plan-search.js) |
 | **Medicaid provider directory & public search** | [`docs/Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md`](../Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md) | [`middleware-platform/services/provider-search-service.js`](../../middleware-platform/services/provider-search-service.js), [`middleware-platform/server.js`](../../middleware-platform/server.js) (`/api/public/providers` mount) |
 | **RCM (eligibility, prior auth, claims)** | [`docs/RCM/README.md`](../RCM/README.md), [`docs/RCM/PA_ARCHITECTURE.md`](../RCM/PA_ARCHITECTURE.md) | [`docs/RCM/STEDI_PA_WORKSTREAM.md`](../RCM/STEDI_PA_WORKSTREAM.md), [`middleware-platform/services/insurance-service.js`](../../middleware-platform/services/insurance-service.js) |
-| **Voice / commerce LLM, checkout, Retell, middleware depth** | [`docs/middleware-platform/README.md`](../middleware-platform/README.md) (TOC anchors) | [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md) (consumer naming), [`docs/reasoning/README.md`](../reasoning/README.md), [`docs/architecture/README.md`](../architecture/README.md) |
+| **Voice / commerce LLM, checkout, Retell, middleware depth** | [`docs/middleware-platform/README.md`](../middleware-platform/README.md) (TOC anchors) | [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md) (consumer naming), [`docs/reasoning/README.md`](../reasoning/README.md), [`docs/architecture/README.md`](../architecture/README.md) (archive TOC) |
 | **Testing & E2E** | [`docs/testing/README.md`](../testing/README.md), [`docs/testing/PROD_PLAYWRIGHT_SUITES.md`](../testing/PROD_PLAYWRIGHT_SUITES.md) | [`middleware-platform/package.json`](../../middleware-platform/package.json) (`test:e2e-*`, `test:prod:*`), [`middleware-platform/playwright.config.cjs`](../../middleware-platform/playwright.config.cjs) |
 | **Database / migrations** | [`docs/Database/README.md`](../Database/README.md), [`docs/Database/DB_STRUCTURE_AND_PIPELINE.md`](../Database/DB_STRUCTURE_AND_PIPELINE.md) | [`middleware-platform/database.js`](../../middleware-platform/database.js), [`middleware-platform/migrations/postgres/README.md`](../../middleware-platform/migrations/postgres/README.md) |
 | **Security / compliance** | [`docs/security/README.md`](../security/README.md), [`docs/compliance/README.md`](../compliance/README.md) | [`docs/legal/README.md`](../legal/README.md) |

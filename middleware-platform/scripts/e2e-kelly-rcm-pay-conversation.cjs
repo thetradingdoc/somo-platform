@@ -63,7 +63,7 @@ const API_BASE = (process.env.BASE_URL || process.env.PW_API_BASE_URL || 'http:/
   ''
 );
 const CLINIC_ID = process.env.TEST_CLINIC_ID || process.env.RCM_E2E_CLINIC_ID || 'clinic-default';
-const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PROVIDER_PASSWORD = process.env.RCM_E2E_PROVIDER_PASSWORD || 'demo123';
 const STRIPE_LIVE = process.env.RCM_E2E_STRIPE_LIVE === '1';
 const VISIT_ONLY = process.env.KELLY_E2E_VISIT_ONLY === '1';

@@ -66,7 +66,7 @@
 
 ## Do not touch (without explicit sign-off)
 
-- DodgeCall demo / outbound sales default Retell agents
+- Somo demo / outbound sales default Retell agents
 - Kelly tool names and Retell WS message shapes
 - Trial webhook URL format (`/voice/incoming?customer_id=`)
 - RCM ledger write paths

@@ -26,7 +26,7 @@ try {
   if (!html.includes("id=\"whyPriceDetails\"")) fail('checkout-chat.html missing why price disclosure');
   if (!html.includes('checkout-chat.js')) fail('checkout-chat.html must link checkout-chat.js');
   if (!html.includes('checkout-phone-e164.js')) fail('checkout-chat.html must link checkout-phone-e164.js');
-  if (!tsx.includes('doclittle_kelly_commerce_quote_v1')) fail('RN missing KELLY_QUOTE_KEY');
+  if (!tsx.includes('somo_kelly_commerce_quote_v1')) fail('RN missing KELLY_QUOTE_KEY');
   if (!tsx.includes('emitCheckoutAnalytics')) fail('RN missing checkout analytics import/usage');
   if (!analytics.includes('DeviceEventEmitter.emit')) fail('checkoutAnalytics must emit DeviceEventEmitter');
   if (!analytics.includes('checkout-funnel')) fail('checkoutAnalytics must use checkout-funnel event name');

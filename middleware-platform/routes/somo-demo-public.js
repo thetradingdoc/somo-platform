@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { requestDemoCall, isDemoEnabled } = require('../services/dodgecall-demo-service');
+const { requestDemoCall, isDemoEnabled } = require('../services/somo-demo-service');
 
 async function verifyTurnstileIfConfigured(token) {
   const secret = process.env.DODGECALL_TURNSTILE_SECRET;

@@ -72,7 +72,7 @@ function setMeta(sessionId, key, value) {
  */
 function seedE2eBookableProvider(clinicId, opts = {}) {
   const specialty = opts.specialty || opts.targetSpecialty || 'Dermatology';
-  const email = (opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com')
+  const email = (opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com')
     .trim()
     .toLowerCase();
   const ProviderService = require(path.join(__dirname, '..', '..', 'services', 'provider-service'));
@@ -578,7 +578,7 @@ function tomorrowAtNoonLocal() {
 }
 
 function seedE2eSlotTomorrowNoon(clinicId, opts = {}) {
-  const providerEmail = (opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com').trim();
+  const providerEmail = (opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com').trim();
   seedE2eBookableProvider(clinicId, { targetSpecialty: opts.targetSpecialty || 'Dermatology', providerEmail });
   const noon = tomorrowAtNoonLocal();
   const ProviderService = require(path.join(__dirname, '..', '..', 'services', 'provider-service'));
@@ -602,7 +602,7 @@ async function seedTomHarrisAppointment(sessionId, patientId, clinicId, opts = {
   const noon = opts.noon || tomorrowAtNoonLocal();
   const apptId = opts.appointmentId || `appt_f2_${crypto.randomBytes(8).toString('hex')}`;
   const providerEmail =
-    opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+    opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com';
 
   await dbModule.createAppointment({
     id: apptId,

@@ -6,11 +6,11 @@ const crypto = require('crypto');
 
 const db = require('../database');
 
-const { initiateDodgecallDemoCall } = require('./outbound-call-service');
+const { initiateSomoDemoDemoCall } = require('./outbound-call-service');
 
-const { resolveTemplate } = require('./dodgecall-template-registry');
+const { resolveTemplate } = require('./somo-demo-template-registry');
 
-const { USE_CASES, USE_CASE_LABELS, USE_CASE_OPENERS, getUseCaseContext } = require('./dodgecall-use-cases');
+const { USE_CASES, USE_CASE_LABELS, USE_CASE_OPENERS, getUseCaseContext } = require('./somo-demo-use-cases');
 
 const SMSService = require('./sms-service');
 
@@ -100,12 +100,12 @@ function checkRateLimits({ clientIp, phone }) {
   }
 
   const dailyCap = getDailyCap();
-  if (db.countDodgecallDemoRequestsToday() >= dailyCap) {
+  if (db.countSomoDemoRequestsToday() >= dailyCap) {
     throw new Error('Demo calls are at capacity for today. Please try again tomorrow.');
   }
 
   const maxConcurrent = getMaxConcurrent();
-  if (db.countActiveDodgecallDemoCalls() >= maxConcurrent) {
+  if (db.countActiveSomoDemoCalls() >= maxConcurrent) {
     throw new Error('Many demo calls are in progress. Please try again in a few minutes.');
   }
 
@@ -114,13 +114,13 @@ function checkRateLimits({ clientIp, phone }) {
   const ipLimit = getIpHourlyLimit();
 
   if (clientIp) {
-    const ipCount = db.countDodgecallDemoRequestsSince({ client_ip: clientIp, since: hourAgo });
+    const ipCount = db.countSomoDemoRequestsSince({ client_ip: clientIp, since: hourAgo });
     if (ipCount >= ipLimit) {
       throw new Error('Too many demo requests from this network. Try again in an hour.');
     }
   }
 
-  const phoneCount = db.countDodgecallDemoRequestsSince({
+  const phoneCount = db.countSomoDemoRequestsSince({
     phone,
     since: dayAgo,
     statuses: ['pending', 'initiated', 'ringing', 'answered', 'completed', 'in-progress']
@@ -174,7 +174,7 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
 
   const id = crypto.randomUUID();
 
-  db.insertDodgecallDemoRequest({
+  db.insertSomoDemoRequest({
 
     id,
 
@@ -198,7 +198,7 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
 
   try {
 
-    const result = await initiateDodgecallDemoCall({
+    const result = await initiateSomoDemoDemoCall({
 
       phone_number: normalizedPhone,
 
@@ -214,7 +214,7 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
 
 
 
-    db.updateDodgecallDemoRequest(id, {
+    db.updateSomoDemoRequest(id, {
 
       status: 'initiated',
 
@@ -236,7 +236,7 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
 
   } catch (err) {
 
-    db.updateDodgecallDemoRequest(id, { status: 'failed', error_message: err.message });
+    db.updateSomoDemoRequest(id, { status: 'failed', error_message: err.message });
 
     throw err;
 

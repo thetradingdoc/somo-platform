@@ -17,7 +17,7 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c1', customer_type: 'saas', retell_agent_id: null },
       customerId: 'c1',
-      isDodgecallDemo: false,
+      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent,
       defaultAgentId: defaultAgent
@@ -30,7 +30,7 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c1', customer_type: 'saas', retell_agent_id: 'agent_tenant' },
       customerId: 'c1',
-      isDodgecallDemo: false,
+      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });
@@ -43,18 +43,18 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c2', trial_status: 'active' },
       customerId: 'c2',
-      isDodgecallDemo: false,
+      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });
     expect(r.failClosed).toBe(true);
   });
 
-  test('DodgeCall demo keeps current agent', () => {
+  test('Somo demo demo keeps current agent', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: null,
       customerId: null,
-      isDodgecallDemo: true,
+      isSomoDemoDemo: true,
       isOutboundSales: false,
       currentRetellAgentId: 'agent_demo'
     });
@@ -66,7 +66,7 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: null,
       customerId: null,
-      isDodgecallDemo: false,
+      isSomoDemoDemo: false,
       isOutboundSales: true,
       currentRetellAgentId: 'agent_sales'
     });
@@ -78,7 +78,7 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c3', customer_type: 'api' },
       customerId: 'c3',
-      isDodgecallDemo: false,
+      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });
@@ -91,7 +91,7 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c1', customer_type: 'saas' },
       customerId: 'c1',
-      isDodgecallDemo: false,
+      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });

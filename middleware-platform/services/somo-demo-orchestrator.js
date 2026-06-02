@@ -1,7 +1,7 @@
 'use strict';
 
 const Groq = require('groq-sdk');
-const { buildMessages } = require('./dodgecall-prompt-builder');
+const { buildMessages } = require('./somo-demo-prompt-builder');
 
 const STAGES = ['OPEN', 'QUALIFY', 'VALUE', 'OBJECTION', 'CTA', 'CLOSE'];
 
@@ -25,7 +25,7 @@ const DEMO_TOOLS = [
     type: 'function',
     function: {
       name: 'send_signup_link',
-      description: 'Text the prospect a DodgeCall signup link',
+      description: 'Text the prospect a Somo demo signup link',
       parameters: { type: 'object', properties: {} }
     }
   },
@@ -68,15 +68,15 @@ function ruleBasedReply(stage, context) {
   const persona = context.persona_name || 'Sam';
   switch (stage) {
     case 'OPEN':
-      return `Hi ${name}, this is ${persona} from DodgeCall. You asked for a quick live demo — is now still a good time?`;
+      return `Hi ${name}, this is ${persona} from Somo demo. You asked for a quick live demo — is now still a good time?`;
     case 'QUALIFY':
       return `Great. What kind of business are you running — clinic, med spa, or something else?`;
     case 'VALUE':
-      return `DodgeCall answers calls 24/7, books appointments, and gives you one dashboard to control scripts. Your ${context.use_case_label || 'team'} would sound like this on every call.`;
+      return `Somo demo answers calls 24/7, books appointments, and gives you one dashboard to control scripts. Your ${context.use_case_label || 'team'} would sound like this on every call.`;
     case 'OBJECTION':
       return `Totally fair. Most teams use this for overflow and after-hours so staff stay focused on in-room care. Want me to text you a signup link?`;
     case 'CTA':
-      return `I can text you a link to create your DodgeCall account — takes about two minutes. Should I send it?`;
+      return `I can text you a link to create your Somo demo account — takes about two minutes. Should I send it?`;
     case 'CLOSE':
     default:
       return `Thanks for your time, ${name}. Have a great day!`;
@@ -144,7 +144,7 @@ async function processTurn({
       endCall: toolCalls.some((t) => t.name === 'end_call')
     };
   } catch (err) {
-    console.warn('DodgeCall orchestrator Groq failed:', err.message);
+    console.warn('Somo demo orchestrator Groq failed:', err.message);
     return {
       stage: nextStage,
       reply: ruleBasedReply(nextStage, context),

@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * Smoke test DodgeCall demo API (no Twilio). Requires restarted middleware.
- * Usage: node scripts/dodgecall-demo-smoke.cjs
+ * Smoke test Somo demo demo API (no Twilio). Requires restarted middleware.
+ * Usage: node scripts/somo-demo-smoke.cjs
  */
 const base = (process.env.API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
 
 async function main() {
-  const health = await fetch(`${base}/api/public/dodgecall/health`);
+  const health = await fetch(`${base}/api/public/somo-demo/health`);
   if (!health.ok) {
     console.error('Health failed:', health.status, await health.text());
     process.exit(1);
@@ -15,7 +15,7 @@ async function main() {
   const h = await health.json();
   console.log('health', h);
 
-  const bad = await fetch(`${base}/api/public/dodgecall/request-call`, {
+  const bad = await fetch(`${base}/api/public/somo-demo/request-call`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -34,7 +34,7 @@ async function main() {
 
   const prevEnabled = process.env.DODGECALL_DEMO_ENABLED;
   process.env.DODGECALL_DEMO_ENABLED = '0';
-  const disabled = await fetch(`${base}/api/public/dodgecall/request-call`, {
+  const disabled = await fetch(`${base}/api/public/somo-demo/request-call`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -54,7 +54,7 @@ async function main() {
   else delete process.env.DODGECALL_DEMO_ENABLED;
 
   if (process.env.DODGECALL_SMOKE_PLACE_CALL === '1') {
-    const ok = await fetch(`${base}/api/public/dodgecall/request-call`, {
+    const ok = await fetch(`${base}/api/public/somo-demo/request-call`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

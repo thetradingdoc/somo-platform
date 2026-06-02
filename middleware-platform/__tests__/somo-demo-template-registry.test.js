@@ -1,6 +1,6 @@
 'use strict';
 
-describe('dodgecall-template-registry', () => {
+describe('somo-demo-template-registry', () => {
   const orig = {
     dodgeAgent: process.env.DODGECALL_RETELL_AGENT_ID,
     dodgeFrom: process.env.DODGECALL_TWILIO_FROM_NUMBER,
@@ -31,7 +31,7 @@ describe('dodgecall-template-registry', () => {
     process.env.DODGECALL_RETELL_AGENT_ID = 'agent_demo_test';
     process.env.DODGECALL_TWILIO_FROM_NUMBER = '+15555550100';
     jest.resetModules();
-    const { resolveTemplate } = require('../services/dodgecall-template-registry');
+    const { resolveTemplate } = require('../services/somo-demo-template-registry');
     const t = resolveTemplate({ use_case: 'receptionist' });
     expect(t.template_id).toBe('medical');
     expect(t.agentId).toBe('agent_demo_test');
@@ -47,7 +47,7 @@ describe('dodgecall-template-registry', () => {
     process.env.RETELL_AGENT_ID = 'agent_kelly_fallback';
     process.env.TWILIO_PHONE_NUMBER = '+15555550999';
     jest.resetModules();
-    const { resolveTemplate } = require('../services/dodgecall-template-registry');
+    const { resolveTemplate } = require('../services/somo-demo-template-registry');
     const t = resolveTemplate({ use_case: 'receptionist' });
     expect(t.agentId).toBe('agent_kelly_fallback');
     expect(t.fromNumber).toBe('+15555550999');
@@ -59,7 +59,7 @@ describe('dodgecall-template-registry', () => {
     delete process.env.RETELL_AGENT_ID;
     process.env.DODGECALL_TWILIO_FROM_NUMBER = '+15555550100';
     jest.resetModules();
-    const { resolveTemplate } = require('../services/dodgecall-template-registry');
+    const { resolveTemplate } = require('../services/somo-demo-template-registry');
     expect(() => resolveTemplate({ use_case: 'survey' })).toThrow(
       /DODGECALL_RETELL_AGENT_ID|RETELL_AGENT_ID/
     );
@@ -76,7 +76,7 @@ describe('dodgecall-template-registry', () => {
     process.env.DODGECALL_RETELL_AGENT_ID = 'agent_demo_test';
     process.env.DODGECALL_TWILIO_FROM_NUMBER = '+15555550100';
     jest.resetModules();
-    const { resolveTemplate } = require('../services/dodgecall-template-registry');
+    const { resolveTemplate } = require('../services/somo-demo-template-registry');
     const t = resolveTemplate({ use_case: useCase });
     expect(t.template_id).toBe('medical');
   });

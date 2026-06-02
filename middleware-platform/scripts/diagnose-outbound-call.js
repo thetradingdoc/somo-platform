@@ -276,7 +276,7 @@ async function testRetellAgentConfiguration() {
     logInfo('Updating agent configuration...');
     const updateResult = await retellService.updateAgent(salesAgentId, {
       system_prompt: salesPrompt,
-      agent_name: 'DocLittle Sales Agent - Alex',
+      agent_name: 'Somo Sales Agent - Alex',
       functions: salesFunctions
     });
     

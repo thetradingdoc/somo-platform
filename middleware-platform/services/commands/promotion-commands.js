@@ -427,7 +427,7 @@ class PromotionCommands {
                         code: promotion.code,
                         end_date: promotion.end_date
                     },
-                    merchant?.name || 'DocLittle'
+                    merchant?.name || 'Somo'
                 );
                 sent++;
             } catch (error) {

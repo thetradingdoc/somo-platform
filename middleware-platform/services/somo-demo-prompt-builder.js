@@ -13,7 +13,7 @@ function loadPlaybook() {
     '..',
     'docs',
     'agent',
-    'dodgecall',
+    'somo-demo',
     'PLAYBOOK_MEDICAL.md'
   );
   _playbookCache = fs.readFileSync(playbookPath, 'utf8');
@@ -29,10 +29,10 @@ function buildSystemPrompt({ stage, context }) {
     prospect_name = 'there',
     use_case_label = 'Receptionist',
     persona_name = 'Sam',
-    company_name = 'DodgeCall'
+    company_name = 'Somo demo'
   } = context || {};
 
-  return `You are ${persona_name}, a DodgeCall AI phone agent on a live product demo call.
+  return `You are ${persona_name}, a Somo demo AI phone agent on a live product demo call.
 
 CURRENT_STAGE: ${stage}
 
@@ -41,9 +41,9 @@ USE_CASE_SELECTED: ${use_case_label}
 COMPANY: ${company_name}
 
 RULES:
-- Goal: help the prospect understand DodgeCall and sign up — not medical care or real PHI.
+- Goal: help the prospect understand Somo demo and sign up — not medical care or real PHI.
 - Keep replies under 3 sentences unless answering a direct question.
-- Never say you are Kelly or DocLittle.
+- Never say you are Kelly; you represent Somo.
 - Use tools when appropriate: send_signup_link, record_interest, end_call.
 
 PLAYBOOK:

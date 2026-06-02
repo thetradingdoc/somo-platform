@@ -1,4 +1,4 @@
-# Staging sign-off checklist (myskinandcare.com)
+# Staging sign-off checklist (callsomo.com)
 
 Complete after `./scripts/deploy-staging-all.sh` or `.github/workflows/deploy-staging.yml`.
 
@@ -25,7 +25,7 @@ export SOMO_OWNER_EMAIL=...
 export SOMO_OWNER_PASSWORD=...
 
 npm run staging:preflight
-API_BASE_URL=https://api.myskinandcare.com STAGING_SMS_CODE=... npm run staging:trial-provision
+API_BASE_URL=https://api.callsomo.com STAGING_SMS_CODE=... npm run staging:trial-provision
 npm run test:e2e:staging-signup
 npm run test:e2e:staging-voice
 
@@ -35,10 +35,10 @@ npm run staging:call-verify -- --customer-id=<trial-customer-id>
 
 ## Manual checklist
 
-- [ ] https://myskinandcare.com/ — landing loads, demo CTA visible
-- [ ] https://myskinandcare.com/signup?fresh=1 — SIM trial signup completes
-- [ ] https://myskinandcare.com/login — owner login (`SOMO_OWNER_EMAIL`)
-- [ ] https://myskinandcare.com/business/agent.html — greeting save + Retell sync
+- [ ] https://callsomo.com/ — landing loads, demo CTA visible
+- [ ] https://callsomo.com/signup?fresh=1 — SIM trial signup completes
+- [ ] https://callsomo.com/login — owner login (`SOMO_OWNER_EMAIL`)
+- [ ] https://callsomo.com/business/agent.html — greeting save + Retell sync
 - [ ] Inbound call to staging Twilio line → agent answers; `voice_call_log.customer_id` = owner
 - [ ] Redeploy API (`./scripts/deploy-to-gcp.sh`) → owner + trial data **still present** (GCS SQLite + Cloud SQL mirror)
 
@@ -54,7 +54,7 @@ cd middleware-platform && npm run bootstrap:staging
 
 Twilio voice URL must be:
 
-`https://api.myskinandcare.com/voice/incoming?customer_id=<OWNER_CUSTOMER_ID>`
+`https://api.callsomo.com/voice/incoming?customer_id=<OWNER_CUSTOMER_ID>`
 
 ## Rollback drill
 
@@ -66,7 +66,7 @@ Twilio voice URL must be:
 ## Related
 
 - [STAGING_DIAGNOSTIC_RUNBOOK.md](../testing/STAGING_DIAGNOSTIC_RUNBOOK.md)
-- [STAGING_MYSKINANDCARE.md](./STAGING_MYSKINANDCARE.md)
+- [CALLSOMO_GCP_CUTOVER.md](../runbooks/CALLSOMO_GCP_CUTOVER.md)
 - [STAGING_TRIAL_ROLLOUT.md](./STAGING_TRIAL_ROLLOUT.md)
 - [STAGING_CLOUDSQL.md](./STAGING_CLOUDSQL.md)
 - [GCP_DEPLOY_ROLLBACK_RUNBOOK.md](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md)

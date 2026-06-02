@@ -6,7 +6,7 @@ const API_BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replac
 
 test.describe('Somo demo landing', () => {
   test('hero and demo form submit (mocked API)', async ({ page }) => {
-    await page.route('**/api/public/dodgecall/request-call', async (route) => {
+    await page.route('**/api/public/somo-demo/request-call', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -155,13 +155,13 @@ test.describe('Somo demo landing', () => {
 
   test('request-call API validates consent', async ({ request }) => {
     try {
-      const health = await request.get(`${API_BASE}/api/public/dodgecall/health`);
+      const health = await request.get(`${API_BASE}/api/public/somo-demo/health`);
       if (!health.ok()) test.skip(true, 'Middleware not running');
     } catch {
       test.skip(true, 'Middleware not reachable');
     }
 
-    const res = await request.post(`${API_BASE}/api/public/dodgecall/request-call`, {
+    const res = await request.post(`${API_BASE}/api/public/somo-demo/request-call`, {
       data: {
         name: 'Test',
         phone: '+15555550123',

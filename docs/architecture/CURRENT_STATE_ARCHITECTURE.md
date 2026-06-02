@@ -8,7 +8,7 @@
 
 ## 1) Executive Summary
 
-Somo (myskinandcare.com) and legacy DocLittle surfaces share a Node/Express middleware (`middleware-platform`) that orchestrates:
+Somo (callsomo.com) and legacy Somo surfaces share a Node/Express middleware (`middleware-platform`) that orchestrates:
 
 - Voice workflows (Retell + Twilio + booking/payment/insurance tools)
 - Patient web portal and native mobile app experiences

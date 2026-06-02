@@ -87,7 +87,7 @@ Set in `.env` before production claim submit. See `InsuranceService.getStediClai
 
 Register in the [Stedi dashboard](https://www.stedi.com/) (production):
 
-`https://api.myskinandcare.com/webhooks/stedi/claim-status`
+`https://api.callsomo.com/webhooks/stedi/claim-status`
 
 Set `STEDI_WEBHOOK_SECRET` in Render/middleware `.env` to match Stedi if HMAC verification is enabled. Handler: `routes/stedi-webhooks.js`.
 

@@ -439,10 +439,10 @@ function getSignupAttribution(customer) {
   }
 }
 
-function isDodgecallSignup(customer) {
+function isSomoDemoSignup(customer) {
   const attr = getSignupAttribution(customer);
   const source = String(attr.utm_source || '').toLowerCase();
-  return source === 'dodgecall' || source === 'somo';
+  return source === 'somo-demo' || source === 'somo';
 }
 
 module.exports = {
@@ -462,6 +462,6 @@ module.exports = {
   convertTrialToPaid,
   markTrialExhaustedIfNeeded,
   getSignupAttribution,
-  isDodgecallSignup,
+  isSomoDemoSignup,
   getTrialInactivityReleaseDays
 };

@@ -13,7 +13,7 @@ function getFromNumber() {
 }
 
 function getSignupUrl() {
-  const base = process.env.DODGECALL_SIGNUP_URL || '/signup?utm_source=dodgecall';
+  const base = process.env.SOMO_DEMO_SIGNUP_URL || '/signup?utm_source=somo-demo';
   if (base.startsWith('http')) return base;
   const apiBase = (process.env.API_BASE_URL || process.env.BASE_URL || '').replace(/\/+$/, '');
   if (apiBase) return `${apiBase}${base.startsWith('/') ? base : `/${base}`}`;
@@ -21,7 +21,7 @@ function getSignupUrl() {
 }
 
 /**
- * Send DodgeCall signup link SMS (demo/marketing path — not patient SMS).
+ * Send Somo demo signup link SMS (demo/marketing path — not patient SMS).
  */
 async function sendSignupLink(phoneNumber, { prospectName } = {}) {
   const formatted = SMSService.formatPhoneNumber(phoneNumber);
@@ -29,7 +29,7 @@ async function sendSignupLink(phoneNumber, { prospectName } = {}) {
 
   const url = getSignupUrl();
   const greeting = prospectName ? `Hi ${prospectName.split(' ')[0]},` : 'Hi,';
-  const message = `${greeting} here is your DodgeCall signup link: ${url} — Reply STOP to opt out.`;
+  const message = `${greeting} here is your Somo demo signup link: ${url} — Reply STOP to opt out.`;
 
   if (SMSService.isTestNumber(formatted)) {
     return {

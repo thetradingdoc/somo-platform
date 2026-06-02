@@ -2101,7 +2101,7 @@ db.exec(`
     start_time DATETIME NOT NULL,
     end_time DATETIME NOT NULL,
     duration_minutes INTEGER DEFAULT 50,
-    provider TEXT DEFAULT 'DocLittle Mental Health Team',
+    provider TEXT DEFAULT 'Somo Care Team',
     status TEXT DEFAULT 'scheduled',
     payment_status TEXT DEFAULT 'unpaid',
     requires_prior_auth INTEGER DEFAULT 0,
@@ -3833,11 +3833,11 @@ function migrateProviderTrialSim() {
   }
 }
 
-// Migration: DodgeCall public demo requests
-function migrateDodgecallDemoRequests() {
+// Migration: Somo demo public demo requests
+function migrateSomoDemoRequests() {
   try {
     db.exec(`
-      CREATE TABLE IF NOT EXISTS dodgecall_demo_requests (
+      CREATE TABLE IF NOT EXISTS somo_demo_requests (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         phone TEXT NOT NULL,
@@ -3849,9 +3849,9 @@ function migrateDodgecallDemoRequests() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_phone ON dodgecall_demo_requests(phone);
-      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_created ON dodgecall_demo_requests(created_at);
-      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_ip_created ON dodgecall_demo_requests(client_ip, created_at);
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_phone ON somo_demo_requests(phone);
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_created ON somo_demo_requests(created_at);
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_ip_created ON somo_demo_requests(client_ip, created_at);
     `);
     const extraCols = [
       ['template_id', 'TEXT'],
@@ -3865,16 +3865,27 @@ function migrateDodgecallDemoRequests() {
       ['attribution_json', 'TEXT']
     ];
     const existing = new Set(
-      db.prepare('PRAGMA table_info(dodgecall_demo_requests)').all().map((c) => c.name)
+      db.prepare('PRAGMA table_info(somo_demo_requests)').all().map((c) => c.name)
     );
     for (const [col, type] of extraCols) {
       if (!existing.has(col)) {
-        db.exec(`ALTER TABLE dodgecall_demo_requests ADD COLUMN ${col} ${type}`);
+        db.exec(`ALTER TABLE somo_demo_requests ADD COLUMN ${col} ${type}`);
       }
     }
-    console.log('✅ Migration complete: dodgecall_demo_requests');
+    const legacyExists = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='dodgecall_demo_requests'"
+      )
+      .get();
+    if (legacyExists) {
+      db.exec(`
+        INSERT OR IGNORE INTO somo_demo_requests
+        SELECT * FROM dodgecall_demo_requests
+      `);
+    }
+    console.log('✅ Migration complete: somo_demo_requests');
   } catch (error) {
-    console.error('❌ DodgeCall demo migration failed:', error.message);
+    console.error('❌ Somo demo migration failed:', error.message);
   }
 }
 
@@ -5797,7 +5808,7 @@ runStartupMigrations(
     migrateCustomerCreditsExpiration,
     migrateVoiceSubscriptionBilling,
     migrateProviderTrialSim,
-    migrateDodgecallDemoRequests,
+    migrateSomoDemoRequests,
     migrateFHIRPatientsMerchantId,
     migrateFHIRPatientsMergedInto,
     migrateCircleAccountsMerchantId,
@@ -10463,7 +10474,10 @@ module.exports = {
 
     const patientId = encounterResource.subject?.reference?.replace('Patient/', '');
     const callId = encounterResource.extension?.find(
-      e => e.url === 'https://doclittle.health/extension/voice-call-id'
+      e => {
+        const fhirIds = require('./lib/fhir-brand-identifiers');
+        return fhirIds.matchesExtensionUrl(e.url, 'voice-call-id');
+      }
     )?.valueString;
 
     return stmt.run(
@@ -16612,10 +16626,10 @@ module.exports = {
     `).run(customerId);
   },
 
-  insertDodgecallDemoRequest(row) {
+  insertSomoDemoRequest(row) {
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO dodgecall_demo_requests (
+      INSERT INTO somo_demo_requests (
         id, name, phone, use_case, template_id, status, client_ip, attribution_json, created_at, updated_at
       )
       VALUES (
@@ -16636,7 +16650,7 @@ module.exports = {
     return row.id;
   },
 
-  updateDodgecallDemoRequest(id, patch) {
+  updateSomoDemoRequest(id, patch) {
     if (!id) return;
     const fields = [];
     const params = { id, updated_at: new Date().toISOString() };
@@ -16662,44 +16676,44 @@ module.exports = {
     }
     if (!fields.length) return;
     fields.push('updated_at = @updated_at');
-    db.prepare(`UPDATE dodgecall_demo_requests SET ${fields.join(', ')} WHERE id = @id`).run(params);
+    db.prepare(`UPDATE somo_demo_requests SET ${fields.join(', ')} WHERE id = @id`).run(params);
   },
 
-  countDodgecallDemoRequestsToday() {
+  countSomoDemoRequestsToday() {
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const row = db
       .prepare(
-        `SELECT COUNT(*) AS c FROM dodgecall_demo_requests WHERE created_at >= ?`
+        `SELECT COUNT(*) AS c FROM somo_demo_requests WHERE created_at >= ?`
       )
       .get(dayAgo);
     return row?.c || 0;
   },
 
-  countActiveDodgecallDemoCalls() {
+  countActiveSomoDemoCalls() {
     const row = db
       .prepare(
-        `SELECT COUNT(*) AS c FROM dodgecall_demo_requests
+        `SELECT COUNT(*) AS c FROM somo_demo_requests
          WHERE status IN ('initiated', 'ringing', 'answered', 'in-progress')`
       )
       .get();
     return row?.c || 0;
   },
 
-  getDodgecallDemoRequest(id) {
+  getSomoDemoRequest(id) {
     if (!id) return null;
-    return db.prepare('SELECT * FROM dodgecall_demo_requests WHERE id = ?').get(id) || null;
+    return db.prepare('SELECT * FROM somo_demo_requests WHERE id = ?').get(id) || null;
   },
 
-  countDodgecallDemoRequestsSince({ client_ip, phone, since, statuses }) {
+  countSomoDemoRequestsSince({ client_ip, phone, since, statuses }) {
     if (client_ip) {
       const row = db.prepare(`
-        SELECT COUNT(*) AS c FROM dodgecall_demo_requests
+        SELECT COUNT(*) AS c FROM somo_demo_requests
         WHERE client_ip = ? AND created_at >= ?
       `).get(client_ip, since);
       return row?.c || 0;
     }
     if (phone) {
-      let sql = `SELECT COUNT(*) AS c FROM dodgecall_demo_requests WHERE phone = ? AND created_at >= ?`;
+      let sql = `SELECT COUNT(*) AS c FROM somo_demo_requests WHERE phone = ? AND created_at >= ?`;
       const params = [phone, since];
       if (statuses && statuses.length) {
         sql += ` AND status IN (${statuses.map(() => '?').join(',')})`;
@@ -17678,7 +17692,7 @@ module.exports = {
 
     const leadPayload = {
       title: options.title || `Inbound - ${customer.use_case || 'API Signup'}`,
-      clinic_name: customer.company_name || customer.name || 'DocLittle Prospect',
+      clinic_name: customer.company_name || customer.name || 'Somo Prospect',
       clinic_phone: customer.phone_number || null,
       clinic_email: normalizedEmail,
       location: customer.business_size || customer.use_case || null,

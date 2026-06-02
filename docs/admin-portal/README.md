@@ -111,7 +111,7 @@ A Node.js script is available to test all admin portal routes:
 node middleware-platform/scripts/test-admin-routes.js http://localhost:4000
 
 # Test against production (if accessible)
-node middleware-platform/scripts/test-admin-routes.js https://doclittle.site
+node middleware-platform/scripts/test-admin-routes.js https://api.callsomo.com
 ```
 
 **What it tests:**
@@ -212,7 +212,7 @@ Root-level access (should be blocked):
 
 **Last Updated:** April 9, 2026
 
-Documentation for the DocLittle admin portal (unified dashboard admin section).
+Documentation for the Somo admin portal (unified dashboard admin section).
 
 ## Documents
 

@@ -18,17 +18,17 @@ CTAs use `VITE_SIGNUP_URL` or `/signup?utm_source=somo`. The signup wizard ([sig
 |-------|------|
 | Landing (Vite + React) | `unified-dashboard/somo-landing/` |
 | Public demo API | `POST /api/public/dodgecall/request-call` (internal path; deferred rename) |
-| Service | `middleware-platform/services/dodgecall-demo-service.js` |
-| Telephony | `call_type=dodgecall_demo` on `/voice/incoming` |
+| Service | `middleware-platform/services/somo-demo-service.js` |
+| Telephony | `call_type=somo_demo` on `/voice/incoming` |
 | Archived legacy landing | `unified-dashboard/_archive/littlelab-landing/` |
 
 ## Hosts
 
 | Host | Serves |
 |------|--------|
-| `https://myskinandcare.com` | Somo landing (Firebase Hosting → `somo-landing/build`) |
+| `https://callsomo.com` | Somo landing (Firebase Hosting → `somo-landing/build`) |
 | `http://localhost:4000/` | Somo landing (middleware, local dev) |
-| `https://api.myskinandcare.com` | Middleware API only |
+| `https://api.callsomo.com` | Middleware API only |
 
 Legacy marketing paths (`/shop`, `/landing`, `/find-provider`, etc.) redirect to `/`.
 
@@ -99,7 +99,7 @@ TWILIO_OUTBOUND_WEBHOOK_URL=https://YOUR-SUBDOMAIN.ngrok-free.app  # for real de
 npm run deploy:landing-hosting
 ```
 
-Builds `somo-landing` and deploys to Firebase Hosting (`myskinandcare.com`).
+Builds `somo-landing` and deploys to Firebase Hosting (`callsomo.com`).
 
 ## Scripts
 

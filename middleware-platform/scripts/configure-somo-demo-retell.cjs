@@ -2,8 +2,8 @@
 'use strict';
 
 /**
- * Configure DodgeCall demo Retell agent (isolated from Kelly configure-retell.js).
- * Run: npm run configure:dodgecall-demo
+ * Configure Somo demo demo Retell agent (isolated from Kelly configure-retell.js).
+ * Run: npm run configure:somo-demo
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const axios = require('axios');
@@ -46,7 +46,7 @@ function loadDemoPrompt() {
     '..',
     'docs',
     'agent',
-    'dodgecall',
+    'somo-demo',
     'prompts',
     'demo-voice-prompt.md'
   );
@@ -78,7 +78,7 @@ const DEMO_TOOLS = [
   {
     type: 'custom',
     name: 'send_signup_link',
-    description: 'Text the prospect a DodgeCall signup link.',
+    description: 'Text the prospect a Somo demo signup link.',
     parameters: { type: 'object', properties: {} }
   }
 ];
@@ -97,7 +97,7 @@ async function main() {
   const retellApiBase = process.env.RETELL_API_BASE_URL || 'https://api.retellai.com';
 
   const updateData = {
-    agent_name: 'DodgeCall Demo — Medical',
+    agent_name: 'Somo demo Demo — Medical',
     voice_id: VOICE_ID,
     language: 'en-US',
     response_engine: {
@@ -110,7 +110,7 @@ async function main() {
     general_tools: DEMO_TOOLS
   };
 
-  console.log('Updating DodgeCall demo agent', AGENT_ID);
+  console.log('Updating Somo demo demo agent', AGENT_ID);
   console.log('WebSocket:', updateData.response_engine.llm_websocket_url);
   console.log('Voice:', VOICE_ID);
 
@@ -121,7 +121,7 @@ async function main() {
     }
   });
 
-  console.log('DodgeCall demo agent configured successfully.');
+  console.log('Somo demo demo agent configured successfully.');
 }
 
 main().catch((err) => {

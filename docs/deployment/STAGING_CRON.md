@@ -1,6 +1,6 @@
 # Staging scheduled jobs (Cloud Scheduler)
 
-Trial maintenance and optional DLQ workers on **staging** (`api.myskinandcare.com`).
+Trial maintenance and optional DLQ workers on **staging** (`api.callsomo.com`).
 
 ## Jobs
 

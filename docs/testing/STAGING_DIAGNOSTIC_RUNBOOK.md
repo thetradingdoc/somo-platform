@@ -1,8 +1,8 @@
 # Staging diagnostic runbook (Playwright + live Twilio)
 
 **Last updated:** 2026-05-30  
-**Hosts:** UI `https://myskinandcare.com` · API `https://api.myskinandcare.com`  
-**SSOT deploy:** [STAGING_MYSKINANDCARE.md](../deployment/STAGING_MYSKINANDCARE.md)
+**Hosts:** UI `https://callsomo.com` · API `https://api.callsomo.com`  
+**SSOT deploy:** [CALLSOMO_GCP_CUTOVER.md](../runbooks/CALLSOMO_GCP_CUTOVER.md)
 
 This runbook implements the four-pillar staging audit: **signup**, **Twilio provisioning**, **agent**, **inbound calls**. Each step has a step ID for pass/fail tracking and a primary failure hypothesis.
 
@@ -18,8 +18,8 @@ This runbook implements the four-pillar staging audit: **signup**, **Twilio prov
 | `TRIAL_E2E_PHONE` | Handset that receives **real** Twilio Verify SMS on staging |
 | `STAGING_SMS_CODE` | Latest SMS code (set before phone step / `staging:trial-provision`) |
 | `SOMO_OWNER_EMAIL` / `SOMO_OWNER_PASSWORD` | Owner login for voice-agent tests (GCP secret locally) |
-| `API_BASE_URL` | `https://api.myskinandcare.com` for API smokes |
-| `RETELL_API_KEY` / `RETELL_LLM_WEBSOCKET_URL` | Cloud Run — agent create + Kelly WS (`wss://api.myskinandcare.com/webhook/retell/llm`) |
+| `API_BASE_URL` | `https://api.callsomo.com` for API smokes |
+| `RETELL_API_KEY` / `RETELL_LLM_WEBSOCKET_URL` | Cloud Run — agent create + Kelly WS (`wss://api.callsomo.com/webhook/retell/llm`) |
 
 Download staging DB (example):
 
@@ -101,7 +101,7 @@ npm run test:e2e:staging-signup-api --prefix middleware-platform
 
 ```bash
 cd middleware-platform
-API_BASE_URL=https://api.myskinandcare.com \
+API_BASE_URL=https://api.callsomo.com \
 STAGING_DB_PATH=... \
 TRIAL_E2E_PHONE=+1... \
 STAGING_SMS_CODE=... \
@@ -110,7 +110,7 @@ npm run staging:trial-provision
 
 | Step ID | Check |
 |---------|--------|
-| T1 | Twilio console: voice URL `https://api.myskinandcare.com/voice/incoming?customer_id={CUSTOMER_ID}` |
+| T1 | Twilio console: voice URL `https://api.callsomo.com/voice/incoming?customer_id={CUSTOMER_ID}` |
 | T2 | `customers.twilio_phone_sid` matches Twilio Phone SID |
 | T3 | Webhook not pointing at ngrok/local |
 | T4 | `node scripts/audit-voice-twilio-numbers.cjs` — no orphans |
@@ -149,10 +149,10 @@ Uses **real** `/api/voice-agent/settings` and `/api/kelly/*` (no Playwright mock
 Optional Retell check:
 
 ```bash
-API_BASE_URL=https://api.myskinandcare.com node configure-retell.js
+API_BASE_URL=https://api.callsomo.com node configure-retell.js
 ```
 
-Dashboard: agent WS = `wss://api.myskinandcare.com/webhook/retell/llm`
+Dashboard: agent WS = `wss://api.callsomo.com/webhook/retell/llm`
 
 ### Agent failure matrix
 
@@ -171,7 +171,7 @@ Dashboard: agent WS = `wss://api.myskinandcare.com/webhook/retell/llm`
 
 ```bash
 # Confirm TWILIO_WEBHOOK_SIGNATURE_REQUIRED on staging first
-node scripts/test-voice-incoming-gate.cjs --base=https://api.myskinandcare.com
+node scripts/test-voice-incoming-gate.cjs --base=https://api.callsomo.com
 ```
 
 ### C2 — Manual inbound call (operator)

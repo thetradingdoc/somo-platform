@@ -1,7 +1,9 @@
 # Codebase Batch Review And Documentation Gaps
 
-**Last Updated:** 2026-05-30  
+**Last Updated:** 2026-06-02  
 **Purpose:** Tracked documentation gap list from a batched code review. **Surface map:** [`SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md).
+
+> **Priorities:** For P0/P1 engineering work, use [`architecture/CODEBASE_REVIEW_ROADMAP.md`](../architecture/CODEBASE_REVIEW_ROADMAP.md). This file is a discoverability backlog, not the sprint plan.
 1) whole codebase, 2) `routes/`, 3) `services/`.
 
 ---

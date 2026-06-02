@@ -163,7 +163,7 @@ We implement industry-standard security measures including:
 - Backup data may be retained for up to 90 days after deletion
 
 ### 8.3 Privacy Policy
-Our Privacy Policy, available at `doclittle.site/privacy`, governs how we collect, use, and disclose your information.
+Our Privacy Policy, available at `api.callsomo.com/privacy`, governs how we collect, use, and disclose your information.
 
 ## 9. Service Availability and Modifications
 
@@ -180,8 +180,8 @@ Our Privacy Policy, available at `doclittle.site/privacy`, governs how we collec
 ## 10. Support and Service Level Agreement
 
 ### 10.1 Support
-- Email support: support@doclittle.site
-- Documentation: api.doclittle.site/docs
+- Email support: support@api.callsomo.com
+- Documentation: api.api.callsomo.com/docs
 - Response time targets:
   - **Standard**: 48 hours
   - **Urgent**: 24 hours (for enterprise accounts)
@@ -271,9 +271,9 @@ Notices may be sent via email to the address associated with your account or pos
 ## 18. Contact Information
 
 **Somo**  
-Email: support@doclittle.site  
-API Documentation: https://api.doclittle.site/docs  
-Website: https://doclittle.site
+Email: support@api.callsomo.com  
+API Documentation: https://api.api.callsomo.com/docs  
+Website: https://api.callsomo.com
 
 ---
 

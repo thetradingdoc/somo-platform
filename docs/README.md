@@ -7,10 +7,12 @@
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
 > **Overlapping topics:** start with **[meta/CANONICAL_DOC_MAP.md](./meta/CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
 
-### Consumer brand (Skin & Care / skinandcare)
+### Consumer brand (Somo)
 
-- **Single source of truth:** **[Brand guidelines](./Brand/GUIDELINES.md)** — palette, typography, S&C lockup, scope vs provider admin CSS.
+- **Single source of truth:** **[SOMO_GUIDELINES.md](./Brand/SOMO_GUIDELINES.md)** — naming, tokens, typography.
+- **Logo / favicon / email HTML:** **[LOGO_AND_ICON_SSOT.md](./Brand/LOGO_AND_ICON_SSOT.md)**
 - **Index:** **[Brand folder README](./Brand/README.md)**
+- **Doc hygiene (what to read first):** **[meta/ENGINEERING_DOC_HYGIENE.md](./meta/ENGINEERING_DOC_HYGIENE.md)**
 
 ### Documentation placement policy (April 2026)
 

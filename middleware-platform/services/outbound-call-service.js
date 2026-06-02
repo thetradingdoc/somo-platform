@@ -2,7 +2,7 @@
 
 const db = require('../database');
 const twilio = require('twilio');
-const { resolveTemplate } = require('./dodgecall-template-registry');
+const { resolveTemplate } = require('./somo-demo-template-registry');
 const { resolveTelephonyWebhookBase } = require('../utils/telephony-webhook-base');
 
 /**
@@ -51,9 +51,9 @@ async function initiateOutboundCall({ phone_number, merchantId, customer_id, cal
 }
 
 /**
- * Public DodgeCall landing demo — no merchant context.
+ * Public Somo demo landing demo — no merchant context.
  */
-async function initiateDodgecallDemoCall({
+async function initiateSomoDemoDemoCall({
   phone_number,
   demo_request_id,
   use_case,
@@ -70,14 +70,14 @@ async function initiateDodgecallDemoCall({
 
   const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
   const webhookUrl = new URL(`${apiBase}/voice/incoming`);
-  webhookUrl.searchParams.set('call_type', 'dodgecall_demo');
+  webhookUrl.searchParams.set('call_type', 'somo_demo');
   webhookUrl.searchParams.set('agent_id', retellAgentId);
   if (demo_request_id) webhookUrl.searchParams.set('demo_request_id', String(demo_request_id));
   if (use_case) webhookUrl.searchParams.set('use_case', String(use_case));
   if (prospect_name) webhookUrl.searchParams.set('prospect_name', encodeURIComponent(String(prospect_name)));
 
   const statusCallback = `${apiBase}/voice/status-callback`;
-  const amdCallback = `${apiBase}/voice/dodgecall-amd-callback`;
+  const amdCallback = `${apiBase}/voice/somo-demo-amd-callback`;
 
   const twilioCall = await twilioClient.calls.create({
     from: fromNumber,
@@ -100,4 +100,4 @@ async function initiateDodgecallDemoCall({
   };
 }
 
-module.exports = { initiateOutboundCall, initiateDodgecallDemoCall, resolveTemplate };
+module.exports = { initiateOutboundCall, initiateSomoDemoDemoCall, resolveTemplate };

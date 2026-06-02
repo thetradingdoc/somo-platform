@@ -1,6 +1,6 @@
 # callsomo.com GCP cutover (project `somo-callsomo`)
 
-**Status (2026-06-01):** Cloud Run `myskin-middleware` is deployed. Domain mapping for `api.callsomo.com` exists. Finish DNS, Firebase, org policy, and webhooks below.
+**Status (2026-06-01):** Cloud Run `myskin-middleware` is deployed. `api.callsomo.com` and Firebase Hosting (`somo-4ddf6`, `callsomo.com`) are live. Finish registrar/DNS edge cases and vendor webhooks as needed.
 
 | Project | ID | Role |
 |---------|-----|------|
@@ -15,6 +15,39 @@ ID `somo` alone is too short for GCP (min 6 characters).
 | API | `https://api.callsomo.com` |
 | Cloud Run URL (direct) | `gcloud run services describe myskin-middleware --region=us-central1 --project=somo-callsomo --format='value(status.url)'` |
 
+## Local gcloud and ADC
+
+CLI account and **Application Default Credentials** are separate. Scripts using `google-auth-library` read ADC from `~/.config/gcloud/application_default_credentials.json`, not the active `gcloud` account.
+
+Use **`richard@callsomo.com`** for both (not `richard@callsomo.com`):
+
+```bash
+gcloud config set account richard@callsomo.com
+gcloud config set project somo-callsomo
+gcloud auth application-default login   # browser — sign in as richard@callsomo.com
+gcloud auth application-default set-quota-project somo-callsomo
+```
+
+Verify ADC email:
+
+```bash
+curl -sS "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=$(gcloud auth application-default print-access-token)" | grep email
+```
+
+If quota-project update fails with `serviceusage.services.use`, the ADC file is still on the wrong Google account — revoke and log in again:
+
+```bash
+gcloud auth application-default revoke
+gcloud auth application-default login
+```
+
+Remove legacy CLI account after switching:
+
+```bash
+gcloud auth revoke richard@callsomo.com
+gcloud auth list   # should show only richard@callsomo.com
+```
+
 ## 1. DNS for API
 
 | Name | Type | Value |
@@ -28,11 +61,11 @@ gcloud beta run domain-mappings describe --domain=api.callsomo.com \
 
 ## 2. Firebase Hosting (UI)
 
-Firebase is **not** linked yet (API returned 403). As `richard@callsomo.com`:
+Firebase Hosting project **`somo-4ddf6`** serves **`callsomo.com`** (verify with `npm run gcp:bootstrap:check`). As `richard@callsomo.com`:
 
-1. Open [Firebase Console](https://console.firebase.google.com/) → **Add project** → select existing GCP project **somo-callsomo**.
-2. Enable Hosting (project **`somo-4ddf6`** in Firebase Console).
-3. Deploy from repo (must use **`richard@callsomo.com`** for Firebase CLI, not `drlittlekids@gmail.com`):
+1. [Firebase Console](https://console.firebase.google.com/) → project **`somo-4ddf6`** → Hosting.
+2. Custom domain **`callsomo.com`** — DNS A `199.36.158.100`, TXT `hosting-site=somo-4ddf6`.
+3. Deploy from repo:
 
 ```bash
 firebase logout
@@ -158,6 +191,6 @@ npm run test:e2e:callsomo:smoke --prefix middleware-platform
 
 After 24–48h on callsomo.com:
 
-1. 301 `myskinandcare.com` → `https://callsomo.com`
+1. 301 `callsomo.com` → `https://callsomo.com`
 2. Remove domain mappings on `doctor-little-c688d`
 3. Disable billing on old project if unused

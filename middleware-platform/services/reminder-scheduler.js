@@ -341,7 +341,7 @@ class ReminderScheduler {
         return;
       }
 
-      const subject = metadata.subject || activity.activity_subject || 'Email from DocLittle';
+      const subject = metadata.subject || activity.activity_subject || 'Email from Somo';
       const content = metadata.content || activity.activity_description || '';
 
       console.log(`📧 Sending scheduled email to ${lead.clinic_email} (Lead: ${lead.clinic_name})`);

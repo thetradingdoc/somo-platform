@@ -1,6 +1,6 @@
 # Brand documentation index
 
-> **Last reviewed:** 2026-05-30
+> **Last reviewed:** 2026-06-02
 
 ## Canonical brand guide
 
@@ -14,3 +14,5 @@
 - [docs/meta/CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md)
 - [docs/meta/SURFACE_OWNERSHIP_MAP.md](../meta/SURFACE_OWNERSHIP_MAP.md)
 - [QA_MATRIX.md](./QA_MATRIX.md)
+- [Transactional email HTML](../../middleware-platform/lib/somo-email-layout.js) — see LOGO_AND_ICON_SSOT § Transactional email
+- [INFRA_BRAND_DEFERRAL.md](./INFRA_BRAND_DEFERRAL.md) — consumer vs GCP/internal names

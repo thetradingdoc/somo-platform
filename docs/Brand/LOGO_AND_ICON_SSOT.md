@@ -54,6 +54,16 @@ League Spartan “Somo” beside the official gecko is allowed; inventing a new 
 <img src="/assets/brand/somo-logo.png" alt="Somo" width="200" height="auto" />
 ```
 
+## Transactional email (HTML)
+
+All outbound templates use [`middleware-platform/lib/somo-email-layout.js`](../../middleware-platform/lib/somo-email-layout.js):
+
+- Header: official logo from `https://callsomo.com/assets/brand/somo-logo.png` (override with `SOMO_EMAIL_LOGO_URL`)
+- Colors: Somo green `#16a637`, MSU green header gradient, League Spartan stack
+- Footer: tagline, `callsomo.com`, `info@callsomo.com`
+
+Do not use CSS text logos (`<span class="doc">`) or legacy blue `#1e40af` in new templates.
+
 ## Favicon (all static HTML)
 
 ```html

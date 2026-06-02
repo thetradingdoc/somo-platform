@@ -242,7 +242,7 @@ Follow **[AGENTIC_CHECKOUT_E2E_CHECKLIST.md](./README.md#agentic-checkout-e2e-ch
 
 ## Staging diagnostic — signup, Twilio, agent, calls
 
-**Runbook:** [STAGING_DIAGNOSTIC_RUNBOOK.md](./STAGING_DIAGNOSTIC_RUNBOOK.md) — Playwright on `myskinandcare.com`, live Twilio provision smoke, post-call `voice_call_log` verification.
+**Runbook:** [STAGING_DIAGNOSTIC_RUNBOOK.md](./STAGING_DIAGNOSTIC_RUNBOOK.md) — Playwright on `callsomo.com`, live Twilio provision smoke, post-call `voice_call_log` verification.
 
 | npm script (`middleware-platform`) | Purpose |
 |-----------------------------------|---------|

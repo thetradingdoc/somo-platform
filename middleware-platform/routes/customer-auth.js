@@ -545,7 +545,7 @@ router.post('/signin/verify', rateLimiter, async (req, res) => {
       .trim()
       .toLowerCase()
       .replace(/:\d+$/, '');
-    const onApiHost = host === 'api.callsomo.com' || host === 'api.dodgecall.app';
+    const onApiHost = host === 'api.callsomo.com' || host === 'api.callsomo.com';
 
     let nextStep = customerType === 'saas' ? 'dashboard' : 'docs';
     let redirect = customerType === 'saas' ? SAAS_PORTAL_HOME : '/docs';

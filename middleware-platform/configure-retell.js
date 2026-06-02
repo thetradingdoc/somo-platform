@@ -266,7 +266,7 @@ async function configureRetellAgent() {
         if (healthcarePrompt) {
             generalPrompt = healthcarePrompt;
         } else {
-            generalPrompt = `You are Kelly, a helpful medical voice assistant for DocLittle. Your role is to:
+            generalPrompt = `You are Kelly, a helpful medical voice assistant for Somo. Your role is to:
 1. Help patients check their insurance coverage
 2. Book physician appointments
 3. Handle appointment confirmations, cancellations, and rescheduling

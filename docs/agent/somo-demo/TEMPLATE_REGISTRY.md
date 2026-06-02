@@ -1,8 +1,8 @@
-# DodgeCall template registry
+# Somo demo template registry
 
 **Last updated:** 2026-05-28
 
-Config file: [`middleware-platform/config/dodgecall-templates.json`](../../../middleware-platform/config/dodgecall-templates.json)
+Config file: [`middleware-platform/config/somo-demo-templates.json`](../../../middleware-platform/config/somo-demo-templates.json)
 
 ## Schema
 
@@ -34,7 +34,7 @@ Config file: [`middleware-platform/config/dodgecall-templates.json`](../../../mi
 | `debt_collection` | `medical` | Fictional balance demo |
 | `survey` | `medical` | Opener differs |
 
-Openers live in `dodgecall-demo-service.js` (`USE_CASE_OPENERS`); registry only resolves telephony + agent + duration.
+Openers live in `somo-demo-service.js` (`USE_CASE_OPENERS`); registry only resolves telephony + agent + duration.
 
 ## API
 

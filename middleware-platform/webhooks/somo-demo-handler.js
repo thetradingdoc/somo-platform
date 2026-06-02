@@ -1,10 +1,10 @@
 'use strict';
 
 const db = require('../database');
-const { isDemoEnabled } = require('../services/dodgecall-demo-service');
-const { resolveTemplate } = require('../services/dodgecall-template-registry');
-const orchestrator = require('../services/dodgecall-demo-orchestrator');
-const dodgecallSms = require('../services/dodgecall-sms');
+const { isDemoEnabled } = require('../services/somo-demo-service');
+const { resolveTemplate } = require('../services/somo-demo-template-registry');
+const orchestrator = require('../services/somo-demo-orchestrator');
+const somoDemoSms = require('../services/somo-demo-sms');
 const twilio = require('twilio');
 
 function getCallType(connection) {
@@ -22,13 +22,13 @@ function getCallType(connection) {
   );
 }
 
-function isDodgecallDemoConnection(connection) {
+function isSomoDemoDemoConnection(connection) {
   if (!isDemoEnabled()) return false;
-  if (connection._isDodgecallDemo === true) return true;
-  if (connection._isDodgecallDemo === false) return false;
+  if (connection._isSomoDemoDemo === true) return true;
+  if (connection._isSomoDemoDemo === false) return false;
   const callType = getCallType(connection);
-  const isDemo = callType === 'dodgecall_demo';
-  connection._isDodgecallDemo = isDemo;
+  const isDemo = callType === 'somo_demo';
+  connection._isSomoDemoDemo = isDemo;
   return isDemo;
 }
 
@@ -57,7 +57,7 @@ function extractDemoContext(connection) {
     use_case: dv.use_case || 'receptionist',
     use_case_label: dv.use_case_label || template.use_case_label,
     persona_name: template.personaName || 'Sam',
-    company_name: dv.company_name || 'DodgeCall',
+    company_name: dv.company_name || 'Somo demo',
     maxDurationSec: template.maxDurationSec || 240,
     prospect_phone: connection.customerPhone
   };
@@ -90,7 +90,7 @@ function sendDemoInitialGreeting(callId, connection, callMeta, responseId, sendF
   if (!connection || connection.sentInitialGreeting) return;
   const ctx = extractDemoContext(connection);
   const first = (ctx.prospect_name || 'there').split(' ')[0];
-  const opening = `Hi ${first}, this is ${ctx.persona_name} from DodgeCall. You asked for a quick live demo — is now still a good time?`;
+  const opening = `Hi ${first}, this is ${ctx.persona_name} from Somo demo. You asked for a quick live demo — is now still a good time?`;
 
   sendFn(connection.ws, opening, responseId);
   connection.sentInitialGreeting = true;
@@ -100,7 +100,7 @@ function sendDemoInitialGreeting(callId, connection, callMeta, responseId, sendF
     content: opening,
     timestamp: Date.now()
   });
-  console.log(`👋 DodgeCall demo greeting for ${callId}`);
+  console.log(`👋 Somo demo demo greeting for ${callId}`);
 }
 
 async function executeDemoTool(name, args, ctx, connection) {
@@ -109,7 +109,7 @@ async function executeDemoTool(name, args, ctx, connection) {
     case 'record_interest': {
       const level = args.level || 'warm';
       if (demoId) {
-        db.updateDodgecallDemoRequest(demoId, {
+        db.updateSomoDemoRequest(demoId, {
           interest_level: level,
           conversation_stage: connection._demoStage
         });
@@ -119,9 +119,9 @@ async function executeDemoTool(name, args, ctx, connection) {
     case 'send_signup_link': {
       const phone = connection.customerPhone;
       if (!phone) return { success: false, error: 'No phone on call' };
-      const sms = await dodgecallSms.sendSignupLink(phone, { prospectName: ctx.prospect_name });
+      const sms = await somoDemoSms.sendSignupLink(phone, { prospectName: ctx.prospect_name });
       if (demoId) {
-        db.updateDodgecallDemoRequest(demoId, {
+        db.updateSomoDemoRequest(demoId, {
           signup_link_sent: 1,
           cta_offered_at: new Date().toISOString(),
           conversation_stage: 'CTA'
@@ -132,7 +132,7 @@ async function executeDemoTool(name, args, ctx, connection) {
     case 'end_call': {
       await hangupTwilioCall(connection);
       if (demoId) {
-        db.updateDodgecallDemoRequest(demoId, {
+        db.updateSomoDemoRequest(demoId, {
           outcome: 'completed_agent',
           conversation_stage: 'CLOSE'
         });
@@ -156,7 +156,7 @@ async function hangupTwilioCall(connection) {
     const client = twilio(accountSid, authToken);
     await client.calls(sid).update({ status: 'completed' });
   } catch (e) {
-    console.warn('DodgeCall demo hangup failed:', e.message);
+    console.warn('Somo demo demo hangup failed:', e.message);
   }
 }
 
@@ -175,7 +175,7 @@ async function handleDemoTranscript(callId, connection, userSaid, message, sendF
 
   connection._demoStage = result.stage;
   if (ctx.demo_request_id) {
-    db.updateDodgecallDemoRequest(ctx.demo_request_id, {
+    db.updateSomoDemoRequest(ctx.demo_request_id, {
       conversation_stage: result.stage,
       interest_level: result.toolCalls?.find((t) => t.name === 'record_interest')?.arguments?.level
     });
@@ -273,7 +273,7 @@ async function handleDemoMessage(callId, connection, message, handlers) {
 }
 
 module.exports = {
-  isDodgecallDemoConnection,
+  isSomoDemoDemoConnection,
   sendDemoInitialGreeting,
   handleDemoMessage,
   handleDemoTranscript,

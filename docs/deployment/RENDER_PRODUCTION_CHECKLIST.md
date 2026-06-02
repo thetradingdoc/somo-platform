@@ -1,4 +1,4 @@
-# Render production checklist (`api.myskinandcare.com`)
+# Render production checklist (`api.callsomo.com`)
 
 Apply these in the **middleware** Render service environment before live claim submit.
 
@@ -19,7 +19,7 @@ Also set: `OPENAI_API_KEY`, `STEDI_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX
 ## Stedi dashboard (manual)
 
 1. [Stedi](https://www.stedi.com/) → webhooks → add endpoint:
-   - `https://api.myskinandcare.com/webhooks/stedi/claim-status`
+   - `https://api.callsomo.com/webhooks/stedi/claim-status`
 2. Copy signing secret into Render as `STEDI_WEBHOOK_SECRET`.
 3. Redeploy middleware after env changes.
 
@@ -27,7 +27,7 @@ Also set: `OPENAI_API_KEY`, `STEDI_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX
 
 ```bash
 # Health (replace host if different)
-curl -s https://api.myskinandcare.com/health
+curl -s https://api.callsomo.com/health
 
 # Logs: must NOT show institutional Stedi warning on startup
 ```

@@ -756,7 +756,7 @@ curl -X POST /api/test-error
 
 # Check health (use your deployed API origin)
 curl "https://api.callsomo.com/health?detailed=true"
-# Legacy/alternate hostnames may still be allowlisted, e.g. https://api.myskinandcare.com/health?detailed=true
+# Legacy/alternate hostnames may still be allowlisted, e.g. https://api.callsomo.com/health?detailed=true
 ```
 
 ## Emergency Procedures

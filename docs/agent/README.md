@@ -6,7 +6,7 @@ This folder documents **product-specific voice agents** that are separate from t
 
 | Agent | Audience | Docs |
 |-------|----------|------|
-| **DodgeCall demo** | Landing-page prospects (`dodgecall.app` / localhost:4000) | [dodgecall/](dodgecall/ARCHITECTURE.md) |
+| **Somo demo** | Landing-page prospects (`callsomo.com` / localhost:4000) | [dodgecall/](dodgecall/ARCHITECTURE.md) |
 | **Kelly (production)** | Paying clinics, patients | [../voice-agent/README.md](../voice-agent/README.md) |
 
-Do not mix DodgeCall demo configuration with Kelly `configure-retell.js` or paying-tenant Retell agents.
+Do not mix Somo demo configuration with Kelly `configure-retell.js` or paying-tenant Retell agents.

@@ -5,6 +5,7 @@
 
 const db = require('../database');
 const EOBCalculationService = require('./eob-calculation-service');
+const SomoEmail = require('../lib/somo-email-layout');
 
 class InvoiceService {
   /**
@@ -281,106 +282,74 @@ class InvoiceService {
     const totalPaid = db.getInvoicePaymentsTotal(invoice.id);
     const balance = invoice.amount - totalPaid;
 
-    return {
-      subject: `Invoice ${invoice.invoice_number} from DocLittle`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #1e40af; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-            .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
-            .invoice-details { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; }
-            .amount-due { font-size: 24px; font-weight: bold; color: #ef4444; margin: 20px 0; }
-            .button { display: inline-block; background: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-            .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
-            th { background: #f3f4f6; font-weight: 600; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Invoice ${invoice.invoice_number}</h1>
-            </div>
-            <div class="content">
-              <p>Dear ${patientName},</p>
-              <p>Please find your invoice below for medical services provided.</p>
-              
-              <div class="invoice-details">
-                <h2>Invoice Details</h2>
-                <p><strong>Invoice Number:</strong> ${invoice.invoice_number}</p>
-                <p><strong>Date:</strong> ${new Date(invoice.created_at).toLocaleDateString()}</p>
-                <p><strong>Due Date:</strong> ${dueDate}</p>
-                ${balance > 0 ? `<p class="amount-due">Amount Due: $${balance.toFixed(2)}</p>` : '<p style="color: #10b981; font-weight: bold;">Paid in Full</p>'}
-                
-                ${items.length > 0 ? `
-                  <h3>Services</h3>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Description</th>
-                        <th>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${items.map(item => `
-                        <tr>
-                          <td>${item.service_date ? new Date(item.service_date).toLocaleDateString() : '—'}</td>
-                          <td>${item.description}</td>
-                          <td>$${item.total_price.toFixed(2)}</td>
-                        </tr>
-                      `).join('')}
-                    </tbody>
-                    <tfoot>
-                      <tr style="font-weight: bold;">
-                        <td colspan="2">Total</td>
-                        <td>$${invoice.amount.toFixed(2)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                ` : ''}
-              </div>
+    const balanceLabel =
+      balance > 0
+        ? `$${balance.toFixed(2)}`
+        : 'Paid in full';
+    const itemsTable =
+      items.length > 0
+        ? `<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
+        <thead><tr style="background:${SomoEmail.TOKENS.greenSoft};">
+          <th style="padding:10px;text-align:left;">Date</th>
+          <th style="padding:10px;text-align:left;">Description</th>
+          <th style="padding:10px;text-align:right;">Amount</th>
+        </tr></thead><tbody>
+        ${items
+          .map(
+            (item) => `<tr>
+          <td style="padding:10px;border-bottom:1px solid ${SomoEmail.TOKENS.border};">${item.service_date ? new Date(item.service_date).toLocaleDateString() : '—'}</td>
+          <td style="padding:10px;border-bottom:1px solid ${SomoEmail.TOKENS.border};">${SomoEmail.escapeHtml(item.description)}</td>
+          <td style="padding:10px;border-bottom:1px solid ${SomoEmail.TOKENS.border};text-align:right;">$${item.total_price.toFixed(2)}</td>
+        </tr>`
+          )
+          .join('')}
+        </tbody></table>`
+        : '';
 
-              ${balance > 0 ? `
-                <p>Please remit payment by ${dueDate} to avoid late fees.</p>
-                <p>If you have any questions about this invoice, please contact us.</p>
-              ` : ''}
-            </div>
-            <div class="footer">
-              <p>This is an automated message from DocLittle Doctor's Portal</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
+    const html = SomoEmail.layout({
+      title: `Invoice ${invoice.invoice_number}`,
+      subtitle: balance > 0 ? `Due ${dueDate}` : 'Paid in full',
+      bodyHtml: `
+        <h2>Dear ${SomoEmail.escapeHtml(patientName)},</h2>
+        <p>Here is your invoice for services from Somo.</p>
+        ${SomoEmail.infoRows([
+          { label: 'Invoice number', value: invoice.invoice_number },
+          { label: 'Date', value: new Date(invoice.created_at).toLocaleDateString() },
+          { label: 'Due date', value: dueDate },
+          {
+            label: 'Balance',
+            valueHtml:
+              balance > 0
+                ? `<strong style="color:${SomoEmail.TOKENS.green};font-size:18px;">$${balance.toFixed(2)}</strong>`
+                : '<strong style="color:#10b981;">Paid in full</strong>'
+          }
+        ])}
+        ${itemsTable}
+        ${balance > 0 ? `<p>Please pay by ${SomoEmail.escapeHtml(dueDate)}.</p>` : ''}
+        <p>Questions? <a href="mailto:${SomoEmail.SUPPORT_EMAIL}">${SomoEmail.SUPPORT_EMAIL}</a></p>
+      `
+    });
+
+    return {
+      subject: `Somo invoice ${invoice.invoice_number} — ${balanceLabel}`,
+      html,
       text: `
 Invoice ${invoice.invoice_number}
 
 Dear ${patientName},
 
-Please find your invoice for medical services provided.
-
 Invoice Number: ${invoice.invoice_number}
 Date: ${new Date(invoice.created_at).toLocaleDateString()}
 Due Date: ${dueDate}
-Amount Due: $${balance > 0 ? balance.toFixed(2) : '0.00 (Paid in Full)'}
+Amount Due: ${balance > 0 ? balance.toFixed(2) : '0.00 (Paid in Full)'}
 
-${items.length > 0 ? items.map(item => `- ${item.description}: $${item.total_price.toFixed(2)}`).join('\n') : ''}
+${items.length > 0 ? items.map((item) => `- ${item.description}: $${item.total_price.toFixed(2)}`).join('\n') : ''}
 
 Total: $${invoice.amount.toFixed(2)}
 
-${balance > 0 ? `Please remit payment by ${dueDate} to avoid late fees.` : 'This invoice has been paid in full.'}
+${balance > 0 ? `Please remit payment by ${dueDate}.` : 'This invoice has been paid in full.'}
 
-If you have any questions, please contact us.
-
----
-DocLittle Doctor's Portal
+— Somo
       `.trim()
     };
   }

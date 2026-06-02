@@ -5,7 +5,7 @@
  *   DB_PATH=./middleware-dev.db node scripts/seed-patient-demo.js
  *
  * This is intentionally scoped to:
- * - One canonical demo patient (Bala Jones / patient@doclittle.com)
+ * - One canonical demo patient (Bala Jones / patient@callsomo.com)
  * - One upcoming appointment
  * - Optional stub voice_checkout + patient_documents
  */
@@ -65,7 +65,7 @@ async function main() {
   // Reuse existing FHIR + appointment seeding logic via services where possible
   const FHIRService = require('../services/fhir-service');
 
-  const email = 'patient@doclittle.com';
+  const email = 'patient@callsomo.com';
   const phone = '+15550001001';
   const patientName = 'Bala Jones';
   const [firstName, ...rest] = patientName.split(' ');

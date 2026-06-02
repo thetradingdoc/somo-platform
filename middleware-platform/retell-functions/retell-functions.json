@@ -699,7 +699,7 @@
     {
       "type": "function",
       "name": "schedule_demo",
-      "description": "Schedule a product demo for a clinic interested in DocLittle.",
+      "description": "Schedule a product demo for a clinic interested in Somo.",
       "parameters": {
         "type": "object",
         "properties": {

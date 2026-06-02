@@ -6,8 +6,8 @@ Single reference for staging flags and ops paths (May 2026).
 
 | Role | URL |
 |------|-----|
-| UI | `https://myskinandcare.com` (staging) |
-| API | `https://api.myskinandcare.com` |
+| UI | `https://callsomo.com` (staging) |
+| API | `https://api.callsomo.com` |
 
 ## Required env (Cloud Run / local staging)
 

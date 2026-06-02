@@ -2,7 +2,7 @@
  * STRIPE ISSUING SERVICE
  * 
  * Handles Stripe Issuing API integration for creating cardholders and issuing virtual cards
- * for patients in the DocLittle platform.
+ * for patients in the Somo platform.
  */
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -55,7 +55,7 @@ class StripeIssuingService {
         metadata: {
           patient_id: patientData.id || patientData.resource_id,
           clinic_id: options.clinic_id || null,
-          created_by: 'doclittle-platform'
+          created_by: 'somo-platform'
         }
       };
 
@@ -146,7 +146,7 @@ class StripeIssuingService {
         metadata: {
           patient_id: options.patient_id || null,
           clinic_id: options.clinic_id || null,
-          created_by: 'doclittle-platform'
+          created_by: 'somo-platform'
         }
       };
 

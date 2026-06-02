@@ -1,8 +1,8 @@
 'use strict';
 
-const { getUseCaseContext } = require('../services/dodgecall-demo-service');
+const { getUseCaseContext } = require('../services/somo-demo-service');
 
-describe('dodgecall-demo-service', () => {
+describe('somo-demo-service', () => {
   test('getUseCaseContext returns label and opener per use case', () => {
     const ctx = getUseCaseContext('appointment_setter');
     expect(ctx.use_case_label).toBe('Appointment Setter');

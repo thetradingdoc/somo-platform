@@ -1133,7 +1133,7 @@ class InsuranceService {
         dateOfBirth: claimData.dateOfBirth
       },
       provider: {
-        providerId: claimData.providerId || 'Doclittle-Provider-001',
+        providerId: claimData.providerId || 'Somo-Provider-001',
         npi: claimData.npi || claimData.providerNpi || null,
         taxonomyCode: claimData.taxonomyCode || null,
         providerTaxonomyCode: claimData.taxonomyCode || null

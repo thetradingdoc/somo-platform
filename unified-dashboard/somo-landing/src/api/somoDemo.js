@@ -11,7 +11,7 @@ export const USE_CASES = [
 
 export async function requestDemoCall({ name, phone, use_case, consent }) {
   const base = API_BASE || '';
-  const res = await fetch(`${base}/api/public/dodgecall/request-call`, {
+  const res = await fetch(`${base}/api/public/somo-demo/request-call`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, phone, use_case, consent })

@@ -59,7 +59,7 @@ Amounts in API responses are **dollars** (not cents).
 |----------|---------|
 | `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` | Card rail |
 | `CIRCLE_*` | USDC rail |
-| `PUBLIC_PAY_BASE_URL` | Pay link host (prod: `https://api.myskinandcare.com`) |
+| `PUBLIC_PAY_BASE_URL` | Pay link host (prod: `https://api.callsomo.com`) |
 | `RCM_PAY_PROBE_CIRCLE_BALANCE=1` | Show USDC balance on pay page |
 | `RCM_E2E_STRIPE_LIVE=1` | Live Stripe in gateway E2E |
 | `RCM_E2E_USDC_LIVE=1` | Live USDC in gateway E2E |

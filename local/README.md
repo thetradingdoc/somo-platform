@@ -1,5 +1,9 @@
 # Local-only credentials (not committed)
 
+## GCP CLI / ADC
+
+For `somo-callsomo`, use **`richard@callsomo.com`** for `gcloud` and for Application Default Credentials (ADC). See [CALLSOMO_GCP_CUTOVER.md](../docs/runbooks/CALLSOMO_GCP_CUTOVER.md#local-gcloud-and-adc).
+
 ## Database path (read first)
 
 Dev SQLite SSoT: [`docs/Database/ENV_AND_DB_SSOT.md`](../docs/Database/ENV_AND_DB_SSOT.md).

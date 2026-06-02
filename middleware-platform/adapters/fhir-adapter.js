@@ -1,9 +1,11 @@
 /**
- * FHIR Adapter - DocLittle Telehealth Platform
+ * FHIR Adapter - Somo Telehealth Platform
  *
  * Converts between internal platform formats and FHIR resources
  * Handles data transformation for voice calls, transcripts, and orders
  */
+
+const fhirIds = require('../lib/fhir-brand-identifiers');
 
 class FHIRAdapter {
   /**
@@ -147,7 +149,7 @@ class FHIRAdapter {
    */
   static fhirEncounterToCall(fhirEncounter) {
     const callId = fhirEncounter.extension?.find(
-      e => e.url === 'https://doclittle.health/extension/voice-call-id'
+      e => fhirIds.matchesExtensionUrl(e.url, 'voice-call-id')
     )?.valueString;
 
     return {
@@ -170,11 +172,11 @@ class FHIRAdapter {
   static fhirCommunicationToTranscript(fhirCommunication) {
     const messages = fhirCommunication.payload?.map(p => {
       const speaker = p.extension?.find(
-        e => e.url === 'https://doclittle.health/extension/speaker'
+        e => fhirIds.matchesExtensionUrl(e.url, 'speaker')
       )?.valueString;
 
       const timestamp = p.extension?.find(
-        e => e.url === 'https://doclittle.health/extension/timestamp'
+        e => fhirIds.matchesExtensionUrl(e.url, 'timestamp')
       )?.valueDateTime;
 
       return {
@@ -206,7 +208,7 @@ class FHIRAdapter {
       total: resources.length,
       timestamp: new Date().toISOString(),
       entry: resources.map(resource => ({
-        fullUrl: `https://doclittle.health/fhir/${resource.resourceType}/${resource.id}`,
+        fullUrl: `${fhirIds.FHIR_BASE}/${resource.resourceType}/${resource.id}`,
         resource
       }))
     };

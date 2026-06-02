@@ -30,7 +30,7 @@ class VisitBundleService {
       resources.push({
         resourceType: 'Patient',
         id: patient.resource_id,
-        doclittle_source: 'db'
+        somo_source: 'db'
       });
     }
 
@@ -43,7 +43,7 @@ class VisitBundleService {
         start: appt.start_time || null,
         end: appt.end_time || null
       },
-      doclittle: {
+      somo: {
         appointment_id: appt.id,
         clinic_id: appt.clinic_id,
         appointment_type: appt.appointment_type
@@ -57,7 +57,7 @@ class VisitBundleService {
         status: claim.status,
         type: { coding: [{ code: 'professional' }] },
         total: { value: claim.total_amount, currency: 'USD' },
-        doclittle: {
+        somo: {
           member_id: claim.member_id,
           payer_id: claim.payer_id,
           service_code: claim.service_code,
@@ -72,7 +72,7 @@ class VisitBundleService {
         id: latestEligibility.id,
         status: latestEligibility.eligible ? 'active' : 'inactive',
         outcome: latestEligibility.eligible ? 'complete' : 'error',
-        doclittle: {
+        somo: {
           payer_id: latestEligibility.payer_id,
           member_id: latestEligibility.member_id,
           copay_amount: latestEligibility.copay_amount,

@@ -1,6 +1,8 @@
 # Runtime Entrypoints And Call Paths
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-02
+
+> **Companion:** HTTP route tables live in [RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md](./RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md). Platform snapshot: [CURRENT_STATE_ARCHITECTURE.md](./CURRENT_STATE_ARCHITECTURE.md).
 
 ## Primary Entrypoints
 

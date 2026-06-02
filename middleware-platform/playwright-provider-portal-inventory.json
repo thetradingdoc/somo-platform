@@ -1,9 +1,9 @@
 {
   "base": "http://127.0.0.1:4000",
   "login": {
-    "email": "provider@doclittle.com",
+    "email": "provider@callsomo.com",
     "ok": true,
-    "customer": "provider@doclittle.com"
+    "customer": "provider@callsomo.com"
   },
   "sidebarFromToday": {
     "nav": [

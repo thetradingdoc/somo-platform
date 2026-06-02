@@ -3231,7 +3231,7 @@ app.post('/api/admin/appointments/create', async (req, res) => {
               name: 'Default Clinic',
               slug: 'default',
               phone_number: process.env.DEFAULT_CLINIC_PHONE || '+15550000000',
-              email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@doclittle.com'
+              email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@callsomo.com'
             });
           } catch (e) {
             if (!e.message?.includes('UNIQUE') && !e.message?.includes('duplicate')) throw e;

@@ -1,4 +1,4 @@
-# DodgeCall demo agent — runbook
+# Somo demo demo agent — runbook
 
 **Last updated:** 2026-05-28
 
@@ -59,8 +59,8 @@ npm test -- --testPathPattern=dodgecall
 
 ## Verification checklist
 
-- [ ] Demo call greeting says **DodgeCall** / **Sam**, not Kelly/DocLittle.
-- [ ] Logs show `dodgecall-demo-handler`, not `KellyAgentService.processTurn`.
+- [ ] Demo call greeting says **Somo demo** / **Sam**, not Kelly/Somo.
+- [ ] Logs show `somo-demo-handler`, not `KellyAgentService.processTurn`.
 - [ ] `DODGECALL_DEMO_ENABLED=0` rejects form API.
 - [ ] Call ends within max duration.
 - [ ] Voicemail/no-answer updates `outcome` on demo request row.

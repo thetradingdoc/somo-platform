@@ -4,7 +4,7 @@
 
 ## Table of contents
 
-- [Complete Setup Guide - DocLittle Platform (`getting-started/SETUP.md`)](#getting-started-setup)
+- [Complete Setup Guide - Somo Platform (`getting-started/SETUP.md`)](#getting-started-setup)
 - [Google OAuth & Calendar Integration - Complete Guide (`google/GOOGLE_OAUTH_COMPLETE_GUIDE.md`)](#google-google-oauth-complete-guide)
 - [Google Calendar Integration - User Experience (`google/oauth/GOOGLE_CALENDAR_USER_EXPERIENCE.md`)](#google-oauth-google-calendar-user-experience)
 - [Multi-Tenant Google OAuth Setup (`google/oauth/MULTI_TENANT_GOOGLE_OAUTH.md`)](#google-oauth-multi-tenant-google-oauth)
@@ -19,7 +19,7 @@ Browse by anchor above. Each section notes the former file path.
 
 <a id="getting-started-setup"></a>
 
-## Complete Setup Guide - DocLittle Platform
+## Complete Setup Guide - Somo Platform
 
 *Former path: `docs/setup/getting-started/SETUP.md`*
 
@@ -206,12 +206,12 @@ lt --port 4000
 ### Backend URL
 
 - **Railway URL**: `https://web-production-a783d.up.railway.app`
-- **Custom Domain** (optional): `api.doclittle.site` (if configured)
+- **Custom Domain** (optional): `api.api.callsomo.com` (if configured)
 
 ### Frontend URL
 
 - **Netlify URL**: `https://doclittle.netlify.app`
-- **Custom Domain**: `https://doclittle.site`
+- **Custom Domain**: `https://api.callsomo.com`
 
 ---
 
@@ -219,7 +219,7 @@ lt --port 4000
 
 ### Current Setup
 
-- **Domain**: `doclittle.site` (registered with IONOS)
+- **Domain**: `api.callsomo.com` (registered with IONOS)
 - **Frontend**: Hosted on Netlify
 - **Backend**: Hosted on Railway
 - **DNS**: Managed by Netlify (nameservers: `dns1-4.p06.nsone.net`)
@@ -227,7 +227,7 @@ lt --port 4000
 ### Connecting Domain to Netlify
 
 1. **Update Nameservers in IONOS:**
-   - Go to: https://my.ionos.com/domain-dns-settings/doclittle.site
+   - Go to: https://my.ionos.com/domain-dns-settings/api.callsomo.com
    - Change nameservers to Netlify's:
      ```
      dns1.p06.nsone.net
@@ -239,7 +239,7 @@ lt --port 4000
 2. **Add Domain in Netlify:**
    - Netlify Dashboard → Site Settings → Domain management
    - Click "Add domain alias"
-   - Enter: `doclittle.site`
+   - Enter: `api.callsomo.com`
    - Wait for DNS verification (5-10 minutes)
 
 3. **Wait for SSL:**
@@ -270,7 +270,7 @@ Netlify automatically manages:
 
 2. **This sets:**
    - LLM WebSocket URL: `wss://your-backend-url.com/webhook/retell/llm`
-   - Agent name: "Kelly - DocLittle Medical Voice Assistant"
+   - Agent name: "Kelly - Somo Medical Voice Assistant"
    - Functions: All healthcare functions (collect_insurance, schedule_appointment, etc.)
 
 3. **Verify in Retell Dashboard:**
@@ -341,7 +341,7 @@ If `http://localhost:4000/login` loads slowly right after starting the server, i
 - **Problem**: Twilio webhook URL is wrong
 - **Fix**: Update Twilio webhook to Railway backend URL:
   - `https://web-production-a783d.up.railway.app/voice/incoming`
-  - NOT `https://doclittle.site/voice/incoming` (that's frontend)
+  - NOT `https://api.callsomo.com/voice/incoming` (that's frontend)
 
 **Error: "11205 - Request timed out"**
 - **Problem**: Server taking too long to respond
@@ -359,12 +359,12 @@ If `http://localhost:4000/login` loads slowly right after starting the server, i
 
 ### Domain Not Loading
 
-**Error: "404 Not Found" on doclittle.site**
+**Error: "404 Not Found" on api.callsomo.com**
 - **Problem**: Domain not connected to Netlify site
 - **Fix**:
   1. Netlify Dashboard → Site Settings → Domain management
   2. Click "Add domain alias"
-  3. Enter: `doclittle.site`
+  3. Enter: `api.callsomo.com`
   4. Wait for DNS verification
 
 **Error: "SSL Certificate Error"**
@@ -407,7 +407,7 @@ If `http://localhost:4000/login` loads slowly right after starting the server, i
 ### Important URLs
 
 - **Backend (Railway)**: `https://web-production-a783d.up.railway.app`
-- **Frontend (Netlify)**: `https://doclittle.site`
+- **Frontend (Netlify)**: `https://api.callsomo.com`
 - **Retell Dashboard**: https://dashboard.retellai.com/
 - **Twilio Console**: https://console.twilio.com/
 - **Railway Dashboard**: https://railway.app/
@@ -425,7 +425,7 @@ If `http://localhost:4000/login` loads slowly right after starting the server, i
 1. `API_BASE_URL` (highest priority)
 2. `BASE_URL`
 3. Railway URL (if `RAILWAY_PUBLIC_DOMAIN` is set)
-4. Production domain (`doclittle.site` in production)
+4. Production domain (`api.callsomo.com` in production)
 5. `localhost:4000` (development default)
 
 ---
@@ -446,12 +446,12 @@ If `http://localhost:4000/login` loads slowly right after starting the server, i
 - [ ] Health check works: `curl https://web-production-a783d.up.railway.app/health`
 
 ### Domain Setup
-- [ ] Domain registered (doclittle.site)
+- [ ] Domain registered (api.callsomo.com)
 - [ ] Nameservers updated in IONOS
 - [ ] Domain added in Netlify
 - [ ] DNS verification complete
 - [ ] SSL certificate provisioned
-- [ ] Site loads at https://doclittle.site
+- [ ] Site loads at https://api.callsomo.com
 
 ### Voice Agent Setup
 - [ ] Retell agent configured (`node configure-retell.js`)
@@ -509,13 +509,13 @@ If `http://localhost:4000/login` loads slowly right after starting the server, i
 
 ## 📋 Overview
 
-This guide covers the complete setup and usage of Google OAuth for Calendar integration in DocLittle. This is a **one-time platform setup** done by DocLittle administrators, not by individual users.
+This guide covers the complete setup and usage of Google OAuth for Calendar integration in Somo. This is a **one-time platform setup** done by Somo administrators, not by individual users.
 
 ### Key Points
 
-- ✅ **Platform Setup (One Time)**: DocLittle sets up one Google OAuth app
+- ✅ **Platform Setup (One Time)**: Somo sets up one Google OAuth app
 - ✅ **User Experience (Seamless)**: Users just click "Connect" and authorize
-- ✅ **Automatic Syncing**: DocLittle handles all calendar syncing automatically
+- ✅ **Automatic Syncing**: Somo handles all calendar syncing automatically
 - ✅ **Multi-Tenant Support**: One OAuth app serves all clinics/tenants
 
 ---
@@ -527,7 +527,7 @@ This guide covers the complete setup and usage of Google OAuth for Calendar inte
 1. Open: https://console.cloud.google.com/
 2. Click the project dropdown (top left)
 3. Click **"New Project"**
-4. Name it: **"DocLittle"**
+4. Name it: **"Somo"**
 5. Click **"Create"**
 
 ### Step 2: Enable Calendar API (30 seconds)
@@ -543,7 +543,7 @@ This guide covers the complete setup and usage of Google OAuth for Calendar inte
 3. If prompted to configure consent screen:
    - **User Type**: Choose **"External"**
    - Click **"Create"**
-   - **App name**: "DocLittle"
+   - **App name**: "Somo"
    - **User support email**: Your email
    - **Developer contact**: Your email
    - Click **"Save and Continue"** (3 times)
@@ -552,10 +552,10 @@ This guide covers the complete setup and usage of Google OAuth for Calendar inte
 
 4. Now create the OAuth client:
    - **Application type**: **"Web application"**
-   - **Name**: "DocLittle Calendar"
+   - **Name**: "Somo Calendar"
    - **Authorized redirect URIs**: Click **"+ ADD URI"**
    - For **Local Development**: `http://localhost:4000/auth/google/calendar/callback`
-   - For **Production**: `https://api.doclittle.site/auth/google/calendar/callback`
+   - For **Production**: `https://api.api.callsomo.com/auth/google/calendar/callback`
    - Click **"Create"**
 
 5. **Copy the credentials**:
@@ -593,14 +593,14 @@ npm start
 
 ## 📖 Detailed Setup Guide
 
-### For DocLittle Platform Administrators
+### For Somo Platform Administrators
 
 #### Step 1: Create a Google Cloud Project (One Time)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Click on the project dropdown at the top
 3. Click "New Project"
-4. Enter a project name (e.g., "DocLittle Calendar Integration")
+4. Enter a project name (e.g., "Somo Calendar Integration")
 5. Click "Create"
 
 #### Step 2: Enable Google Calendar API (One Time)
@@ -614,7 +614,7 @@ npm start
 1. Go to **APIs & Services** > **OAuth consent screen**
 2. Choose **External** (for public use) or **Internal** (for Google Workspace)
 3. Fill in:
-   - App name: "DocLittle"
+   - App name: "Somo"
    - User support email: Your support email
    - Developer contact: Your email
 4. Click **Save and Continue**
@@ -629,10 +629,10 @@ npm start
 1. Go to **APIs & Services** > **Credentials**
 2. Click **+ CREATE CREDENTIALS** > **OAuth client ID**
 3. Application type: **Web application**
-4. Name: "DocLittle Calendar Integration"
+4. Name: "Somo Calendar Integration"
 5. **Authorized redirect URIs**: Add:
    - `http://localhost:4000/auth/google/calendar/callback` (development)
-   - `https://api.doclittle.site/auth/google/calendar/callback` (production)
+   - `https://api.api.callsomo.com/auth/google/calendar/callback` (production)
 6. Click **Create**
 7. **Copy and save**:
    - Client ID
@@ -655,7 +655,7 @@ az webapp config appsettings set \
   --settings \
     GOOGLE_CLIENT_ID=your-client-id-here \
     GOOGLE_CLIENT_SECRET=your-client-secret-here \
-    GOOGLE_REDIRECT_URI=https://api.doclittle.site/auth/google/calendar/callback
+    GOOGLE_REDIRECT_URI=https://api.api.callsomo.com/auth/google/calendar/callback
 ```
 
 ---
@@ -668,24 +668,24 @@ az webapp config appsettings set \
 2. **Clicks "Connect Google Calendar"** button
 3. **Redirected to Google** authorization screen
 4. **Clicks "Allow"** to grant permissions
-5. **Automatically redirected back** to DocLittle
+5. **Automatically redirected back** to Somo
 6. **Calendar is now connected** ✅
 
 ### What Happens Behind the Scenes
 
-1. User clicks "Connect" → DocLittle redirects to Google OAuth
+1. User clicks "Connect" → Somo redirects to Google OAuth
 2. Google shows consent screen → User authorizes
 3. Google redirects back with authorization code
-4. DocLittle exchanges code for access token
-5. DocLittle stores token securely in database
+4. Somo exchanges code for access token
+5. Somo stores token securely in database
 6. Calendar integration is active
 
 ### Automatic Calendar Syncing
 
 Once connected:
-- ✅ Appointments created in DocLittle → Automatically added to Google Calendar
-- ✅ Appointments updated in DocLittle → Automatically updated in Google Calendar
-- ✅ Appointments cancelled in DocLittle → Automatically removed from Google Calendar
+- ✅ Appointments created in Somo → Automatically added to Google Calendar
+- ✅ Appointments updated in Somo → Automatically updated in Google Calendar
+- ✅ Appointments cancelled in Somo → Automatically removed from Google Calendar
 - ✅ Calendar events include all appointment details (patient, time, type, etc.)
 
 ---
@@ -695,7 +695,7 @@ Once connected:
 ### How It Works
 
 **One OAuth App for All Tenants:**
-- DocLittle uses a single Google OAuth application
+- Somo uses a single Google OAuth application
 - Each clinic/tenant connects their own Google account
 - Each connection is stored separately in the database
 - Each tenant's calendar is synced independently
@@ -726,7 +726,7 @@ ehr_connections (
 
 - **Access Tokens**: Stored encrypted in database
 - **Refresh Tokens**: Automatically used to renew expired tokens
-- **Token Expiration**: Handled automatically by DocLittle
+- **Token Expiration**: Handled automatically by Somo
 - **Revocation**: Users can disconnect anytime
 
 ---
@@ -745,7 +745,7 @@ ehr_connections (
 1. Check Google Cloud Console → Credentials → OAuth Client
 2. Verify redirect URI **exactly** matches:
    - Development: `http://localhost:4000/auth/google/calendar/callback`
-   - Production: `https://api.doclittle.site/auth/google/calendar/callback`
+   - Production: `https://api.api.callsomo.com/auth/google/calendar/callback`
 3. No trailing slashes, no typos
 4. Save and wait 5 minutes for changes to propagate
 
@@ -904,7 +904,7 @@ Before going live:
 
 ## Overview
 
-DocLittle provides **seamless, one-click Google Calendar integration**. Users don't need any technical knowledge or setup - they just click "Connect" and we handle everything.
+Somo provides **seamless, one-click Google Calendar integration**. Users don't need any technical knowledge or setup - they just click "Connect" and we handle everything.
 
 ---
 
@@ -917,11 +917,11 @@ DocLittle provides **seamless, one-click Google Calendar integration**. Users do
 
 ### Step 2: Google Authorization (10 seconds)
 - User is redirected to Google's OAuth screen
-- Sees: "DocLittle wants to access your Google Calendar"
+- Sees: "Somo wants to access your Google Calendar"
 - Clicks **"Allow"** (one click)
 
 ### Step 3: Automatic Setup (Instant)
-- User is redirected back to DocLittle
+- User is redirected back to Somo
 - Calendar status shows: **"✅ Connected"**
 - **That's it!** No further action needed
 
@@ -929,10 +929,10 @@ DocLittle provides **seamless, one-click Google Calendar integration**. Users do
 
 ## What Happens Automatically
 
-Once connected, DocLittle handles **everything** automatically:
+Once connected, Somo handles **everything** automatically:
 
 ### ✅ Availability Checking
-- When patients call to schedule, DocLittle checks the user's Google Calendar
+- When patients call to schedule, Somo checks the user's Google Calendar
 - Prevents double-booking
 - Respects existing calendar events
 
@@ -964,7 +964,7 @@ Once connected, DocLittle handles **everything** automatically:
 
 ```
 ┌─────────────────────────────────────────────┐
-│  DocLittle Platform                         │
+│  Somo Platform                         │
 │  - ONE Google OAuth App (set up once)      │
 │  - Handles all OAuth flows                  │
 │  - Stores tokens per user securely          │
@@ -984,7 +984,7 @@ Once connected, DocLittle handles **everything** automatically:
 
 ### Key Points
 
-- **One OAuth App**: DocLittle sets up one Google OAuth application
+- **One OAuth App**: Somo sets up one Google OAuth application
 - **Per-User Tokens**: Each user's tokens are stored separately and securely
 - **Isolated Calendars**: Each user's calendar is completely isolated
 - **No Conflicts**: Multiple users can connect without interfering with each other
@@ -996,14 +996,14 @@ Once connected, DocLittle handles **everything** automatically:
 ### Example 1: First-Time Connection
 
 **Provider A (Dr. Smith)**
-1. Logs into DocLittle
+1. Logs into Somo
 2. Goes to Settings
 3. Clicks "Connect Google Calendar"
 4. Authorizes on Google
 5. ✅ Connected in 15 seconds
 
 **Provider B (Dr. Jones)**
-1. Logs into DocLittle (same platform)
+1. Logs into Somo (same platform)
 2. Goes to Settings
 3. Clicks "Connect Google Calendar"
 4. Authorizes on Google
@@ -1095,7 +1095,7 @@ Once connected, DocLittle handles **everything** automatically:
 - **Automatic syncing** always
 - **Secure** and private
 
-### For Platform (DocLittle)
+### For Platform (Somo)
 - **One-time setup** of OAuth app
 - **Automatic token management**
 - **Per-user isolation**
@@ -1120,12 +1120,12 @@ See `docs/setup/README.md#google-google-oauth-complete-guide` for platform setup
 ## Your Architecture
 
 ```
-doclittle.site/clinicA  → Clinic A's dashboard
-doclittle.site/clinicB  → Clinic B's dashboard
-doclittle.site/clinicC  → Clinic C's dashboard
+api.callsomo.com/clinicA  → Clinic A's dashboard
+api.callsomo.com/clinicB  → Clinic B's dashboard
+api.callsomo.com/clinicC  → Clinic C's dashboard
 ```
 
-Each clinic is a separate tenant, but they all use the same DocLittle platform.
+Each clinic is a separate tenant, but they all use the same Somo platform.
 
 ---
 
@@ -1136,7 +1136,7 @@ Each clinic is a separate tenant, but they all use the same DocLittle platform.
 In Google Cloud Console, add **ONE redirect URI** that handles all clinics:
 
 ```
-https://doclittle.site/auth/google/calendar/callback
+https://api.callsomo.com/auth/google/calendar/callback
 ```
 
 **Do NOT** register separate URIs for each clinic. The system already handles routing back to the correct clinic.
@@ -1147,25 +1147,25 @@ https://doclittle.site/auth/google/calendar/callback
 
 ### Flow for Clinic A
 
-1. **User at Clinic A** (`doclittle.site/clinicA`) clicks "Connect Google Calendar"
+1. **User at Clinic A** (`api.callsomo.com/clinicA`) clicks "Connect Google Calendar"
 2. **System** redirects to Google OAuth with:
-   - Redirect URI: `https://doclittle.site/auth/google/calendar/callback` (same for all)
-   - State parameter: Contains `returnUrl: doclittle.site/clinicA/settings`
+   - Redirect URI: `https://api.callsomo.com/auth/google/calendar/callback` (same for all)
+   - State parameter: Contains `returnUrl: api.callsomo.com/clinicA/settings`
 3. **User** authorizes on Google
-4. **Google** redirects back to: `https://doclittle.site/auth/google/calendar/callback`
+4. **Google** redirects back to: `https://api.callsomo.com/auth/google/calendar/callback`
 5. **System** processes OAuth, stores tokens
-6. **System** redirects user back to: `doclittle.site/clinicA/settings` (from state)
+6. **System** redirects user back to: `api.callsomo.com/clinicA/settings` (from state)
 
 ### Flow for Clinic B
 
-1. **User at Clinic B** (`doclittle.site/clinicB`) clicks "Connect Google Calendar"
+1. **User at Clinic B** (`api.callsomo.com/clinicB`) clicks "Connect Google Calendar"
 2. **System** redirects to Google OAuth with:
-   - Redirect URI: `https://doclittle.site/auth/google/calendar/callback` (same)
-   - State parameter: Contains `returnUrl: doclittle.site/clinicB/settings`
+   - Redirect URI: `https://api.callsomo.com/auth/google/calendar/callback` (same)
+   - State parameter: Contains `returnUrl: api.callsomo.com/clinicB/settings`
 3. **User** authorizes on Google
-4. **Google** redirects back to: `https://doclittle.site/auth/google/calendar/callback`
+4. **Google** redirects back to: `https://api.callsomo.com/auth/google/calendar/callback`
 5. **System** processes OAuth, stores tokens for Clinic B user
-6. **System** redirects user back to: `doclittle.site/clinicB/settings` (from state)
+6. **System** redirects user back to: `api.callsomo.com/clinicB/settings` (from state)
 
 ---
 
@@ -1177,12 +1177,12 @@ Add **only these**:
 
 ```
 http://localhost:4000/auth/google/calendar/callback
-https://doclittle.site/auth/google/calendar/callback
+https://api.callsomo.com/auth/google/calendar/callback
 ```
 
 **That's it!** No need to add:
-- ❌ `https://doclittle.site/clinicA/auth/google/calendar/callback`
-- ❌ `https://doclittle.site/clinicB/auth/google/calendar/callback`
+- ❌ `https://api.callsomo.com/clinicA/auth/google/calendar/callback`
+- ❌ `https://api.callsomo.com/clinicB/auth/google/calendar/callback`
 - ❌ Each clinic separately
 
 ---
@@ -1200,7 +1200,7 @@ GOOGLE_REDIRECT_URI=http://localhost:4000/auth/google/calendar/callback
 ```env
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=https://doclittle.site/auth/google/calendar/callback
+GOOGLE_REDIRECT_URI=https://api.callsomo.com/auth/google/calendar/callback
 ```
 
 ---
@@ -1210,15 +1210,15 @@ GOOGLE_REDIRECT_URI=https://doclittle.site/auth/google/calendar/callback
 The system already handles this! Here's the code flow:
 
 1. **Connect Request** (`/auth/google/calendar/connect`)
-   - Receives `returnUrl` parameter (e.g., `doclittle.site/clinicA/settings`)
+   - Receives `returnUrl` parameter (e.g., `api.callsomo.com/clinicA/settings`)
    - Encodes it in the OAuth `state` parameter
    - Redirects to Google
 
 2. **Callback** (`/auth/google/calendar/callback`)
-   - Google redirects to: `https://doclittle.site/auth/google/calendar/callback`
+   - Google redirects to: `https://api.callsomo.com/auth/google/calendar/callback`
    - System decodes `state` to get original `returnUrl`
    - Processes OAuth, stores tokens
-   - Redirects user back to: `doclittle.site/clinicA/settings`
+   - Redirects user back to: `api.callsomo.com/clinicA/settings`
 
 ---
 
@@ -1242,8 +1242,8 @@ Tokens are stored per user, isolated by clinic/user identity.
 
 ## Summary
 
-✅ **One OAuth App**: DocLittle has one OAuth app
-✅ **One Redirect URI**: `https://doclittle.site/auth/google/calendar/callback`
+✅ **One OAuth App**: Somo has one OAuth app
+✅ **One Redirect URI**: `https://api.callsomo.com/auth/google/calendar/callback`
 ✅ **Multi-Tenant Routing**: System routes back to correct clinic via `returnUrl` in state
 ✅ **Per-User Tokens**: Each user's tokens stored separately
 ✅ **Scalable**: Add unlimited clinics without updating Google Cloud Console
@@ -1252,10 +1252,10 @@ Tokens are stored per user, isolated by clinic/user identity.
 
 ## Checklist
 
-- [ ] Add `https://doclittle.site/auth/google/calendar/callback` to Google Cloud Console
-- [ ] Set `GOOGLE_REDIRECT_URI=https://doclittle.site/auth/google/calendar/callback` in production `.env`
-- [ ] Test with Clinic A: Should redirect back to `doclittle.site/clinicA/settings`
-- [ ] Test with Clinic B: Should redirect back to `doclittle.site/clinicB/settings`
+- [ ] Add `https://api.callsomo.com/auth/google/calendar/callback` to Google Cloud Console
+- [ ] Set `GOOGLE_REDIRECT_URI=https://api.callsomo.com/auth/google/calendar/callback` in production `.env`
+- [ ] Test with Clinic A: Should redirect back to `api.callsomo.com/clinicA/settings`
+- [ ] Test with Clinic B: Should redirect back to `api.callsomo.com/clinicB/settings`
 - [ ] Verify tokens are stored per user/clinic
 
 ---

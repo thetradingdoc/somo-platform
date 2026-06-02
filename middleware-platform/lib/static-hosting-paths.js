@@ -22,8 +22,8 @@ function isSomoMarketingHostname(hostname) {
     h === 'www.callsomo.com' ||
     h === 'skinandcare.com' ||
     h === 'www.skinandcare.com' ||
-    h === 'dodgecall.app' ||
-    h === 'www.dodgecall.app'
+    h === 'callsomo.com' ||
+    h === 'www.callsomo.com'
   );
 }
 

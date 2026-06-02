@@ -358,7 +358,7 @@ class EHRAggregatorService {
   }
 
   /**
-   * Match EHR encounter to DocLittle appointment
+   * Match EHR encounter to Somo appointment
    * @param {Object} encounter - FHIR Encounter resource
    * @param {string} patientPhone - Patient phone number
    * @param {string} appointmentDate - Appointment date (YYYY-MM-DD)

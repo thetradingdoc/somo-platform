@@ -46,7 +46,7 @@ For overlap with architecture docs, see [`docs/meta/CANONICAL_DOC_MAP.md`](../do
 | Document | Purpose |
 |----------|---------|
 | [pending/Orchestration-todos.md](./pending/Orchestration-todos.md) | Ongoing orchestration QA |
-| [pending/DODGECALL_DEMO_LAUNCH_CHECKLIST.md](./pending/DODGECALL_DEMO_LAUNCH_CHECKLIST.md) | DodgeCall ops before first call |
+| [pending/SOMO_DEMO_LAUNCH_CHECKLIST.md](./pending/SOMO_DEMO_LAUNCH_CHECKLIST.md) | Somo demo ops before first call |
 | [pending/LANDING_NAVIGATOR_REGRESSION_TODOS.md](./pending/LANDING_NAVIGATOR_REGRESSION_TODOS.md) | Geo ZIP regression tests |
 | [pending/PHOTO_TO_BILL_EXTRACTION_TODOS.md](./pending/PHOTO_TO_BILL_EXTRACTION_TODOS.md) | Key rotation + rollout |
 

@@ -457,7 +457,7 @@ STEDI_API_KEY=your_production_api_key_here
 - **Prevent Denials:** Get authorization before service
 - **Faster Processing:** Electronic prior auth vs phone/fax
 
-DocLittle’s canonical prior-authorization workflow (including the Stedi scope constraints and the case-level tracking model) is documented in:
+Somo’s canonical prior-authorization workflow (including the Stedi scope constraints and the case-level tracking model) is documented in:
 
 - [`docs/RCM/PA_ARCHITECTURE.md`](../RCM/PA_ARCHITECTURE.md)
 - [`docs/RCM/STEDI_PA_WORKSTREAM.md`](../RCM/STEDI_PA_WORKSTREAM.md)

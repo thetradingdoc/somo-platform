@@ -1822,10 +1822,7 @@ const allowedOrigins = [
   'http://127.0.0.1:8080',
   'http://[::1]:8080',
   'http://localhost:5180',
-  'http://127.0.0.1:5180',
-  'https://dodgecall.app',
-  'https://www.dodgecall.app',
-  'https://api.dodgecall.app'
+  'http://127.0.0.1:5180'
 ];
 
 const corsOptions = {
@@ -1843,10 +1840,6 @@ const corsOptions = {
     if (/^https?:\/\/([a-z0-9-]+\.)*callsomo\.com$/i.test(origin)) {
       return callback(null, true);
     }
-    if (/^https?:\/\/([a-z0-9-]+\.)*dodgecall\.app$/i.test(origin)) {
-      return callback(null, true);
-    }
-
     // Allow ngrok domains (for HTTPS testing: https://xxxx.ngrok-free.app)
     if (/^https:\/\/[a-z0-9-]+\.ngrok-free\.app$/.test(origin) || /^https:\/\/[a-z0-9-]+\.ngrok\.io$/.test(origin)) {
       return callback(null, true);
@@ -2145,14 +2138,9 @@ function redirectLegacyLandingPath(req, res) {
   return res.redirect(301, `/${qs}`);
 }
 
-function isDodgecallApiHostname(hostname) {
-  return String(hostname || '').toLowerCase() === 'api.dodgecall.app';
-}
-
-/** Production API hostnames (split-domain + transition aliases). */
+/** Production API hostnames (split-domain). */
 function isProductionApiHostname(hostname) {
-  const h = String(hostname || '').toLowerCase();
-  return h === 'api.callsomo.com' || h === 'api.dodgecall.app';
+  return String(hostname || '').toLowerCase() === 'api.callsomo.com';
 }
 
 // Root endpoint - route based on domain
@@ -2211,12 +2199,8 @@ app.get('/', (req, res) => {
     return sendSomoLandingOrInstructions(res);
   }
 
-  if (isDodgecallApiHostname(hostname)) {
-    return res.json({ ok: true, service: 'dodgecall-api', demo: '/api/public/dodgecall/health' });
-  }
-
   // API subdomain - check if user is already logged in
-  if (isProductionApiHostname(hostname) && !isDodgecallApiHostname(hostname)) {
+  if (isProductionApiHostname(hostname)) {
     // Check if user has valid session
     const sessionId = req.cookies?.customer_session;
     if (sessionId) {
@@ -2891,8 +2875,9 @@ const rcmRoutes = require('./routes/rcm');
 app.use('/api/rcm', rcmRoutes);
 const rcmPublicRoutes = require('./routes/rcm-public');
 app.use('/api/public/rcm', rcmPublicRoutes);
-const dodgecallPublicRoutes = require('./routes/dodgecall-public');
-app.use('/api/public/dodgecall', dodgecallPublicRoutes);
+const somoDemoPublicRoutes = require('./routes/somo-demo-public');
+app.use('/api/public/somo-demo', somoDemoPublicRoutes);
+app.use('/api/public/dodgecall', somoDemoPublicRoutes); // legacy alias (deprecated)
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
 app.use('/api/internal/service-ops', internalServiceOpsRoutes);
 const impactPublicRoutes = require('./routes/impact-public');
@@ -3226,9 +3211,8 @@ function escapeXml(s) {
     .replace(/'/g, '&apos;');
 }
 
-// Twilio async AMD for DodgeCall demo outbound
-app.post(
-  '/voice/dodgecall-amd-callback',
+// Twilio async AMD for Somo demo outbound
+const somoDemoAmdHandler = [
   express.urlencoded({ extended: true }),
   twilioSignatureRequired,
   async (req, res) => {
@@ -3237,10 +3221,10 @@ app.post(
       const answeredBy = req.body.AnsweredBy || req.body.MachineDetectionResult || '';
       if (callSid && /machine|fax/i.test(String(answeredBy))) {
         const row = db.db
-          .prepare('SELECT id FROM dodgecall_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+          .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
           .get(callSid);
         if (row?.id) {
-          db.updateDodgecallDemoRequest(row.id, {
+          db.updateSomoDemoRequest(row.id, {
             voicemail_detected: 1,
             outcome: 'voicemail',
             status: 'completed'
@@ -3248,11 +3232,13 @@ app.post(
         }
       }
     } catch (e) {
-      console.warn('DodgeCall AMD callback error:', e.message);
+      console.warn('Somo demo AMD callback error:', e.message);
     }
     res.sendStatus(200);
   }
-);
+];
+app.post('/voice/somo-demo-amd-callback', ...somoDemoAmdHandler);
+app.post('/voice/dodgecall-amd-callback', ...somoDemoAmdHandler); // legacy alias (deprecated)
 
 // Twilio Status Callback - receives call status updates
 app.post(
@@ -3288,10 +3274,10 @@ app.post(
     if (callSid) {
       setImmediate(async () => {
         try {
-          const dodgecallDemo = db.db
-            .prepare('SELECT id FROM dodgecall_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+          const somoDemo = db.db
+            .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
             .get(callSid);
-          if (dodgecallDemo?.id) {
+          if (somoDemo?.id) {
             const patch = {};
             if (callStatus) patch.status = callStatus;
             if (callDuration) {
@@ -3304,7 +3290,7 @@ app.post(
               patch.outcome = callStatus;
             }
             if (Object.keys(patch).length) {
-              db.updateDodgecallDemoRequest(dodgecallDemo.id, patch);
+              db.updateSomoDemoRequest(somoDemo.id, patch);
             }
           }
 
@@ -9039,26 +9025,26 @@ app.post('/api/ehr/epic/sync', async (req, res) => {
       const encPatientId = encounter.subject?.reference?.replace('Patient/', '') ||
         encounter.subject?.id || epicPatientId;
 
-      // Find matching DocLittle patient by Epic patient ID
+      // Find matching Somo patient by Epic patient ID
       // First, try to find by resource_id matching Epic patient ID
-      let doclittlePatient = db.db.prepare(`
+      let platformPatient = db.db.prepare(`
         SELECT * FROM fhir_patients WHERE resource_id = ?
       `).get(encPatientId);
 
       // If not found, use the first patient or create a link
-      if (!doclittlePatient && epicPatientId) {
+      if (!platformPatient && epicPatientId) {
         // For now, we'll use the connection's patient_id if available
-        doclittlePatient = db.db.prepare(`
+        platformPatient = db.db.prepare(`
           SELECT * FROM fhir_patients WHERE resource_id = ?
         `).get(epicPatientId);
       }
 
-      if (!doclittlePatient) {
+      if (!platformPatient) {
         console.warn(`   ⚠️  Patient ${encPatientId} not found in DocLittle, skipping encounter ${encounter.id}`);
         continue;
       }
 
-      const patientId = doclittlePatient.resource_id;
+      const patientId = platformPatient.resource_id;
       const encounterId = encounter.id;
       const startTime = encounter.period?.start || null;
       const endTime = encounter.period?.end || null;

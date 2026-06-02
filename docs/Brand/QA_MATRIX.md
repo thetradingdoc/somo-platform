@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-05-30
 
-Run after brand changes; production host may still be **myskinandcare.com**.
+Run after brand changes; production host may still be **callsomo.com**.
 
 | Surface | URL (local :4000) | Check |
 |---------|-------------------|--------|

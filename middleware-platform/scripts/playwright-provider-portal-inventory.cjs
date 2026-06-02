@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
-const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@doclittle.com';
+const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PASS = process.env.PW_PROVIDER_PASS || 'demo123';
 
 const PAGES = [

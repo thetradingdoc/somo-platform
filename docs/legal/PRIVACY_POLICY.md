@@ -7,7 +7,7 @@
 
 Somo ("we", "us", or "our") provides an AI front desk and revenue cycle management platform for healthcare and business customers. This Privacy Policy describes how we collect, use, disclose, and protect information when you use our websites, applications, and APIs.
 
-Production services may be served from **myskinandcare.com** and related infrastructure until **somopay.ai** cutover. See [INFRA_BRAND_DEFERRAL.md](../Brand/INFRA_BRAND_DEFERRAL.md).
+Production services may be served from **callsomo.com** and related infrastructure until **somopay.ai** cutover. See [INFRA_BRAND_DEFERRAL.md](../Brand/INFRA_BRAND_DEFERRAL.md).
 
 ## 2. Information we collect
 

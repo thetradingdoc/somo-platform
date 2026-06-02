@@ -1,5 +1,7 @@
 # meta — consolidated documentation
 
+> **Read first (standalone files, not buried in this TOC):** [CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md) · [ENGINEERING_DOC_HYGIENE.md](./ENGINEERING_DOC_HYGIENE.md)
+
 **Single file:** All former `docs/meta/**/*.md` content is merged here. **Last updated:** 2026-04-29
 
 ## Table of contents

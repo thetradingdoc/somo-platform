@@ -31,12 +31,12 @@ const USE_CASE_LABELS = {
 };
 
 const USE_CASE_OPENERS = {
-  receptionist: 'You are calling as a friendly medical office receptionist for DodgeCall demo purposes.',
-  appointment_setter: 'You are calling to schedule an appointment as a DodgeCall appointment setter demo.',
-  lead_qualification: 'You are qualifying a lead for a DodgeCall sales demo call.',
-  customer_service: 'You are providing helpful customer service on this DodgeCall demo call.',
-  debt_collection: 'You are conducting a polite, compliant collections-style DodgeCall demo (fictional balance).',
-  survey: 'You are running a short customer satisfaction survey for this DodgeCall demo.',
+  receptionist: 'You are calling as a friendly medical office receptionist for Somo demo demo purposes.',
+  appointment_setter: 'You are calling to schedule an appointment as a Somo demo appointment setter demo.',
+  lead_qualification: 'You are qualifying a lead for a Somo demo sales demo call.',
+  customer_service: 'You are providing helpful customer service on this Somo demo demo call.',
+  debt_collection: 'You are conducting a polite, compliant collections-style Somo demo demo (fictional balance).',
+  survey: 'You are running a short customer satisfaction survey for this Somo demo demo.',
   dental_front_desk:
     'You are calling as a friendly dental office front desk for this Somo demo — scheduling, insurance FAQs, and new patient intake.',
   medical_clinic:

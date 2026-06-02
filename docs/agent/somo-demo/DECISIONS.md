@@ -1,4 +1,4 @@
-# DodgeCall demo agent — decisions (ADR)
+# Somo demo demo agent — decisions (ADR)
 
 **Last updated:** 2026-05-28
 
@@ -8,7 +8,7 @@
 
 **Rejected:** Retell-native LLM only (`general_prompt` without our WebSocket). That would require re-wiring for Phase B orchestrator, tools, and stage state.
 
-**Implication:** Phase A implements a thin demo branch in `dodgecall-demo-handler.js`; Phase B plugs in `dodgecall-demo-orchestrator.js` without changing Retell agent type.
+**Implication:** Phase A implements a thin demo branch in `somo-demo-handler.js`; Phase B plugs in `somo-demo-orchestrator.js` without changing Retell agent type.
 
 ---
 

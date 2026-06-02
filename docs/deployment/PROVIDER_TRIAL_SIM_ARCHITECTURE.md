@@ -22,7 +22,7 @@
 
 | World | Who | Number / agent | Data |
 |-------|-----|----------------|------|
-| **Demo** | Landing visitors | Shared DodgeCall Twilio + Retell | `dodgecall_demo_requests` |
+| **Demo** | Landing visitors | Shared Somo Twilio + Retell | `dodgecall_demo_requests` |
 | **Provider** | Paying / trial customers | Dedicated per `customers` row | `customers`, portal call logs |
 
 Nothing from demo carries over automatically. Signup bridge tracks `utm_source=dodgecall` for onboarding copy only.

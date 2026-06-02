@@ -12,7 +12,7 @@ const https = require('https');
 
 const API_BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
 const CLINIC_ID = process.env.RCM_E2E_CLINIC_ID || 'clinic-default';
-const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PROVIDER_PASSWORD = process.env.RCM_E2E_PROVIDER_PASSWORD || 'demo123';
 const PATIENT_ID = process.env.RCM_E2E_PATIENT_ID || null;
 const AMOUNT = Number(process.env.RCM_E2E_PAY_AMOUNT || 25);

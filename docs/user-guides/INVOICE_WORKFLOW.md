@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide explains the complete workflow for generating and managing invoices from medical claims in the DocLittle platform.
+This guide explains the complete workflow for generating and managing invoices from medical claims in the Somo platform.
 
 ## Workflow: PDF → Claim → Invoice → Send → Payment
 

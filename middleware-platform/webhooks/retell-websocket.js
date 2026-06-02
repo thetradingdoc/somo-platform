@@ -19,7 +19,7 @@ const PatientOrchestratorService = require('../services/patient-orchestrator-ser
 const KellyAgentService = require('../services/kelly-agent-service');
 const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
-const dodgecallDemoHandler = require('./dodgecall-demo-handler');
+const somoDemoHandler = require('./somo-demo-handler');
 const VoiceAgentRuntime = require('../services/voice-agent-runtime');
 
 class RetellWebSocketHandler {
@@ -421,9 +421,9 @@ class RetellWebSocketHandler {
                 console.log(`✅ Voice caller name pre-filled from call metadata: ${pn}`);
             }
 
-            if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+            if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
                 connection.awaitingName = false;
-                connection._demoCallType = 'dodgecall_demo';
+                connection._demoCallType = 'somo_demo';
             }
 
             // Skincare / routine intake: Retell dynamic_variables.kelly_flow (or routine_intake_active)
@@ -465,16 +465,16 @@ class RetellWebSocketHandler {
             }
 
             // Provider voice runtime (greeting, hours, enabled) — after tenant context exists
-            if (!connection._runtimeApplied && !dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+            if (!connection._runtimeApplied && !somoDemoHandler.isSomoDemoDemoConnection(connection)) {
                 this.applyProviderRuntime(callId, connection, callMeta, message.response_id);
             }
 
             // If the call starts and the caller is silent, proactively greet once.
-            if (!connection.sentInitialGreeting && !dodgecallDemoHandler.isDodgecallDemoConnection(connection) && !connection.agentBlocked) {
+            if (!connection.sentInitialGreeting && !somoDemoHandler.isSomoDemoDemoConnection(connection) && !connection.agentBlocked) {
                 this.sendInitialGreeting(callId, connection, callMeta, message.response_id);
             }
-            if (!connection.sentInitialGreeting && dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
-                dodgecallDemoHandler.sendDemoInitialGreeting(
+            if (!connection.sentInitialGreeting && somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+                somoDemoHandler.sendDemoInitialGreeting(
                     callId,
                     connection,
                     callMeta,
@@ -502,7 +502,7 @@ class RetellWebSocketHandler {
 
         console.log(`\n📨 Message from ${callId}:`, interactionType);
 
-        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
             if (interactionType === 'ping_pong') {
                 this.sendToRetell(connection.ws, { response_type: 'ping_pong', timestamp: message.timestamp });
                 return;
@@ -511,7 +511,7 @@ class RetellWebSocketHandler {
                 this.sendToRetell(connection.ws, { type: 'pong' });
                 return;
             }
-            await dodgecallDemoHandler.handleDemoMessage(callId, connection, message, {
+            await somoDemoHandler.handleDemoMessage(callId, connection, message, {
                 sendRetellResponse: (ws, content, rid) => this.sendRetellResponse(ws, content, rid),
                 interactionType
             });
@@ -576,7 +576,7 @@ class RetellWebSocketHandler {
     async handleTranscript(callId, message) {
         const connection = this.activeConnections.get(callId);
 
-        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
             const userSaid = message.transcript;
             if (userSaid) {
                 connection.conversationHistory.push({
@@ -584,7 +584,7 @@ class RetellWebSocketHandler {
                     content: userSaid,
                     timestamp: Date.now()
                 });
-                await dodgecallDemoHandler.handleDemoTranscript(
+                await somoDemoHandler.handleDemoTranscript(
                     callId,
                     connection,
                     userSaid,
@@ -858,8 +858,8 @@ class RetellWebSocketHandler {
         const connection = this.activeConnections.get(callId);
         if (!connection) return;
 
-        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
-            await dodgecallDemoHandler.handleDemoFunctionCall(callId, connection, message);
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+            await somoDemoHandler.handleDemoFunctionCall(callId, connection, message);
             return;
         }
 
@@ -2397,8 +2397,8 @@ class RetellWebSocketHandler {
     // Helper: build and send one-time initial greeting
     sendInitialGreeting(callId, connection, callMeta, responseId = null) {
         if (!connection || connection.sentInitialGreeting) return;
-        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
-            dodgecallDemoHandler.sendDemoInitialGreeting(
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+            somoDemoHandler.sendDemoInitialGreeting(
                 callId,
                 connection,
                 callMeta,
@@ -2415,10 +2415,10 @@ class RetellWebSocketHandler {
         }
         if (!opening) {
             opening = isOutboundSales
-                ? "Hi, this is Alex from DocLittle. Is now still a good time to talk?"
+                ? "Hi, this is Alex from Somo. Is now still a good time to talk?"
                 : (patientName
-                    ? `Hi ${patientName}, this is Kelly from DocLittle. How can I help you today?`
-                    : 'Hi, this is Kelly from DocLittle. How can I help you today?');
+                    ? `Hi ${patientName}, this is Kelly from Somo. How can I help you today?`
+                    : 'Hi, this is Kelly from Somo. How can I help you today?');
         }
 
         this.sendRetellResponse(connection.ws, opening, responseId);
@@ -3199,7 +3199,7 @@ class RetellWebSocketHandler {
                 demo_date: args.preferred_date,
                 demo_time: args.preferred_time,
                 contact_email: args.contact_email,
-                confirmation: `Great! I've scheduled your demo for ${args.preferred_date} at ${args.preferred_time}. You'll receive a confirmation email at ${args.contact_email} shortly. Looking forward to showing you how DocLittle can help ${args.clinic_name}!`
+                confirmation: `Great! I've scheduled your demo for ${args.preferred_date} at ${args.preferred_time}. You'll receive a confirmation email at ${args.contact_email} shortly. Looking forward to showing you how Somo can help ${args.clinic_name}!`
             };
         } catch (error) {
             console.error('❌ Error scheduling demo:', error);
@@ -3333,7 +3333,7 @@ class RetellWebSocketHandler {
             const leadId = connection?.callMetadata?.lead_id || args.lead_id;
 
             const toEmail = args.to_email || args.email;
-            const subject = args.subject || 'Follow-up from DocLittle';
+            const subject = args.subject || 'Follow-up from Somo';
             const body = args.body || args.message || '';
 
             if (!toEmail) {

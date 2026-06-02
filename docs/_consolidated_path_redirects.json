@@ -197,5 +197,11 @@
   "docs/testing/TELEMEDICINE_E2E.md": "docs/testing/README.md#telemedicine-e2e",
   "docs/testing/TRANSCRIPT_ONLY_E2E.md": "docs/testing/README.md#transcript-only-e2e",
   "docs/ARCHITECTURE.md": "docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md",
-  "docs/user-journey/08-growth-backlog.md": "docs/user-journey/11-growth-backlog.md"
+  "docs/user-journey/08-growth-backlog.md": "docs/user-journey/11-growth-backlog.md",
+  "docs/deployment/GCP_DEPLOY_ROLLBACK.md": "docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md",
+  "docs/deployment/STAGING_MYSKINANDCARE.md": "docs/runbooks/CALLSOMO_GCP_CUTOVER.md",
+  "docs/deployment/RETELL_AGENT_INVENTORY.md": "docs/deployment/retell-agent-inventory.md",
+  "docs/Brand/GUIDELINES.md": "docs/Brand/SOMO_GUIDELINES.md",
+  "docs/email/email-issues-verification.md": "docs/archive/email-voice-checkout-verification-2026.md",
+  "docs/email/LOCAL_EMAIL_SETUP.md": "docs/email/README.md"
 }

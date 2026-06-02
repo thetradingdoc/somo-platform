@@ -1,4 +1,4 @@
-# DodgeCall landing (superseded)
+# Somo demo landing (superseded)
 
 This doc moved to **[SOMO_LANDING.md](./SOMO_LANDING.md)**.
 

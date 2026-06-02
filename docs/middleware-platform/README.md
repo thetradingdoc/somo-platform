@@ -18,7 +18,7 @@
 
 - [Agentic Reasoning Solution Design (`AGENTIC_REASONING_SOLUTION_DESIGN.md`)](#agentic-reasoning-solution-design)
 - [Kelly + Payment Architecture (`architecture-kelly-payment.md`)](#architecture-kelly-payment)
-- [DocLittle platform architecture (concise) (`ARCHITECTURE.md`)](#architecture)
+- [Somo platform architecture (concise) (`ARCHITECTURE.md`)](#architecture)
 - [Catalog coverage (X2) and routine evidence (Kelly) (`CATALOG_COVERAGE_AND_ROUTINE_EVIDENCE_RUNBOOK.md`)](#catalog-coverage-and-routine-evidence-runbook)
 - [Checkout chat UI (patient `checkout-chat.html`) (`CHECKOUT_CHAT_UI_NOTES.md`)](#checkout-chat-ui-notes)
 - [Checkout State Contamination Runbook (`CHECKOUT_STATE_CONTAMINATION_RUNBOOK.md`)](#checkout-state-contamination-runbook)
@@ -75,7 +75,7 @@
 - [Voice Agent Checkout Configuration Verification (`VOICE_CHECKOUT_VERIFICATION.md`)](#voice-checkout-verification)
 - [Voice triage parity (Kelly vs Retell direct) (`VOICE_TRIAGE_PARITY.md`)](#voice-triage-parity)
 - [Wallet key custody model and recovery procedures (`WALLET_KEY_CUSTODY_AND_RECOVERY.md`)](#wallet-key-custody-and-recovery)
-- [DocLittle Payment Architecture — Wiring Guide (`WIRING_GUIDE.md`)](#wiring-guide)
+- [Somo Payment Architecture — Wiring Guide (`WIRING_GUIDE.md`)](#wiring-guide)
 
 ---
 
@@ -513,7 +513,7 @@ This document summarizes the current end-to-end architecture.
 
 <a id="architecture"></a>
 
-## DocLittle platform architecture (concise)
+## Somo platform architecture (concise)
 
 
 This document orients new contributors. Deep dives live in `docs/` and `docs/architecture/`.
@@ -2319,7 +2319,7 @@ There are **no** `npm run test:langsmith` / `npm run test:langgraph` scripts in 
 
 ## Scope
 
-This runbook ingests Open Beauty Facts data into DocLittle's local serving index:
+This runbook ingests Open Beauty Facts data into Somo's local serving index:
 
 - `products_obf_index` (barcode lookup + taxonomy fields)
 - `obf_ingestion_runs` (pipeline observability)
@@ -2908,7 +2908,7 @@ Use `AGENT_REASONING_MAP_V1=true` only in staging first, then:
 
 Retell SIP / Twilio trunking values are **not** stable across accounts/environments. Treat any concrete trunk SID, domain, username, or credential list name in this repo as **example/legacy** unless you have verified it in the **current Twilio Console**.
 
-For current production (`api.myskinandcare.com`) voice behavior and endpoints, see:
+For current production (`api.callsomo.com`) voice behavior and endpoints, see:
 - `docs/deployment/VOICE_CURRENT_ARCHITECTURE.md`
 
 ### Retell Dashboard → Telephony / SIP trunk config (template)
@@ -4192,7 +4192,7 @@ Set when the call is registered (`server.js`: `retell_llm_dynamic_variables`). R
 | `patient_name`  | `Bala Jones`       | Patient context. |
 | `has_insurance` | `yes` or `no`      | Context only (copay/eligibility done via tools). |
 | `customer_type` | `clinic`           | Optional context. |
-| `clinic_name`   | `DocLittle Mental Health Team` | Outbound sales context. |
+| `clinic_name`   | `Somo Mental Health Team` | Outbound sales context. |
 | `clinic_location`| `America/New_York` | Outbound sales context. |
 | `job_title`     | `Medical Receptionist` | Outbound sales context. |
 | `lead_id`       | `1`                | Outbound: `schedule_demo`, `collect_contact_info`, `end_call`, `send_followup_email`, `send_followup_sms`. |
@@ -4230,7 +4230,7 @@ Set these in Retell (Variable name → Test value). Use your real DB values for 
 | `merchant_id`   | `merchant_c3d547a10f43eeec` | **Yes**   | Required for creating checkout (copay). Server can resolve from `clinic_id` if clinic has `merchant_id`. |
 | `patient_name`  | `Jane Test`            | **Recommended** | Test patient’s name so the agent knows the caller and can use it in booking/checkout. |
 | `patient_id`    | FHIR `resource_id` of test patient | Optional | For context only; backend links appointment to patient via name+phone+email from the conversation. |
-| `clinic_name`   | `DocLittle Mental Health` | Optional | So the agent can say the correct clinic name. |
+| `clinic_name`   | `Somo Mental Health` | Optional | So the agent can say the correct clinic name. |
 | `has_insurance` | `yes` or `no`          | Optional | Informs whether to mention copay/eligibility. |
 
 ### Flow and test data
@@ -4423,7 +4423,7 @@ Use `scripts/test-voice-triage-parity-smoke.sh` with the server running (optiona
 
 <a id="wiring-guide"></a>
 
-## DocLittle Payment Architecture — Wiring Guide
+## Somo Payment Architecture — Wiring Guide
 
 
 ## What is wired

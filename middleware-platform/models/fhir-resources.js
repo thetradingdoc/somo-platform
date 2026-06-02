@@ -1,5 +1,5 @@
 /**
- * FHIR Resource Templates - DocLittle Telehealth Platform
+ * FHIR Resource Templates - Somo Telehealth Platform
  *
  * FHIR R4 compliant resource templates for:
  * - Patient (demographics)
@@ -11,6 +11,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const fhirIds = require('../lib/fhir-brand-identifiers');
 
 class FHIRResources {
   /**
@@ -26,7 +27,7 @@ class FHIRResources {
       id: patientId,
       identifier: [
         {
-          system: 'https://doclittle.health/patient-id',
+          system: fhirIds.patientIdSystem(),
           value: data.patientNumber || patientId
         }
       ],
@@ -59,22 +60,22 @@ class FHIRResources {
       }] : [],
       extension: [
         {
-          url: 'https://doclittle.health/extension/consent-voice-recording',
+          url: fhirIds.extensionUrl('consent-voice-recording'),
           valueBoolean: data.consentVoiceRecording !== undefined ? data.consentVoiceRecording : true
         },
         {
-          url: 'https://doclittle.health/extension/preferred-language',
+          url: fhirIds.extensionUrl('preferred-language'),
           valueCode: data.preferredLanguage || 'en-US'
         },
         ...(data.timezone ? [{
-          url: 'https://doclittle.health/extension/timezone',
+          url: fhirIds.extensionUrl('timezone'),
           valueString: data.timezone
         }] : [])
       ],
       meta: {
         lastUpdated: new Date().toISOString(),
         versionId: '1',
-        source: 'https://doclittle.health'
+        source: fhirIds.metaSource()
       }
     };
   }
@@ -130,26 +131,26 @@ class FHIRResources {
       }] : [],
       extension: [
         {
-          url: 'https://doclittle.health/extension/voice-call-id',
+          url: fhirIds.extensionUrl('voice-call-id'),
           valueString: data.callId || encounterId
         },
         {
-          url: 'https://doclittle.health/extension/ai-agent-version',
+          url: fhirIds.extensionUrl('ai-agent-version'),
           valueString: data.agentVersion || 'v1.0.0'
         },
         ...(data.callQuality ? [{
-          url: 'https://doclittle.health/extension/call-quality',
+          url: fhirIds.extensionUrl('call-quality'),
           valueInteger: data.callQuality // 1-5 rating
         }] : []),
         ...(data.merchantId ? [{
-          url: 'https://doclittle.health/extension/merchant-id',
+          url: fhirIds.extensionUrl('merchant-id'),
           valueString: data.merchantId
         }] : [])
       ],
       meta: {
         lastUpdated: new Date().toISOString(),
         versionId: '1',
-        source: 'https://doclittle.health'
+        source: fhirIds.metaSource()
       }
     };
   }
@@ -186,7 +187,7 @@ class FHIRResources {
       ...(data.receivedTime && { received: data.receivedTime }),
       recipient: [{
         reference: data.recipientReference || 'Device/voice-agent-001',
-        display: 'DocLittle Voice Agent'
+        display: 'Somo Voice Agent'
       }],
       sender: {
         reference: `Patient/${data.patientId}`,
@@ -196,15 +197,15 @@ class FHIRResources {
         contentString: msg.text,
         extension: [
           {
-            url: 'https://doclittle.health/extension/speaker',
+            url: fhirIds.extensionUrl('speaker'),
             valueString: msg.speaker // 'patient' or 'agent'
           },
           {
-            url: 'https://doclittle.health/extension/timestamp',
+            url: fhirIds.extensionUrl('timestamp'),
             valueDateTime: msg.timestamp || new Date().toISOString()
           },
           ...(msg.sentiment ? [{
-            url: 'https://doclittle.health/extension/sentiment',
+            url: fhirIds.extensionUrl('sentiment'),
             valueString: msg.sentiment // 'positive', 'negative', 'neutral'
           }] : [])
         ]
@@ -217,7 +218,7 @@ class FHIRResources {
       meta: {
         lastUpdated: new Date().toISOString(),
         versionId: '1',
-        source: 'https://doclittle.health'
+        source: fhirIds.metaSource()
       }
     };
   }
@@ -289,7 +290,7 @@ class FHIRResources {
       meta: {
         lastUpdated: new Date().toISOString(),
         versionId: '1',
-        source: 'https://doclittle.health'
+        source: fhirIds.metaSource()
       }
     };
   }
@@ -323,7 +324,7 @@ class FHIRResources {
       authoredOn: data.authoredOn || new Date().toISOString(),
       requester: {
         reference: data.requesterReference || 'Device/voice-agent-001',
-        display: 'DocLittle Voice Agent'
+        display: 'Somo Voice Agent'
       },
       dosageInstruction: data.dosageInstructions ? data.dosageInstructions.map(instruction => ({
         text: instruction.text,
@@ -337,25 +338,25 @@ class FHIRResources {
       })) : [],
       extension: [
         ...(data.orderId ? [{
-          url: 'https://doclittle.health/extension/order-id',
+          url: fhirIds.extensionUrl('order-id'),
           valueString: data.orderId
         }] : []),
         ...(data.price ? [{
-          url: 'https://doclittle.health/extension/purchase-price',
+          url: fhirIds.extensionUrl('purchase-price'),
           valueMoney: {
             value: data.price,
             currency: data.currency || 'USD'
           }
         }] : []),
         ...(data.productId ? [{
-          url: 'https://doclittle.health/extension/product-id',
+          url: fhirIds.extensionUrl('product-id'),
           valueString: data.productId
         }] : [])
       ],
       meta: {
         lastUpdated: new Date().toISOString(),
         versionId: '1',
-        source: 'https://doclittle.health'
+        source: fhirIds.metaSource()
       }
     };
   }
@@ -405,7 +406,7 @@ class FHIRResources {
       meta: {
         lastUpdated: new Date().toISOString(),
         versionId: '1',
-        source: 'https://doclittle.health'
+        source: fhirIds.metaSource()
       }
     };
   }
@@ -461,7 +462,7 @@ class FHIRResources {
           }]
         }]
       }),
-      meta: { lastUpdated: new Date().toISOString(), versionId: '1', source: 'https://doclittle.health' }
+      meta: { lastUpdated: new Date().toISOString(), versionId: '1', source: fhirIds.metaSource() }
     };
   }
 
@@ -498,7 +499,7 @@ class FHIRResources {
           reference: typeof r === 'string' ? r : `Observation/obs-${i}`
         }))
       }),
-      meta: { lastUpdated: new Date().toISOString(), versionId: '1', source: 'https://doclittle.health' }
+      meta: { lastUpdated: new Date().toISOString(), versionId: '1', source: fhirIds.metaSource() }
     };
     const markdown = data.presentedFormMarkdown || (data.presentedForm && typeof data.presentedForm === 'string' ? data.presentedForm : null);
     if (markdown) {

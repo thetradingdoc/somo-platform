@@ -41,8 +41,19 @@ const API_BASE = API_BASE_URL;
 const SESSION_KEY = 'patient_session_id';
 const API_BASE_KEY = 'patient_api_base_url';
 
-/** SecureStore key for persisted server quote id (must match usage in get/set). */
-const KELLY_QUOTE_KEY = 'doclittle_kelly_commerce_quote_v1';
+const KELLY_QUOTE_KEY = 'somo_kelly_commerce_quote_v1';
+const KELLY_QUOTE_KEY_LEGACY = 'doclittle_kelly_commerce_quote_v1';
+
+async function loadPersistedQuoteId(): Promise<string | null> {
+  const current = await SecureStore.getItemAsync(KELLY_QUOTE_KEY);
+  if (current) return current;
+  const legacy = await SecureStore.getItemAsync(KELLY_QUOTE_KEY_LEGACY);
+  if (legacy) {
+    await SecureStore.setItemAsync(KELLY_QUOTE_KEY, legacy);
+    return legacy;
+  }
+  return null;
+}
 
 const API_HEADERS = {
   'Content-Type': 'application/json',
@@ -156,7 +167,7 @@ export default function CheckoutChatScreen() {
         }
         const sid = await SecureStore.getItemAsync(SESSION_KEY);
         setSessionId(sid);
-        const qid = await SecureStore.getItemAsync(KELLY_QUOTE_KEY);
+        const qid = await loadPersistedQuoteId();
         if (qid) setCommerceQuoteId(qid);
       } catch {
         setSessionId(null);

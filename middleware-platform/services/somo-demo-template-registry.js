@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { getUseCaseContext } = require('./dodgecall-use-cases');
+const { getUseCaseContext } = require('./somo-demo-use-cases');
 
 const AGENT_ENV_FALLBACKS = ['RETELL_SALES_AGENT_ID', 'RETELL_AGENT_ID'];
 const FROM_ENV_FALLBACKS = ['TWILIO_PHONE_NUMBER'];
@@ -12,7 +12,7 @@ let _config = null;
 
 function loadConfig() {
   if (_config) return _config;
-  const configPath = path.join(__dirname, '..', 'config', 'dodgecall-templates.json');
+  const configPath = path.join(__dirname, '..', 'config', 'somo-demo-templates.json');
   _config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   return _config;
 }
@@ -29,7 +29,7 @@ function resolveEnv(primaryKey, fallbackKeys = []) {
     }
   }
   throw new Error(
-    `DodgeCall demo misconfigured: set one of ${keys.join(', ')} in middleware-platform/.env`
+    `Somo demo demo misconfigured: set one of ${keys.join(', ')} in middleware-platform/.env`
   );
 }
 
@@ -54,7 +54,7 @@ function resolveTemplate({ use_case }) {
   const templateId = config.use_case_map[useCase] || config.use_case_map.receptionist || 'medical';
   const template = config.templates[templateId];
   if (!template) {
-    throw new Error(`Unknown DodgeCall template: ${templateId}`);
+    throw new Error(`Unknown Somo demo template: ${templateId}`);
   }
 
   const agentId = resolveEnv(template.retell_agent_id_env, AGENT_ENV_FALLBACKS);

@@ -1,6 +1,8 @@
 # Runtime entrypoints and route ownership (middleware)
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-02
+
+> **Companion:** End-to-end flows (landing → API → DB) in [RUNTIME_ENTRYPOINTS_AND_CALL_PATHS.md](./RUNTIME_ENTRYPOINTS_AND_CALL_PATHS.md).
 
 Single map for “what listens where” on the main Node process. **Compose entry:** [`middleware-platform/server.js`](../../middleware-platform/server.js). **Decomposition map:** [`SERVER_DECOMPOSITION.md`](./SERVER_DECOMPOSITION.md).
 

@@ -1,8 +1,8 @@
-# DodgeCall demo — isolation contract
+# Somo demo demo — isolation contract
 
 **Last updated:** 2026-05-28
 
-Demo calls (`call_type=dodgecall_demo`) must **never** execute the following on the WebSocket path:
+Demo calls (`call_type=somo_demo`) must **never** execute the following on the WebSocket path:
 
 | Must NOT run | Module / behavior |
 |--------------|-------------------|
@@ -14,16 +14,16 @@ Demo calls (`call_type=dodgecall_demo`) must **never** execute the following on 
 
 ## Allowed on demo path
 
-- `dodgecall-demo-handler.js`
-- `dodgecall-demo-orchestrator.js`
-- `dodgecall-prompt-builder.js` (playbook + signup CTA)
-- `dodgecall-sms.js` (signup link; dedicated FROM env)
-- `dodgecall-template-registry.js`
-- DB: `dodgecall_demo_requests` only (no `rcm_journeys` / Kelly session coupling required)
+- `somo-demo-handler.js`
+- `somo-demo-orchestrator.js`
+- `somo-demo-prompt-builder.js` (playbook + signup CTA)
+- `somo-demo-sms.js` (signup link; dedicated FROM env)
+- `somo-demo-template-registry.js`
+- DB: `somo_demo_requests` only (no `rcm_journeys` / Kelly session coupling required)
 
 ## Ingress exceptions
 
-On `/voice/incoming` when `call_type=dodgecall_demo`:
+On `/voice/incoming` when `call_type=somo_demo`:
 
 - Skip subscription/billing gate (already implemented).
 - Use `DODGECALL_RETELL_AGENT_ID` + `DODGECALL_TWILIO_FROM_NUMBER` from template registry.
@@ -31,9 +31,9 @@ On `/voice/incoming` when `call_type=dodgecall_demo`:
 
 ## Enforcement
 
-`isDodgecallDemoConnection(connection)` in `dodgecall-demo-handler.js` requires:
+`isSomoDemoDemoConnection(connection)` in `somo-demo-handler.js` requires:
 
 1. `DODGECALL_DEMO_ENABLED` not `0` / `false`
-2. `call_type === 'dodgecall_demo'` in metadata or dynamic variables
+2. `call_type === 'somo_demo'` in metadata or dynamic variables
 
 `retell-websocket.js` returns early to demo handler **before** LangGraph (~578) and Kelly (~627).

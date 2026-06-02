@@ -1,6 +1,6 @@
 # Prior Authorization (PA) Architecture
 
-This document is the **canonical** description of how DocLittle handles **insurance prior authorization**.
+This document is the **canonical** description of how Somo handles **insurance prior authorization**.
 
 It intentionally separates:
 

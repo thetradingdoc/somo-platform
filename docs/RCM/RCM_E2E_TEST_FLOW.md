@@ -81,7 +81,7 @@ See scorecard and failure categories in [RCM_PATIENT_PAY_GATEWAY.md](./RCM_PATIE
 
 ### Provider
 
-1. Log in at `/business/login.html` (demo: `provider@doclittle.com` / `demo123`).
+1. Log in at `/business/login.html` (demo: `provider@callsomo.com` / `demo123`).
 2. **RCM Command Center** (`/business/rcm.html`) — stage labels, collection queue, recently paid.
 3. **Patient Payments** (`/business/patient-payments.html`) — paid rows, journey stage labels, copy pay link.
 

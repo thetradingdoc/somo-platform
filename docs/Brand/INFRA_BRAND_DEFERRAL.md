@@ -17,18 +17,26 @@ Legacy `myskinandcare.com` / `doclittle.site` are retired in code; DNS 301s are 
 
 | Pattern | Example |
 |---------|---------|
-| `dodgecall-*` modules / HTTP paths | `dodgecall-demo`, `services/dodgecall-*.js` |
 | `Kelly*` services | `KellyAgentService`, `KELLY_*` env vars |
 | `STEDI_*` | Stedi integration env vars |
 | Cloud Run service `myskin-middleware` | GCP resource name (rename is separate ops) |
-| FHIR `doclittle.health` extension URLs | Stored data namespace — migrate deliberately |
+| `/api/public/dodgecall` | Deprecated route alias → `/api/public/somo-demo` |
+
+## FHIR namespace
+
+New writes use `https://callsomo.com/fhir/StructureDefinition/...` via [`fhir-brand-identifiers.js`](../../middleware-platform/lib/fhir-brand-identifiers.js). Legacy `doclittle.health` URLs remain readable until backfill:
+
+```bash
+DB_PATH=./middleware-staging.db node middleware-platform/scripts/backfill-fhir-callsomo-namespace.cjs --dry-run
+```
 
 ## Display vs infra
 
 - **Change:** HTML titles, hero copy, support emails, terms party name (Somo).
-- **Do not change without migration:** FHIR extension URLs, GCP service/bucket names, vendor webhook URLs until consoles are updated.
+- **Do not change without migration:** GCP service/bucket names, vendor webhook URLs until consoles are updated.
 
 ## Guardrails
 
 - `npm run check:legacy-hosts` — fails on `doclittle.site`, `myskinandcare.com`, `doctor-little-c688d` in active code.
+- `npm run check:brand-consumer-strings` — bans legacy consumer strings in services/routes.
 - `npm run guardrail:no-azure-deploy` — fails if Azure deploy scripts are reintroduced.

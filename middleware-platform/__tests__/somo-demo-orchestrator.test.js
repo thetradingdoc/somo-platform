@@ -2,10 +2,10 @@
 
 // Loaded after env cleared in beforeEach for rule-based path
 function loadOrchestrator() {
-  return require('../services/dodgecall-demo-orchestrator');
+  return require('../services/somo-demo-orchestrator');
 }
 
-describe('dodgecall-demo-orchestrator', () => {
+describe('somo-demo-orchestrator', () => {
   const origGroq = process.env.GROQ_API_KEY;
 
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe('dodgecall-demo-orchestrator', () => {
       elapsedSec: 10,
       maxDurationSec: 240
     });
-    expect(result.reply).toMatch(/DodgeCall|Sam|business/i);
+    expect(result.reply).toMatch(/Somo demo|Sam|business/i);
     expect(result.stage).toBeTruthy();
   });
 
