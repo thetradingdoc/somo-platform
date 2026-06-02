@@ -156,7 +156,6 @@ async function testRetellAPI() {
         response.data.llm_websocket_url ||
         'N/A';
       logInfo(`WebSocket URL: ${wsUrl}`);
- agent log
       try {
         const phonesResp = await axios.get('https://api.retellai.com/v2/list-phone-numbers', {
           headers: { 'Authorization': `Bearer ${apiKey}` },
@@ -165,7 +164,6 @@ async function testRetellAPI() {
         const items = Array.isArray(phonesResp.data?.items) ? phonesResp.data.items : [];
         const fromNumber = process.env.TWILIO_PHONE_NUMBER;
         const matched = items.find((i) => i.phone_number === fromNumber);
- agent log
       } catch (_) {}
       return true;
     }
