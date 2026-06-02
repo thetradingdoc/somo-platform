@@ -49,9 +49,7 @@ function getSessionCookieOptions(req, maxAge = 30 * 24 * 60 * 60 * 1000) {
   };
   const cookieHost = (req.headers.host || '').toLowerCase();
   if (process.env.NODE_ENV === 'production') {
-    if (cookieHost.includes('myskinandcare.com')) options.domain = '.myskinandcare.com';
-    else if (cookieHost.includes('skinandcare.com')) options.domain = '.skinandcare.com';
-    else if (cookieHost.includes('doclittle.site')) options.domain = '.doclittle.site';
+    if (cookieHost.includes('callsomo.com')) options.domain = '.callsomo.com';
   }
   return options;
 }

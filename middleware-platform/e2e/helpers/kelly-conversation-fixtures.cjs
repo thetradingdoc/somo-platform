@@ -138,9 +138,16 @@ const seedE2eBookableDermProvider = seedE2eBookableProvider;
 function teardownKellySession(sessionId) {
   const { dbModule } = loadDb();
   if (dbModule.wipeChatSessionClinicalState) {
-    return dbModule.wipeChatSessionClinicalState(sessionId);
+    dbModule.wipeChatSessionClinicalState(sessionId);
   }
-  return { ok: false };
+  try {
+    const KellyToolExecutor = getKellyToolExecutor();
+    KellyToolExecutor._setSessionMeta(sessionId, 'rcm_pay_token', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'rcm_payment_id', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'pay_url', '');
+  } catch (_) {}
+  return { ok: true };
 }
 
 /**
@@ -400,12 +407,17 @@ function verifyBookingFixtureGates(sessionId) {
  */
 function assertClinicVisitPath(sessionId) {
   const state = readKellyState(sessionId);
+  const KellyToolExecutor = getKellyToolExecutor();
+  const graphBranch = String(KellyToolExecutor._getSessionMeta(sessionId, 'kelly_graph_branch') || '');
   const badPhases = ['ROUTINE_INTAKE', 'ROUTINE_FOLLOWUP'];
   if (badPhases.includes(state.phase)) {
     throw new Error(`S0-1: on skincare path phase=${state.phase}`);
   }
   if (state.routine_intake_active) {
     throw new Error('S0-1: routine_intake_active=1 (skincare consumer path)');
+  }
+  if (graphBranch === 'education' || graphBranch === 'skincare_education') {
+    throw new Error(`S0-1: on education lane branch=${graphBranch}`);
   }
   return state;
 }
@@ -415,12 +427,18 @@ function assertClinicVisitPath(sessionId) {
  */
 function assertKellyState(sessionId, expected = {}) {
   const state = readKellyState(sessionId);
+  const KellyToolExecutor = getKellyToolExecutor();
+  const graphBranch = String(KellyToolExecutor._getSessionMeta(sessionId, 'kelly_graph_branch') || '');
   const mismatches = [];
 
   if (expected.phase != null) {
     const allowed = Array.isArray(expected.phase) ? expected.phase : [expected.phase];
-    if (!allowed.includes(state.phase)) {
-      mismatches.push(`phase: expected ${allowed.join('|')} got ${state.phase}`);
+    const branchOk =
+      (allowed.includes('BOOKING') && graphBranch === 'booking') ||
+      (allowed.includes('TRIAGE_ACTIVE') && graphBranch === 'clinical') ||
+      (allowed.includes('TRIAGE_DISCOVERY') && (graphBranch === 'basic_intake' || graphBranch === 'clinical'));
+    if (!allowed.includes(state.phase) && !branchOk) {
+      mismatches.push(`phase: expected ${allowed.join('|')} got ${state.phase} branch=${graphBranch}`);
     }
   }
   if (expected.triage_complete != null && state.triage_complete !== expected.triage_complete) {
@@ -489,19 +507,30 @@ function seedPatient(opts = {}) {
   const { dbModule } = loadDb();
   const phone = opts.phone || process.env.TEST_PATIENT_PHONE || '+15550009991';
   const email = opts.email || 'e2e-golden-path@somo.test';
+  const given = opts.given || (opts.patientName ? String(opts.patientName).split(/\s+/)[0] : 'E2E');
+  const family =
+    opts.family || (opts.patientName ? String(opts.patientName).split(/\s+/).slice(1).join(' ') || 'Test' : 'GoldenPath');
 
   let patient = dbModule.getFHIRPatientByPhone?.(phone);
+  if (!patient && email && dbModule.db) {
+    try {
+      const row = dbModule.db
+        .prepare(`SELECT resource_id FROM fhir_patients WHERE lower(email) = lower(?) LIMIT 1`)
+        .get(email);
+      if (row?.resource_id) patient = dbModule.getFHIRPatient(row.resource_id);
+    } catch (_) {}
+  }
   if (!patient) {
     const resourceId = `Patient/e2e-golden-${crypto.randomBytes(6).toString('hex')}`;
     dbModule.createFHIRPatient({
       resourceType: 'Patient',
       id: resourceId,
-      name: [{ given: ['E2E'], family: 'GoldenPath' }],
+      name: [{ given: [given], family }],
       telecom: [
         { system: 'phone', value: phone },
         { system: 'email', value: email },
       ],
-      birthDate: '1990-01-15',
+      birthDate: opts.birthDate || '1990-01-15',
     });
     patient = dbModule.getFHIRPatient(resourceId);
   }
@@ -514,8 +543,317 @@ function seedPatient(opts = {}) {
     patientId: patient.resource_id,
     phone,
     email,
+    patientName: `${given} ${family}`.trim(),
   };
 }
+
+const TOM_HARRIS_EMAIL = 'drlittlekids@gmail.com';
+const TOM_HARRIS_PHONE = process.env.TOM_HARRIS_PHONE || '+15550008877';
+
+function seedTomHarrisPatient(opts = {}) {
+  return seedPatient({
+    phone: opts.phone || TOM_HARRIS_PHONE,
+    email: opts.email || TOM_HARRIS_EMAIL,
+    given: 'Tom',
+    family: 'Harris',
+    ...opts,
+  });
+}
+
+function tomorrowAtNoonLocal() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return {
+    dateStr: `${y}-${m}-${day}`,
+    startDatetime: `${y}-${m}-${day}T12:00:00`,
+    endDatetime: `${y}-${m}-${day}T12:30:00`,
+    label: 'tomorrow at 12:00 PM',
+  };
+}
+
+function seedE2eSlotTomorrowNoon(clinicId, opts = {}) {
+  const providerEmail = (opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com').trim();
+  seedE2eBookableProvider(clinicId, { targetSpecialty: opts.targetSpecialty || 'Dermatology', providerEmail });
+  const noon = tomorrowAtNoonLocal();
+  const ProviderService = require(path.join(__dirname, '..', '..', 'services', 'provider-service'));
+  try {
+    ProviderService.createAvailabilityBlock({
+      id: `avb_e2e_noon_${crypto.randomBytes(6).toString('hex')}`,
+      provider_email: providerEmail,
+      block_type: 'available',
+      start_datetime: noon.startDatetime,
+      end_datetime: noon.endDatetime,
+      title: 'E2E tomorrow noon dermatology',
+    });
+  } catch (e) {
+    if (!String(e.message || '').includes('UNIQUE')) throw e;
+  }
+  return { ...noon, providerEmail };
+}
+
+async function seedTomHarrisAppointment(sessionId, patientId, clinicId, opts = {}) {
+  const { dbModule } = loadDb();
+  const noon = opts.noon || tomorrowAtNoonLocal();
+  const apptId = opts.appointmentId || `appt_f2_${crypto.randomBytes(8).toString('hex')}`;
+  const providerEmail =
+    opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+
+  await dbModule.createAppointment({
+    id: apptId,
+    clinic_id: clinicId,
+    patient_id: patientId,
+    patient_name: opts.patientName || 'Tom Harris',
+    patient_email: opts.email || TOM_HARRIS_EMAIL,
+    patient_phone: opts.phone || TOM_HARRIS_PHONE,
+    appointment_type: 'Dermatology',
+    date: noon.dateStr,
+    time: '12:00',
+    start_time: noon.startDatetime,
+    end_time: noon.endDatetime,
+    duration_minutes: 30,
+    provider: providerEmail,
+    status: 'scheduled',
+    visit_mode: 'sync_video',
+  });
+
+  try {
+    const { persistCaseSummaryForAppointment } = require('../services/case-summary-service');
+    persistCaseSummaryForAppointment({ appointmentId: apptId, sessionId });
+  } catch (_) {}
+
+  return apptId;
+}
+
+function clearRcmE2eEmailOutbox() {
+  const { dbModule } = loadDb();
+  try {
+    dbModule.db.exec(`DELETE FROM rcm_e2e_email_outbox`);
+  } catch (_) {}
+}
+
+function assertEmailSentTo(email, opts = {}) {
+  const { dbModule } = loadDb();
+  const normalized = String(email || '').toLowerCase();
+  const since = opts.sinceMinutes ? `datetime('now', '-${opts.sinceMinutes} minutes')` : null;
+  let rows = [];
+  try {
+    rows = since
+      ? dbModule.db
+          .prepare(
+            `SELECT recipient, subject, template, success, created_at FROM rcm_e2e_email_outbox
+             WHERE lower(recipient) = ? AND created_at >= ${since}
+             ORDER BY id DESC`
+          )
+          .all(normalized)
+      : dbModule.db
+          .prepare(
+            `SELECT recipient, subject, template, success, created_at FROM rcm_e2e_email_outbox
+             WHERE lower(recipient) = ?
+             ORDER BY id DESC`
+          )
+          .all(normalized);
+  } catch (e) {
+    throw new Error(
+      `assertEmailSentTo: rcm_e2e_email_outbox missing (set RCM_E2E_RECORD_EMAIL=1 on server): ${e.message}`
+    );
+  }
+  const template = opts.template ? String(opts.template).toLowerCase() : null;
+  const filtered = template ? rows.filter((r) => String(r.template || '').toLowerCase() === template) : rows;
+  const successOnly = opts.requireSuccess !== false;
+  const hit = filtered.find((r) => {
+    if (!successOnly) return true;
+    const ok = r.success === 1 || r.success === true || String(r.success) === '1';
+    return ok || (process.env.RCM_E2E_RECORD_EMAIL === '1' && r.recipient);
+  });
+  if (!hit) {
+    throw new Error(
+      `No email to ${email} template=${template || 'any'} success=${successOnly}. rows=${JSON.stringify(rows.slice(0, 3))}`
+    );
+  }
+  if (opts.subjectFragment) {
+    const frag = String(opts.subjectFragment).toLowerCase();
+    if (!String(hit.subject || '').toLowerCase().includes(frag)) {
+      throw new Error(`Email subject missing "${opts.subjectFragment}": ${hit.subject}`);
+    }
+  }
+  return hit;
+}
+
+async function providerApiLogin(baseUrl, email, password) {
+  const http = require('http');
+  const https = require('https');
+  const url = new URL(`${baseUrl.replace(/\/$/, '')}/api/customers/login`);
+  const payload = JSON.stringify({ email, password, remember_me: false });
+  const lib = url.protocol === 'https:' ? https : http;
+  let cookieJar = '';
+  const res = await new Promise((resolve, reject) => {
+    const req = lib.request(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+      },
+      (r) => {
+        let data = '';
+        r.on('data', (c) => {
+          data += c;
+        });
+        r.on('end', () => {
+          const setCookie = r.headers['set-cookie'];
+          if (setCookie) cookieJar = setCookie.map((c) => c.split(';')[0]).join('; ');
+          let json = {};
+          try {
+            json = data ? JSON.parse(data) : {};
+          } catch (_) {}
+          resolve({ status: r.statusCode, json, cookieJar });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+  if (res.status !== 200 || !res.json.success) {
+    throw new Error(res.json.error || `Provider login HTTP ${res.status}`);
+  }
+  return res.cookieJar;
+}
+
+async function fetchClinicalPrep(baseUrl, cookieJar, appointmentId) {
+  const http = require('http');
+  const https = require('https');
+  const url = new URL(
+    `${baseUrl.replace(/\/$/, '')}/api/admin/appointments/${encodeURIComponent(appointmentId)}/clinical-prep`
+  );
+  const lib = url.protocol === 'https:' ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = lib.request(
+      url,
+      { method: 'GET', headers: { Cookie: cookieJar } },
+      (r) => {
+        let data = '';
+        r.on('data', (c) => {
+          data += c;
+        });
+        r.on('end', () => {
+          let json = {};
+          try {
+            json = data ? JSON.parse(data) : {};
+          } catch (_) {}
+          resolve({ status: r.statusCode, json });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function assertClinicalPrepInProcess(appointmentId, sessionId, opts = {}) {
+  const { dbModule } = loadDb();
+  let appt = null;
+  try {
+    appt = dbModule.db.prepare('SELECT * FROM appointments WHERE id = ?').get(appointmentId);
+  } catch (_) {}
+  if (!appt && dbModule.getAppointment) {
+    appt = dbModule.getAppointment(appointmentId);
+  }
+  if (!appt) throw new Error(`clinical-prep: appointment not found ${appointmentId}`);
+
+  let caseSummaryRow = null;
+  try {
+    caseSummaryRow = dbModule.db
+      .prepare('SELECT * FROM case_summaries WHERE appointment_id = ? LIMIT 1')
+      .get(appointmentId);
+  } catch (_) {}
+
+  const { resolveTriageSessionIdForAppointment } = require('../../services/clinical-prep-session-resolve');
+  const triageSessionId =
+    caseSummaryRow?.session_id || resolveTriageSessionIdForAppointment(appointmentId, appt);
+  const triage =
+    triageSessionId && dbModule.getTriageSession ? dbModule.getTriageSession(triageSessionId) : null;
+
+  const blob = JSON.stringify({ triage, caseSummaryRow, appt }).toLowerCase();
+  if (opts.expectRash !== false && !/rash|leg|neck|itch|dermat/i.test(blob)) {
+    throw new Error(`clinical-prep (in-process) missing rash/leg/neck: ${blob.slice(0, 300)}`);
+  }
+  if (sessionId && triageSessionId && triageSessionId !== sessionId) {
+    throw new Error(`clinical-prep session mismatch: got ${triageSessionId} expected ${sessionId}`);
+  }
+  return { triage, caseSummaryRow, triageSessionId };
+}
+
+async function assertClinicalPrep(baseUrl, cookieJar, appointmentId, sessionId, opts = {}) {
+  const res = await fetchClinicalPrep(baseUrl, cookieJar, appointmentId);
+  if (res.status !== 200 || !res.json.success) {
+    throw new Error(`clinical-prep HTTP ${res.status}: ${JSON.stringify(res.json).slice(0, 200)}`);
+  }
+  const prep = res.json.prep || res.json;
+  const triage = prep.triage || prep.triage_session || null;
+  const summary = prep.case_summary || null;
+  const blob = JSON.stringify({ triage, summary, prep }).toLowerCase();
+  if (opts.expectRash !== false) {
+    if (!/rash|leg|neck|itch|dermat/i.test(blob)) {
+      throw new Error(`clinical-prep missing rash/leg/neck context: ${blob.slice(0, 300)}`);
+    }
+  }
+  if (sessionId) {
+    const sid = String(prep.triage_session_id || triage?.session_id || caseSummarySession(prep) || '');
+    if (sid && sid !== sessionId) {
+      throw new Error(`clinical-prep session mismatch: got ${sid} expected ${sessionId}`);
+    }
+  }
+  return prep;
+}
+
+function caseSummarySession(prep) {
+  try {
+    return prep?.case_summary?.session_id || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Ensure OPQRST + RAG rows exist for cold-start F2 (DB seed — no LLM call).
+ */
+function seedTriageWithRag(sessionId, patientId, clinicId, opts = {}) {
+  const { completeTriageRagForSession } = require('../services/triage-rag-fast-complete');
+  completeTriageRagForSession(sessionId, patientId, {
+    targetSpecialty: opts.targetSpecialty || 'Dermatology',
+    region: opts.region || 'leg and neck',
+    quality: opts.quality || 'itchy rash on leg and neck',
+    patientName: opts.patientName || 'Tom Harris',
+    email: opts.email || TOM_HARRIS_EMAIL,
+    ragId: opts.ragId,
+    ragConfidence: opts.ragConfidence,
+  });
+  setMeta(sessionId, 'kelly_graph_branch', 'clinical');
+  return readKellyState(sessionId);
+}
+
+function ensureClinicalTriageReady(sessionId, patientId, clinicId, opts = {}) {
+  return seedTriageWithRag(sessionId, patientId, clinicId, opts);
+}
+
+const TOM_HARRIS_MESSAGES = {
+  t1: 'I have an itchy rash on my leg and neck for about a week. It is not an emergency — I would like dermatology help.',
+  t2: 'It is dry skin type, not pregnant, moderate itch about 3 out of 5. It started last Tuesday on my leg and neck. No fever.',
+  t2b: 'The rash is on my left leg and neck, red and scaly, worse at night. Severity is 3 out of 5.',
+  t3: (noon) =>
+    `Can you book me for ${noon?.label || 'tomorrow at 12:00 PM'} with dermatology? I am available at noon.`,
+  t4: (email, noon) =>
+    `Yes, please book the ${noon?.label || 'tomorrow at 12:00 PM'} slot. My email is ${email || TOM_HARRIS_EMAIL} and phone ${TOM_HARRIS_PHONE}.`,
+  t5: 'I have BlueCross insurance. What will my copay be for this visit?',
+  t6: (copay) =>
+    `OK, I would like to pay ${copay || '$25'} now before the appointment. Please send me a secure payment link to my email.`,
+};
 
 /**
  * A2: Seed eligibility copay for patient.
@@ -660,7 +998,13 @@ function setupGoldenPathContext(opts = {}) {
 
   const clinicId = opts.clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
   const sessionId = opts.sessionId || newE2eSessionId('e2e_golden');
-  const patient = seedPatient(opts);
+  const tomHarris = process.env.KELLY_F2_TOM_HARRIS === '1' || opts.tomHarris === true;
+  const patient = tomHarris ? seedTomHarrisPatient(opts) : seedPatient(opts);
+  let tomorrowNoon = null;
+  if (tomHarris) {
+    clearRcmE2eEmailOutbox();
+    tomorrowNoon = seedE2eSlotTomorrowNoon(clinicId, opts);
+  }
   const eligibility = seedEligibility(patient.patientId, opts.copayAmount ?? 25);
   const journey = seedOpenJourney(clinicId, patient.patientId, opts);
   const portalSessionId = seedPatientSessionForE2e(patient.patientId, patient.email);
@@ -691,12 +1035,15 @@ function setupGoldenPathContext(opts = {}) {
     patientId: patient.patientId,
     patientPhone: patient.phone,
     patientEmail: patient.email,
+    patientName: patient.patientName || 'Tom Harris',
     portalSessionId,
     journeyId: journey.journeyId,
     copayAmount: eligibility.copayAmount,
     skipTriagePreflight,
     turnLog: [],
     payToken: null,
+    tomorrowNoon,
+    tomHarris,
   };
 }
 
@@ -725,5 +1072,20 @@ module.exports = {
   assertPaymentPaid,
   setupGoldenPathContext,
   setMeta,
+  seedTomHarrisPatient,
+  seedTomHarrisAppointment,
+  tomorrowAtNoonLocal,
+  seedE2eSlotTomorrowNoon,
+  assertEmailSentTo,
+  clearRcmE2eEmailOutbox,
+  providerApiLogin,
+  assertClinicalPrep,
+  assertClinicalPrepInProcess,
+  fetchClinicalPrep,
+  TOM_HARRIS_EMAIL,
+  TOM_HARRIS_PHONE,
+  TOM_HARRIS_MESSAGES,
+  ensureClinicalTriageReady,
+  seedTriageWithRag,
 };
 

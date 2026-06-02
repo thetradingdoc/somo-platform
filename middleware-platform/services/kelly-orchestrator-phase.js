@@ -160,6 +160,43 @@ function clinicDermMinimumIntakeMet({ sessionRow, metaGet }) {
   return !!(skinOk && chiefComplaint && bodySite && severity && timeline);
 }
 
+/**
+ * Non-derm clinic minimum: OPQRST fields without Step1 skin type (I2-7).
+ */
+function clinicClinicalMinimumIntakeMet({ sessionRow, metaGet }) {
+  const get = typeof metaGet === 'function' ? metaGet : () => null;
+  const chiefComplaint =
+    (sessionRow && String(sessionRow.quality || sessionRow.chief_complaint || '').trim()) ||
+    String(get('chief_complaint') || '').trim();
+  const bodySite =
+    (sessionRow && String(sessionRow.region || sessionRow.body_site || '').trim()) ||
+    String(get('body_sites') || '').trim();
+  const severity =
+    sessionRow &&
+    (sessionRow.severity != null ||
+      sessionRow.severity_score != null ||
+      String(sessionRow.severity || '').trim());
+  const timeline =
+    (sessionRow && String(sessionRow.onset || sessionRow.timeline || '').trim()) ||
+    String(get('timeline') || get('onset') || '').trim();
+  return !!(chiefComplaint && bodySite && severity && timeline);
+}
+
+function isDermSpecialtyTarget(sessionRow, metaGet) {
+  const get = typeof metaGet === 'function' ? metaGet : () => null;
+  const spec = String(
+    (sessionRow && sessionRow.target_specialty) || get('target_specialty') || ''
+  ).toLowerCase();
+  return spec.includes('dermatolog') || spec === 'derm' || spec === 'dermatology';
+}
+
+function clinicMinimumIntakeMet(opts) {
+  if (isDermSpecialtyTarget(opts.sessionRow, opts.metaGet)) {
+    return clinicDermMinimumIntakeMet(opts);
+  }
+  return clinicClinicalMinimumIntakeMet(opts);
+}
+
 function isExplicitBookingIntent(message) {
   const t = String(message || '').toLowerCase();
   return (
@@ -349,7 +386,7 @@ function resolveOrchestrationPhase(opts) {
     hasRag = true;
   }
   const bookingIntentSeen = metaTrue('booking_intent_seen') || isExplicitBookingIntent(message);
-  const clinicIntakeMet = clinicDermMinimumIntakeMet({ sessionRow, metaGet });
+  const clinicIntakeMet = clinicMinimumIntakeMet({ sessionRow, metaGet });
   if (bookingIntentSeen && clinicIntakeMet) {
     _metaSet(KellyToolExecutor, sessionId, 'booking_intent_seen', '1');
   }
@@ -653,6 +690,9 @@ module.exports = {
   orchestratorEnabled,
   kellyE2eSkipTriageEnabled,
   clinicDermMinimumIntakeMet,
+  clinicClinicalMinimumIntakeMet,
+  clinicMinimumIntakeMet,
+  isDermSpecialtyTarget,
   isExplicitBookingIntent,
   isRescheduleCancelIntent,
   SCHEDULING_TOOL_NAMES,

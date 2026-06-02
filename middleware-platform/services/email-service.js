@@ -161,12 +161,62 @@ class EmailService {
    * @param {string} options.text - Plain text body (optional)
    * @param {Array} options.attachments - Email attachments (optional)
    */
+  static _ensureRcmE2eEmailOutbox() {
+    if (process.env.RCM_E2E_RECORD_EMAIL !== '1') return;
+    try {
+      const db = require('../database');
+      if (!db.db) return;
+      db.db.exec(`
+        CREATE TABLE IF NOT EXISTS rcm_e2e_email_outbox (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          recipient TEXT NOT NULL,
+          subject TEXT,
+          template TEXT,
+          provider TEXT,
+          success INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
+    } catch (e) {
+      console.warn('[RCM_E2E_RECORD_EMAIL] outbox table:', e.message);
+    }
+  }
+
+  static _recordRcmE2eEmail({ to, subject, template, provider, success }) {
+    if (process.env.RCM_E2E_RECORD_EMAIL !== '1') return;
+    try {
+      this._ensureRcmE2eEmailOutbox();
+      const db = require('../database');
+      db.db
+        .prepare(
+          `INSERT INTO rcm_e2e_email_outbox (recipient, subject, template, provider, success)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(
+          String(to || '').toLowerCase(),
+          String(subject || ''),
+          String(template || 'generic'),
+          String(provider || ''),
+          success ? 1 : 0
+        );
+    } catch (e) {
+      console.warn('[RCM_E2E_RECORD_EMAIL] insert failed:', e.message);
+    }
+  }
+
   static async sendEmail({ to, subject, html, text, attachments }) {
     try {
       // Try Azure first if configured
       if (this.isAzureConfigured()) {
         const azureResult = await this._sendViaAzure({ to, subject, html, text, attachments });
         if (azureResult && azureResult.success) {
+          this._recordRcmE2eEmail({
+            to,
+            subject,
+            template: 'generic',
+            provider: 'azure',
+            success: true
+          });
           return azureResult;
         }
         // If Azure fails, fall back to SMTP
@@ -175,7 +225,7 @@ class EmailService {
 
       // Try SMTP
       const transporter = this.getTransporter();
-      const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'Somo <info@myskinandcare.com>';
+      const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'Somo <info@callsomo.com>';
 
       if (transporter) {
         const mailOptions = {
@@ -197,6 +247,13 @@ class EmailService {
         if (attachments && attachments.length > 0) {
           console.log(`   Attachments: ${attachments.length} file(s)`);
         }
+        this._recordRcmE2eEmail({
+          to,
+          subject,
+          template: 'generic',
+          provider: 'smtp',
+          success: true
+        });
         return { success: true, message_id: info.messageId, provider: 'smtp' };
       }
 
@@ -214,10 +271,31 @@ class EmailService {
         });
       }
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      this._recordRcmE2eEmail({
+        to,
+        subject,
+        template: 'generic',
+        provider: 'console',
+        success: false
+      });
+      if (process.env.RCM_E2E_RECORD_EMAIL === '1') {
+        return {
+          success: false,
+          error: 'SMTP not configured — set SMTP_USER/SMTP_PASS for real email (RCM_E2E_RECORD_EMAIL=1)',
+          provider: 'console'
+        };
+      }
       return { success: true, message_id: 'simulated', provider: 'console' };
 
     } catch (error) {
       console.error('❌ Email send error:', error.message);
+      this._recordRcmE2eEmail({
+        to,
+        subject,
+        template: 'generic',
+        provider: 'error',
+        success: false
+      });
       return { success: false, error: error.message };
     }
   }
@@ -590,7 +668,7 @@ class EmailService {
     const aptDetails = (order?.appointment_date || order?.appointment_type || order?.appointment_time)
       ? `<div><strong>Appointment:</strong> ${order.appointment_type || 'Visit'}${order.appointment_date ? ` - ${order.appointment_date}${order.appointment_time ? ' at ' + order.appointment_time : ''}` : ''}</div>`
       : '';
-    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://api.myskinandcare.com';
+    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://api.callsomo.com';
     const appointmentsUrl = baseUrl.replace(/\/$/, '') + '/patients/appointments.html';
 
     const html = `
@@ -640,11 +718,19 @@ class EmailService {
       </html>
     `;
 
-    return await this.sendEmail({
+    const result = await this.sendEmail({
       to: email,
       subject: 'Complete Your Payment',
       html: html
     });
+    this._recordRcmE2eEmail({
+      to: email,
+      subject: 'Complete Your Payment',
+      template: 'payment_link',
+      provider: result?.provider || '',
+      success: !!result?.success
+    });
+    return result;
   }
 
   /**
@@ -1192,7 +1278,7 @@ class EmailService {
               
               <div class="footer">
                 <p>This is an automated message from Somo API.</p>
-                <p>Visit us at <a href="https://api.myskinandcare.com">api.myskinandcare.com</a></p>
+                <p>Visit us at <a href="https://api.callsomo.com">api.callsomo.com</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
               </div>
             </div>
@@ -1447,7 +1533,7 @@ class EmailService {
               ` : ''}
 
               <p style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.BASE_URL || 'https://api.myskinandcare.com'}/storefront" class="button">Shop Now</a>
+                <a href="${process.env.BASE_URL || 'https://api.callsomo.com'}/storefront" class="button">Shop Now</a>
               </p>
 
               <p>Call us or visit our store to take advantage of this special offer!</p>
@@ -1457,7 +1543,7 @@ class EmailService {
               
               <div class="footer">
                 <p>This is a promotional email from ${merchantName}.</p>
-                <p>Visit us at <a href="${process.env.BASE_URL || 'https://api.myskinandcare.com'}">${process.env.BASE_URL || 'api.myskinandcare.com'}</a></p>
+                <p>Visit us at <a href="${process.env.BASE_URL || 'https://api.callsomo.com'}">${process.env.BASE_URL || 'api.callsomo.com'}</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">You're receiving this because you're a customer. <a href="#" style="color: #94a3b8;">Unsubscribe</a></p>
               </div>
             </div>
@@ -1701,15 +1787,15 @@ class EmailService {
               <p>You can view your invoices and credits at any time in your account dashboard.</p>
               
               <div style="text-align: center;">
-                <a href="https://api.myskinandcare.com/docs" class="button">View Dashboard</a>
+                <a href="https://api.callsomo.com/docs" class="button">View Dashboard</a>
               </div>
               
-              <p>If you have any questions about this invoice, please contact our support team at support@myskinandcare.com.</p>
+              <p>If you have any questions about this invoice, please contact our support team at support@callsomo.com.</p>
               
               <div class="footer">
                 <p>This is an automated invoice from Somo API.</p>
-                <p>Visit us at <a href="https://api.myskinandcare.com">api.myskinandcare.com</a></p>
-                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email. For support, contact support@myskinandcare.com</p>
+                <p>Visit us at <a href="https://api.callsomo.com">api.callsomo.com</a></p>
+                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email. For support, contact support@callsomo.com</p>
               </div>
             </div>
           </div>
@@ -1729,7 +1815,7 @@ class EmailService {
    * Send welcome email with subdomain and password
    */
   static async sendWelcomeEmail(customerEmail, customerName, subdomain, customerType, merchantId, password = null) {
-    const baseDomain = process.env.BASE_DOMAIN || 'myskinandcare.com';
+    const baseDomain = process.env.BASE_DOMAIN || 'callsomo.com';
     const baseUrl = process.env.BASE_URL || (process.env.NODE_ENV === 'production'
       ? `https://${baseDomain}`
       : 'http://localhost:4000');
@@ -1984,7 +2070,7 @@ class EmailService {
               
               <div class="footer">
                 <p>This is an automated welcome email from Somo.</p>
-                <p>Visit us at <a href="https://myskinandcare.com">myskinandcare.com</a></p>
+                <p>Visit us at <a href="https://callsomo.com">callsomo.com</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
               </div>
             </div>
@@ -2145,7 +2231,7 @@ class EmailService {
               
               <div class="footer">
                 <p>This is an automated email from Somo.</p>
-                <p>Visit us at <a href="https://myskinandcare.com">myskinandcare.com</a></p>
+                <p>Visit us at <a href="https://callsomo.com">callsomo.com</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
               </div>
             </div>
@@ -2317,7 +2403,7 @@ class EmailService {
             </div>
             
             <p style="margin-top: 24px;">
-              <a href="https://myskinandcare.com/admin" class="button">View in Admin Portal</a>
+              <a href="https://callsomo.com/admin" class="button">View in Admin Portal</a>
             </p>
             
             <p style="color: #64748b; font-size: 0.9rem; margin-top: 24px;">
@@ -2328,8 +2414,8 @@ class EmailService {
           <div class="footer">
             <p style="margin: 0;">This is an automated notification from Somo API</p>
             <p style="margin: 8px 0 0 0; font-size: 0.85rem;">
-              <a href="https://api.myskinandcare.com" style="color: #2563eb;">API Documentation</a> | 
-              <a href="https://myskinandcare.com" style="color: #2563eb;">Website</a>
+              <a href="https://api.callsomo.com" style="color: #2563eb;">API Documentation</a> | 
+              <a href="https://callsomo.com" style="color: #2563eb;">Website</a>
             </p>
           </div>
         </div>
@@ -2337,7 +2423,7 @@ class EmailService {
       </html>
     `;
 
-    const adminEmail = process.env.ADMIN_EMAIL || 'richard@myskinandcare.com';
+    const adminEmail = process.env.ADMIN_EMAIL || 'richard@callsomo.com';
 
     return await this.sendEmail({
       to: adminEmail,
@@ -2350,10 +2436,10 @@ class EmailService {
    * Send low credit alert email
    */
   static async sendLowCreditAlert(customerEmail, customerName, creditBalance, subdomain = null) {
-    const baseDomain = process.env.BASE_DOMAIN || 'myskinandcare.com';
+    const baseDomain = process.env.BASE_DOMAIN || 'callsomo.com';
     const dashboardUrl = subdomain
       ? `https://${subdomain}.${baseDomain}/billing`
-      : `${process.env.BASE_URL || 'https://api.myskinandcare.com'}/billing`;
+      : `${process.env.BASE_URL || 'https://api.callsomo.com'}/billing`;
 
     const isCritical = creditBalance < 25;
     const alertLevel = isCritical ? 'Critical' : 'Low';
@@ -2468,7 +2554,7 @@ class EmailService {
 
               <p style="margin-top: 20px; color: #64748b; font-size: 14px;">
                 <strong>Need help?</strong><br>
-                Contact us at <a href="mailto:support@myskinandcare.com" style="color: #1e40af;">support@myskinandcare.com</a> 
+                Contact us at <a href="mailto:support@callsomo.com" style="color: #1e40af;">support@callsomo.com</a> 
                 or visit your dashboard to manage your account.
               </p>
             </div>
@@ -2476,7 +2562,7 @@ class EmailService {
               <p>This is an automated alert from Somo.</p>
               <p style="margin-top: 10px;">
                 <a href="${dashboardUrl}" style="color: #1e40af; text-decoration: none;">Manage Credits</a> | 
-                <a href="https://myskinandcare.com" style="color: #1e40af; text-decoration: none;">Visit Website</a>
+                <a href="https://callsomo.com" style="color: #1e40af; text-decoration: none;">Visit Website</a>
               </p>
             </div>
           </div>

@@ -103,7 +103,7 @@ function apiBaseUrl() {
   let base = strip(
     process.env.API_BASE_URL ||
       process.env.BASE_URL ||
-      (process.env.NODE_ENV === 'production' ? 'https://api.myskinandcare.com' : 'http://localhost:4000')
+      (process.env.NODE_ENV === 'production' ? 'https://api.callsomo.com' : 'http://localhost:4000')
   );
 
   if (isLocalHost(base)) {

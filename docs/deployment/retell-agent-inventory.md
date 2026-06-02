@@ -26,7 +26,7 @@ Script: [`middleware-platform/scripts/verify-agent-config.cjs`](../../middleware
 When you add or change the production Kelly agent:
 
 1. Add an entry under `agents` with `agent_id` and a short `label`.
-2. Run `node configure-retell.js` with `API_BASE_URL=https://api.myskinandcare.com`.
+2. Run `node configure-retell.js` with `API_BASE_URL=https://api.callsomo.com`.
 3. Run `npm run verify:agent-config` and fix any drift.
 
 See also: [`VOICE_CURRENT_ARCHITECTURE.md`](./VOICE_CURRENT_ARCHITECTURE.md).

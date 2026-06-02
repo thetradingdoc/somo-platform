@@ -2,10 +2,9 @@
 
 const { test, expect } = require('@playwright/test');
 
-const UI = (process.env.PW_UI_BASE_URL || 'https://myskinandcare.com').replace(/\/$/, '');
-const API = (process.env.PW_API_BASE_URL || 'https://api.myskinandcare.com').replace(/\/$/, '');
+const { UI_BASE: UI, API_BASE: API } = require('./helpers/callsomo-urls.cjs');
 
-test.describe('Staging smoke (myskinandcare.com)', () => {
+test.describe('Staging smoke (callsomo.com)', () => {
   test('landing loads', async ({ page }) => {
     const res = await page.goto(`${UI}/`);
     expect(res?.status()).toBeLessThan(400);
@@ -25,7 +24,11 @@ test.describe('Staging smoke (myskinandcare.com)', () => {
   });
 
   test('API health/live', async ({ request }) => {
-    const res = await request.get(`${API}/health/live`);
+    const headers = {};
+    if (process.env.PLAYWRIGHT_API_BEARER) {
+      headers.Authorization = `Bearer ${process.env.PLAYWRIGHT_API_BEARER}`;
+    }
+    const res = await request.get(`${API}/health/live`, { headers });
     expect(res.ok()).toBeTruthy();
   });
 });

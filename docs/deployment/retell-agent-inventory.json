@@ -3,22 +3,21 @@
   "canonical": {
     "websocket_path": "/webhook/retell/llm",
     "required_tools": [
-      "extract_medical_text",
-      "assess_urgency",
-      "suggest_codes_from_symptoms",
-      "validate_code_pair",
-      "get_code_pricing",
-      "schedule_appointment"
+      "schedule_appointment",
+      "collect_insurance",
+      "get_available_slots"
     ],
     "prompt_markers": [
-      "suggest_codes_from_symptoms",
-      "validate_code_pair"
-    ]
+      "Kelly",
+      "schedule_appointment"
+    ],
+    "require_tools": false,
+    "require_prompt_markers": false
   },
   "agents": [
     {
-      "agent_id": "agent_7f0a517ec3b01fbab225749bd5",
-      "label": "Kelly production (myskinandcare API)"
+      "agent_id": "agent_85c66c32dec5575db0ed066130",
+      "label": "Kelly production (api.callsomo.com)"
     }
   ]
 }

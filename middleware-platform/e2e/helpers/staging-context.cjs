@@ -3,8 +3,7 @@
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const UI_BASE = (process.env.PW_UI_BASE_URL || 'https://myskinandcare.com').replace(/\/$/, '');
-const API_BASE = (process.env.PW_API_BASE_URL || 'https://api.myskinandcare.com').replace(/\/$/, '');
+const { UI_BASE, API_BASE } = require('./callsomo-urls.cjs');
 
 function uniqueStagingEmail() {
   const prefix = (process.env.STAGING_TEST_EMAIL_PREFIX || 'trial-e2e-staging').replace(/@.*/, '');
@@ -57,10 +56,18 @@ async function waitForEmailCodeFromStaging(email, { attempts = 8, delayMs = 4000
   );
 }
 
+function apiRequestHeaders() {
+  const headers = { Accept: 'application/json' };
+  if (process.env.PLAYWRIGHT_API_BEARER) {
+    headers.Authorization = `Bearer ${process.env.PLAYWRIGHT_API_BEARER}`;
+  }
+  return headers;
+}
+
 async function createApiContext(playwright) {
   return playwright.request.newContext({
     baseURL: API_BASE,
-    extraHTTPHeaders: { Accept: 'application/json' }
+    extraHTTPHeaders: apiRequestHeaders()
   });
 }
 
@@ -114,6 +121,7 @@ async function loginOwnerViaApi(request) {
 module.exports = {
   UI_BASE,
   API_BASE,
+  apiRequestHeaders,
   uniqueStagingEmail,
   stagingDbConfigured,
   fetchEmailCodeFromDb,

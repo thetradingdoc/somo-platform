@@ -15,6 +15,7 @@ const { execFileSync } = require('child_process');
 const {
   UI_BASE,
   API_BASE,
+  apiRequestHeaders,
   createApiContext,
   browserOnUi,
   seedCustomerInPage,
@@ -31,7 +32,7 @@ test.describe('Staging voice agent (real API)', () => {
   let api;
 
   test.beforeAll(async ({ playwright, request }) => {
-    const health = await request.get(`${API_BASE}/health/live`);
+    const health = await request.get(`${API_BASE}/health/live`, { headers: apiRequestHeaders() });
     expect(health.ok()).toBeTruthy();
 
     api = await createApiContext(playwright);

@@ -11,7 +11,8 @@ const fs = require('fs');
 const path = require('path');
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
-const AGENT_ID = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a';
+const AGENT_ID =
+    process.env.RETELL_AGENT_ID || 'agent_85c66c32dec5575db0ed066130';
 // Retell TTS voice (openai-*, 11labs-*). Same env as RetellService.createAgent — set RETELL_VOICE_ID in .env to unify quality across agents.
 const RETELL_VOICE_ID =
     (process.env.RETELL_VOICE_ID && String(process.env.RETELL_VOICE_ID).trim()) || 'retell-Cimo';
@@ -24,8 +25,7 @@ if (!API_BASE_URL) {
     if (process.env.RAILWAY_PUBLIC_DOMAIN) {
         API_BASE_URL = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
     } else if (process.env.NODE_ENV === 'production') {
-        // Production: use Railway URL (backend is on Railway)
-        API_BASE_URL = 'https://web-production-a783d.up.railway.app';
+        API_BASE_URL = 'https://api.callsomo.com';
     } else {
         // Development: use localhost
         API_BASE_URL = 'http://localhost:4000';
@@ -42,6 +42,117 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production' ||
 const WEBSOCKET_URL = IS_PRODUCTION
     ? API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')
     : 'ws://localhost:4000';
+
+const TARGET_LLM_WS_URL = (
+    process.env.RETELL_LLM_WEBSOCKET_URL &&
+    String(process.env.RETELL_LLM_WEBSOCKET_URL).trim()
+) || `${WEBSOCKET_URL}/webhook/retell/llm`;
+
+const TARGET_AGENT_WEBHOOK_URL =
+    process.env.RETELL_AGENT_WEBHOOK_URL ||
+    `${API_BASE_URL}/webhook/retell/events`;
+
+function normalizeWsUrl(url) {
+    return String(url || '').trim().replace(/\/+$/, '');
+}
+
+function websocketAlreadyConfigured(agent) {
+    const current =
+        agent?.response_engine?.llm_websocket_url || agent?.llm_websocket_url || '';
+    return normalizeWsUrl(current) === normalizeWsUrl(TARGET_LLM_WS_URL);
+}
+
+async function patchRetellAgent(retellApiBase, agentId, payload, version) {
+    const body = version != null ? { ...payload, version } : payload;
+    return axios.patch(`${retellApiBase.replace(/\/$/, '')}/update-agent/${agentId}`, body, {
+        headers: {
+            Authorization: `Bearer ${RETELL_API_KEY}`,
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+async function updateAgentWithVersionFallback(retellApiBase, agent, updateData) {
+    const agentId = agent.agent_id || AGENT_ID;
+    const includeResponseEngine = !websocketAlreadyConfigured(agent);
+
+    const payload = { ...updateData };
+    if (!includeResponseEngine) {
+        delete payload.response_engine;
+        console.log('ℹ️  WebSocket URL already correct — skipping response_engine update');
+    }
+
+    if (agent.is_published) {
+        console.log('ℹ️  Agent is published — using draft version workflow');
+        const draftResp = await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/create-agent-version/${agentId}`,
+            { base_version: agent.version ?? 0 },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        const draftVersion = draftResp.data.version;
+        await patchRetellAgent(retellApiBase, agentId, payload, draftVersion);
+        await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/publish-agent-version/${agentId}`,
+            { version: draftVersion },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log(`✅ Published agent version ${draftVersion}`);
+        return { data: draftResp.data };
+    }
+
+    try {
+        return await patchRetellAgent(retellApiBase, agentId, payload, agent.version);
+    } catch (firstErr) {
+        const msg = firstErr.response?.data?.message || firstErr.message || '';
+        const needsDraft =
+            (firstErr.response?.status === 400 &&
+                (msg.includes('response engine') || msg.includes('version'))) ||
+            (firstErr.response?.status === 422 &&
+                msg.includes('published agent'));
+
+        if (!needsDraft) throw firstErr;
+
+        console.log('ℹ️  Published version locked — creating draft, updating, publishing...');
+        const baseVersion = agent.version ?? 0;
+        const draftResp = await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/create-agent-version/${agentId}`,
+            { base_version: baseVersion },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        const draftVersion = draftResp.data.version;
+        const draftPayload = { ...payload };
+        delete draftPayload.response_engine;
+
+        await patchRetellAgent(retellApiBase, agentId, draftPayload, draftVersion);
+        await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/publish-agent-version/${agentId}`,
+            { version: draftVersion },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log(`✅ Published agent version ${draftVersion}`);
+        return { data: draftResp.data };
+    }
+}
 
 // Load healthcare prompt and functions
 function loadHealthcarePrompt() {
@@ -171,12 +282,13 @@ Keep responses short and natural for voice conversation.`;
 
         // Retell API: custom LLM is response_engine.type "custom-llm" + llm_websocket_url inside it (not top-level).
         const updateData = {
-            agent_name: 'Kelly - DocLittle Medical Voice Assistant',
+            agent_name: 'Kelly - Somo Medical Voice Assistant',
             voice_id: RETELL_VOICE_ID,
             language: 'en-US',
+            webhook_url: TARGET_AGENT_WEBHOOK_URL,
             response_engine: {
                 type: 'custom-llm',
-                llm_websocket_url: `${WEBSOCKET_URL}/webhook/retell/llm`
+                llm_websocket_url: TARGET_LLM_WS_URL
             },
             enable_backchannel: true,
             // Valid values include call-center, coffee-shop, etc.; "office" is not in the current API enum.
@@ -195,25 +307,17 @@ Keep responses short and natural for voice conversation.`;
                 ]
         };
 
-        const updateResponse = await axios.patch(
-            `${retellApiBase.replace(/\/$/, '')}/update-agent/${AGENT_ID}`,
-            updateData,
-            {
-                headers: {
-                    Authorization: `Bearer ${RETELL_API_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            }
+        const updateResponse = await updateAgentWithVersionFallback(
+            retellApiBase,
+            getResponse.data,
+            updateData
         );
 
         console.log('✅ Agent updated successfully!\n');
         console.log('📋 Configuration:');
         console.log('   Agent ID:', AGENT_ID);
-        console.log('   Phone:', '+15856202445');
-        console.log(
-            '   LLM Webhook:',
-            updateData.response_engine?.llm_websocket_url || '(missing — check response_engine)'
-        );
+        console.log('   LLM WebSocket:', TARGET_LLM_WS_URL);
+        console.log('   Agent webhook:', TARGET_AGENT_WEBHOOK_URL);
         console.log('   Voice (RETELL_VOICE_ID):', updateData.voice_id);
 
         console.log('\n' + '━'.repeat(60));
@@ -227,7 +331,7 @@ Keep responses short and natural for voice conversation.`;
             console.log('   3. WebSocket endpoint:', `${WEBSOCKET_URL}/webhook/retell/llm`);
         } else {
             console.log('   2. Server running on localhost:4000');
-            console.log('   3. For production, set API_BASE_URL=https://doclittle.site');
+            console.log('   3. For production, set API_BASE_URL=https://api.callsomo.com');
         }
         console.log('   4. Call: +15856202445');
         console.log('   5. Say: "Hi, I\'d like to schedule an appointment"');
@@ -299,7 +403,7 @@ async function testWebhook() {
             console.error('   Make sure SSL certificate is active');
         } else {
             console.error('   Make sure your server is running on port 4000');
-            console.error('   For production: Set API_BASE_URL=https://doclittle.site in .env');
+            console.error('   For production: Set API_BASE_URL=https://api.callsomo.com in .env');
         }
         console.error('   Error:', error.message);
         if (error.code === 'ECONNREFUSED') {

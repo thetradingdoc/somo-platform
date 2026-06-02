@@ -18,8 +18,8 @@ function getHostname(req) {
 function isSomoMarketingHostname(hostname) {
   const h = String(hostname || '').toLowerCase();
   return (
-    h === 'myskinandcare.com' ||
-    h === 'www.myskinandcare.com' ||
+    h === 'callsomo.com' ||
+    h === 'www.callsomo.com' ||
     h === 'skinandcare.com' ||
     h === 'www.skinandcare.com' ||
     h === 'dodgecall.app' ||
@@ -40,6 +40,18 @@ function shouldServeSomoLanding(hostname) {
   return isSomoMarketingHostname(hostname) || isLocalDevRootHost(hostname);
 }
 
+/** Unified-dashboard portal static prefixes (must not receive landing SPA index.html). */
+function isUnifiedDashboardAssetPath(p) {
+  return (
+    p.startsWith('/assets/js') ||
+    p.startsWith('/assets/css') ||
+    p.startsWith('/assets/images') ||
+    p.startsWith('/assets/brand') ||
+    p.startsWith('/assets/data') ||
+    p.startsWith('/business/assets')
+  );
+}
+
 function isSomoLandingApiPath(p) {
   return (
     p.startsWith('/api') ||
@@ -55,7 +67,8 @@ function isSomoLandingApiPath(p) {
     p.startsWith('/patients') ||
     p.startsWith('/business') ||
     p.startsWith('/admin') ||
-    p.startsWith('/unified-dashboard')
+    p.startsWith('/unified-dashboard') ||
+    isUnifiedDashboardAssetPath(p)
   );
 }
 
@@ -109,5 +122,6 @@ module.exports = {
   isSomoMarketingHostname,
   isLocalDevRootHost,
   shouldServeSomoLanding,
+  isUnifiedDashboardAssetPath,
   isSomoLandingApiPath,
 };

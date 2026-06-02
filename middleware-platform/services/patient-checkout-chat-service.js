@@ -835,7 +835,7 @@ async function handlePatientCheckoutChatMessage(req) {
     if (_isMidFlightCheckout(session_id, message)) {
       result = _safeCheckoutDegradeResponse();
     } else {
-    result = await KellyAgentService.processTurn({
+    result = await require('./kelly-turn-resolver').runKellyTurn({
       message,
       sessionId: session_id,
       channel: 'chat',
@@ -1137,7 +1137,7 @@ async function handlePatientCheckoutChatMessageStream(req, res) {
       if (_isMidFlightCheckout(session_id, message)) {
         result = _safeCheckoutDegradeResponse();
       } else {
-      result = await KellyAgentService.processTurn({
+      result = await require('./kelly-turn-resolver').runKellyTurn({
         message,
         sessionId: session_id,
         channel: 'chat',

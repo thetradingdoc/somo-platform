@@ -638,6 +638,16 @@ class KellyToolExecutor {
               session_id: sessionId
             });
             if (scheduleResultRoutine?.success && scheduleResultRoutine?.appointment?.id) {
+              try {
+                const { persistCaseSummaryForAppointment } = require('./case-summary-service');
+                persistCaseSummaryForAppointment({
+                  appointmentId: scheduleResultRoutine.appointment.id,
+                  sessionId,
+                  practitionerId: scheduleResultRoutine.appointment.practitioner_id || null
+                });
+              } catch (csErr) {
+                console.warn('[KellyToolExecutor] case summary persist failed (non-fatal):', csErr.message);
+              }
               if (channel === 'voice' && sessionId && db.setVoiceCallOutcome) {
                 try {
                   const VoiceAgentRuntime = require('./voice-agent-runtime');
@@ -856,6 +866,16 @@ class KellyToolExecutor {
           // Auto-chain schedule -> checkout through shared helper so all entry points
           // use one deduped checkout path (A2).
           if (scheduleResult?.success && scheduleResult?.appointment?.id) {
+            try {
+              const { persistCaseSummaryForAppointment } = require('./case-summary-service');
+              persistCaseSummaryForAppointment({
+                appointmentId: scheduleResult.appointment.id,
+                sessionId,
+                practitionerId: scheduleResult.appointment.practitioner_id || null
+              });
+            } catch (csErr) {
+              console.warn('[KellyToolExecutor] case summary persist failed (non-fatal):', csErr.message);
+            }
             if (channel === 'voice' && sessionId && db.setVoiceCallOutcome) {
               try {
                 const VoiceAgentRuntime = require('./voice-agent-runtime');

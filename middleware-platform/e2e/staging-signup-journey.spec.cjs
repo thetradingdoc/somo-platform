@@ -4,7 +4,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 /**
- * Staging signup journey (myskinandcare.com + api.myskinandcare.com).
+ * Staging signup journey (callsomo.com + api.callsomo.com).
  *
  * Required env:
  *   TRIAL_E2E_PHONE — handset that receives real Twilio Verify SMS
@@ -19,6 +19,7 @@ const { execFileSync } = require('child_process');
 const {
   UI_BASE,
   API_BASE,
+  apiRequestHeaders,
   uniqueStagingEmail,
   stagingDbConfigured,
   fetchEmailCodeFromDb,
@@ -40,7 +41,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('Staging signup journey', () => {
   test.beforeAll(async ({ request }) => {
-    const health = await request.get(`${API_BASE}/health/live`);
+    const health = await request.get(`${API_BASE}/health/live`, { headers: apiRequestHeaders() });
     expect(health.ok(), `API not healthy: ${API_BASE}/health/live`).toBeTruthy();
     if (!stagingDbConfigured()) {
       test.skip(true, 'Set STAGING_DB_PATH to staging SQLite for email OTP + DB asserts');

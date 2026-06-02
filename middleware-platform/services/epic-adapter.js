@@ -109,8 +109,8 @@ class EpicAdapter {
         }
       } catch (e) {
         // ngrok not available or not running - continue with configured redirect URI
-        if (this.redirectUri && this.redirectUri.includes('doclittle.site')) {
-          console.warn('⚠️  Epic redirect URI points to doclittle.site, but backend is running locally.');
+        if (this.redirectUri && this.redirectUri.includes('callsomo.com')) {
+          console.warn('⚠️  Epic redirect URI points to callsomo.com, but backend is running locally.');
           console.warn('   For local testing, use ngrok or update EPIC_REDIRECT_URI in .env');
         }
       }

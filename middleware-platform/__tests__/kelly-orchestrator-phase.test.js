@@ -3,6 +3,23 @@
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
 
 describe('KellyOrchestratorPhase', () => {
+  describe('clinicClinicalMinimumIntakeMet', () => {
+    it('returns true for OPQRST without skin type (OBGYN path)', () => {
+      const sessionRow = {
+        quality: 'pelvic pain',
+        region: 'pelvis',
+        severity: 4,
+        onset: '2 weeks ago',
+        target_specialty: 'Obstetrics and Gynecology',
+      };
+      const metaGet = () => null;
+      expect(KellyOrchestratorPhase.clinicClinicalMinimumIntakeMet({ sessionRow, metaGet })).toBe(true);
+      expect(
+        KellyOrchestratorPhase.clinicMinimumIntakeMet({ sessionRow, metaGet })
+      ).toBe(true);
+    });
+  });
+
   describe('clinicDermMinimumIntakeMet', () => {
     it('returns true when skin confirmed and OPQRST fields present', () => {
       const sessionRow = {

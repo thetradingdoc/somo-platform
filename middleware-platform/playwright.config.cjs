@@ -78,6 +78,36 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'kelly-f2',
+      testDir: './e2e',
+      testMatch: '**/f2-tom-harris-journey.spec.cjs',
+      timeout: 1_200_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+      },
+      env: {
+        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+        KELLY_RAILS_V2: '1',
+        KELLY_RAILS_ROLLOUT_PCT: '1',
+        LANGGRAPH_KELLY_ROLLOUT_PCT: '0',
+        KELLY_F2_TOM_HARRIS: '1',
+        KELLY_RAILS_FAST_RAG: '1',
+        RCM_E2E_RECORD_EMAIL: '1',
+        SKIP_STARTUP_MIGRATIONS: '1',
+      },
+    },
+    {
+      name: 'provider-portal',
+      testDir: './e2e',
+      testMatch: '**/provider-today-portal.spec.cjs',
+      timeout: 60_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+      },
+    },
+    {
       name: 'provider-rcm',
       testDir: './e2e',
       testMatch: ['**/*rcm*.spec.cjs', '**/patient-wallet-bills.spec.cjs'],

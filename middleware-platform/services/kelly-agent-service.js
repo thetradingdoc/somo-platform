@@ -16,6 +16,7 @@
  *   5. Return final text reply
  *
  * Usage:
+ *   Prefer kelly-turn-resolver / KELLY_RAILS_V2=1 for new work.
  *   const result = await KellyAgentService.processTurn({
  *     message, sessionId, channel, clinicId, patientId, callerPhone, patientName
  *   });
@@ -221,12 +222,40 @@ function _skipStep1SkinClarifierForClinicVisit(sessionId, message) {
   if (_sessionMetaBool(sessionId, 'routine_intake_active')) return false;
   const msg = String(message || '').toLowerCase();
   const clinicalDerm =
-    /\b(rash|itch|dermat|skin concern|mole|eczema|psoriasis|hives|spot|lesion|forearm|scaly)\b/.test(msg);
+    /\b(rash|itch|dermat|skin concern|mole|eczema|psoriasis|hives|spot|lesion|forearm|scaly|pelvic|gynecolog|obgyn|ob\/gyn|period|symptom|pain|fever)\b/.test(
+      msg
+    );
   const booking =
     KellyOrchestratorPhase.isExplicitBookingIntent(message) ||
     /\b(appointment|book|visit|clinic|see a doctor|dermatolog)\b/.test(msg);
   const phase = String(KellyToolExecutor._getSessionMeta(sessionId, 'kelly_orchestrator_phase') || '').toUpperCase();
   return clinicalDerm || booking || phase === 'BOOKING' || phase === 'TRIAGE_ACTIVE' || phase === 'TRIAGE_DISCOVERY';
+}
+
+function _isClinicalVisitMessage(message) {
+  const msg = String(message || '').toLowerCase();
+  if (
+    /\b(rash|itch|dermat|skin concern|mole|eczema|psoriasis|hives|spot|lesion|forearm|scaly|pelvic|gynecolog|obgyn|ob\/gyn|period|symptom|pain|fever)\b/.test(
+      msg
+    )
+  ) {
+    return true;
+  }
+  if (KellyOrchestratorPhase.isExplicitBookingIntent(message)) return true;
+  if (/\b(appointment|book|visit|clinic|see a doctor|dermatolog)\b/.test(msg)) return true;
+  return KellyOrchestratorPhase.isRescheduleCancelIntent(message);
+}
+
+/** I2-6: skip all Step1 early returns when graph routes clinical intake or visit is clinical. */
+function _shouldSkipStep1ForTurn(sessionId, message, graphHost = null) {
+  if (graphHost?.clinicalIntake || graphHost?.skipStep1) return true;
+  if (_sessionMetaBool(sessionId, 'routine_intake_active') && !graphHost?.clinicalIntake) return false;
+  if (_skipStep1SkinClarifierForClinicVisit(sessionId, message)) return true;
+  const branch = String(KellyToolExecutor._getSessionMeta(sessionId, 'kelly_graph_branch') || '').toLowerCase();
+  if (branch === 'clinical_intake') return true;
+  if (process.env.LANGGRAPH_KELLY_ENABLED === '0') return false;
+  if (_sessionMetaBool(sessionId, 'kelly_graph_active') && _isClinicalVisitMessage(message)) return true;
+  return false;
 }
 
 function _looksLikeScanConversation(message) {
@@ -2249,6 +2278,7 @@ Antworten Sie durchgehend auf Deutsch.`,
    *   language: string
    * }>}
    */
+  /** @deprecated Use kelly-turn-resolver with KELLY_RAILS_V2=1. Legacy monolith turn host. */
   static async processTurn(params) {
     let message = String(params.message || '');
     const {
@@ -2271,8 +2301,11 @@ Antworten Sie durchgehend auf Deutsch.`,
       onToolStatus = null,
       scanChatMode: scanChatModeParam = false,
       plannerDecision: plannerDecisionParam = null,
-      scanGrounding: scanGroundingParam = null
+      scanGrounding: scanGroundingParam = null,
+      /** Hybrid graph host from kelly-conversation-bridge (Phases 2–7). */
+      graphHost: graphHostParam = null
     } = params;
+    const graphHost = graphHostParam && typeof graphHostParam === 'object' ? graphHostParam : null;
 
     _kellyDebugTurn('turn_start', {
       sessionId,
@@ -2478,7 +2511,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       }
     }
     const step1ConfirmRequired = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_confirmation_required') || '') === '1';
-    if (step1ConfirmRequired) {
+    if (step1ConfirmRequired && !_shouldSkipStep1ForTurn(sessionId, message, graphHost)) {
       const yes = /\b(yes|yeah|yep|correct|right|exactly|si|sí|oui)\b/i.test(msgLcEarly);
       const no = /\b(no|nope|incorrect|wrong|not really|nah)\b/i.test(msgLcEarly);
       if (yes) {
@@ -2501,7 +2534,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       }
     }
     const skinTypeConfirmRequired = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_confirmation_required') || '') === '1';
-    if (skinTypeConfirmRequired) {
+    if (skinTypeConfirmRequired && !_shouldSkipStep1ForTurn(sessionId, message, graphHost)) {
       const explicitSkinType = _extractExplicitSkinType(msgLcEarly);
       const yes = /\b(yes|yeah|yep|correct|right|exactly)\b/i.test(msgLcEarly);
       const no = /\b(no|nope|incorrect|wrong|not really|nah)\b/i.test(msgLcEarly);
@@ -2748,10 +2781,22 @@ Antworten Sie durchgehend auf Deutsch.`,
         patientId,
         clinicId,
         callerPhone,
-        channel
+        channel,
+        graphHost
       });
       if (fastIntentResponse) return fastIntentResponse;
     }
+
+    const payGuardrailResponse = await this._maybePaymentLinkGuardrail({
+      message,
+      sessionId,
+      patientId,
+      clinicId,
+      callerPhone,
+      channel,
+      graphHost
+    });
+    if (payGuardrailResponse) return payGuardrailResponse;
 
     // ── 2. Load conversation history ──────────────────────────
     const history = historyEarly;
@@ -3203,6 +3248,12 @@ Antworten Sie durchgehend auf Deutsch.`,
       getLatestRag: (sid) => TriageRAGService.getLatestForSession(sid),
       routineLocked
     });
+    if (graphHost?.forcedPhase) {
+      orchestration.phase = graphHost.forcedPhase;
+      try {
+        KellyToolExecutor._setSessionMeta(sessionId, 'kelly_orchestrator_phase', graphHost.forcedPhase);
+      } catch (_) {}
+    }
     if (KellyOrchestratorPhase.orchestratorEnabled()) {
       _kellyDebugTurn('orchestrator_phase', {
         sessionId,
@@ -3537,7 +3588,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       skinTypeResult &&
       (skinTypeResult.value === 'unknown' || skinTypeResult.confidence === 'low') &&
       !_defersStep1SkinTypeClarifier(message) &&
-      !_skipStep1SkinClarifierForClinicVisit(sessionId, message) &&
+      !_shouldSkipStep1ForTurn(sessionId, message, graphHost) &&
       !scanChatMode &&
       !plannerBypassSkincareClarifier &&
       !(function skipSkinForBooking() {
@@ -3553,7 +3604,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         }
         return (
           (_isBookingProgressIntent(message) || KellyOrchestratorPhase.isExplicitBookingIntent(message)) &&
-          KellyOrchestratorPhase.clinicDermMinimumIntakeMet({ sessionRow: sessionRowSkin, metaGet: metaGetSkin })
+          KellyOrchestratorPhase.clinicMinimumIntakeMet({ sessionRow: sessionRowSkin, metaGet: metaGetSkin })
         );
       })()
     ) {
@@ -3582,7 +3633,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       skinTypeResult.status === 'tentative' &&
       skinTypeResult.needs_confirmation &&
       !_defersStep1SkinTypeClarifier(message) &&
-      !_skipStep1SkinClarifierForClinicVisit(sessionId, message) &&
+      !_shouldSkipStep1ForTurn(sessionId, message, graphHost) &&
       !scanChatMode &&
       !plannerBypassSkincareClarifier &&
       !(function skipSkinConfirmForBooking() {
@@ -3598,7 +3649,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         }
         return (
           (_isBookingProgressIntent(message) || KellyOrchestratorPhase.isExplicitBookingIntent(message)) &&
-          KellyOrchestratorPhase.clinicDermMinimumIntakeMet({ sessionRow: sessionRowSkin, metaGet: metaGetSkin })
+          KellyOrchestratorPhase.clinicMinimumIntakeMet({ sessionRow: sessionRowSkin, metaGet: metaGetSkin })
         );
       })()
     ) {
@@ -6283,13 +6334,76 @@ Antworten Sie durchgehend auf Deutsch.`,
   }
 
   /**
+   * P3-2: server guardrail — issue payment link when pay-now intent or payment_line branch.
+   */
+  static async _maybePaymentLinkGuardrail({ message, sessionId, patientId, clinicId, callerPhone, channel, graphHost }) {
+    const branch = String(KellyToolExecutor._getSessionMeta(sessionId, 'kelly_graph_branch') || '');
+    const payIntent = _isPayNowIntent(message);
+    const onPaymentLine = branch === 'payment_line' || graphHost?.paymentLine;
+    const guardrailOn = graphHost?.payGuardrail || payIntent || onPaymentLine;
+    if (!guardrailOn) return null;
+
+    let amount = parseFloat(String(KellyToolExecutor._getSessionMeta(sessionId, 'copay_amount') || ''), 10);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      const db = require('../database');
+      if (patientId && db.db) {
+        try {
+          const elig = db.db
+            .prepare(
+              `SELECT copay_amount FROM eligibility_checks WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1`
+            )
+            .get(patientId);
+          if (elig?.copay_amount) amount = Number(elig.copay_amount);
+        } catch (_) {}
+      }
+    }
+    if (!Number.isFinite(amount) || amount <= 0) amount = 25;
+
+    const journeyId = KellyToolExecutor._getSessionMeta(sessionId, 'rcm_journey_id') || null;
+    const out = await KellyToolExecutor.execute(
+      'request_patient_payment',
+      {
+        amount,
+        journey_id: journeyId,
+        patient_id: patientId,
+        patient_phone: callerPhone,
+        delivery: 'both'
+      },
+      { sessionId, clinicId, patientId, callerPhone, channel }
+    );
+
+    if (!out?.success) return null;
+
+    const payUrl = out.pay_url || out.payUrl || null;
+    const reply =
+      payUrl
+        ? `I sent a secure payment link for $${Number(amount).toFixed(2)}. Please open the link to pay with card or wallet — I will not collect card numbers here.`
+        : String(out.message || 'Your secure payment link is on the way.');
+
+    this._appendToHistory(sessionId, 'user', message);
+    this._appendToHistory(sessionId, 'assistant', reply);
+    return {
+      reply,
+      endCall: false,
+      toolsUsed: ['request_patient_payment'],
+      language: (require('../database').getKellySessionLanguage &&
+        require('../database').getKellySessionLanguage(sessionId)) ||
+        'en'
+    };
+  }
+
+  /**
    * Handle non-clinical fast intents before entering the LLM tool loop.
    * Returns a full response object when handled, otherwise null.
    */
-  static async _handleFastIntentPrecheck({ intent, message, sessionId, patientId, clinicId, callerPhone, channel }) {
+  static async _handleFastIntentPrecheck({ intent, message, sessionId, patientId, clinicId, callerPhone, channel, graphHost }) {
     if (intent === 'billing') {
-      if (_isPayNowIntent(message)) {
+      const graphBranch = String(KellyToolExecutor._getSessionMeta(sessionId, 'kelly_graph_branch') || '');
+      if (_isPayNowIntent(message) || graphBranch === 'payment_line' || graphHost?.paymentLine) {
         return null;
+      }
+      if (graphHost?.supportFaqOnly) {
+        /* allow FAQ fast-path below */
       }
       const billingReply = _getBillingReply(message);
       this._appendToHistory(sessionId, 'user', message);
@@ -6463,3 +6577,4 @@ Antworten Sie durchgehend auf Deutsch.`,
 }
 
 module.exports = KellyAgentService;
+module.exports.KELLY_TOOLS = KELLY_TOOLS;

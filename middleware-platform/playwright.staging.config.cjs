@@ -1,8 +1,8 @@
 const { defineConfig } = require('@playwright/test');
 
-const uiBase = (process.env.PW_UI_BASE_URL || 'https://myskinandcare.com').replace(/\/$/, '');
+const { UI_BASE: uiBase } = require('./e2e/helpers/callsomo-urls.cjs');
 
-/** Staging E2E — live myskinandcare.com + api.myskinandcare.com (no local webServer). */
+/** Live E2E — callsomo.com + api.callsomo.com (no local webServer). */
 module.exports = defineConfig({
   timeout: 180_000,
   forbidOnly: !!process.env.CI,

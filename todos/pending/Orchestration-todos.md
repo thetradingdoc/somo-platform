@@ -11,6 +11,8 @@ The current system uses a hybrid orchestration model:
   - graph-managed control flow for strict process stages,
   - agent-managed conversational reasoning inside bounded contexts.
 
+**Kelly conversation rails (LangGraph host):** Target architecture and phased tasks — [`docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`](../docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md). Implementation: [`middleware-platform/services/kelly-conversation-graph.js`](../../middleware-platform/services/kelly-conversation-graph.js) (`LANGGRAPH_KELLY_ROLLOUT_PCT`, shadow mode). Distinct from coding-graph and Step 10 graph.
+
 Why this matters for checkout:
 
 - Checkout is payment-critical and should behave like a transaction system, not an open-ended conversation.

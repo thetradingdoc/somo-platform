@@ -731,7 +731,9 @@ class RetellWebSocketHandler {
             try {
                 const callerPhone = connection?.customerPhone || connection?.callMetadata?.from_number || null;
                 const resolvedPatientId = connection?.patientId || null;
-                const result = await KellyAgentService.processTurn({
+                // Coding graph handles billing codes; Kelly Rails V2 owns patient conversation (see kelly-rails/).
+                const { runKellyTurn } = require('../services/kelly-turn-resolver');
+                const turnOpts = {
                     message: userSaid,
                     sessionId: callId,
                     channel: 'voice',
@@ -741,7 +743,8 @@ class RetellWebSocketHandler {
                     callerPhone,
                     patientName: connection?.customerName || connection?.initialName || null,
                     providerInstructions: connection?.voiceRuntime?.customPrompt || null
-                });
+                };
+                const result = await runKellyTurn(turnOpts);
                 kellyResult = result;
                 agentReply = result?.reply;
                 const agentTransfer = VoiceAgentRuntime.detectTransferHint(null, agentReply);

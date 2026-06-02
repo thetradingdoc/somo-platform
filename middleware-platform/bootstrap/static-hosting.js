@@ -8,6 +8,7 @@ const {
   getHostname,
   shouldServeSomoLanding,
   isSomoLandingApiPath,
+  isUnifiedDashboardAssetPath,
 } = require('../lib/static-hosting-paths');
 
 /** Legacy littlelab SPA paths — redirect to / in server.js route handlers. */
@@ -53,6 +54,8 @@ function registerStaticHosting(app, { express, rootDir }) {
   });
 
   app.use('/assets', express.static(getUnifiedDashboardPath('assets'), { maxAge: '1d' }));
+  // Provider pages under /business/ sometimes resolve ../assets to /business/assets — alias to shared assets.
+  app.use('/business/assets', express.static(getUnifiedDashboardPath('assets'), { maxAge: '1d' }));
 
   const isProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
   app.use('/somo-landing-assets', express.static(getSomoLandingBuildPath('assets'), {
@@ -90,8 +93,14 @@ function registerEarlySomoLandingStatic(app, { express, rootDir }) {
 
     if (trySendUnifiedDashboardAsset(req, res)) return;
 
+    // Portal asset URLs must not fall through to landing SPA index.html.
+    if (isUnifiedDashboardAssetPath(req.path)) return next();
+
     return express.static(getSomoLandingBuildPath(), { index: false, maxAge: '5m' })(req, res, () => {
       if ((req.method === 'GET' || req.method === 'HEAD') && !res.headersSent) {
+        if (/\.(js|mjs|css|json|woff2?|png|jpe?g|gif|svg|ico|webp)$/i.test(req.path)) {
+          return next();
+        }
         const indexPath = getSomoLandingBuildPath('index.html');
         if (require('fs').existsSync(indexPath)) {
           return res.sendFile(indexPath);

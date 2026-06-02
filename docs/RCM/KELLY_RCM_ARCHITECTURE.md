@@ -54,8 +54,8 @@ This baseline exists, but status and controls are not yet fully unified into a s
 
 | Surface | Host | Platform |
 |---------|------|----------|
-| Provider portal (SPA) | `https://myskinandcare.com` | Firebase Hosting |
-| Middleware API | `https://api.myskinandcare.com` | Google Cloud Run (`myskin-middleware`, `us-central1`) |
+| Provider portal (SPA) | `https://callsomo.com` | Firebase Hosting |
+| Middleware API | `https://api.callsomo.com` | Google Cloud Run (`myskin-middleware`, `us-central1`) |
 
 Operational deploy/rollback: [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md).  
 Voice transport detail: [`docs/deployment/VOICE_CURRENT_ARCHITECTURE.md`](../deployment/VOICE_CURRENT_ARCHITECTURE.md).
@@ -64,14 +64,14 @@ Voice transport detail: [`docs/deployment/VOICE_CURRENT_ARCHITECTURE.md`](../dep
 
 | Purpose | URL |
 |---------|-----|
-| Twilio inbound webhook | `POST https://api.myskinandcare.com/voice/incoming` |
-| Twilio status callbacks | `POST https://api.myskinandcare.com/voice/status-callback` |
-| Retell custom LLM (WSS) | `wss://api.myskinandcare.com/webhook/retell/llm` |
-| Retell lifecycle events | `POST https://api.myskinandcare.com/webhook/retell/events` |
-| Liveness (startup probe) | `GET https://api.myskinandcare.com/health/live` |
-| Voice dependency check | `GET https://api.myskinandcare.com/health/voice-deps` |
+| Twilio inbound webhook | `POST https://api.callsomo.com/voice/incoming` |
+| Twilio status callbacks | `POST https://api.callsomo.com/voice/status-callback` |
+| Retell custom LLM (WSS) | `wss://api.callsomo.com/webhook/retell/llm` |
+| Retell lifecycle events | `POST https://api.callsomo.com/webhook/retell/events` |
+| Liveness (startup probe) | `GET https://api.callsomo.com/health/live` |
+| Voice dependency check | `GET https://api.callsomo.com/health/voice-deps` |
 
-Required env (production): `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_LLM_WEBSOCKET_URL`, `TWILIO_*`, `BASE_URL` / `API_BASE_URL` = `https://api.myskinandcare.com`.  
+Required env (production): `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_LLM_WEBSOCKET_URL`, `TWILIO_*`, `BASE_URL` / `API_BASE_URL` = `https://api.callsomo.com`.  
 Env generation: [`middleware-platform/scripts/generate-cloudrun-env-yaml.cjs`](../../middleware-platform/scripts/generate-cloudrun-env-yaml.cjs).
 
 ### Voice path status

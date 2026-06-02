@@ -1,6 +1,6 @@
 # Todos
 
-**Last updated:** May 31, 2026
+**Last updated:** June 1, 2026
 
 Operational checklists live under **`pending/`** (active) and **`archive/`** (completed history). **Single SSOT for what to do next:** [`pending/README.md`](./pending/README.md).
 
@@ -21,7 +21,8 @@ For overlap with architecture docs, see [`docs/meta/CANONICAL_DOC_MAP.md`](../do
 
 | Document | Purpose |
 |----------|---------|
-| [pending/KELLY_CONVERSATION_RAILS_TODOS.md](./pending/KELLY_CONVERSATION_RAILS_TODOS.md) | Kelly rails — F2 visit, provider UI, money maturity |
+| [docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md](../docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md) | **Kelly agentic rails SSOT** — LangGraph target, phased build checklist |
+| [pending/KELLY_CONVERSATION_RAILS_TODOS.md](./pending/KELLY_CONVERSATION_RAILS_TODOS.md) | Kelly rails — short backlog pointer + staging items |
 | [pending/KELLY_RCM_PIPELINE_TODOS.md](./pending/KELLY_RCM_PIPELINE_TODOS.md) | RCM pipeline roadmap (TODO-01–24) |
 | [pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](./pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Checkout open items (P0 blockers done) |
 | [pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](./pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm Q&A UI + eval + ops |

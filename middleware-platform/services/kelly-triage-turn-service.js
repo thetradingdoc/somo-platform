@@ -334,6 +334,15 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
       existingFlowState = {};
     }
   }
+  // P3-6: ensure pay tokens from prior sessions cannot satisfy a new conversation (F2 hygiene).
+  if (shouldWipeClinicalState) {
+    try {
+      const KellyToolExecutor = require('./kelly-tool-executor');
+      KellyToolExecutor._setSessionMeta(session_id, 'rcm_pay_token', '');
+      KellyToolExecutor._setSessionMeta(session_id, 'payment_token', '');
+      KellyToolExecutor._setSessionMeta(session_id, 'rcm_payment_id', '');
+    } catch (_) {}
+  }
 
   // Skincare / routine intake: same meta key as voice (Retell kelly_flow)
   try {
@@ -369,7 +378,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   };
   const effectivePreferredLanguage = detectPreferredLanguage();
 
-  const result = await KellyAgentService.processTurn({
+  const { runKellyTurn } = require('./kelly-turn-resolver');
+  const turnOpts = {
     message: messageForKelly,
     sessionId: session_id,
     channel: 'chat',
@@ -382,7 +392,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     scanChatMode: scanChatModeActive,
     plannerDecision,
     scanGrounding: latestBarcodeContextEvent?.product_data || null
-  });
+  };
+  const result = await runKellyTurn(turnOpts);
   if (req.path === '/api/public/landing-assistant/turn') {
     result.reply = await translateReplyIfNeeded(result.reply, effectivePreferredLanguage);
   }

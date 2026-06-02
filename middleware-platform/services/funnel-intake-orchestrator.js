@@ -146,7 +146,7 @@ async function runKellyIntakeTurn({ message, sessionId, clinicId, findSpecialist
     }
   } catch (_) {}
 
-  const result = await KellyAgentService.processTurn({
+  const result = await require('./kelly-turn-resolver').runKellyTurn({
     message,
     sessionId: sid,
     channel: 'chat',

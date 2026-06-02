@@ -1,37 +1,35 @@
 # Kelly Conversation Rails — Backlog
 
-Status: golden path complete; S4–S5 + secondary rails pending
+Status: **Kelly Rails V2** landed (2026-06-02); F2 full green pending local LLM run
 
-Completed golden-path work (Sprints 0–3, F1b/F1c/Playwright skip-triage, fixture spec, E2E env):  
+**Full build plan (SSOT):** [`docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`](../../docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md)
+
+Completed golden-path work (Sprints 0–3, F1b/F1c/Playwright skip-triage):  
 [`../archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md`](../archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md)
 
-## Open backlog
+Phases 2–7 patch layer (superseded on v2 path):  
+[`../archive/KELLY_AGENTIC_RAILS_PHASE_2_7_COMPLETED_2026-06-01.md`](../archive/KELLY_AGENTIC_RAILS_PHASE_2_7_COMPLETED_2026-06-01.md)
 
-### F2 full visit (Node)
+**V2 rebuild (authoritative when `KELLY_RAILS_V2=1`):**  
+[`../archive/KELLY_AGENTIC_RAILS_V2_REBUILD_2026-06-02.md`](../archive/KELLY_AGENTIC_RAILS_V2_REBUILD_2026-06-02.md) · [`../../docs/architecture/kelly_rails_v2_as_built.md`](../../docs/architecture/kelly_rails_v2_as_built.md)
 
-- F2 `test:e2e:rcm:conversation` T1–T4: Step1 skincare clarifier skip when `routine_intake_active=0` + clinic derm/booking intent (`_skipStep1SkinClarifierForClinicVisit` in `kelly-agent-service.js`)
-- Re-run: `npm run test:e2e:rcm:conversation`
+## Active execution (see build plan checklist)
 
-### Sprint 4 — Provider UI (partial)
+- **E7-1:** F2 cold start T1–T6 green locally (`KELLY_RAILS_V2=1`, LLM keys, server :4000)
+- **V6-3:** Manual staging — verify provider-shell clinical prep + `rcm.html` with booked appointment (no Stripe required)
 
-- TODO-01/02 shipped (`routes/kelly.js`)
+## Sprint 4 — Provider UI (partial)
+
 - TODO-03/04 in `provider-shell.js` (verify in staging)
-- TODO-08/15/16: `rcm.html` command center + `today.html` payment summary fetch exist
-- E1: legacy pages `business-dashboard.html`, `commerce-billing.html` redirect to canonical routes
+- TODO-08/15/16: `rcm.html` + `today.html` (exist; verify)
+- E1: legacy dashboard redirects (done)
 
-### Sprint 5 — Money maturity (partial)
+## Sprint 5 — Money maturity (partial)
 
-- G1 idempotency policy + test
-- G2 rollback doc: [`docs/RCM/RCM_LEDGER_ROLLBACK.md`](../../docs/RCM/RCM_LEDGER_ROLLBACK.md)
-- G3 tenant isolation test: `__tests__/rcm-tenant-isolation.test.js`
-- TODO-09/13/14/20: track in [`KELLY_RCM_PIPELINE_TODOS.md`](KELLY_RCM_PIPELINE_TODOS.md)
+- Track in [`KELLY_RCM_PIPELINE_TODOS.md`](KELLY_RCM_PIPELINE_TODOS.md) (TODO-09/13/14/20)
+- G1–G3 done per golden-path archive
 
-### Later — Secondary rails (stubs)
+## Optional
 
-- B2 `isRescheduleCancelIntent` in orchestrator (intent routing hook)
-- B3–B6, D1–D7, TODO-18/24: deferred; implement per-rail E2E when touched
-
-### Optional follow-ups
-
-- Playwright full golden with `RCM_E2E_STRIPE_LIVE=1` (Layer 3 live Stripe on `pay.html`)
-- CI wiring in `run-rcm-e2e-suite.cjs` after first full green run
+- Playwright full golden + `RCM_E2E_STRIPE_LIVE=1`
+- CI in `run-rcm-e2e-suite.cjs` after F2 green
