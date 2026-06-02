@@ -11,17 +11,16 @@
 
 ### Start here (2026) — do not read this 12k-line file first
 
-| Topic | Document |
-|-------|----------|
-| Platform snapshot | [CURRENT_STATE_ARCHITECTURE.md](./CURRENT_STATE_ARCHITECTURE.md) |
-| Route ownership | [RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md](./RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) |
-| E2E call paths | [RUNTIME_ENTRYPOINTS_AND_CALL_PATHS.md](./RUNTIME_ENTRYPOINTS_AND_CALL_PATHS.md) |
-| `server.js` extraction | [SERVER_DECOMPOSITION.md](./SERVER_DECOMPOSITION.md) |
-| Kelly rails v2 (built) | [kelly_rails_v2_as_built.md](./kelly_rails_v2_as_built.md) |
-| Kelly rails (target plan) | [KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md](./KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md) |
-| Doc hygiene | [ENGINEERING_DOC_HYGIENE.md](../meta/ENGINEERING_DOC_HYGIENE.md) |
+**Live architecture:** [`LIVE.md`](./LIVE.md) (platform snapshot, routes, Kelly rails, patient timeline APIs).
 
-The sections below are a **consolidated archive** of former per-folder markdown files (searchable TOC). Prefer the focused docs above for new work.
+| Topic | Anchor in `LIVE.md` |
+|-------|---------------------|
+| Platform snapshot | [#current-state-architecture](./LIVE.md#current-state-architecture) |
+| Route ownership | [#runtime-entrypoints-and-route-ownership](./LIVE.md#runtime-entrypoints-and-route-ownership) |
+| Kelly rails | [#kelly-rails-v2-as-built](./LIVE.md#kelly-rails-v2-as-built) |
+| Patient timeline | [#patient-timeline-routine-and-billing](./LIVE.md#patient-timeline-routine-and-billing) |
+
+The sections below are a **consolidated archive** of former per-folder markdown files (searchable TOC). Prefer [`LIVE.md`](./LIVE.md) for new work.
 
 ## Existing Documentation Body
 

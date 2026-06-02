@@ -1,6 +1,6 @@
 # meta — consolidated documentation
 
-> **Read first (standalone files, not buried in this TOC):** [CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md) · [ENGINEERING_DOC_HYGIENE.md](./ENGINEERING_DOC_HYGIENE.md)
+> **Read first:** [CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md) (topic index). Hygiene rules: [§ Engineering doc hygiene](#engineering-doc-hygiene).
 
 **Single file:** All former `docs/meta/**/*.md` content is merged here. **Last updated:** 2026-04-29
 
@@ -16,6 +16,46 @@
 ## Introduction
 
 Browse by anchor above. Each section notes the former file path.
+
+<a id="engineering-doc-hygiene"></a>
+
+## Engineering doc hygiene (2026-06-02)
+
+- **Two files per folder:** `README.md` + one companion (`OPERATIONS.md`, `LIVE.md`, `RUNBOOK.md`, etc.). Exceptions: runtime prompt paths under `voice-agent/prompts/`, binary assets under `patient-app/screenshots/`.
+- **Read first:** [CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md) — not the 12k-line `architecture/README.md` or `deployment/README.md` archives.
+- **New ops content:** append to the folder’s companion file with a dated anchor; register retired paths in [`_consolidated_path_redirects.json`](../_consolidated_path_redirects.json).
+- **Regenerate merges:** `node scripts/consolidate-docs-two-per-folder.cjs`
+
+<a id="staging-profile"></a>
+
+## Staging profile
+
+*Former path: `docs/STAGING_PROFILE.md`.*
+
+| Role | URL |
+|------|-----|
+| UI | `https://callsomo.com` (staging) |
+| API | `https://api.callsomo.com` |
+
+**Preflight:** `npm run staging:preflight`, `npm run billing:test-gate`, `npm run audit:trial-provision-drift` (from `middleware-platform/`).
+
+**DB truth:** GCS `middleware-staging.db` may lag Postgres — see [`Database/OPERATIONS.md`](../Database/OPERATIONS.md#somo-foundation-runbook). See also [`testing/README.md`](../testing/README.md).
+
+<a id="surface-ownership-map"></a>
+
+## Surface ownership map
+
+| Surface | Code | Docs |
+|---------|------|------|
+| Marketing landing | `unified-dashboard/somo-landing/` | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#somo-landing), [`design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md) |
+| Middleware API | `middleware-platform/` | [`middleware-platform/README.md`](../middleware-platform/README.md), [`architecture/LIVE.md`](../architecture/LIVE.md) |
+| Patient mobile | `patient-app/` | [`patient-app/README.md`](../patient-app/README.md) |
+
+<a id="po-surface-scorecard"></a>
+
+## PO surface scorecard
+
+RAG status per surface — see [`todos/pending/PRODUCTION_READINESS_TASKS.md`](../../todos/pending/PRODUCTION_READINESS_TASKS.md) for open ops gaps. Staging matrix: `npm run staging:preflight` from `middleware-platform/`.
 
 ---
 

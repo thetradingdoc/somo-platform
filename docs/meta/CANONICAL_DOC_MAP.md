@@ -1,41 +1,33 @@
 # Canonical documentation map
 
-**Last Updated:** 2026-06-02
+**Last updated:** 2026-06-02
 
-Use this table to avoid maintaining the same story in multiple folders. **Edit this file** when you add a new major runtime surface or split ownership.
+Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); see [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
 
-**Onboarding / doc hygiene:** [ENGINEERING_DOC_HYGIENE.md](./ENGINEERING_DOC_HYGIENE.md) — what to read first; when to stub vs archive.
-
-| Topic | Read first | Also useful (do not duplicate) |
-|-------|------------|----------------------------------|
-| **Repo overview & contributing** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
-| **Deploy / CI / GCP** | [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md) | [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md) (not `deployment/GCP_DEPLOY_ROLLBACK.md` stub), [`docs/deployment/README.md`](../deployment/README.md) (historical bulk), [`docs/runbooks/PROD_MONITORING_WORKFLOWS.md`](../runbooks/PROD_MONITORING_WORKFLOWS.md) |
-| **Retell agent inventory** | [`docs/deployment/retell-agent-inventory.md`](../deployment/retell-agent-inventory.md) + [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) | `npm run verify:agent-config` |
-| **Architecture snapshot (onboarding)** | [`docs/architecture/CURRENT_STATE_ARCHITECTURE.md`](../architecture/CURRENT_STATE_ARCHITECTURE.md) | Not the 12k-line [`architecture/README.md`](../architecture/README.md) first |
-| **Environment variables** | [`docs/setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md`](../setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md) | [`docs/setup/README.md`](../setup/README.md), [`somo-landing/.env.development`](../../unified-dashboard/somo-landing/.env.development) |
-| **Logo, icon, favicon, transactional email HTML** | [`docs/Brand/LOGO_AND_ICON_SSOT.md`](../Brand/LOGO_AND_ICON_SSOT.md) | [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md), [`middleware-platform/lib/somo-email-layout.js`](../../middleware-platform/lib/somo-email-layout.js), `npm run brand:sync` |
-| **Email (SMTP local + templates)** | [`docs/email/README.md`](../email/README.md) | [`email-service.js`](../../middleware-platform/services/email-service.js), [`invoice-service.js`](../../middleware-platform/services/invoice-service.js) |
-| **Infra vs consumer brand** | [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](../Brand/INFRA_BRAND_DEFERRAL.md) | `npm run check:legacy-hosts`, `npm run check:brand-consumer-strings` |
-| **Marketing UI / palette (Image 1)** | [`docs/design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md) | [`deployment/SOMO_LANDING.md`](../deployment/SOMO_LANDING.md), [`SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) |
-| **Surface ownership (code vs docs)** | [`docs/meta/SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) | This map |
-| **HTTP routes & static SPA mounts** | [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md), [`docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) | [`middleware-platform/server.js`](../../middleware-platform/server.js) (~11k compose), [`middleware-platform/routes/`](../../middleware-platform/routes/), [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js), [`bootstrap/static-hosting.js`](../../middleware-platform/bootstrap/static-hosting.js) |
-| **Codebase review roadmap (P0/P1/P2)** | [`docs/architecture/CODEBASE_REVIEW_ROADMAP.md`](../architecture/CODEBASE_REVIEW_ROADMAP.md) | [`docs/testing/STAGING_DIAGNOSTIC_RUNBOOK.md`](../testing/STAGING_DIAGNOSTIC_RUNBOOK.md), [`docs/Database/SOMO_FOUNDATION_RUNBOOK.md`](../Database/SOMO_FOUNDATION_RUNBOOK.md) |
-| **PO surface scorecard (RAG)** | [`docs/meta/PO_SURFACE_SCORECARD.md`](../meta/PO_SURFACE_SCORECARD.md) | [`docs/STAGING_PROFILE.md`](../STAGING_PROFILE.md) |
-| **Kelly agentic rails (target + build plan)** | [`docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`](../architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md) | **V2 as-built:** [`kelly_rails_v2_as_built.md`](../architecture/kelly_rails_v2_as_built.md), [`services/kelly-rails/`](../../middleware-platform/services/kelly-rails/), [`kelly-turn-resolver.js`](../../middleware-platform/services/kelly-turn-resolver.js) |
-| **Kelly triage (patient + landing)** | [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js) | [`routes/patient-booking.js`](../../middleware-platform/routes/patient-booking.js), [`routes/public-landing-assistant.js`](../../middleware-platform/routes/public-landing-assistant.js) |
-| **Medicare plan search (payor)** | [`docs/Payor/README.md`](../Payor/README.md) | [`middleware-platform/routes/public-plan-search.js`](../../middleware-platform/routes/public-plan-search.js) |
-| **Medicaid provider directory & public search** | [`docs/Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md`](../Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md) | [`middleware-platform/services/provider-search-service.js`](../../middleware-platform/services/provider-search-service.js), [`middleware-platform/server.js`](../../middleware-platform/server.js) (`/api/public/providers` mount) |
-| **RCM (eligibility, prior auth, claims)** | [`docs/RCM/README.md`](../RCM/README.md), [`docs/RCM/PA_ARCHITECTURE.md`](../RCM/PA_ARCHITECTURE.md) | [`docs/RCM/STEDI_PA_WORKSTREAM.md`](../RCM/STEDI_PA_WORKSTREAM.md), [`middleware-platform/services/insurance-service.js`](../../middleware-platform/services/insurance-service.js) |
-| **Voice / commerce LLM, checkout, Retell, middleware depth** | [`docs/middleware-platform/README.md`](../middleware-platform/README.md) (TOC anchors) | [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md) (consumer naming), [`docs/reasoning/README.md`](../reasoning/README.md), [`docs/architecture/README.md`](../architecture/README.md) (archive TOC) |
-| **Testing & E2E** | [`docs/testing/README.md`](../testing/README.md), [`docs/testing/PROD_PLAYWRIGHT_SUITES.md`](../testing/PROD_PLAYWRIGHT_SUITES.md) | [`middleware-platform/package.json`](../../middleware-platform/package.json) (`test:e2e-*`, `test:prod:*`), [`middleware-platform/playwright.config.cjs`](../../middleware-platform/playwright.config.cjs) |
-| **Database / migrations** | [`docs/Database/README.md`](../Database/README.md), [`docs/Database/DB_STRUCTURE_AND_PIPELINE.md`](../Database/DB_STRUCTURE_AND_PIPELINE.md) | [`middleware-platform/database.js`](../../middleware-platform/database.js), [`middleware-platform/migrations/postgres/README.md`](../../middleware-platform/migrations/postgres/README.md) |
-| **Security / compliance** | [`docs/security/README.md`](../security/README.md), [`docs/compliance/README.md`](../compliance/README.md) | [`docs/legal/README.md`](../legal/README.md) |
-| **Medical coding / codebook** | [`docs/Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) | [`docs/Medical Coding/OPERATIONS.md`](../Medical%20Coding/OPERATIONS.md), [`docs/deployment/MEDICAL_CODEBOOK_SETUP.md`](../deployment/MEDICAL_CODEBOOK_SETUP.md), [`docs/deployment/PROD_DB_PARITY.md`](../deployment/PROD_DB_PARITY.md) |
-| **Voice agent** | [`docs/architecture/README.md`](../architecture/README.md) (voice anchors), [`docs/voice-agent/README.md`](../voice-agent/README.md) | [`docs/voice-agent/prompts/README.md`](../voice-agent/prompts/README.md), [`docs/Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) § voice |
-| **Patient app — Timeline, billing, calendar-range API** | [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md) | [`docs/architecture/README.md`](../architecture/README.md), [`docs/patient-app/README.md`](../patient-app/README.md), [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md) |
-| **Routine tracker user journey (MVP)** | [`docs/user-journey/README.md`](../user-journey/README.md) | [`07-v1-product-decisions.md`](../user-journey/07-v1-product-decisions.md) (photo = day logged), [`06-mobile-and-web-parity.md`](../user-journey/06-mobile-and-web-parity.md), [`02-journey-now.md`](../user-journey/02-journey-now.md), [`04-surfaces-and-urls.md`](../user-journey/04-surfaces-and-urls.md) |
-| **Todos vs docs** | [`todos/README.md`](../../todos/README.md) | This map — **do not** copy long checklists into product docs; link instead |
+| Topic | Read first | Companion / depth |
+|-------|------------|-------------------|
+| **Repo overview** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
+| **Deploy / CI / GCP (live)** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#callsomo-gcp-cutover) | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md), [`deployment/README.md`](../deployment/README.md) (historical) |
+| **Retell agent inventory** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#retell-agent-inventory) + [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) | `npm run verify:agent-config` |
+| **Architecture snapshot** | [`architecture/LIVE.md`](../architecture/LIVE.md#current-state-architecture) | [`architecture/README.md`](../architecture/README.md) (archive TOC only) |
+| **Routes & call paths** | [`architecture/LIVE.md`](../architecture/LIVE.md#runtime-entrypoints-and-route-ownership) | [`middleware-platform/server.js`](../../middleware-platform/server.js) |
+| **Environment variables** | [`setup/README.md`](../setup/README.md) | Former `ENVIRONMENT_VARIABLES_BY_SURFACE` merged into setup README |
+| **Brand / logo / email HTML** | [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md) | [`Brand/README.md`](../Brand/README.md) |
+| **Staging profile** | [`meta/README.md`](./README.md#staging-profile) | [`testing/README.md`](../testing/README.md) |
+| **Somo demo (landing outbound)** | [`agent/somo-demo/RUNBOOK.md`](../agent/somo-demo/RUNBOOK.md#phase-a-go-recovery-runbook) | [`agent/somo-demo/README.md`](../agent/somo-demo/README.md) |
+| **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`kelly-rails/`](../../middleware-platform/services/kelly-rails/) in code |
+| **Payor / provider search** | [`Payor/README.md`](../Payor/README.md) | [`Payor/OPERATIONS.md`](../Payor/OPERATIONS.md) |
+| **RCM** | [`RCM/README.md`](../RCM/README.md) | [`RCM/ARCHITECTURE.md`](../RCM/ARCHITECTURE.md) |
+| **Database** | [`Database/README.md`](../Database/README.md) | [`Database/OPERATIONS.md`](../Database/OPERATIONS.md) |
+| **Patient app** | [`patient-app/README.md`](../patient-app/README.md) | [`patient-app/PRODUCT.md`](../patient-app/PRODUCT.md) |
+| **Patient timeline APIs** | [`architecture/LIVE.md`](../architecture/LIVE.md#patient-timeline-routine-and-billing) | [`user-journey/JOURNEY.md`](../user-journey/JOURNEY.md) |
+| **Routine tracker MVP** | [`user-journey/README.md`](../user-journey/README.md) | [`user-journey/JOURNEY.md`](../user-journey/JOURNEY.md) |
+| **Medical coding** | [`Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) | [`Medical Coding/README.md`](../Medical%20Coding/README.md) |
+| **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
+| **Middleware depth** | [`middleware-platform/README.md`](../middleware-platform/README.md) | TOC anchors — do not duplicate |
+| **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
+| **Active work** | [`todos/pending/`](../../todos/pending/) | Do not copy long checklists into product docs |
 
 ## Middleware consolidated README
 
-Voice/commerce LLM stack (`KellyAgentService`, `KELLY_*` env vars), payments, Retell, LangGraph notes, and long-form runbooks live in one file: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Use its **table of contents** for anchors; avoid copying sections elsewhere. Customer-facing naming is **Somo** per [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md).
+Kelly, checkout, Retell, and LangGraph depth: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Consumer naming: [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md).
