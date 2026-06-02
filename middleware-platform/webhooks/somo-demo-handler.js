@@ -6,6 +6,7 @@ const { resolveTemplate } = require('../services/somo-demo-template-registry');
 const orchestrator = require('../services/somo-demo-orchestrator');
 const somoDemoSms = require('../services/somo-demo-sms');
 const twilio = require('twilio');
+const { getMaxDurationSec } = require('../lib/somo-demo-env');
 
 function getCallType(connection) {
   const meta = connection.callMetadata || {};
@@ -46,7 +47,7 @@ function extractDemoContext(connection) {
   } catch {
     template = {
       personaName: 'Sam',
-      maxDurationSec: parseInt(process.env.DODGECALL_DEMO_MAX_DURATION_SEC, 10) || 240,
+      maxDurationSec: getMaxDurationSec(240),
       use_case_label: dv.use_case_label || 'Receptionist'
     };
   }

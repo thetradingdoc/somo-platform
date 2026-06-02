@@ -6,18 +6,19 @@
  * Run: npm run configure:somo-demo
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const somoDemoEnv = require('../lib/somo-demo-env');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
 const AGENT_ID =
-  (process.env.DODGECALL_RETELL_AGENT_ID && String(process.env.DODGECALL_RETELL_AGENT_ID).trim()) ||
+  somoDemoEnv.getRetellAgentId() ||
   (process.env.RETELL_SALES_AGENT_ID && String(process.env.RETELL_SALES_AGENT_ID).trim()) ||
   (process.env.RETELL_AGENT_ID && String(process.env.RETELL_AGENT_ID).trim()) ||
   null;
 const VOICE_ID =
-  (process.env.DODGECALL_DEMO_VOICE_ID && String(process.env.DODGECALL_DEMO_VOICE_ID).trim()) ||
+  somoDemoEnv.getDemoVoiceId() ||
   (process.env.RETELL_VOICE_ID && String(process.env.RETELL_VOICE_ID).trim()) ||
   'retell-Cimo';
 
@@ -89,7 +90,7 @@ async function main() {
     process.exit(1);
   }
   if (!AGENT_ID) {
-    console.error('Set DODGECALL_RETELL_AGENT_ID or RETELL_AGENT_ID');
+    console.error('Set SOMO_DEMO_RETELL_AGENT_ID or RETELL_AGENT_ID');
     process.exit(1);
   }
 

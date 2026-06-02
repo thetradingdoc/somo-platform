@@ -35,7 +35,7 @@ export USE_GCP_SECRETS=1 CLOUDRUN_BASE_URL=https://api.callsomo.com CLOUDRUN_PRO
 "$ROOT/scripts/deploy-to-gcp.sh"
 
 echo "==> Domain mapping (add DNS: api CNAME ghs.googlehosted.com)"
-gcloud beta run domain-mappings create --service=myskin-middleware \
+gcloud beta run domain-mappings create --service=somo-middleware \
   --domain=api.callsomo.com --region="$GCP_REGION" --project="$GCP_PROJECT" 2>/dev/null || true
 
 echo "==> Firebase (manual if addFirebase 403): console.firebase.google.com → add $GCP_PROJECT"

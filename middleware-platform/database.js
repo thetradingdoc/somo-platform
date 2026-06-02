@@ -3852,9 +3852,32 @@ function migrateSomoDemoRequests() {
       CREATE INDEX IF NOT EXISTS idx_somo_demo_phone ON somo_demo_requests(phone);
       CREATE INDEX IF NOT EXISTS idx_somo_demo_created ON somo_demo_requests(created_at);
       CREATE INDEX IF NOT EXISTS idx_somo_demo_ip_created ON somo_demo_requests(client_ip, created_at);
+      CREATE TABLE IF NOT EXISTS somo_demo_phone_daily_lock (
+        phone TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (phone, day_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_phone_lock_created
+        ON somo_demo_phone_daily_lock(created_at);
+      CREATE TABLE IF NOT EXISTS somo_demo_phone_window_lock (
+        phone TEXT PRIMARY KEY,
+        request_id TEXT NOT NULL,
+        locked_until DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_phone_window_until
+        ON somo_demo_phone_window_lock(locked_until);
     `);
     const extraCols = [
       ['template_id', 'TEXT'],
+      ['language', 'TEXT'],
+      ['country', 'TEXT'],
+      ['city', 'TEXT'],
+      ['practice_specialty', 'TEXT'],
+      ['practice_size', 'TEXT'],
+      ['questions_asked', 'TEXT'],
       ['conversation_stage', 'TEXT'],
       ['interest_level', 'TEXT'],
       ['cta_offered_at', 'TEXT'],
@@ -3879,10 +3902,20 @@ function migrateSomoDemoRequests() {
       .get();
     if (legacyExists) {
       db.exec(`
-        INSERT OR IGNORE INTO somo_demo_requests
-        SELECT * FROM dodgecall_demo_requests
+        INSERT OR IGNORE INTO somo_demo_requests (
+          id, name, phone, use_case, status, twilio_call_sid, client_ip, error_message, created_at, updated_at
+        )
+        SELECT
+          id, name, phone, use_case, status, twilio_call_sid, client_ip, error_message, created_at, updated_at
+        FROM dodgecall_demo_requests
       `);
     }
+    db.exec(`
+      DELETE FROM somo_demo_phone_daily_lock
+      WHERE created_at < datetime('now', '-2 days');
+      DELETE FROM somo_demo_phone_window_lock
+      WHERE locked_until <= datetime('now');
+    `);
     console.log('✅ Migration complete: somo_demo_requests');
   } catch (error) {
     console.error('❌ Somo demo migration failed:', error.message);
@@ -16630,10 +16663,10 @@ module.exports = {
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO somo_demo_requests (
-        id, name, phone, use_case, template_id, status, client_ip, attribution_json, created_at, updated_at
+        id, name, phone, use_case, template_id, language, country, city, practice_specialty, practice_size, questions_asked, status, client_ip, attribution_json, created_at, updated_at
       )
       VALUES (
-        @id, @name, @phone, @use_case, @template_id, @status, @client_ip, @attribution_json, @created_at, @updated_at
+        @id, @name, @phone, @use_case, @template_id, @language, @country, @city, @practice_specialty, @practice_size, @questions_asked, @status, @client_ip, @attribution_json, @created_at, @updated_at
       )
     `).run({
       id: row.id,
@@ -16641,6 +16674,12 @@ module.exports = {
       phone: row.phone,
       use_case: row.use_case,
       template_id: row.template_id || null,
+      language: row.language || null,
+      country: row.country || null,
+      city: row.city || null,
+      practice_specialty: row.practice_specialty || null,
+      practice_size: row.practice_size || null,
+      questions_asked: row.questions_asked || null,
       status: row.status || 'pending',
       client_ip: row.client_ip || null,
       attribution_json: row.attribution_json || null,
@@ -16704,6 +16743,36 @@ module.exports = {
     return db.prepare('SELECT * FROM somo_demo_requests WHERE id = ?').get(id) || null;
   },
 
+  acquireSomoDemoDailyPhoneLock(phone, requestId, nowIso = new Date().toISOString()) {
+    if (!phone || !requestId) return false;
+    try {
+      const now = nowIso || new Date().toISOString();
+      const lockUntil = new Date(Date.parse(now) + (24 * 60 * 60 * 1000)).toISOString();
+      db.prepare(`
+        DELETE FROM somo_demo_phone_window_lock
+        WHERE phone = ? AND locked_until <= ?
+      `).run(phone, now);
+      db.prepare(`
+        INSERT INTO somo_demo_phone_window_lock (phone, request_id, locked_until, created_at)
+        VALUES (?, ?, ?, ?)
+      `).run(phone, requestId, lockUntil, now);
+      return true;
+    } catch (err) {
+      if (String(err && err.message || '').includes('UNIQUE constraint failed')) {
+        return false;
+      }
+      throw err;
+    }
+  },
+
+  releaseSomoDemoDailyPhoneLock(phone, _nowIso = new Date().toISOString()) {
+    if (!phone) return;
+    db.prepare(`
+      DELETE FROM somo_demo_phone_window_lock
+      WHERE phone = ?
+    `).run(phone);
+  },
+
   countSomoDemoRequestsSince({ client_ip, phone, since, statuses }) {
     if (client_ip) {
       const row = db.prepare(`
@@ -16723,6 +16792,54 @@ module.exports = {
       return row?.c || 0;
     }
     return 0;
+  },
+
+  insertKellyCallEvent(event = {}) {
+    if (!event.event_type) return null;
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS kelly_call_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        call_id TEXT,
+        event_type TEXT NOT NULL,
+        payload_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_kelly_call_events_session_created
+        ON kelly_call_events(session_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_kelly_call_events_type_created
+        ON kelly_call_events(event_type, created_at);
+    `);
+    const id = event.id || `kce_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO kelly_call_events (id, session_id, call_id, event_type, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      event.session_id || null,
+      event.call_id || null,
+      event.event_type,
+      safeStringify(event.payload_json || {}),
+      event.created_at || new Date().toISOString()
+    );
+    return id;
+  },
+
+  listKellyCallEvents({ session_id, limit = 100 } = {}) {
+    const cap = Math.max(1, Math.min(500, Number(limit) || 100));
+    if (session_id) {
+      return db.prepare(`
+        SELECT * FROM kelly_call_events
+        WHERE session_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(session_id, cap);
+    }
+    return db.prepare(`
+      SELECT * FROM kelly_call_events
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(cap);
   },
 
   insertUsageEvent(row) {

@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-somo-callsomo}"
-REGION="${GCP_REGION:-us-central1}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/cloudrun-deploy-env.sh
+source "$ROOT/scripts/lib/cloudrun-deploy-env.sh"
+
+PROJECT="${GCP_PROJECT:-$CLOUDRUN_GCP_PROJECT}"
+REGION="${GCP_REGION:-$CLOUDRUN_REGION}"
 JOB="${STAGING_BOOTSTRAP_JOB:-somo-staging-bootstrap}"
-SERVICE="${CLOUDRUN_SERVICE:-myskin-middleware}"
+SERVICE="${CLOUDRUN_SERVICE:-$CLOUDRUN_SERVICE}"
 IMAGE="${ARTIFACT_IMAGE:-gcr.io/${PROJECT}/${SERVICE}:$(git -C "$(dirname "$0")/.." rev-parse --short HEAD 2>/dev/null || echo latest)}"
 CONNECTION="${CLOUDSQL_CONNECTION_NAME:-${PROJECT}:${REGION}:somo-staging-pg}"
 TWILIO_PHONE="${STAGING_OWNER_TWILIO_PHONE:-+13639990205}"

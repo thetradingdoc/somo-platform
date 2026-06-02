@@ -16,7 +16,7 @@ function registerPublicLandingAssistantRoutes(app, deps) {
 
 app.post('/api/public/landing-assistant/turn', apiLimiter, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
-    const out = await handlePublicLandingAssistantMessage(req);
+    const out = await handlePublicLandingAssistantFromRequest(req);
     return res.status(out.status).json(out.json);
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });

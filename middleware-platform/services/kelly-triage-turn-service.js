@@ -691,8 +691,8 @@ async function handlePatientTriageMessage(req) {
   return runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId: sid });
 }
 
-/** Anonymous Skin & Care landing assistant — same Kelly triage stack as /api/patient/triage/message (rate-limited). */
-async function handlePublicLandingAssistantMessage(req) {
+/** Somo public landing assistant — same Kelly triage stack as /api/patient/triage/message (rate-limited). */
+async function handlePublicLandingAssistantFromRequest(req) {
   const { startTrace, endTrace } = require('./langsmith-trace-service');
   const sessionId = String(req.body?.session_id || '').trim() || null;
   const traceCtx = await startTrace({
@@ -735,42 +735,6 @@ async function handlePatientTriageFromRequest(req) {
   const email = sessionValidation?.email || null;
   const mappedPatientId = sessionValidation?.patient_id || null;
   return runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId: sid });
-}
-
-async function handlePublicLandingAssistantFromRequest(req) {
-  const { startTrace, endTrace } = require('./langsmith-trace-service');
-  const sessionId = String(req.body?.session_id || '').trim() || null;
-  const traceCtx = await startTrace({
-    name: 'landing_assistant_turn',
-    inputs: {
-      session_id: sessionId,
-      message: String(req.body?.message || ''),
-      category_route: String(req.body?.category_route || req.body?.route || '').trim() || null,
-      scan_chat_mode: String(req.body?.scan_chat_mode || '').trim() || null
-    },
-    metadata: {
-      route: '/api/public/landing-assistant/turn',
-      source: 'landing_page'
-    },
-    tags: ['landing-page', 'chat', 'kelly']
-  });
-  try {
-    const out = await runKellyTriageTurnForHttpRequest(req, { mappedPatientId: null, email: null, portalSessionId: null });
-    await endTrace(traceCtx, {
-      outputs: {
-        success: !!out?.json?.success,
-        status: out?.status || 200,
-        session_id: out?.json?.session_id || sessionId,
-        next_step: out?.json?.next_step || null,
-        scan_chat_mode: String(out?.json?.state?.turn_planner?.flags?.scan_chat_mode || '').trim() || null
-      },
-      usage: out?.json?.llm_usage || null
-    });
-    return out;
-  } catch (e) {
-    await endTrace(traceCtx, { error: e?.message || 'landing_assistant_turn_failed' });
-    throw e;
-  }
 }
 
 module.exports = {

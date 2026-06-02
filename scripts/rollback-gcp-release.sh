@@ -4,9 +4,13 @@ set -euo pipefail
 # Roll back Cloud Run to previous revision.
 # Usage: ./scripts/rollback-gcp-release.sh
 
-PROJECT="${GCP_PROJECT:-${GOOGLE_CLOUD_PROJECT:-somo-callsomo}}"
-REGION="${GCP_REGION:-us-central1}"
-SERVICE="${CLOUDRUN_SERVICE:-myskin-middleware}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/cloudrun-deploy-env.sh
+source "$ROOT/scripts/lib/cloudrun-deploy-env.sh"
+
+PROJECT="${GCP_PROJECT:-$CLOUDRUN_GCP_PROJECT}"
+REGION="${GCP_REGION:-$CLOUDRUN_REGION}"
+SERVICE="${CLOUDRUN_SERVICE:-$CLOUDRUN_SERVICE}"
 
 echo "==> List recent revisions for $SERVICE"
 gcloud run revisions list --service "$SERVICE" --region "$REGION" --project "$PROJECT" --limit 5

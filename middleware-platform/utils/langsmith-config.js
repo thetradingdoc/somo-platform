@@ -1,5 +1,5 @@
 /**
- * LangSmith configuration for Doctor Little project
+ * LangSmith configuration for Somo middleware
  *
  * Ensures tracing goes to the correct project for visibility.
  * Set LANGSMITH_API_KEY (or AP_Langchain) and optionally LANGSMITH_PROJECT.
@@ -15,12 +15,12 @@ if (process.env.LANGSMITH_API_KEY && process.env.LANGCHAIN_TRACING_V2 !== 'false
   process.env.LANGCHAIN_TRACING_V2 = 'true';
 }
 
-// Doctor Little project - use project NAME (LangSmith accepts names, not just UUIDs)
+// Somo middleware — use project NAME (LangSmith accepts names, not just UUIDs)
 // Gap Analysis: env-based project naming (middleware-{env}) for dev/staging/prod separation
 const env = process.env.NODE_ENV || 'development';
 const envSuffix = env === 'production' ? 'prod' : env === 'staging' ? 'staging' : 'dev';
 const DEFAULT_PROJECT = `middleware-${envSuffix}`;
-const DOCTOR_LITTLE_PROJECT = process.env.LANGCHAIN_PROJECT || process.env.LANGSMITH_PROJECT || DEFAULT_PROJECT;
+const SOMO_MIDDLEWARE_PROJECT = process.env.LANGCHAIN_PROJECT || process.env.LANGSMITH_PROJECT || DEFAULT_PROJECT;
 if (!process.env.LANGCHAIN_PROJECT && !process.env.LANGSMITH_PROJECT) {
   process.env.LANGCHAIN_PROJECT = DEFAULT_PROJECT;
   process.env.LANGSMITH_PROJECT = DEFAULT_PROJECT;
@@ -45,10 +45,10 @@ if (isProd && (!hasKey || tracingOff)) {
 
 function getConfig() {
   return {
-    projectId: process.env.LANGCHAIN_PROJECT || process.env.LANGSMITH_PROJECT || DOCTOR_LITTLE_PROJECT,
+    projectId: process.env.LANGCHAIN_PROJECT || process.env.LANGSMITH_PROJECT || SOMO_MIDDLEWARE_PROJECT,
     hasKey: !!(process.env.LANGSMITH_API_KEY || process.env.AP_Langchain),
     tracingEnabled: process.env.LANGCHAIN_TRACING_V2 === 'true'
   };
 }
 
-module.exports = { DOCTOR_LITTLE_PROJECT, getConfig };
+module.exports = { SOMO_MIDDLEWARE_PROJECT, DOCTOR_LITTLE_PROJECT: SOMO_MIDDLEWARE_PROJECT, getConfig };

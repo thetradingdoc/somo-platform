@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { getUseCaseContext } = require('./somo-demo-use-cases');
+const somoDemoEnv = require('../lib/somo-demo-env');
 
 const AGENT_ENV_FALLBACKS = ['RETELL_SALES_AGENT_ID', 'RETELL_AGENT_ID'];
 const FROM_ENV_FALLBACKS = ['TWILIO_PHONE_NUMBER'];
@@ -20,8 +21,11 @@ function loadConfig() {
 /**
  * Read first non-empty env among primary + fallbacks.
  */
+const { LEGACY_ENV_BY_PRIMARY } = somoDemoEnv;
+
 function resolveEnv(primaryKey, fallbackKeys = []) {
-  const keys = [primaryKey, ...fallbackKeys];
+  const legacy = LEGACY_ENV_BY_PRIMARY[primaryKey];
+  const keys = [primaryKey, legacy, ...fallbackKeys].filter(Boolean);
   for (const key of keys) {
     const val = process.env[key];
     if (val && String(val).trim()) {
@@ -61,10 +65,7 @@ function resolveTemplate({ use_case }) {
   const fromNumber = resolveEnv(template.twilio_from_env, FROM_ENV_FALLBACKS);
   const voiceId = resolveOptionalEnv(template.voice_id_env, VOICE_ENV_FALLBACKS);
 
-  const maxDurationSec =
-    parseInt(process.env.DODGECALL_DEMO_MAX_DURATION_SEC, 10) ||
-    template.max_duration_sec ||
-    240;
+  const maxDurationSec = somoDemoEnv.getMaxDurationSec(template.max_duration_sec || 240);
 
   const ctx = getUseCaseContext(useCase);
 
@@ -82,10 +83,7 @@ function resolveTemplate({ use_case }) {
 }
 
 function getDemoFromNumberCandidates() {
-  const keys = [
-    'DODGECALL_TWILIO_FROM_NUMBER',
-    'TWILIO_PHONE_NUMBER'
-  ];
+  const keys = somoDemoEnv.getDemoFromNumberEnvKeys();
   return keys
     .map((k) => process.env[k])
     .filter((v) => v && String(v).trim())

@@ -23,7 +23,7 @@ concurrency:
 env:
   GCP_PROJECT: somo-callsomo
   GCP_REGION: us-central1
-  CLOUDRUN_SERVICE: myskin-middleware
+  CLOUDRUN_SERVICE: somo-middleware
   UI_BASE_URL: https://callsomo.com
   MIDDLEWARE_API_BASE: https://api.callsomo.com
 

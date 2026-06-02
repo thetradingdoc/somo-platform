@@ -45,7 +45,7 @@ if (isProd) {
   }
 }
 
-// LangSmith: route traces to Doctor Little project
+// LangSmith: route traces to Somo middleware project (LANGCHAIN_PROJECT)
 try {
   require('./utils/langsmith-config');
 } catch (e) { /* ignore */ }
@@ -2877,7 +2877,6 @@ const rcmPublicRoutes = require('./routes/rcm-public');
 app.use('/api/public/rcm', rcmPublicRoutes);
 const somoDemoPublicRoutes = require('./routes/somo-demo-public');
 app.use('/api/public/somo-demo', somoDemoPublicRoutes);
-app.use('/api/public/dodgecall', somoDemoPublicRoutes); // legacy alias (deprecated)
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
 app.use('/api/internal/service-ops', internalServiceOpsRoutes);
 const impactPublicRoutes = require('./routes/impact-public');
@@ -3238,7 +3237,6 @@ const somoDemoAmdHandler = [
   }
 ];
 app.post('/voice/somo-demo-amd-callback', ...somoDemoAmdHandler);
-app.post('/voice/dodgecall-amd-callback', ...somoDemoAmdHandler); // legacy alias (deprecated)
 
 // Twilio Status Callback - receives call status updates
 app.post(
@@ -9040,7 +9038,7 @@ app.post('/api/ehr/epic/sync', async (req, res) => {
       }
 
       if (!platformPatient) {
-        console.warn(`   ⚠️  Patient ${encPatientId} not found in DocLittle, skipping encounter ${encounter.id}`);
+        console.warn(`   ⚠️  Patient ${encPatientId} not found in Somo, skipping encounter ${encounter.id}`);
         continue;
       }
 

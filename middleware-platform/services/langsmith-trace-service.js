@@ -32,7 +32,7 @@ async function startTrace({ name, inputs, metadata, tags }) {
       id: runId,
       name: String(name || 'middleware_trace'),
       run_type: 'chain',
-      project_name: process.env.LANGCHAIN_PROJECT || process.env.LANGSMITH_PROJECT || 'Doctor Little',
+      project_name: process.env.LANGCHAIN_PROJECT || process.env.LANGSMITH_PROJECT || 'middleware-prod',
       inputs: inputs || {},
       tags: Array.isArray(tags) ? tags : [],
       extra: { metadata: metadata || {} },

@@ -151,7 +151,7 @@ function routeOrchestratorLane(state = {}) {
     return { lane: KELLY_LANE.PAYMENT, step: LANE_FIRST_STEP[KELLY_LANE.PAYMENT] };
   }
 
-  const db = require('../database');
+  const db = require('../../database');
   const sessionRow = state.session_id && db.getTriageSession ? db.getTriageSession(state.session_id) : null;
   const opqrstOk =
     sessionRow &&

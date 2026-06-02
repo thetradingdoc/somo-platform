@@ -42,6 +42,7 @@ const BANNED = [
 
 const ALLOW_PATH = [
   /[/\\]docs[/\\]archive[/\\]/i,
+  /somo-demo-env\.js$/i,
   /check-brand-consumer-strings/i,
   /check-brand-strings/i,
   /check-legacy-hosts/i,
@@ -60,8 +61,23 @@ const ALLOW_LINE = [
   /doclittle\.health/i,
   /doclittle_kelly_commerce_quote_v1/i,
   /dodgecall_demo_requests/i,
-  /\/api\/public\/dodgecall/i,
+  /utm_source=dodgecall/i,
+  /legacy utm/i,
+  /source === 'dodgecall'/i,
 ];
+
+const BANNED_ENV_PREFIX = /\bDODGECALL_/;
+
+function scanFileForBannedEnv(filePath, text, violations) {
+  if (!/somo-demo-env\.js$/i.test(filePath) && BANNED_ENV_PREFIX.test(text)) {
+    const lines = text.split('\n');
+    lines.forEach((line, i) => {
+      if (BANNED_ENV_PREFIX.test(line) && !ALLOW_LINE.some((re) => re.test(line))) {
+        violations.push({ file: filePath, line: i + 1, label: 'DODGECALL_ env (use SOMO_DEMO_ + somo-demo-env.js)', snippet: line.trim().slice(0, 120) });
+      }
+    });
+  }
+}
 
 function walk(dir, files = []) {
   if (!fs.existsSync(dir)) return files;
@@ -95,7 +111,9 @@ if (noLegacyEnv) files.push(...ENV_FILES.filter((f) => fs.existsSync(f)));
 const violations = [];
 for (const file of files) {
   const rel = path.relative(ROOT, file);
-  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  const text = fs.readFileSync(file, 'utf8');
+  scanFileForBannedEnv(rel, text, violations);
+  const lines = text.split('\n');
   lines.forEach((line, i) => {
     if (isAllowedLine(line)) return;
     for (const { re, label } of BANNED) {

@@ -13,38 +13,22 @@ const { resolveTemplate } = require('./somo-demo-template-registry');
 const { USE_CASES, USE_CASE_LABELS, USE_CASE_OPENERS, getUseCaseContext } = require('./somo-demo-use-cases');
 
 const SMSService = require('./sms-service');
+const { appendEventLog, upsertLeadStatus } = require('./somo-demo-sheets-sync');
+const somoDemoEnv = require('../lib/somo-demo-env');
 
-
-
-function isDemoEnabled() {
-
-  const v = process.env.DODGECALL_DEMO_ENABLED;
-
-  if (v === '0' || v === 'false') return false;
-
-  return true;
-
+function buildDemoError(message, code, status) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = status;
+  return err;
 }
 
 
 
-function getDailyCap() {
-
-  return parseInt(process.env.DODGECALL_DEMO_DAILY_CAP, 10) || 100;
-
-}
-
-
-
-function getMaxConcurrent() {
-
-  return parseInt(process.env.DODGECALL_DEMO_MAX_CONCURRENT, 10) || 3;
-
-}
-
-function getIpHourlyLimit() {
-  return parseInt(process.env.DODGECALL_DEMO_IP_LIMIT_PER_HOUR, 10) || 3;
-}
+const isDemoEnabled = somoDemoEnv.isDemoEnabled;
+const getDailyCap = somoDemoEnv.getDailyCap;
+const getMaxConcurrent = somoDemoEnv.getMaxConcurrent;
+const getIpHourlyLimit = somoDemoEnv.getIpHourlyLimit;
 
 function isLoopbackClientIp(clientIp) {
   const ip = String(clientIp || '')
@@ -55,7 +39,7 @@ function isLoopbackClientIp(clientIp) {
 
 /** Local dev: skip IP/phone caps (failed Twilio attempts were counting toward the 3/hr IP limit). */
 function shouldRelaxDemoLimits(clientIp) {
-  if (process.env.DODGECALL_DEMO_RELAX_LIMITS === '1' || process.env.DODGECALL_DEMO_RELAX_LIMITS === 'true') {
+  if (somoDemoEnv.shouldRelaxDemoLimitsFlag()) {
     return true;
   }
   if (process.env.NODE_ENV === 'production') return false;
@@ -101,12 +85,20 @@ function checkRateLimits({ clientIp, phone }) {
 
   const dailyCap = getDailyCap();
   if (db.countSomoDemoRequestsToday() >= dailyCap) {
-    throw new Error('Demo calls are at capacity for today. Please try again tomorrow.');
+    throw buildDemoError(
+      'Demo calls are at capacity for today. Please try again tomorrow.',
+      'DAILY_CAP_REACHED',
+      429
+    );
   }
 
   const maxConcurrent = getMaxConcurrent();
   if (db.countActiveSomoDemoCalls() >= maxConcurrent) {
-    throw new Error('Many demo calls are in progress. Please try again in a few minutes.');
+    throw buildDemoError(
+      'Many demo calls are in progress. Please try again in a few minutes.',
+      'CONCURRENT_CAP_REACHED',
+      429
+    );
   }
 
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -116,7 +108,11 @@ function checkRateLimits({ clientIp, phone }) {
   if (clientIp) {
     const ipCount = db.countSomoDemoRequestsSince({ client_ip: clientIp, since: hourAgo });
     if (ipCount >= ipLimit) {
-      throw new Error('Too many demo requests from this network. Try again in an hour.');
+      throw buildDemoError(
+        'Too many demo requests from this network. Try again in an hour.',
+        'IP_RATE_LIMIT',
+        429
+      );
     }
   }
 
@@ -126,17 +122,34 @@ function checkRateLimits({ clientIp, phone }) {
     statuses: ['pending', 'initiated', 'ringing', 'answered', 'completed', 'in-progress']
   });
   if (phoneCount >= 1) {
-    throw new Error('This number already received a demo call recently. Try again tomorrow.');
+    throw buildDemoError(
+      'This number already received a demo call recently. Try again tomorrow.',
+      'DUPLICATE_PHONE_WINDOW',
+      429
+    );
   }
 }
 
 
 
-async function requestDemoCall({ name, phone, use_case, consent, clientIp, attribution }) {
+async function requestDemoCall({
+  name,
+  phone,
+  use_case,
+  language,
+  country,
+  city,
+  practice_specialty,
+  practice_size,
+  questions_asked,
+  consent,
+  clientIp,
+  attribution
+}) {
 
   if (!isDemoEnabled()) {
 
-    throw new Error('Demo calls are temporarily unavailable');
+    throw buildDemoError('Demo calls are temporarily unavailable', 'DEMO_DISABLED', 503);
 
   }
 
@@ -144,7 +157,7 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
 
   if (consent !== true) {
 
-    throw new Error('Consent is required to place a demo call');
+    throw buildDemoError('Consent is required to place a demo call', 'CONSENT_REQUIRED', 400);
 
   }
 
@@ -154,7 +167,7 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
 
   if (!USE_CASES.has(useCase)) {
 
-    throw new Error('Invalid use case');
+    throw buildDemoError('Invalid use case', 'INVALID_USE_CASE', 400);
 
   }
 
@@ -173,26 +186,70 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
 
 
   const id = crypto.randomUUID();
+  const lockAcquired = db.acquireSomoDemoDailyPhoneLock(normalizedPhone, id);
+  if (!lockAcquired) {
+    throw buildDemoError(
+      'This number already received a demo call recently. Try again tomorrow.',
+      'DUPLICATE_PHONE_WINDOW',
+      429
+    );
+  }
 
-  db.insertSomoDemoRequest({
+  try {
+    db.insertSomoDemoRequest({
 
-    id,
+      id,
 
-    name: prospectName,
+      name: prospectName,
 
-    phone: normalizedPhone,
+      phone: normalizedPhone,
 
-    use_case: useCase,
+      use_case: useCase,
 
-    template_id: template.template_id,
+      template_id: template.template_id,
+      language: language || null,
+      country: country || null,
+      city: city || null,
+      practice_specialty: practice_specialty || null,
+      practice_size: practice_size || null,
+      questions_asked: questions_asked || null,
 
-    client_ip: clientIp || null,
+      client_ip: clientIp || null,
 
-    attribution_json: attribution ? JSON.stringify(attribution) : null,
+      attribution_json: attribution ? JSON.stringify(attribution) : null,
 
-    status: 'pending'
+      status: 'pending'
 
-  });
+    });
+    await appendEventLog({
+      event_type: 'request_received',
+      demo_request_id: id,
+      phone: normalizedPhone,
+      status: 'pending',
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
+      metadata_json: { use_case: useCase, client_ip: clientIp || null }
+    }).catch(() => null);
+    await upsertLeadStatus({
+      demo_request_id: id,
+      phone: normalizedPhone,
+      name: prospectName,
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
+      status: 'pending'
+    }).catch(() => null);
+  } catch (err) {
+    db.releaseSomoDemoDailyPhoneLock(normalizedPhone);
+    throw err;
+  }
 
 
 
@@ -221,6 +278,33 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
       twilio_call_sid: result.call_id
 
     });
+    await appendEventLog({
+      event_type: 'call_initiated',
+      demo_request_id: id,
+      phone: normalizedPhone,
+      call_id: result.call_id,
+      status: 'initiated',
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
+      metadata_json: { use_case: useCase }
+    }).catch(() => null);
+    await upsertLeadStatus({
+      demo_request_id: id,
+      phone: normalizedPhone,
+      name: prospectName,
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
+      status: 'initiated',
+      call_start_at: new Date().toISOString()
+    }).catch(() => null);
 
 
 
@@ -237,6 +321,33 @@ async function requestDemoCall({ name, phone, use_case, consent, clientIp, attri
   } catch (err) {
 
     db.updateSomoDemoRequest(id, { status: 'failed', error_message: err.message });
+    db.releaseSomoDemoDailyPhoneLock(normalizedPhone);
+    await appendEventLog({
+      event_type: 'request_failed',
+      demo_request_id: id,
+      phone: normalizedPhone,
+      status: 'failed',
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
+      error_code: err.code || '',
+      error_message: err.message || ''
+    }).catch(() => null);
+    await upsertLeadStatus({
+      demo_request_id: id,
+      phone: normalizedPhone,
+      name: prospectName,
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
+      status: 'failed'
+    }).catch(() => null);
 
     throw err;
 

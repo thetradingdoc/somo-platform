@@ -3,10 +3,14 @@
 # When org policy blocks allUsers IAM binding, use --no-invoker-iam-check instead.
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-somo-callsomo}"
-REGION="${GCP_REGION:-us-central1}"
-SERVICE="${CLOUDRUN_SERVICE:-myskin-middleware}"
-API_BASE="${MIDDLEWARE_API_BASE:-https://api.callsomo.com}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/cloudrun-deploy-env.sh
+source "$ROOT/scripts/lib/cloudrun-deploy-env.sh"
+
+PROJECT="${GCP_PROJECT:-$CLOUDRUN_GCP_PROJECT}"
+REGION="${GCP_REGION:-$CLOUDRUN_REGION}"
+SERVICE="${CLOUDRUN_SERVICE:-$CLOUDRUN_SERVICE}"
+API_BASE="${MIDDLEWARE_API_BASE:-$CLOUDRUN_API_HOST}"
 
 echo "==> Project: $PROJECT  Service: $SERVICE  Region: $REGION"
 

@@ -8,6 +8,33 @@ const { routeOrchestratorLane } = require('./state-schema');
  * Kelly Conversation Orchestrator — V2 entry (no KellyAgentService.processTurn).
  */
 async function handleTurn(opts = {}) {
+  const db = require('../../database');
+  if (opts.forceLanguageHandoff) {
+    const language = opts.preferredLanguage || 'en';
+    const reply =
+      language === 'es'
+        ? 'Quiero conectarte con un especialista para asegurar una comunicacion clinica segura en tu idioma. Un momento por favor.'
+        : language === 'pt'
+          ? 'Vou conectar voce com um especialista para garantir comunicacao clinica segura no seu idioma. Um momento, por favor.'
+          : language === 'zh'
+            ? '为了确保你使用的语言得到安全的临床沟通，我将为你转接人工支持，请稍候。'
+            : 'I am connecting you with a specialist to ensure safe clinical communication in your language. One moment please.';
+    try {
+      db.insertKellyCallEvent?.({
+        session_id: opts.sessionId || null,
+        event_type: 'language_confidence_handoff',
+        payload_json: { preferred_language: language, confidence: opts.languageConfidence || 0 }
+      });
+    } catch (_) {}
+    return {
+      reply,
+      endCall: false,
+      toolsUsed: [],
+      language,
+      kelly_rails: { active_lane: 'support', step: 'handoff', flags: { language_handoff: true } }
+    };
+  }
+
   const out = await invokeMainGraph(opts);
   const language =
     (require('../../database').getKellySessionLanguage &&

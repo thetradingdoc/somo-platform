@@ -29,7 +29,8 @@ function shouldUseKellyRailsV2(sessionId, _clinicId = null) {
   const pct = getRolloutPct();
   if (pct >= 1) return true;
   if (pct <= 0) return false;
-  return hashSessionId(sessionId) % 100 < pct * 100;
+  const useV2 = hashSessionId(sessionId) % 100 < pct * 100;
+  return useV2;
 }
 
 module.exports = {

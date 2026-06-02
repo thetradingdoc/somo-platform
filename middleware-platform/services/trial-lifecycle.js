@@ -442,7 +442,8 @@ function getSignupAttribution(customer) {
 function isSomoDemoSignup(customer) {
   const attr = getSignupAttribution(customer);
   const source = String(attr.utm_source || '').toLowerCase();
-  return source === 'somo-demo' || source === 'somo';
+  // Legacy utm_source=dodgecall accepted read-only for existing signups
+  return source === 'somo-demo' || source === 'somo' || source === 'dodgecall';
 }
 
 module.exports = {

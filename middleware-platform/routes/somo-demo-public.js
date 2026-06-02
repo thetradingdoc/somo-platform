@@ -3,9 +3,10 @@
 const express = require('express');
 const router = express.Router();
 const { requestDemoCall, isDemoEnabled } = require('../services/somo-demo-service');
+const { getTurnstileSecret } = require('../lib/somo-demo-env');
 
 async function verifyTurnstileIfConfigured(token) {
-  const secret = process.env.DODGECALL_TURNSTILE_SECRET;
+  const secret = getTurnstileSecret();
   if (!secret) return true;
   if (!token) throw new Error('Captcha verification required');
   const body = new URLSearchParams({
@@ -34,7 +35,19 @@ router.get('/health', (_req, res) => {
 
 router.post('/request-call', async (req, res) => {
   try {
-    const { name, phone, use_case, consent, turnstile_token: turnstileToken } = req.body || {};
+    const {
+      name,
+      phone,
+      use_case,
+      consent,
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
+      turnstile_token: turnstileToken
+    } = req.body || {};
 
     await verifyTurnstileIfConfigured(turnstileToken);
 
@@ -48,6 +61,12 @@ router.post('/request-call', async (req, res) => {
       name,
       phone,
       use_case,
+      language,
+      country,
+      city,
+      practice_specialty,
+      practice_size,
+      questions_asked,
       consent: consent === true || consent === 'true',
       clientIp: clientIp(req),
       attribution
@@ -56,18 +75,22 @@ router.post('/request-call', async (req, res) => {
     res.json(result);
   } catch (err) {
     const status =
-      err.message?.includes('temporarily unavailable') ? 503
-        : err.message?.includes('public webhook URL') ||
-            err.message?.includes('ngrok') ||
-            err.message?.includes('localhost')
-          ? 503
-          : err.message?.includes('Too many') ||
-              err.message?.includes('already received') ||
-              err.message?.includes('capacity') ||
-              err.message?.includes('in progress')
-            ? 429
-            : 400;
-    res.status(status).json({ error: err.message || 'Unable to start demo call' });
+      Number.isFinite(Number(err.status)) ? Number(err.status)
+        : err.message?.includes('temporarily unavailable') ? 503
+          : err.message?.includes('public webhook URL') ||
+              err.message?.includes('ngrok') ||
+              err.message?.includes('localhost')
+            ? 503
+            : err.message?.includes('Too many') ||
+                err.message?.includes('already received') ||
+                err.message?.includes('capacity') ||
+                err.message?.includes('in progress')
+              ? 429
+              : 400;
+    res.status(status).json({
+      error: err.message || 'Unable to start demo call',
+      error_code: err.code || null
+    });
   }
 });
 

@@ -1,19 +1,28 @@
 'use strict';
 
 /**
- * Smoke test Somo demo demo API (no Twilio). Requires restarted middleware.
+ * Smoke test Somo demo API (no Twilio). Requires restarted middleware.
  * Usage: node scripts/somo-demo-smoke.cjs
  */
+const somoDemoEnv = require('../lib/somo-demo-env');
+
 const base = (process.env.API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
 
-async function main() {
+async function getHealth() {
   const health = await fetch(`${base}/api/public/somo-demo/health`);
-  if (!health.ok) {
-    console.error('Health failed:', health.status, await health.text());
+  const body = await health.text();
+  let parsed = null;
+  try { parsed = JSON.parse(body); } catch (_) {}
+  return { ok: health.ok, status: health.status, body: parsed || body };
+}
+
+async function main() {
+  const canonical = await getHealth();
+  if (!canonical.ok) {
+    console.error('Canonical health failed:', canonical.status, canonical.body);
     process.exit(1);
   }
-  const h = await health.json();
-  console.log('health', h);
+  console.log('health:somo-demo', canonical.body);
 
   const bad = await fetch(`${base}/api/public/somo-demo/request-call`, {
     method: 'POST',
@@ -26,14 +35,14 @@ async function main() {
     })
   });
   const badBody = await bad.json();
-  if (bad.status !== 400 || !/consent/i.test(badBody.error || '')) {
+  if (bad.status !== 400 || !/consent/i.test(badBody.error || '') || badBody.error_code !== 'CONSENT_REQUIRED') {
     console.error('Expected consent error, got', bad.status, badBody);
     process.exit(1);
   }
   console.log('consent validation ok');
 
-  const prevEnabled = process.env.DODGECALL_DEMO_ENABLED;
-  process.env.DODGECALL_DEMO_ENABLED = '0';
+  const prevEnabled = process.env.SOMO_DEMO_ENABLED;
+  process.env.SOMO_DEMO_ENABLED = '0';
   const disabled = await fetch(`${base}/api/public/somo-demo/request-call`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,23 +59,23 @@ async function main() {
   } else {
     console.log('demo disabled gate ok');
   }
-  if (prevEnabled !== undefined) process.env.DODGECALL_DEMO_ENABLED = prevEnabled;
-  else delete process.env.DODGECALL_DEMO_ENABLED;
+  if (prevEnabled !== undefined) process.env.SOMO_DEMO_ENABLED = prevEnabled;
+  else delete process.env.SOMO_DEMO_ENABLED;
 
-  if (process.env.DODGECALL_SMOKE_PLACE_CALL === '1') {
+  if (somoDemoEnv.getSmokePlaceCall()) {
     const ok = await fetch(`${base}/api/public/somo-demo/request-call`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'Smoke',
-        phone: process.env.DODGECALL_SMOKE_PHONE,
+        phone: somoDemoEnv.getSmokePhone(),
         use_case: 'receptionist',
         consent: true
       })
     });
     console.log('place call', ok.status, await ok.json());
   } else {
-    console.log('Skip live call (set DODGECALL_SMOKE_PLACE_CALL=1 and DODGECALL_SMOKE_PHONE=+1...)');
+    console.log('Skip live call (set SOMO_DEMO_SMOKE_PLACE_CALL=1 and SOMO_DEMO_SMOKE_PHONE=+1...)');
   }
 }
 

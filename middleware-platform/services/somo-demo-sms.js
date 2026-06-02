@@ -2,11 +2,11 @@
 
 const twilio = require('twilio');
 const SMSService = require('./sms-service');
+const somoDemoEnv = require('../lib/somo-demo-env');
 
 function getFromNumber() {
   return (
-    process.env.DODGECALL_SMS_FROM_NUMBER ||
-    process.env.DODGECALL_TWILIO_FROM_NUMBER ||
+    somoDemoEnv.getSmsFromNumber() ||
     process.env.TWILIO_PHONE_NUMBER ||
     null
   );
@@ -44,7 +44,7 @@ async function sendSignupLink(phoneNumber, { prospectName } = {}) {
   const from = getFromNumber();
   if (!from) {
     throw new Error(
-      'Set DODGECALL_SMS_FROM_NUMBER, DODGECALL_TWILIO_FROM_NUMBER, or TWILIO_PHONE_NUMBER for signup SMS'
+      'Set SOMO_DEMO_SMS_FROM_NUMBER, SOMO_DEMO_TWILIO_FROM_NUMBER, or TWILIO_PHONE_NUMBER for signup SMS'
     );
   }
 

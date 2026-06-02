@@ -57,7 +57,7 @@ Palette: [docs/design/SOMO_MARKETING_COLORS.md](../../docs/design/SOMO_MARKETING
 
 | Variable | Dev (:4000) | Notes |
 |----------|-------------|-------|
-| `VITE_API_BASE` | empty | Same-origin `/api/public/somo-demo/...` (legacy `/api/public/dodgecall` alias) |
+| `VITE_API_BASE` | empty | Same-origin `/api/public/somo-demo/...` |
 | `VITE_SIGNUP_URL` | `http://127.0.0.1:4000/signup?utm_source=somo` | Set in `.env.development` |
 | `VITE_LOGIN_URL` | `/login?utm_source=somo` (proxied to :4000 in `npm run dev`) | Provider sign-in |
 

@@ -2965,9 +2965,6 @@ app.get('/api/admin/appointments/:id/clinical-prep', async (req, res) => {
 
 app.get('/api/admin/appointments', async (req, res) => {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7741/ingest/60c91aef-af1c-44d6-9853-4dc7e0e1d879',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'965a10'},body:JSON.stringify({sessionId:'965a10',location:'admin-platform.js:appointments',message:'GET /api/admin/appointments',data:{hasResolver:typeof resolveClinicIdFromRequest,date:req.query.date},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
     let clinicId = resolveClinicIdFromRequest(req);
     if (!clinicId && db.db) {
       try {

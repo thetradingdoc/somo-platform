@@ -122,7 +122,7 @@ async function processTurn({
 
   try {
     const completion = await groq.chat.completions.create({
-      model: process.env.DODGECALL_DEMO_GROQ_MODEL || 'llama-3.3-70b-versatile',
+      model: require('../lib/somo-demo-env').getGroqModel(),
       messages,
       tools: DEMO_TOOLS,
       tool_choice: 'auto',

@@ -152,6 +152,7 @@ async function checkDnsAndHttp() {
   console.log('\n==> DNS (Google 8.8.8.8)');
   const apex = digShort('callsomo.com', 'A');
   const api = digShort('api.callsomo.com', 'CNAME') || digShort('api.callsomo.com', 'A');
+  // Legacy domain retirement verification (should 301 to callsomo.com)
   const myskin = digShort('myskinandcare.com', 'A');
   console.log(`  callsomo.com A: ${apex || '(none)'}`);
   console.log(`  api.callsomo.com: ${api || '(none)'}`);

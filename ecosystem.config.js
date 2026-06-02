@@ -6,7 +6,7 @@
 
 module.exports = {
   apps: [{
-    name: 'doclittle-api',
+    name: 'somo-api',
     script: './middleware-platform/server.js',
     instances: 1, // Start with 1, can scale with PM2 cluster mode
     exec_mode: 'fork', // Use 'cluster' for multi-core scaling

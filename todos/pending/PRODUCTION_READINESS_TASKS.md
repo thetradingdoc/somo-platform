@@ -1,5 +1,7 @@
 # Production Readiness: Tasks & Azure Setup
 
+> **Superseded for API deploy:** Use GCP runbooks — [`docs/deployment/SOMO_CLOUD_RUN_DEPLOY.md`](../docs/deployment/SOMO_CLOUD_RUN_DEPLOY.md), [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md). Azure sections below are **historical** only.
+
 **Purpose:** Single checklist of tasks to make the Somo platform production-ready for real patients (book → pay → join telemedicine). Includes Azure setup and compliance.
 
 **Related:** [ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md](../docs/architecture/README.md#overview-architecture-overview-and-colab-rag), [MASTER_TODO_FULL.md](../docs/development/README.md#master-todo-full), [VIDEO_CONSULT.md](../docs/architecture/README.md#care-delivery-video-consult), [DEPLOYMENT_GUIDE.md](../docs/deployment/README.md#guides-deployment-guide).

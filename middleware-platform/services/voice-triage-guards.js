@@ -235,6 +235,17 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
 function enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, bumpOp = 'schedule') {
   const ev = evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp);
   if (ev.ok) return true;
+  try {
+    db.insertKellyCallEvent?.({
+      session_id: sessionIdForGuard || null,
+      event_type: 'guardrail_blocked',
+      payload_json: {
+        operation: bumpOp,
+        bump: ev.bump,
+        error_code: ev.body?.error_code || null
+      }
+    });
+  } catch (_) {}
   bumpCounter(bumpOp, ev.bump);
   res.status(403).json(ev.body);
   return false;

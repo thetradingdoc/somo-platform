@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+    <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Somo Provider - Voice Agent</title>
+    <title>Somo Provider - Voice Agent</title>
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <link rel="stylesheet" href="/assets/css/voice-agent.css">
   <script src="/assets/js/config.js"></script>
@@ -23,8 +23,8 @@
         <div>
           <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
           <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
-        </div>
-      </div>
+            </div>
+                    </div>
       <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
       <div class="pp-sb-footer">
         <a class="pp-sb-clinic" href="settings.html">
@@ -32,17 +32,17 @@
           <div>
             <div class="pp-sb-cn">Settings</div>
             <div class="pp-sb-cr">Account & billing</div>
-          </div>
+                </div>
         </a>
-      </div>
-    </aside>
+            </div>
+        </aside>
 
     <div class="pp-main">
       <header class="pp-topbar">
         <div>
           <div class="pp-page-eyebrow">Voice</div>
           <div class="pp-page-title">AI front desk</div>
-        </div>
+            </div>
       </header>
 
       <main class="pp-content">
@@ -50,19 +50,19 @@
         <!-- Zone 1: Line card -->
         <section class="va-zone" id="zoneLine">
           <div class="va-line-card">
-            <div>
+                        <div>
               <div class="va-field-label">Your Somo line</div>
               <div class="va-line-number" id="vaPhone">—</div>
               <div class="va-line-meta" id="vaTrialMeta">Loading…</div>
-            </div>
+                            </div>
             <div class="gap" style="flex:1"></div>
             <span class="va-badge va-badge-active" id="vaStatusBadge">Active</span>
             <button type="button" class="va-toggle on" id="vaToggle" aria-label="Toggle agent on/off"></button>
-          </div>
+                        </div>
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
             <a class="pp-btn pp-btn-primary pp-btn-sm" id="vaCallLink" href="#">Call my line</a>
             <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaCopyPhone">Copy number</button>
-          </div>
+                    </div>
         </section>
 
         <!-- Zone 2: Quick settings -->
@@ -75,7 +75,7 @@
               <div class="va-save-hint" id="vaGreetingHint">Applies on your next call</div>
               <div class="va-save-hint" id="vaGreetingSync" style="margin-top:4px"></div>
               <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveGreeting" style="margin-top:8px">Save greeting</button>
-            </div>
+                    </div>
             <div id="hours">
               <div class="va-field-label">Business hours</div>
               <div id="vaHoursPicker"></div>
@@ -83,8 +83,8 @@
               <textarea class="va-textarea" id="vaAfterHours" rows="2" placeholder="Message when closed…"></textarea>
               <div class="va-save-hint" id="vaHoursHint">Applies on your next call</div>
               <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveHours" style="margin-top:8px">Save hours</button>
-            </div>
-          </div>
+                </div>
+                    </div>
           <details class="va-prompt-details" id="prompt" style="margin-top:20px">
             <summary>Customize Kelly (advanced)</summary>
             <textarea class="va-textarea" id="vaPrompt" rows="8" style="margin-top:8px"></textarea>
@@ -99,26 +99,26 @@
             <div class="va-kpi">
               <div class="va-kpi-label">Calls today</div>
               <div class="va-kpi-value" id="vaKpiCalls">0</div>
-            </div>
+                    </div>
             <div class="va-kpi">
               <div class="va-kpi-label">Avg duration</div>
               <div class="va-kpi-value" id="vaKpiDuration">0m</div>
-            </div>
+                    </div>
             <div class="va-kpi">
               <div class="va-kpi-label">Appts booked</div>
               <div class="va-kpi-value" id="vaKpiAppts">0</div>
-            </div>
-          </div>
+                    </div>
+                    </div>
           <div class="va-field-label">Recent calls</div>
           <div class="va-call-list" id="vaCallList">
             <p style="color:var(--gray-500);font-size:0.9rem">No calls yet. Call your line to test your greeting.</p>
-          </div>
+                </div>
         </section>
       </main>
+                    </div>
     </div>
-  </div>
 
-  <script>
+    <script>
     (function () {
       const API_BASE = (window.API_BASE || (typeof resolveApiBase === 'function' ? resolveApiBase() : window.location.origin)).replace(/\/$/, '');
       let hoursPickerApi = null;
@@ -187,8 +187,8 @@
         if (!customer?.id) {
           window.location.href =
             '/login?redirect=' + encodeURIComponent('/unified-dashboard/business/agent.html');
-          return;
-        }
+                    return;
+                }
         if (VoiceAgentPage.shouldRedirectToSetup(customer)) {
           window.location.href = 'voice-setup.html';
           return;
@@ -296,8 +296,8 @@
           if (!calls.length) {
             list.innerHTML =
               '<p style="color:var(--gray-500);font-size:0.9rem">No calls yet. Call your line to test your greeting.</p>';
-            return;
-          }
+                return;
+            }
           list.innerHTML = calls
             .map((c) => {
               const time = c.created_at
@@ -412,6 +412,6 @@
         init();
       }
     })();
-  </script>
+    </script>
 </body>
 </html>

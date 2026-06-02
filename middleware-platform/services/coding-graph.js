@@ -189,7 +189,7 @@ async function processTurn(db, callId, triggerType, triggerPayload = {}, options
   const config = {
     configurable: { thread_id: threadId },
     runName: `coding_state_${triggerType}`,
-    tags: ['coding-graph', 'doctor-little', triggerType],
+    tags: ['coding-graph', 'somo', triggerType],
     metadata: { callId, clinic_id: options.clinic_id ?? null }
   };
 
