@@ -1,0 +1,50 @@
+/* Shared Somo branding for api.callsomo.com static pages */
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap');
+
+.logo-brand {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.logo-brand img {
+  display: inline-block;
+  max-width: 200px;
+  height: auto;
+  vertical-align: middle;
+}
+
+.logo-brand--on-dark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.logo-brand--on-dark img {
+  max-width: 40px;
+  filter: none;
+}
+
+.logo-brand--on-dark .logo-brand-text {
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.logo-brand-text {
+  font-family: 'League Spartan', system-ui, sans-serif;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #164437;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.logo p,
+.logo .page-subtitle {
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-top: 8px;
+  font-family: 'League Spartan', system-ui, sans-serif;
+}
+

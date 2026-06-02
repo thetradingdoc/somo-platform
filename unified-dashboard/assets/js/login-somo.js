@@ -67,11 +67,11 @@
     if (host === 'localhost' || host === '127.0.0.1') {
       return DEFAULT_HOME;
     }
-    if (subdomain && host.includes(`${subdomain}.myskinandcare.com`)) {
+    if (subdomain && host.includes(`${subdomain}.callsomo.com`)) {
       return DEFAULT_HOME;
     }
     if (subdomain) {
-      return `https://${subdomain}.myskinandcare.com${DEFAULT_HOME}`;
+      return `https://${subdomain}.callsomo.com${DEFAULT_HOME}`;
     }
     return DEFAULT_HOME;
   }

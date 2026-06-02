@@ -1,3 +1,4 @@
+<!-- DEPRECATED: do not use in product UI. Use somo-logo.png per docs/Brand/LOGO_AND_ICON_SSOT.md -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" role="img" aria-label="Somo">
   <text x="0" y="38" font-family="'League Spartan', system-ui, sans-serif" font-size="42" font-weight="700" fill="#1a1a1a">
     <tspan>S</tspan><tspan font-size="42">omo</tspan>

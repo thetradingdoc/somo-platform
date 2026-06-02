@@ -4,7 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/assets/brand/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png" />
     <title>Somo API Documentation</title>
+    <link rel="stylesheet" href="/assets/css/api-somo-brand.css" />
     <link rel="stylesheet" href="/docs/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -14,8 +18,9 @@
         <!-- Sidebar Navigation -->
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="logo-brand">
-                    <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+                <div class="logo-brand logo-brand--on-dark">
+                    <img src="/assets/brand/somo-icon.png" alt="" width="40" height="40" aria-hidden="true" />
+                    <span class="logo-brand-text">Somo</span>
                 </div>
                 <p class="version" style="text-align: center; color: rgba(255, 255, 255, 0.8);">API v3.0.0</p>
             </div>
@@ -52,7 +57,7 @@
 
                 <div class="info-box">
                     <h3>Base URL</h3>
-                    <code class="base-url">https://api.myskinandcare.com</code>
+                    <code class="base-url">https://api.callsomo.com</code>
                 </div>
 
                 <h2>What is Somo?</h2>
@@ -71,7 +76,7 @@
 
                 <h3>Quick Start</h3>
                 <ol>
-                    <li>Sign up for an account at <code>https://api.myskinandcare.com</code></li>
+                    <li>Sign up for an account at <code>https://api.callsomo.com</code></li>
                     <li>Complete email verification and accept terms of service</li>
                     <li>Add a payment method (required, but no charges until free credits are used)</li>
                     <li>Receive 100 free voice minutes and 1,000 free API requests/month</li>
@@ -97,7 +102,7 @@
 X-API-Key: your-api-key-here</code></pre>
 
                 <h3>Example Request</h3>
-                <pre><code class="language-javascript">fetch('https://api.myskinandcare.com/voice/products/search', {
+                <pre><code class="language-javascript">fetch('https://api.callsomo.com/voice/products/search', {
   method: 'POST',
   headers: {
     'Authorization': 'Bearer your-api-key',
@@ -333,7 +338,7 @@ X-API-Key: your-api-key-here</code></pre>
 
                 <h3>WebSocket for Real-Time Voice</h3>
                 <p>For in-app voice calls via Retell SDK, the WebSocket connection is automatically handled by Retell. Your Retell agent is configured to connect to:</p>
-                <pre><code class="language-javascript">wss://api.myskinandcare.com/retell-llm</code></pre>
+                <pre><code class="language-javascript">wss://api.callsomo.com/retell-llm</code></pre>
                 <p><strong>Note:</strong> You don't need to manually connect to this WebSocket. When you initialize Retell SDK with your <code>retell_agent_id</code>, Retell automatically routes calls to Somo's WebSocket handler.</p>
             </section>
 
@@ -394,7 +399,7 @@ dependencies:
 
 // Get credentials from your profile API
 final customerResponse = await http.get(
-  Uri.parse('https://api.myskinandcare.com/api/customers/me'),
+  Uri.parse('https://api.callsomo.com/api/customers/me'),
   headers: {
     'Cookie': 'customer_session=your_session_cookie',
   },
@@ -426,7 +431,7 @@ Retell.startCall(config: retellConfig);</code></pre>
                     <ul style="margin-bottom: 0;">
                         <li><strong>MUST</strong> pass <code>customer_id</code> in <code>dynamic_variables</code> for proper tracking</li>
                         <li>Use <code>retell_agent_id</code> from your customer profile (each customer gets their own agent)</li>
-                        <li>Voice agent automatically connects to Somo WebSocket: <code>wss://api.myskinandcare.com/retell-llm</code></li>
+                        <li>Voice agent automatically connects to Somo WebSocket: <code>wss://api.callsomo.com/retell-llm</code></li>
                     </ul>
                 </div>
 
@@ -436,7 +441,7 @@ Retell.startCall(config: retellConfig);</code></pre>
                 <pre><code class="language-swift">import RetellSDK
 
 // Get credentials from your profile API
-let url = URL(string: "https://api.myskinandcare.com/api/customers/me")!
+let url = URL(string: "https://api.callsomo.com/api/customers/me")!
 var request = URLRequest(url: url)
 request.setValue("customer_session=your_session_cookie", forHTTPHeaderField: "Cookie")
 
@@ -474,7 +479,7 @@ URLSession.shared.dataTask(with: request) { data, response, error in
 import com.retellai.retellsdk.models.RetellConfig
 
 // Get credentials from your profile API
-val url = "https://api.myskinandcare.com/api/customers/me"
+val url = "https://api.callsomo.com/api/customers/me"
 val client = OkHttpClient()
 val request = Request.Builder()
     .url(url)
@@ -515,7 +520,7 @@ client.newCall(request).enqueue(object : Callback {
                 <p>When your mobile app initiates a voice call:</p>
                 <ol>
                     <li><strong>Retell SDK</strong> captures audio and processes speech-to-text</li>
-                    <li><strong>Retell AI</strong> routes the call to Somo WebSocket: <code>wss://api.myskinandcare.com/retell-llm</code></li>
+                    <li><strong>Retell AI</strong> routes the call to Somo WebSocket: <code>wss://api.callsomo.com/retell-llm</code></li>
                     <li><strong>Somo WebSocket Handler</strong> extracts <code>customer_id</code> from <code>dynamic_variables</code></li>
                     <li><strong>Function Calls</strong> are executed based on user intent:
                         <ul>
@@ -672,7 +677,7 @@ client.newCall(request).enqueue(object : Callback {
 
                 <h3>JavaScript/Node.js</h3>
                 <pre><code class="language-javascript">// Search products
-const response = await fetch('https://api.myskinandcare.com/voice/products/search', {
+const response = await fetch('https://api.callsomo.com/voice/products/search', {
   method: 'POST',
   headers: {
     'Authorization': 'Bearer your-api-key',
@@ -690,7 +695,7 @@ console.log(data.products);</code></pre>
                 <h3>Python</h3>
                 <pre><code class="language-python">import requests
 
-url = "https://api.myskinandcare.com/voice/products/search"
+url = "https://api.callsomo.com/voice/products/search"
 headers = {
     "Authorization": "Bearer your-api-key",
     "Content-Type": "application/json"
@@ -704,7 +709,7 @@ response = requests.post(url, json=data, headers=headers)
 products = response.json()["products"]</code></pre>
 
                 <h3>cURL</h3>
-                <pre><code class="language-bash">curl -X POST https://api.myskinandcare.com/voice/products/search \
+                <pre><code class="language-bash">curl -X POST https://api.callsomo.com/voice/products/search \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -715,7 +720,7 @@ products = response.json()["products"]</code></pre>
 
             <!-- Footer -->
             <footer class="footer">
-                <p>Need help? Contact us at <a href="mailto:info@myskinandcare.com">info@myskinandcare.com</a></p>
+                <p>Need help? Contact us at <a href="mailto:support@callsomo.com">support@callsomo.com</a></p>
                 <p>API Status: <a href="/health" target="_blank">Check Health</a></p>
             </footer>
         </main>

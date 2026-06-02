@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/assets/brand/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png" />
     <title>My Profile - Somo API</title>
+    <link rel="stylesheet" href="/assets/css/api-somo-brand.css" />
     <style>
         * {
             margin: 0;
@@ -32,28 +36,6 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-        }
-
-        .logo-brand {
-            font-size: 32px;
-            font-weight: 300;
-            line-height: 1;
-            letter-spacing: -1px;
-        }
-
-        .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-        }
-
-        .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-        }
-
-        .logo-brand .dot {
-            font-weight: 700;
         }
 
         .nav-links {
@@ -376,8 +358,9 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+            <div class="logo-brand logo-brand--on-dark">
+                <img src="/assets/brand/somo-icon.png" alt="" width="40" height="40" aria-hidden="true" />
+                <span class="logo-brand-text">Somo</span>
             </div>
             <div class="nav-links">
                 <a href="/docs">Documentation</a>

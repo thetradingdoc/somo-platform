@@ -63,30 +63,27 @@ body {
 }
 
 .logo-brand {
-    font-size: 32px;
-    font-weight: 300;
-    line-height: 1;
-    margin-bottom: 10px;
-    letter-spacing: -1px;
     text-align: center;
+    margin-bottom: 10px;
 }
 
-.logo-brand .doc {
-    font-family: 'Times New Roman', Times, serif;
-    font-style: italic;
-    font-weight: 400;
+.logo-brand--on-dark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.logo-brand--on-dark img {
+    max-width: 40px;
+    height: auto;
+}
+
+.logo-brand--on-dark .logo-brand-text {
     color: #fff;
-}
-
-.logo-brand .little {
-    font-family: 'Verdana', Geneva, sans-serif;
+    font-family: 'League Spartan', system-ui, sans-serif;
+    font-size: 1.5rem;
     font-weight: 700;
-    color: #fff;
-}
-
-.logo-brand .dot {
-    font-weight: 700;
-    color: #fff;
 }
 
 .version {

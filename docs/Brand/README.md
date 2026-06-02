@@ -4,6 +4,7 @@
 
 ## Canonical brand guide
 
+- [LOGO_AND_ICON_SSOT.md](./LOGO_AND_ICON_SSOT.md) — **logo, icon, favicon paths (read before changing UI marks)**
 - [SOMO_GUIDELINES.md](./SOMO_GUIDELINES.md) — naming, design tokens, typography, and surface scope.
 - [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md) — Image 1 palette (marketing landing UI).
 

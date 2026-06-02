@@ -2,7 +2,7 @@
 
 
 
-> **Last reviewed:** 2026-05-30
+> **Last reviewed:** 2026-06-01
 
 
 
@@ -105,23 +105,19 @@ Wordmark: gecko lockup PNG in nav; uppercase **S** + lowercase **omo** in vector
 
 
 
-### Logo assets
+### Logo & icon — single source of truth
 
+**Read first:** [LOGO_AND_ICON_SSOT.md](./LOGO_AND_ICON_SSOT.md). **Sync command:** `npm run brand:sync` (copies from `unified-dashboard/assets/brand/` to API static and somo-landing public).
 
+| Role | File | Use |
+|------|------|-----|
+| **Logo** | `unified-dashboard/assets/brand/somo-logo.png` | Nav, signup, login — official gecko + wordmark (PNG only) |
+| **Icon** | `somo-icon.png`, `somo-icon-lizard.png` | Favicon source, dark headers, app icon |
+| **Favicon** | `favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` | Browser / PWA |
 
-| File | Use |
+**Forbidden in product UI:** text-only `somo-logo-wordmark.svg`, CSS `<span>` brand marks, invented gecko SVGs for nav/favicon, DocLittle / Skin & Care lockups. `somo-gecko.svg` is decorative (marketing “how it works”) only.
 
-|------|-----|
-
-| `somo-landing/public/assets/brand/somo-logo.png` | Nav lockup (gecko + wordmark, transparent) |
-
-| `unified-dashboard/assets/brand/somo-logo-wordmark.png` | Full lockup (legacy path) |
-
-| `unified-dashboard/assets/brand/somo-logo-wordmark.svg` | Vector wordmark |
-
-| `unified-dashboard/assets/brand/somo-icon-lizard.png` | App icon source |
-
-| `favicon-*.png`, `favicon.ico`, `apple-touch-icon.png` | Browser / PWA icons |
+**Deprecated (do not use in UI):** `somo-logo-wordmark.svg`, `somo-wordmark-text.svg` — League Spartan text without the official gecko lockup.
 
 
 
@@ -139,9 +135,7 @@ Wordmark: gecko lockup PNG in nav; uppercase **S** + lowercase **omo** in vector
 
 ## Related
 
-
-
+- [LOGO_AND_ICON_SSOT.md](./LOGO_AND_ICON_SSOT.md) — mandatory logo vs icon vs favicon paths
 - [INFRA_BRAND_DEFERRAL.md](./INFRA_BRAND_DEFERRAL.md) — hostnames and internal names unchanged until somopay.ai
-
 - [somo_logo_exploration.html](./somo_logo_exploration.html) — logo variants and product wordmarks
 
