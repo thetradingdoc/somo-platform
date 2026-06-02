@@ -2,25 +2,45 @@
 'use strict';
 
 /**
- * Kelly Rails Phase B — golden conversation harness (deterministic paths).
- * Asserts routing + toolsUsed; does not require LLM for router-only scenarios.
+ * Kelly Rails Phase B — 10 golden conversations (2 per rail) + guardrail checks.
  *
  * Usage:
- *   node scripts/e2e-kelly-rails-golden-conversations.cjs
- *   KELLY_GOLDEN_INCLUDE_LLM=1 node scripts/e2e-kelly-rails-golden-conversations.cjs
+ *   npm run test:e2e:kelly:golden-conversations --prefix middleware-platform
+ *   KELLY_GOLDEN_INCLUDE_LLM=1 ...  # defers visit/payment LLM depth to F2 (see runLlmGateNote)
  */
 
 process.env.KELLY_RAILS_V2 = process.env.KELLY_RAILS_V2 || '1';
 process.env.KELLY_ALLOW_HYBRID_GRAPH = process.env.KELLY_ALLOW_HYBRID_GRAPH || '0';
 process.env.KELLY_RAILS_ROLLOUT_PCT = process.env.KELLY_RAILS_ROLLOUT_PCT || '1';
 
-const path = require('path');
-const fixture = require('../tests/fixtures/kelly-rails-golden-utterances.json');
+/** Stub payment tool in harness so copay conv does not depend on Stripe/network. */
+function installGoldenPaymentStub() {
+  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  if (KellyToolExecutor.__goldenPaymentStubbed) return;
+  const orig = KellyToolExecutor.execute.bind(KellyToolExecutor);
+  KellyToolExecutor.execute = async function goldenExecute(name, args, ctx) {
+    if (name === 'request_patient_payment') {
+      return {
+        success: true,
+        pay_url: 'https://pay.golden.test/link',
+        pay_token: 'tok-golden-e2e',
+        message: 'Secure payment link sent.'
+      };
+    }
+    return orig(name, args, ctx);
+  };
+  KellyToolExecutor.__goldenPaymentStubbed = true;
+}
+installGoldenPaymentStub();
+
+const golden = require('../tests/fixtures/kelly-rails-golden-conversations.json');
 const { routeOrchestratorLane, KELLY_LANE } = require('../services/kelly-rails/state-schema');
 const { executeTurn } = require('../services/kelly-rails/execute-turn');
+const { getAllowedToolNames } = require('../services/kelly-rails/tool-allowlists');
 
 let passed = 0;
 let failed = 0;
+const byRail = {};
 
 function ok(name) {
   passed++;
@@ -37,132 +57,192 @@ function assert(cond, name, detail) {
   else fail(name, detail);
 }
 
-async function runRouterGolden() {
-  console.log('\n==> Router golden utterances (fixture)');
-  for (const row of fixture.cases) {
-    const r = routeOrchestratorLane({
-      last_user_message: row.last_user_message,
-      flags: row.flags || {}
-    });
-    const laneOk = r.lane === row.expect.lane;
-    const stepOk = r.step === row.expect.step;
-    const safetyOk = row.expect.safety_blocked ? r.safety_blocked === true : true;
-    assert(
-      laneOk && stepOk && safetyOk,
-      row.id,
-      `got lane=${r.lane} step=${r.step} safety=${r.safety_blocked}`
-    );
+function trackRail(rail, success) {
+  if (!byRail[rail]) byRail[rail] = { pass: 0, fail: 0 };
+  if (success) byRail[rail].pass++;
+  else byRail[rail].fail++;
+}
+
+function checkToolGuardrails(toolsUsed, expect, convId, reply) {
+  const used = Array.isArray(toolsUsed) ? toolsUsed : [];
+  let okAll = true;
+  const required = expect.toolsRequired || [];
+  const requiredAny = expect.toolsRequiredAny || [];
+  if (requiredAny.length) {
+    const hasTool = requiredAny.some((t) => used.includes(t));
+    const hasReply =
+      expect.replyMatches && new RegExp(expect.replyMatches, 'i').test(String(reply || ''));
+    if (!hasTool && !hasReply) {
+      fail(
+        `${convId}_guard_required_any`,
+        `need one of [${requiredAny.join(',')}] or reply /${expect.replyMatches}/; tools=${used.join(',')}`
+      );
+      okAll = false;
+    }
   }
+  for (const t of required) {
+    if (!used.includes(t)) {
+      fail(`${convId}_guard_required_${t}`, `missing required tool ${t}; got ${used.join(',')}`);
+      okAll = false;
+    }
+  }
+  for (const t of expect.toolsForbidden || []) {
+    if (used.includes(t)) {
+      fail(`${convId}_guard_forbidden_${t}`, `forbidden tool ${t} was used`);
+      okAll = false;
+    }
+  }
+  if (
+    okAll &&
+    (required.length ||
+      requiredAny.length ||
+      (expect.toolsForbidden || []).length)
+  ) {
+    ok(`${convId}_tool_guardrails`);
+  }
+  return okAll;
 }
 
-async function runDeterministicConversations() {
-  console.log('\n==> Deterministic conversations');
-
-  const r1 = routeOrchestratorLane({
-    last_user_message: 'I need a receipt for my last appointment',
-    flags: {}
-  });
-  assert(r1.lane === KELLY_LANE.SUPPORT, 'conv9_receipt_support', `lane=${r1.lane}`);
-
-  const r2 = routeOrchestratorLane({
-    last_user_message: 'What did my doctor say on my last visit',
-    flags: {}
-  });
-  assert(r2.lane === KELLY_LANE.ACCOUNT, 'conv10_records_account', `lane=${r2.lane}`);
-
-  const { state: s3, reply: rep3, endCall } = await executeTurn({
-    sessionId: 'golden-safety-1',
-    message: "I'm having chest pain",
-    v2_hydrated: true
-  });
-  assert(s3.flags.safety_blocked && /911|emergency/i.test(rep3), 'conv_safety_emergency', rep3);
-  assert(endCall === true, 'conv_safety_end_call', String(endCall));
-
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
-  KellyToolExecutor._setSessionMeta('golden-pp-1', 'last_appointment_id', 'appt-g1');
-  KellyToolExecutor._setSessionMeta('golden-pp-1', 'last_slot_date', '2026-06-15');
-  KellyToolExecutor._setSessionMeta('golden-pp-1', 'last_slot_time', '14:00');
-
-  const { state: s5, reply: rep5 } = await executeTurn({
-    sessionId: 'golden-pp-1',
-    message: 'What happens next after I book?',
-    flags: {
-      appointment_id: 'appt-g1',
-      post_visit_confirmation_pending: true
-    },
-    v2_hydrated: true
-  });
-  assert(
-    s5.active_lane === KELLY_LANE.POST_PAYMENT && /confirmed|appointment/i.test(rep5),
-    'conv5_post_visit_confirm',
-    `lane=${s5.active_lane} reply=${rep5?.slice(0, 80)}`
-  );
-
-  const { state: s6, reply: rep6 } = await executeTurn({
-    sessionId: 'golden-pp-2',
-    message: 'I just paid, what do I do now?',
-    flags: {
-      appointment_id: 'appt-g2',
-      payment_complete: true
-    },
-    v2_hydrated: true
-  });
-  assert(
-    s6.active_lane === KELLY_LANE.POST_PAYMENT && /confirmed|appointment/i.test(rep6),
-    'conv6_post_pay_confirm',
-    `lane=${s6.active_lane}`
-  );
-
-  const r7 = routeOrchestratorLane({
-    last_user_message: 'What moisturizer should I use for dry skin?',
-    flags: { routine_intake_active: true }
-  });
-  assert(r7.lane === KELLY_LANE.EDUCATION, 'conv7_education_stay', `lane=${r7.lane}`);
-
-  const { state: s8 } = await executeTurn({
-    sessionId: 'golden-escape-1',
-    message: 'I have an itchy rash and need a dermatology appointment',
-    active_lane: KELLY_LANE.EDUCATION,
-    step: 'education',
-    flags: { routine_intake_active: true },
-    v2_hydrated: true
-  });
-  assert(
-    [KELLY_LANE.CLINICAL, KELLY_LANE.BOOKING].includes(s8.active_lane),
-    'conv8_education_escape',
-    `lane=${s8.active_lane}`
-  );
-
-  const rPayBeforeBook = routeOrchestratorLane({
-    last_user_message: 'I want to pay my copay now',
-    flags: { appointment_id: null, copay_amount: 25 }
-  });
-  assert(rPayBeforeBook.lane === KELLY_LANE.PAYMENT, 'conv4_pay_intent_routes_payment', `lane=${rPayBeforeBook.lane}`);
+function checkAllowListGuardrail(lane, step, toolsUsed, convId) {
+  const allowed = new Set(getAllowedToolNames(lane, step));
+  if (lane === KELLY_LANE.PAYMENT && step === 'insurance') {
+    for (const t of getAllowedToolNames(KELLY_LANE.PAYMENT, 'pay_invoice')) {
+      allowed.add(t);
+    }
+  }
+  const used = Array.isArray(toolsUsed) ? toolsUsed : [];
+  let okAll = true;
+  for (const t of used) {
+    if (!allowed.has(t)) {
+      fail(`${convId}_allowlist_${t}`, `tool ${t} not in allow-list for ${lane}/${step}`);
+      okAll = false;
+    }
+  }
+  if (okAll && used.length) ok(`${convId}_allowlist_ok`);
+  return okAll;
 }
 
-async function runLlmPlaceholder() {
-  if (process.env.KELLY_GOLDEN_INCLUDE_LLM !== '1') {
-    console.log('\n==> LLM conversations 1–4 (skipped in CI — covered by F2 gate)');
-    console.log('    Production proof: npm run test:e2e:rcm:conversation --prefix middleware-platform');
-    console.log('    With KELLY_RAILS_V2=1 KELLY_ALLOW_HYBRID_GRAPH=0 RCM_E2E_USE_EXISTING_SERVER=1');
+async function runConversation(conv) {
+  const exp = conv.expect || {};
+  let convOk = true;
+
+  if (conv.mode === 'router') {
+    const r = routeOrchestratorLane({
+      last_user_message: conv.message,
+      flags: conv.flags || {}
+    });
+    if (exp.lane && r.lane !== exp.lane) {
+      fail(conv.id, `lane=${r.lane} expected ${exp.lane}`);
+      convOk = false;
+    }
+    if (exp.step && r.step !== exp.step) {
+      fail(conv.id, `step=${r.step} expected ${exp.step}`);
+      convOk = false;
+    }
+    if (exp.safety_blocked && !r.safety_blocked) {
+      fail(conv.id, 'expected safety_blocked');
+      convOk = false;
+    }
+    if (convOk) ok(conv.id);
+    checkToolGuardrails([], exp, conv.id, null);
+    trackRail(conv.rail, convOk);
     return;
   }
-  console.log('\n==> LLM golden convos 1–4: use F2 as authoritative gate (visit + payment + provider clinical-prep)');
-  console.log('    npm run test:e2e:rcm:conversation --prefix middleware-platform');
-  if (process.env.RCM_E2E_USE_EXISTING_SERVER !== '1') {
-    console.warn('    Set RCM_E2E_USE_EXISTING_SERVER=1 and start middleware on :4000 for full LLM proof.');
+
+  const sessionId = `golden-${conv.id}`;
+  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  if (conv.sessionMeta) {
+    for (const [k, v] of Object.entries(conv.sessionMeta)) {
+      KellyToolExecutor._setSessionMeta(sessionId, k, v);
+    }
+  }
+
+  const input = {
+    sessionId,
+    message: conv.message,
+    flags: conv.flags || {},
+    v2_hydrated: true,
+    clinicId: conv.clinicId || 'clinic-golden-e2e',
+    patientId: conv.patientId || 'patient-golden-e2e'
+  };
+  if (conv.active_lane) input.active_lane = conv.active_lane;
+  if (conv.step) input.step = conv.step;
+
+  const { state, reply, toolsUsed, endCall } = await executeTurn(input);
+  const lane = state.active_lane;
+  const step = state.step;
+
+  if (exp.lane && lane !== exp.lane) {
+    fail(conv.id, `lane=${lane} expected ${exp.lane}`);
+    convOk = false;
+  }
+  if (exp.laneIn && !exp.laneIn.includes(lane)) {
+    fail(conv.id, `lane=${lane} expected one of ${exp.laneIn.join(',')}`);
+    convOk = false;
+  }
+  if (exp.step && step !== exp.step) {
+    fail(conv.id, `step=${step} expected ${exp.step}`);
+    convOk = false;
+  }
+  if (exp.safety_blocked && !state.flags.safety_blocked) {
+    fail(conv.id, 'expected safety_blocked flag');
+    convOk = false;
+  }
+  if (exp.endCall && !endCall) {
+    fail(conv.id, 'expected endCall');
+    convOk = false;
+  }
+  if (exp.replyMatches && !new RegExp(exp.replyMatches, 'i').test(String(reply || ''))) {
+    fail(conv.id, `reply did not match /${exp.replyMatches}/`);
+    convOk = false;
+  }
+  if (convOk) ok(conv.id);
+
+  const guardOk = checkToolGuardrails(toolsUsed, exp, conv.id, reply);
+  if (lane && step && toolsUsed?.length) {
+    checkAllowListGuardrail(lane, step, toolsUsed, conv.id);
+  }
+  trackRail(conv.rail, convOk && guardOk);
+}
+
+function printRailSummary() {
+  console.log('\n==> Per-rail summary (expect 2 pass each)');
+  let railGateFail = false;
+  for (const rail of golden.rails) {
+    const s = byRail[rail] || { pass: 0, fail: 0 };
+    const status = s.pass >= 2 && s.fail === 0 ? 'OK' : 'FAIL';
+    console.log(`  ${rail}: ${s.pass}/2 passed (${status})`);
+    if (s.pass < 2 || s.fail > 0) railGateFail = true;
+  }
+  if (railGateFail) failed++;
+}
+
+function runLlmGateNote() {
+  if (process.env.KELLY_GOLDEN_INCLUDE_LLM === '1') {
+    console.log('\n==> LLM depth (visit/payment multi-turn): run F2');
+    console.log('    KELLY_RAILS_V2=1 RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:conversation');
   }
 }
 
 async function main() {
-  console.log('Kelly Rails golden conversations (Phase B)');
-  await runRouterGolden();
-  await runDeterministicConversations();
-  await runLlmPlaceholder();
+  console.log('Kelly Rails — 10 golden conversations (2 per rail)');
+  const convs = golden.conversations || [];
+  if (convs.length !== 10) {
+    console.error(`Expected 10 conversations, got ${convs.length}`);
+    process.exit(1);
+  }
 
-  console.log(`\nSummary: ${passed} passed, ${failed} failed`);
+  console.log('\n==> Golden conversations');
+  for (const conv of convs) {
+    await runConversation(conv);
+  }
+
+  printRailSummary();
+  runLlmGateNote();
+
+  console.log(`\nSummary: ${passed} assertions passed, ${failed} failures`);
   if (failed > 0) process.exit(1);
-  console.log('Golden conversation harness OK (deterministic paths).');
+  console.log('Gate OK: 10 golden conversations (2 per rail), guardrails verified.');
 }
 
 main().catch((e) => {

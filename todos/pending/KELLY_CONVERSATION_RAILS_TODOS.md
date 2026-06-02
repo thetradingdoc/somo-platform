@@ -39,7 +39,7 @@ LIMIT 5;
 - [x] Golden utterance fixture + `test:kelly:rails:golden` (router, allow-lists, executeTurn, payment, voice-payment, resolver)
 - [x] Allow-list contract tests
 - [x] Switch 3 confirmation receipt (no video/portal tools in `post_payment`)
-- [x] `test:e2e:kelly:golden-conversations` (deterministic paths)
+- [x] `test:e2e:kelly:golden-conversations` — **10 conversations, 2 per rail**, tool guardrails per [`kelly-rails-golden-conversations.json`](../middleware-platform/tests/fixtures/kelly-rails-golden-conversations.json)
 - [x] Pay-before-book `executeTurn` integration test
 - [x] Voice payment lane test (`kelly-rails-voice-payment.test.js`)
 - [x] CI: Kelly Rails Phase B step in `.github/workflows/ci.yml`

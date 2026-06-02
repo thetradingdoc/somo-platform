@@ -155,6 +155,9 @@ async function executeTurn(input = {}) {
     if (state.active_lane === KELLY_LANE.POST_PAYMENT) {
       state.step = 'confirmation';
       state.flags.post_visit_confirmation_pending = false;
+    } else if (state.flags.safety_blocked) {
+      state.active_lane = KELLY_LANE.SUPPORT;
+      state.step = 'handoff';
     } else {
       state.active_lane = KELLY_LANE.ROUTER;
       state.step = 'await_intent';

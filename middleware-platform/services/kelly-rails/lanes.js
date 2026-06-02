@@ -349,6 +349,10 @@ function advanceAfterStep(state, toolsUsed) {
     KellyToolExecutor._setSessionMeta(state.session_id, 'pending_human_handoff', '1');
   }
 
+  if (lane === KELLY_LANE.SUPPORT && state.step === 'handoff' && state.flags.safety_blocked) {
+    return;
+  }
+
   const next = chain[state.step];
   if (next) state.step = next;
 }
