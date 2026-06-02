@@ -1,4 +1,4 @@
-name: Deploy Staging (myskinandcare.com)
+name: Deploy Staging (callsomo.com)
 
 on:
   workflow_dispatch:
@@ -21,11 +21,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GCP_PROJECT: doctor-little-c688d
+  GCP_PROJECT: somo-callsomo
   GCP_REGION: us-central1
   CLOUDRUN_SERVICE: myskin-middleware
-  UI_BASE_URL: https://myskinandcare.com
-  MIDDLEWARE_API_BASE: https://api.myskinandcare.com
+  UI_BASE_URL: https://callsomo.com
+  MIDDLEWARE_API_BASE: https://api.callsomo.com
 
 jobs:
   deploy:
@@ -84,4 +84,4 @@ jobs:
 
       - name: Post-deploy smoke
         if: ${{ github.event.inputs.skip_smoke != 'true' }}
-        run: npm run smoke:staging
+        run: npm run smoke:callsomo

@@ -110,6 +110,18 @@ async function main() {
     await runNode('e2e-kelly-rcm-pay-gateway.cjs');
 
     try {
+      await runNode('e2e-kelly-rcm-pay-conversation.cjs', {
+        KELLY_RAILS_V2: '1',
+        KELLY_RAILS_ROLLOUT_PCT: '1',
+        LANGGRAPH_KELLY_ROLLOUT_PCT: '0',
+        KELLY_F2_TOM_HARRIS: '1',
+        RCM_E2E_RECORD_EMAIL: '1'
+      });
+    } catch (convErr) {
+      console.warn('[rcm-suite] Kelly conversation F2 E2E skipped or failed (needs LLM keys + long runtime):', convErr.message);
+    }
+
+    try {
       await runNode('e2e-kelly-booking-fixture.cjs', { KELLY_E2E_SKIP_TRIAGE: '1' });
     } catch (bfErr) {
       console.warn('[rcm-suite] Kelly booking fixture E2E skipped or failed (needs LLM keys):', bfErr.message);

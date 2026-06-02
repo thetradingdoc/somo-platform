@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const PROD_BASE = String(process.env.PROD_API_BASE || 'https://api.myskinandcare.com').replace(/\/$/, '');
+const PROD_BASE = String(process.env.PROD_API_BASE || 'https://api.callsomo.com').replace(/\/$/, '');
 
 async function fetchJson(url) {
   const res = await fetch(url, { headers: { accept: 'application/json' } });

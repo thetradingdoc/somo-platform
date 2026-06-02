@@ -1,13 +1,13 @@
 # Staging Cloud SQL (Postgres mirror)
 
-> **Project:** `doctor-little-c688d` · **Region:** `us-central1` · **Instance:** `somo-staging-pg`
+> **Project:** `somo-callsomo` · **Region:** `us-central1` · **Instance:** `somo-staging-pg`
 
 SQLite remains **primary** for reads/writes in `middleware-platform/database.js`. Cloud SQL Postgres is provisioned for mirror/write-through, backups, and the future Postgres-primary flip.
 
 ## Provision (operator)
 
 ```bash
-export GCP_PROJECT=doctor-little-c688d
+export GCP_PROJECT=somo-callsomo
 export REGION=us-central1
 export INSTANCE=somo-staging-pg
 export CONNECTION_NAME="${GCP_PROJECT}:${REGION}:${INSTANCE}"

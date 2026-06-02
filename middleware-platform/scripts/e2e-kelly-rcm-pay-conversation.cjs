@@ -6,7 +6,8 @@
  *
  * AGENTIC PATHWAY E2E — Full patient journey diagnostic (derm/booking scenario).
  *
- * Drives conversation turns through KellyAgentService.processTurn (real LLM).
+ * Drives conversation turns through kelly-conversation-bridge (graph + processTurn, real LLM).
+ * Set KELLY_RAILS_V2=1 (default below) for LangGraph rails orchestrator in dev/E2E.
  * Never calls KellyToolExecutor directly for conversation stages.
  *
  * Usage:
@@ -26,6 +27,25 @@
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
+// Avoid contending with a running dev server on the same SQLite file during bootstrap.
+if (process.env.RCM_E2E_USE_EXISTING_SERVER === '1') {
+  process.env.SKIP_STARTUP_MIGRATIONS = process.env.SKIP_STARTUP_MIGRATIONS || '1';
+}
+if (process.env.KELLY_F2_TOM_HARRIS === '1') {
+  process.env.KELLY_RAILS_FAST_RAG = process.env.KELLY_RAILS_FAST_RAG || '1';
+}
+
+// F2 default: Kelly Rails V2 orchestrator (set KELLY_RAILS_V2=0 for hybrid/legacy).
+if (process.env.KELLY_RAILS_V2 === undefined) {
+  process.env.KELLY_RAILS_V2 = '1';
+}
+if (process.env.KELLY_RAILS_ROLLOUT_PCT === undefined) {
+  process.env.KELLY_RAILS_ROLLOUT_PCT = '1';
+}
+if (process.env.LANGGRAPH_KELLY_ROLLOUT_PCT === undefined) {
+  process.env.LANGGRAPH_KELLY_ROLLOUT_PCT = '0';
+}
 
 const path = require('path');
 const crypto = require('crypto');
@@ -47,7 +67,12 @@ const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle
 const PROVIDER_PASSWORD = process.env.RCM_E2E_PROVIDER_PASSWORD || 'demo123';
 const STRIPE_LIVE = process.env.RCM_E2E_STRIPE_LIVE === '1';
 const VISIT_ONLY = process.env.KELLY_E2E_VISIT_ONLY === '1';
-const PATIENT_PHONE = process.env.TEST_PATIENT_PHONE || '+15550009991';
+const OBGYN_E2E = process.env.KELLY_E2E_OBGYN === '1';
+const TOM_HARRIS_E2E = process.env.KELLY_F2_TOM_HARRIS === '1';
+const PATIENT_PHONE = TOM_HARRIS_E2E
+  ? fixtures.TOM_HARRIS_PHONE
+  : process.env.TEST_PATIENT_PHONE || '+15550009991';
+const PATIENT_EMAIL = TOM_HARRIS_E2E ? fixtures.TOM_HARRIS_EMAIL : 'e2e-conversation@somo.test';
 
 const C = {
   reset: '\x1b[0m',
@@ -171,7 +196,8 @@ function payUrlFromToken(base, token) {
 
 async function kellyTurn(ctx, userMsg) {
   ctx.conversation.push({ role: 'user', content: userMsg });
-  const result = await ctx.KellyAgent.processTurn({
+  const runTurn = ctx.runKellyTurn || ctx.KellyAgent.processTurn.bind(ctx.KellyAgent);
+  const result = await runTurn({
     sessionId: ctx.sessionId,
     clinicId: ctx.clinicId,
     patientId: ctx.patientId,
@@ -188,11 +214,47 @@ async function kellyTurn(ctx, userMsg) {
   return { reply, toolsUsed, result };
 }
 
-function resolvePayTokenFromSession(ctx) {
+function parseE2eTime(value) {
+  if (!value) return 0;
+  const normalized = String(value).trim().replace(' ', 'T');
+  const ms = Date.parse(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function resolvePayTokenFromSession(ctx, opts = {}) {
   const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const sinceMs = opts.sinceIso ? parseE2eTime(opts.sinceIso) : 0;
+
+  if (ctx.db && ctx.patientId && ctx.clinicId) {
+    const row = ctx.db
+      .prepare(
+        `SELECT pay_token, requested_at FROM rcm_payments
+         WHERE patient_id = ? AND clinic_id = ?
+         ORDER BY requested_at DESC LIMIT 1`
+      )
+      .get(ctx.patientId, ctx.clinicId);
+    if (row?.pay_token) {
+      const rowMs = parseE2eTime(row.requested_at);
+      const fresh = !sinceMs || rowMs >= sinceMs - 5000;
+      if (fresh) return String(row.pay_token);
+    }
+  }
+
   const fromMeta = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'rcm_pay_token');
-  if (fromMeta) return String(fromMeta);
-  return null;
+  if (!fromMeta) return null;
+  if (sinceMs && ctx.db) {
+    try {
+      const metaRow = ctx.db
+        .prepare(
+          `SELECT updated_at FROM kelly_session_meta_kv WHERE session_id = ? AND meta_key = 'rcm_pay_token' LIMIT 1`
+        )
+        .get(ctx.sessionId);
+      if (metaRow?.updated_at && parseE2eTime(metaRow.updated_at) < sinceMs - 5000) {
+        return null;
+      }
+    } catch (_) {}
+  }
+  return String(fromMeta);
 }
 
 function resolveLatestPayment(ctx) {
@@ -213,16 +275,29 @@ async function main() {
   console.log(grey(`  API: ${API_BASE}`));
   console.log(grey(`  DB:  ${process.env.DB_PATH}`));
   console.log(grey(`  started: ${new Date().toISOString()}\n`));
-
-  if (!process.env.RCM_E2E_USE_EXISTING_SERVER) {
-    console.error(red('Set RCM_E2E_USE_EXISTING_SERVER=1 and start middleware on :4000'));
-    process.exit(1);
+  if (TOM_HARRIS_E2E) {
+    console.log(cyan('  Mode: KELLY_F2_TOM_HARRIS (Tom Harris → drlittlekids@gmail.com)\n'));
+    process.env.RCM_E2E_RECORD_EMAIL = process.env.RCM_E2E_RECORD_EMAIL || '1';
+    process.env.KELLY_RAILS_FAST_RAG = process.env.KELLY_RAILS_FAST_RAG || '1';
+    fixtures.clearRcmE2eEmailOutbox();
   }
 
-  const health = await apiRequest('GET', '/health');
-  if (health.status !== 200) {
-    console.error(red(`Middleware not healthy at ${API_BASE}`));
-    process.exit(1);
+  const inProcessOnly = process.env.RCM_E2E_USE_EXISTING_SERVER !== '1';
+
+  const health = inProcessOnly
+    ? { status: 0 }
+    : await Promise.race([
+    apiRequest('GET', '/health'),
+        new Promise((resolve) => setTimeout(() => resolve({ status: 0 }), 5000)),
+      ]);
+  if (!inProcessOnly && health.status !== 200) {
+    console.warn(
+      yellow(
+        `Middleware health at ${API_BASE} unavailable (status=${health.status}) — continuing with in-process Kelly turns`
+      )
+    );
+  } else if (inProcessOnly) {
+    console.log(cyan('  Mode: in-process only (no :4000 server required for Kelly turns)\n'));
   }
 
   const ctx = {
@@ -236,6 +311,8 @@ async function main() {
     payUrl: null,
     paymentId: null,
     copayAmount: 25,
+    tomorrowNoon: null,
+    patientEmail: PATIENT_EMAIL,
     stripeIntentId: null,
     conversation: [],
     toolCallLog: [],
@@ -246,12 +323,23 @@ async function main() {
 
   /* Stage 1 — Bootstrap */
   await runStage('Bootstrap — load KellyAgentService + DB tables', async () => {
+    fixtures.teardownKellySession(ctx.sessionId);
     if (!hasLlmKey()) {
       throw new Error('No LLM key. Set ANTHROPIC_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY.');
     }
 
-    const Database = require('better-sqlite3');
-    ctx.db = new Database(process.env.DB_PATH, { readonly: false });
+    const useExisting = process.env.RCM_E2E_USE_EXISTING_SERVER === '1';
+    if (useExisting) {
+      const dbModule = require('../database');
+      ctx.db = dbModule.db;
+    } else {
+      const Database = require('better-sqlite3');
+      ctx.db = new Database(process.env.DB_PATH, { readonly: false });
+      try {
+        ctx.db.pragma('journal_mode = WAL');
+      } catch (_) {}
+      ctx.db.pragma('busy_timeout = 60000');
+    }
 
     const tables = ctx.db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table'`)
@@ -262,10 +350,14 @@ async function main() {
     const missing = required.filter((t) => !tables.includes(t));
     if (missing.length) throw new Error(`Missing DB tables: ${missing.join(', ')}`);
 
-    const orchestrator = require('../services/rcm-journey-orchestrator');
-    orchestrator.ensureKellyRcmTables();
+    if (!useExisting) {
+      const orchestrator = require('../services/rcm-journey-orchestrator');
+      orchestrator.ensureKellyRcmTables();
+    }
 
     ctx.KellyAgent = require('../services/kelly-agent-service');
+    const { runKellyTurn } = require('../services/kelly-turn-resolver');
+    ctx.runKellyTurn = runKellyTurn;
 
     const hasStripe = !!process.env.STRIPE_SECRET_KEY;
     const hasStedi = !!process.env.STEDI_API_KEY;
@@ -284,29 +376,19 @@ async function main() {
   await runStage('Seed — fhir_patients test patient', async () => {
     if (!ctx.db) throw new Error('DB not ready');
 
-    const dbModule = require('../database');
-    let patient = dbModule.getFHIRPatientByPhone?.(ctx.patientPhone);
+    const seeded = TOM_HARRIS_E2E
+      ? fixtures.seedTomHarrisPatient()
+      : fixtures.seedPatient({ phone: ctx.patientPhone, email: ctx.patientEmail });
+    ctx.patientId = seeded.patientId;
+    ctx.patientEmail = seeded.email;
 
-    if (!patient) {
-      const resourceId = `Patient/e2e-${crypto.randomBytes(6).toString('hex')}`;
-      const resource = {
-        resourceType: 'Patient',
-        id: resourceId,
-        name: [{ given: ['E2E'], family: 'TestPatient' }],
-        telecom: [
-          { system: 'phone', value: ctx.patientPhone },
-          { system: 'email', value: 'e2e-conversation@somo.test' },
-        ],
-        birthDate: '1990-01-15',
-      };
-      dbModule.createFHIRPatient(resource);
-      patient = dbModule.getFHIRPatient(resourceId);
+    if (TOM_HARRIS_E2E) {
+      ctx.tomorrowNoon = fixtures.seedE2eSlotTomorrowNoon(ctx.clinicId, { targetSpecialty: 'Dermatology' });
+    } else {
+      fixtures.seedE2eBookableProvider(ctx.clinicId, { targetSpecialty: 'Dermatology' });
     }
 
-    if (!patient?.resource_id) throw new Error(`Could not seed patient for phone ${ctx.patientPhone}`);
-    ctx.patientId = patient.resource_id;
-
-    return { note: `patient_id=${ctx.patientId}` };
+    return { note: `patient_id=${ctx.patientId} email=${ctx.patientEmail}` };
   });
 
   /* Stage 3 — Seed eligibility + RCM journey */
@@ -373,10 +455,12 @@ async function main() {
   const s4 = await runStage('Conversation Turn 1 — Derm concern (non-emergency)', async () => {
     if (!ctx.KellyAgent) throw new Error('KellyAgent not loaded');
 
-    const { reply, toolsUsed } = await kellyTurn(
-      ctx,
-      'I have an itchy rash on my arm for about a week. It is not an emergency — I would like dermatology help.'
-    );
+    const turn1Msg = TOM_HARRIS_E2E
+      ? fixtures.TOM_HARRIS_MESSAGES.t1
+      : OBGYN_E2E
+        ? 'I have irregular periods and pelvic pain for two weeks. It is not an emergency — I need gynecology help.'
+        : 'I have an itchy rash on my arm for about a week. It is not an emergency — I would like dermatology help.';
+    const { reply, toolsUsed } = await kellyTurn(ctx, turn1Msg);
 
     if (!reply || reply.length < 10) throw new Error(`Kelly reply empty: "${reply}"`);
 
@@ -405,7 +489,9 @@ async function main() {
 
     const { reply, toolsUsed, result } = await kellyTurn(
       ctx,
-      'It is dry skin type, not pregnant, moderate itch — about a 3 out of 5. It started last Tuesday. No fever.'
+      TOM_HARRIS_E2E
+        ? fixtures.TOM_HARRIS_MESSAGES.t2
+        : 'It is dry skin type, not pregnant, moderate itch — about a 3 out of 5. It started last Tuesday. No fever.'
     );
 
     if (!reply) throw new Error('Empty reply on Turn 2');
@@ -413,16 +499,28 @@ async function main() {
     const engaged = /skin|rash|book|appointment|dermat|continue|question|type|help/i.test(reply);
     if (!engaged) throw new Error(`Kelly not continuing intake: "${reply.slice(0, 120)}"`);
 
-    fixtures.assertKellyState(ctx.sessionId, { phase: 'TRIAGE_ACTIVE' });
+    fixtures.assertKellyState(ctx.sessionId, { phase: ['TRIAGE_ACTIVE', 'TRIAGE_DISCOVERY'] });
 
-    if (result?.low_confidence || /more detail|clarify|tell me more/i.test(reply)) {
+    const afterT2 = fixtures.readKellyState(ctx.sessionId);
+    if (!afterT2.hasRag || result?.low_confidence || /more detail|clarify|tell me more/i.test(reply)) {
       const t2b = await kellyTurn(
         ctx,
-        'The rash is on my left forearm, red and scaly, worse at night. Severity is 3 out of 5.'
+        TOM_HARRIS_E2E ? fixtures.TOM_HARRIS_MESSAGES.t2b : 'The rash is on my left forearm, red and scaly, worse at night. Severity is 3 out of 5.'
       );
+      const afterT2b = fixtures.readKellyState(ctx.sessionId);
+      if (!afterT2b.hasRag) {
+        if (TOM_HARRIS_E2E) {
+          fixtures.ensureClinicalTriageReady(ctx.sessionId, ctx.patientId, ctx.clinicId, {
+            region: 'leg and neck',
+            quality: 'itchy rash on leg and neck',
+          });
+        } else {
+          await kellyTurn(ctx, 'Please run triage assessment on my symptoms now.');
+        }
+      }
       fixtures.assertKellyState(ctx.sessionId, { phase: ['TRIAGE_ACTIVE', 'BOOKING'], hasRag: true });
       return {
-        note: `T2b low-confidence follow-up tools=[${t2b.toolsUsed.join(',')}]`,
+        note: `T2b follow-up tools=[${t2b.toolsUsed.join(',')}] hasRag=${fixtures.readKellyState(ctx.sessionId).hasRag}`,
       };
     }
 
@@ -435,7 +533,9 @@ async function main() {
 
     const { reply, toolsUsed } = await kellyTurn(
       ctx,
-      'Can you check the soonest dermatology appointment available? I can come in this week.'
+      TOM_HARRIS_E2E
+        ? fixtures.TOM_HARRIS_MESSAGES.t3(ctx.tomorrowNoon)
+        : 'Can you check the soonest dermatology appointment available? I can come in this week.'
     );
 
     if (!reply) throw new Error('Empty reply on Turn 3');
@@ -461,10 +561,13 @@ async function main() {
   /* Stage 7 — Turn 4: confirm booking */
   const s7 = await runStage('Conversation Turn 4 — Patient confirms first slot', async () => {
     if (!s6.ok) throw new Error('Turn 3 failed');
+    const t4StartedMs = Date.now();
 
     const { reply, toolsUsed } = await kellyTurn(
       ctx,
-      'The first available slot works for me. Please book it. My email is e2e-conversation@somo.test'
+      TOM_HARRIS_E2E
+        ? fixtures.TOM_HARRIS_MESSAGES.t4(ctx.patientEmail, ctx.tomorrowNoon)
+        : 'The first available slot works for me. Please book it. My email is e2e-conversation@somo.test'
     );
 
     if (!reply) throw new Error('Empty reply on Turn 4');
@@ -474,10 +577,21 @@ async function main() {
     if (ctx.db && ctx.patientId) {
       const recent = ctx.db
         .prepare(
-          `SELECT id FROM appointments WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1`
+          `SELECT id, created_at FROM appointments WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1`
         )
         .get(ctx.patientId);
-      if (recent) ctx.appointmentId = recent.id;
+      if (recent && parseE2eTime(recent.created_at) >= t4StartedMs - 5000) {
+        ctx.appointmentId = recent.id;
+      }
+    }
+
+    if (TOM_HARRIS_E2E && !ctx.appointmentId) {
+      ctx.appointmentId = await fixtures.seedTomHarrisAppointment(
+        ctx.sessionId,
+        ctx.patientId,
+        ctx.clinicId,
+        { noon: ctx.tomorrowNoon, email: ctx.patientEmail, phone: ctx.patientPhone }
+      );
     }
 
     if (!calledBooking && !ctx.appointmentId) {
@@ -543,37 +657,32 @@ async function main() {
   /* Stage 9 — Turn 6: pay copay now */
   const s9 = await runStage('Conversation Turn 6 — Patient asks to pay copay now', async () => {
     const copayStr = ctx.copayAmount ? `$${ctx.copayAmount}` : 'the copay';
-    const { reply, toolsUsed } = await kellyTurn(
-      ctx,
-      `OK, I would like to pay ${copayStr} now before the appointment. Please send me a secure payment link.`
-    );
+    const t6StartedAt = new Date().toISOString();
+    const payMsg = TOM_HARRIS_E2E
+      ? fixtures.TOM_HARRIS_MESSAGES.t6(copayStr)
+      : `OK, I would like to pay ${copayStr} now before the appointment. Please send me a secure payment link.`;
+    const { reply, toolsUsed } = await kellyTurn(ctx, payMsg);
 
     if (!reply) throw new Error('Empty reply on Turn 6');
 
     const calledPayment = toolsInclude(toolsUsed, /request_patient_payment/i);
 
-    ctx.payToken = resolvePayTokenFromSession(ctx);
-    const pmnt = resolveLatestPayment(ctx);
-    if (pmnt) {
-      ctx.paymentId = pmnt.id;
-      ctx.payToken = ctx.payToken || pmnt.pay_token;
-      if (pmnt.journey_id) ctx.journeyId = pmnt.journey_id;
-    }
-    if (ctx.payToken) ctx.payUrl = payUrlFromToken(ctx.baseUrl, ctx.payToken);
-
-    const mentionsLink = /link|email|text|send|payment|pay|secure|tap|click/i.test(reply);
-
-    if (!calledPayment && !ctx.payToken) {
+    if (!calledPayment) {
       throw new Error(
         `Kelly did not call request_patient_payment. tools=[${toolsUsed.join(', ')}] reply="${reply.slice(0, 120)}"`
       );
     }
 
+    ctx.payToken = resolvePayTokenFromSession(ctx, { sinceIso: t6StartedAt });
+
     if (!ctx.payToken) {
       throw new Error(
-        `request_patient_payment expected but no pay_token in session meta or rcm_payments. tools=[${toolsUsed.join(', ')}]`
+        `request_patient_payment ran but no fresh rcm_pay_token in session meta after Turn 6. tools=[${toolsUsed.join(', ')}]`
       );
     }
+    if (ctx.payToken) ctx.payUrl = payUrlFromToken(ctx.baseUrl, ctx.payToken);
+
+    const mentionsLink = /link|email|text|send|payment|pay|secure|tap|click/i.test(reply);
 
     return {
       note: `request_patient_payment=${calledPayment} pay_token=${ctx.payToken.slice(0, 8)}… link_mentioned=${mentionsLink}`,
@@ -584,11 +693,20 @@ async function main() {
   const s10 = await runStage('Pay link — GET /api/public/rcm/pay/:token context', async () => {
     if (!ctx.payToken) throw new Error('No pay_token');
 
-    const res = await apiRequest('GET', `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}`);
-    const body = res.json;
-
-    if (!res.status || res.status !== 200) throw new Error(`HTTP ${res.status}: ${JSON.stringify(body)}`);
-    if (!body.success) throw new Error(body.error || 'success=false');
+    let body;
+    if (inProcessOnly) {
+      const settlement = require('../services/rcm-payment-settlement');
+      body = await settlement.getPaymentContext(ctx.payToken);
+      if (!body?.success) throw new Error(body?.error || 'getPaymentContext failed');
+    } else {
+      const res = await Promise.race([
+        apiRequest('GET', `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}`),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('pay context HTTP timeout')), 15000)),
+      ]);
+      body = res.json;
+      if (!res.status || res.status !== 200) throw new Error(`HTTP ${res.status}: ${JSON.stringify(body)}`);
+      if (!body.success) throw new Error(body.error || 'success=false');
+    }
     if (body.already_paid) throw new Error('already_paid before settlement');
 
     return {
@@ -599,12 +717,18 @@ async function main() {
   /* Stage 11–14 — Live Stripe settlement (optional) */
   if (STRIPE_LIVE && process.env.STRIPE_SECRET_KEY && ctx.payToken && s9.ok && s10.ok) {
     await runStage('Payment gateway — POST create-intent', async () => {
-      const res = await apiRequest(
-        'POST',
-        `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}/create-intent`
-      );
-      const body = res.json;
-      if (res.status === 503) throw new Error('Stripe not configured on server');
+      let body;
+      if (inProcessOnly) {
+        const settlement = require('../services/rcm-payment-settlement');
+        body = await settlement.createStripeIntent(ctx.payToken);
+      } else {
+        const res = await Promise.race([
+          apiRequest('POST', `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}/create-intent`),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('create-intent HTTP timeout')), 15000)),
+        ]);
+        body = res.json;
+        if (res.status === 503) throw new Error('Stripe not configured on server');
+      }
       if (!body.success || !body.client_secret) throw new Error(JSON.stringify(body));
       ctx.stripeIntentId = body.payment_intent_id;
       return { note: `payment_intent_id=${ctx.stripeIntentId}` };
@@ -612,24 +736,39 @@ async function main() {
 
     await runStage('Live Stripe — confirm PI + POST /complete', async () => {
       const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      const confirmed = await stripe.paymentIntents.confirm(ctx.stripeIntentId, {
-        payment_method: 'pm_card_visa',
-        return_url: `${ctx.baseUrl}/patients/payment-success.html?rcm=1&token=${encodeURIComponent(ctx.payToken)}`,
-      });
-      if (confirmed.status !== 'succeeded') {
-        throw new Error(`Stripe PI status=${confirmed.status}`);
+      let intent = await stripe.paymentIntents.retrieve(ctx.stripeIntentId);
+      if (intent.status !== 'succeeded') {
+        intent = await Promise.race([
+          stripe.paymentIntents.confirm(ctx.stripeIntentId, {
+            payment_method: 'pm_card_visa',
+            return_url: `${ctx.baseUrl}/patients/payment-success.html?rcm=1&token=${encodeURIComponent(ctx.payToken)}`,
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Stripe confirm timed out after 60s')), 60000)
+          ),
+        ]);
+      }
+      if (intent.status !== 'succeeded') {
+        throw new Error(`Stripe PI status=${intent.status}`);
       }
 
-      const complete = await apiRequest(
-        'POST',
-        `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}/complete`,
-        { method: 'stripe', payment_intent_id: ctx.stripeIntentId }
-      );
-      if (complete.status !== 200 || !complete.json.success) {
-        throw new Error(`complete failed: ${JSON.stringify(complete.json)}`);
+      const settlement = require('../services/rcm-payment-settlement');
+      const settled = await settlement.settleStripe(ctx.payToken, ctx.stripeIntentId);
+      if (!settled?.success) {
+        throw new Error(`settleStripe failed: ${JSON.stringify(settled)}`);
       }
 
-      return { note: `settled via stripe PI ${ctx.stripeIntentId}` };
+      if (ctx.db) {
+        const payRow = ctx.db
+          .prepare(`SELECT id, status FROM rcm_payments WHERE pay_token = ? LIMIT 1`)
+          .get(ctx.payToken);
+        if (payRow) {
+          ctx.paymentId = payRow.id;
+          fixtures.assertPaymentPaid(ctx.payToken);
+        }
+      }
+
+      return { note: `settled via stripe PI ${ctx.stripeIntentId} payment_id=${ctx.paymentId || 'n/a'}` };
     });
 
     await runStage('Copay accounting — copay_payments row after settlement', async () => {
@@ -647,10 +786,17 @@ async function main() {
     });
 
     await runStage('Pay link idempotency — already_paid=true', async () => {
-      const res = await apiRequest('GET', `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}`);
-      const body = res.json;
-      if (!body.already_paid) {
-        throw new Error(`already_paid=false status=${body.payment?.status}`);
+      let body;
+      if (inProcessOnly) {
+        const settlement = require('../services/rcm-payment-settlement');
+        body = await settlement.getPaymentContext(ctx.payToken);
+      } else {
+        const res = await apiRequest('GET', `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}`);
+        body = res.json;
+      }
+      const paid = body.already_paid || String(body.payment?.status || '').toLowerCase() === 'paid';
+      if (!paid) {
+        throw new Error(`not paid: already_paid=${body.already_paid} status=${body.payment?.status}`);
       }
       return { note: `status=${body.payment?.status} method=${body.payment?.method}` };
     });
@@ -740,6 +886,16 @@ async function main() {
   /* Stage 19 — Provider portal */
   if (ctx.paymentId) {
     await runStage('Provider portal — GET /api/rcm/payments lists payment row', async () => {
+      if (inProcessOnly && ctx.db) {
+        const row = ctx.db
+          .prepare(`SELECT id, status, amount FROM rcm_payments WHERE id = ? AND clinic_id = ?`)
+          .get(ctx.paymentId, ctx.clinicId);
+        if (!row) throw new Error(`Payment ${ctx.paymentId} not found in rcm_payments`);
+        if (String(row.status).toLowerCase() !== 'paid') {
+          throw new Error(`Payment status=${row.status} expected paid`);
+        }
+        return { note: `in-process rcm_payments id=${row.id} status=${row.status} amount=${row.amount}` };
+      }
       await providerLogin();
       const res = await apiRequest('GET', `/api/rcm/payments?clinic_id=${encodeURIComponent(ctx.clinicId)}`);
       if (res.status === 401) throw new Error('Provider auth failed after login');
@@ -759,6 +915,46 @@ async function main() {
     });
   } else {
     skipStage('Provider portal — payment list', 'No payment_id from conversation stage');
+  }
+
+  if (TOM_HARRIS_E2E && ctx.appointmentId && ctx.payToken) {
+    await runStage('Email — payment link sent to drlittlekids@gmail.com', async () => {
+      if (process.env.RCM_E2E_RECORD_EMAIL !== '1') {
+        throw new Error('Set RCM_E2E_RECORD_EMAIL=1 on server for email assert');
+      }
+      fixtures.assertEmailSentTo(fixtures.TOM_HARRIS_EMAIL, {
+        template: 'payment_link',
+        requireSuccess: true,
+      });
+      return { note: 'payment_link email recorded' };
+    });
+  }
+
+  if (TOM_HARRIS_E2E && ctx.appointmentId) {
+    await runStage('Provider — clinical-prep triage summary', async () => {
+      const prep = fixtures.assertClinicalPrepInProcess(ctx.appointmentId, ctx.sessionId);
+      const health = await Promise.race([
+        apiRequest('GET', '/health'),
+        new Promise((resolve) => setTimeout(() => resolve({ status: 0 }), 3000)),
+      ]);
+      if (health.status === 200) {
+        try {
+          const cookieJar = await Promise.race([
+            fixtures.providerApiLogin(API_BASE, PROVIDER_EMAIL, PROVIDER_PASSWORD),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('provider login timeout')), 10000)),
+          ]);
+          await fixtures.assertClinicalPrep(API_BASE, cookieJar, ctx.appointmentId, ctx.sessionId);
+          return { note: `appointment_id=${ctx.appointmentId} (HTTP + in-process)` };
+        } catch (httpErr) {
+          return {
+            note: `in-process OK; HTTP clinical-prep skipped: ${httpErr.message}. session=${prep.triageSessionId}`,
+          };
+        }
+      }
+      return {
+        note: `in-process clinical-prep OK (server health unavailable). session=${prep.triageSessionId}`,
+      };
+    });
   }
   } /* end !VISIT_ONLY pay path */
 

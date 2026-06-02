@@ -19,9 +19,9 @@ const db = require('../database');
 const API = (process.env.API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
 const LIVE =
   process.env.TRIAL_E2E_LIVE_TWILIO === '1' ||
-  /api\.myskinandcare\.com/i.test(API) ||
+  /api\.callsomo\.com/i.test(API) ||
   process.env.STAGING_REMOTE === '1';
-const IS_REMOTE_STAGING = /api\.myskinandcare\.com/i.test(API) || process.env.STAGING_REMOTE === '1';
+const IS_REMOTE_STAGING = /api\.callsomo\.com/i.test(API) || process.env.STAGING_REMOTE === '1';
 
 function request(method, path, body, cookie, baseUrl = API) {
   return new Promise((resolve, reject) => {

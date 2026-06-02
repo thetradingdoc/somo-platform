@@ -14,7 +14,7 @@ Trial maintenance and optional DLQ workers on **staging** (`api.myskinandcare.co
 Create one job image (same as `myskin-middleware`) with overridden command:
 
 ```bash
-export PROJECT=doctor-little-c688d
+export PROJECT=somo-callsomo
 export REGION=us-central1
 export JOB=somo-staging-cron-trial-expiry
 

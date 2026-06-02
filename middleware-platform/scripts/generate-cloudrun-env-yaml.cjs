@@ -18,10 +18,10 @@ const envPath = path.join(__dirname, '..', '.env');
 const stagingExample = path.join(__dirname, '..', '.env.staging.example');
 const outPath = process.argv[2] || path.join('/tmp', `cloudrun-env-${Date.now()}.yaml`);
 const gcpProject =
-  process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'doctor-little-c688d';
+  process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'somo-callsomo';
 
 const baseUrl =
-  process.env.CLOUDRUN_BASE_URL || 'https://api.myskinandcare.com';
+  process.env.CLOUDRUN_BASE_URL || 'https://api.callsomo.com';
 const retellLlmWsUrl =
   process.env.RETELL_LLM_WEBSOCKET_URL ||
   `${String(baseUrl).replace(/\/+$/, '').replace(/^https:/, 'wss:').replace(/^http:/, 'ws:')}/webhook/retell/llm`;
@@ -108,6 +108,7 @@ const merged = {
     secretOrRandom('STRIPE_WEBHOOK_SECRET', 24),
   BASE_URL: baseUrl,
   API_BASE_URL: baseUrl,
+  BASE_DOMAIN: parsed.BASE_DOMAIN || 'callsomo.com',
   RETELL_LLM_WEBSOCKET_URL: parsed.RETELL_LLM_WEBSOCKET_URL || retellLlmWsUrl,
   DB_PATH: isStaging
     ? process.env.CLOUDRUN_DB_PATH || '/var/data/middleware-staging.db'

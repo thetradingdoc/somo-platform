@@ -19,7 +19,7 @@ const https = require('https');
 const mpRoot = path.join(__dirname, '..');
 const repoRoot = path.join(mpRoot, '..');
 
-const UI_BASE = (process.env.UI_BASE_URL || process.env.PW_UI_BASE_URL || 'https://myskinandcare.com').replace(
+const UI_BASE = (process.env.UI_BASE_URL || process.env.PW_UI_BASE_URL || 'https://callsomo.com').replace(
   /\/$/,
   ''
 );
@@ -27,7 +27,7 @@ const API_BASE = (
   process.env.MIDDLEWARE_API_BASE ||
   process.env.API_BASE_URL ||
   process.env.PW_API_BASE_URL ||
-  'https://api.myskinandcare.com'
+  'https://api.callsomo.com'
 ).replace(/\/$/, '');
 
 function fetchStatus(url) {

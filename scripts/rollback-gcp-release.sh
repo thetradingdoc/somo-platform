@@ -4,7 +4,7 @@ set -euo pipefail
 # Roll back Cloud Run to previous revision.
 # Usage: ./scripts/rollback-gcp-release.sh
 
-PROJECT="${GCP_PROJECT:-${GOOGLE_CLOUD_PROJECT:-doctor-little-c688d}}"
+PROJECT="${GCP_PROJECT:-${GOOGLE_CLOUD_PROJECT:-somo-callsomo}}"
 REGION="${GCP_REGION:-us-central1}"
 SERVICE="${CLOUDRUN_SERVICE:-myskin-middleware}"
 
@@ -26,8 +26,8 @@ gcloud run services update-traffic "$SERVICE" \
   --project "$PROJECT"
 
 echo "==> Post-rollback smoke"
-UI_BASE_URL="${UI_BASE_URL:-https://myskinandcare.com}" \
-MIDDLEWARE_API_BASE="${MIDDLEWARE_API_BASE:-https://api.myskinandcare.com}" \
+UI_BASE_URL="${UI_BASE_URL:-https://callsomo.com}" \
+MIDDLEWARE_API_BASE="${MIDDLEWARE_API_BASE:-https://api.callsomo.com}" \
   npm run verify:prod:routing-smoke --prefix middleware-platform
 
 echo "==> Rollback complete."

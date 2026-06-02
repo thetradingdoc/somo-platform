@@ -21,10 +21,9 @@ function getSubdomain(hostname) {
     return null;
   }
   if (parts.length >= 3) {
-    const knownDomains = ['doclittle.site', 'doclittle.azurewebsites.net'];
+    const knownDomains = ['callsomo.com'];
     const domain = parts.slice(-2).join('.');
-    const azureDomain = parts.slice(-3).join('.');
-    if (knownDomains.includes(domain) || knownDomains.includes(azureDomain)) {
+    if (knownDomains.includes(domain)) {
       return parts[0];
     }
   }
@@ -58,12 +57,11 @@ function getTenantType(merchant) {
  */
 router.get('/config', (req, res) => {
   try {
-    // CRITICAL: When frontend calls api.doclittle.site, Host header is "api.doclittle.site"
-    // We need to check Origin or Referer header to get the actual subdomain
+    // When frontend calls api.callsomo.com, Host is api.callsomo.com — use Origin for tenant subdomain
     const hostname = req.headers.host || req.get('host');
     let subdomain = getSubdomain(hostname);
     
-    // If no subdomain from Host (e.g., api.doclittle.site), try Origin header
+    // If no subdomain from Host (e.g., api.callsomo.com), try Origin header
     if (!subdomain) {
       const origin = req.headers.origin || req.headers.referer;
       if (origin) {

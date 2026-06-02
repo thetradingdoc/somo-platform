@@ -11,8 +11,8 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const mp = path.join(root, 'middleware-platform');
-const UI = process.env.UI_BASE_URL || 'https://myskinandcare.com';
-const API = process.env.MIDDLEWARE_API_BASE || 'https://api.myskinandcare.com';
+const UI = process.env.UI_BASE_URL || 'https://callsomo.com';
+const API = process.env.MIDDLEWARE_API_BASE || 'https://api.callsomo.com';
 
 function run(cmd, args, cwd, env = {}) {
   const r = spawnSync(cmd, args, {

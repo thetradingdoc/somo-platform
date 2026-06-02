@@ -460,7 +460,7 @@ router.post('/:id/call', requireAdminAuth, adminLimiter, express.json(), async (
             }
           }
 
-          const apiBaseUrl = process.env.API_BASE_URL || process.env.TWILIO_OUTBOUND_WEBHOOK_URL || 'https://api.doclittle.site';
+          const apiBaseUrl = process.env.API_BASE_URL || process.env.TWILIO_OUTBOUND_WEBHOOK_URL || 'https://api.callsomo.com';
           const webhookUrl = new URL(`${apiBaseUrl}/voice/incoming`);
           webhookUrl.searchParams.set('lead_id', id);
           webhookUrl.searchParams.set('clinic_name', encodeURIComponent(lead.clinic_name || ''));

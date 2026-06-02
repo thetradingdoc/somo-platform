@@ -1,36 +1,34 @@
-# Infrastructure brand deferral (until somopay.ai)
+# Infrastructure brand deferral
 
-User-facing UI says **Somo**. The following **stay on legacy names** until DNS/GCP cutover to **somopay.ai**.
+User-facing UI says **Somo**. Production hosts are **callsomo.com** (see [`CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md)).
 
-## Hostnames and URLs (do not rename in this pass)
+## Canonical production hosts
 
-| Legacy | Notes |
-|--------|--------|
-| `myskinandcare.com` | Production web origin |
-| `api.myskinandcare.com` | API host in `.env.example`, client config |
-| Firebase / GCP project IDs | Unchanged |
-| GCS buckets, Cloud Run service names | Unchanged |
-| [`infra/edge-routing/nginx/myskinandcare.com.conf`](../../infra/edge-routing/nginx/myskinandcare.com.conf) | Edge config |
+| Role | Host |
+|------|------|
+| Marketing / provider portal UI | `https://callsomo.com` |
+| Middleware API | `https://api.callsomo.com` |
+| Firebase Hosting | project `somo-4ddf6` |
+| GCP API project | `somo-callsomo` (Cloud Run `myskin-middleware`) |
 
-Email and signup links may still point at `https://myskinandcare.com/...` where infra requires; display name is **Somo**.
+Legacy `myskinandcare.com` / `doclittle.site` are retired in code; DNS 301s are operator-owned ([`LEGACY_DOMAIN_RETIREMENT.md`](../runbooks/LEGACY_DOMAIN_RETIREMENT.md)).
 
-## Internal code and routes (allowed in lint allowlist)
+## Internal code names (not consumer brand)
 
 | Pattern | Example |
 |---------|---------|
 | `dodgecall-*` modules / HTTP paths | `dodgecall-demo`, `services/dodgecall-*.js` |
 | `Kelly*` services | `KellyAgentService`, `KELLY_*` env vars |
 | `STEDI_*` | Stedi integration env vars |
-| Folder `unified-dashboard/somo-landing/` | Marketing SPA (was `dodgecall/`) |
+| Cloud Run service `myskin-middleware` | GCP resource name (rename is separate ops) |
+| FHIR `doclittle.health` extension URLs | Stored data namespace — migrate deliberately |
 
 ## Display vs infra
 
-- **Change:** HTML titles, hero copy, CSS brand colors, manifest `name`, email From name, terms party name (UI: Somo).
-- **Do not change:** API base URLs in production config, webhook URLs registered with vendors, bucket names in deploy scripts.
+- **Change:** HTML titles, hero copy, support emails, terms party name (Somo).
+- **Do not change without migration:** FHIR extension URLs, GCP service/bucket names, vendor webhook URLs until consoles are updated.
 
-## Cutover checklist (future)
+## Guardrails
 
-1. DNS: `somopay.ai` (+ `api.somopay.ai` if applicable)
-2. Update `unified-dashboard/assets/js/config.js` production URLs
-3. Redirect `myskinandcare.com` → new domain
-4. Re-run brand lint with narrower URL allowlist
+- `npm run check:legacy-hosts` — fails on `doclittle.site`, `myskinandcare.com`, `doctor-little-c688d` in active code.
+- `npm run guardrail:no-azure-deploy` — fails if Azure deploy scripts are reintroduced.

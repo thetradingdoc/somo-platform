@@ -37,16 +37,6 @@ module.exports = {
         NORMALIZED_PLACEHOLDER: '0000000000' // Used when phone is missing
     },
 
-    // Azure Configuration
-    AZURE: {
-        ROOT_DOMAIN: process.env.AZURE_ROOT_DOMAIN || 'doclittle.site',
-        APP_NAME: process.env.AZURE_APP_NAME || 'doclittle',
-        RESOURCE_GROUP: process.env.AZURE_RESOURCE_GROUP || 'doclittle',
-        SKIP_SSL: process.env.AZURE_SKIP_SSL === 'true', // Allow skipping SSL in dev
-        SSL_MAX_RETRIES: parseInt(process.env.AZURE_SSL_MAX_RETRIES || '3'),
-        SSL_RETRY_DELAY_MS: parseInt(process.env.AZURE_SSL_RETRY_DELAY_MS || '60000') // 1 minute
-    },
-
     // Environment
     ENV: {
         PRODUCTION: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod',

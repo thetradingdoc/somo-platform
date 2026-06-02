@@ -73,8 +73,8 @@ async function main() {
   let ok = true;
 
   if (isStaging) {
-    const uiBase = (process.env.UI_BASE_URL || 'https://myskinandcare.com').replace(/\/$/, '');
-    const apiBase = (process.env.MIDDLEWARE_API_BASE || 'https://api.myskinandcare.com').replace(/\/$/, '');
+    const uiBase = (process.env.UI_BASE_URL || 'https://callsomo.com').replace(/\/$/, '');
+    const apiBase = (process.env.MIDDLEWARE_API_BASE || 'https://api.callsomo.com').replace(/\/$/, '');
 
     const apiLive = await fetchStatus(`${apiBase}/health/live`);
     ok = (apiLive >= 200 && apiLive < 300 ? pass : fail)(`API /health/live → ${apiLive}`) && ok;

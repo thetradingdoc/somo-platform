@@ -15,7 +15,7 @@ npm start
 
 
 # For production, server should be deployed to Railway
-# API_BASE_URL=https://api.myskinandcare.com (production) should be set in .env
+# API_BASE_URL=https://api.callsomo.com (production) should be set in .env
 # No need for ngrok in production
 
 #Killserver: # Find what's using port 4000

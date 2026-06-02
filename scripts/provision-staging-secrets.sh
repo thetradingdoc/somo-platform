@@ -4,7 +4,7 @@ set -euo pipefail
 # Seed GCP Secret Manager from local .env (staging only — operator one-time).
 # Usage: ./scripts/provision-staging-secrets.sh
 
-PROJECT="${GCP_PROJECT:-doctor-little-c688d}"
+PROJECT="${GCP_PROJECT:-somo-callsomo}"
 ENV_FILE="${1:-middleware-platform/.env}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -22,10 +22,20 @@ KEYS=(
 
 for key in "${KEYS[@]}"; do
   val="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^"//;s/"$//' || true)"
-  [[ -z "$val" ]] && continue
   secret="somo-staging-$(echo "$key" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
+  if [[ -z "$val" ]]; then
+    case "$key" in
+      JWT_SECRET|ADMIN_PORTAL_SECRET|API_KEY_ENCRYPTION_KEY)
+        echo "Generate $secret (not in $ENV_FILE)"
+        val="$(openssl rand -hex 32)"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+  fi
   echo "Upsert secret $secret"
-  echo -n "$val" | gcloud secrets create "$secret" --project="$PROJECT" --data-file=- 2>/dev/null \
+  echo -n "$val" | gcloud secrets create "$secret" --project="$PROJECT" --data-file=- --replication-policy=automatic 2>/dev/null \
     || echo -n "$val" | gcloud secrets versions add "$secret" --project="$PROJECT" --data-file=-
 done
 

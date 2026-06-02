@@ -31,8 +31,8 @@ Specs live under `middleware-platform/e2e/` and `middleware-platform/tests/e2e/`
 Set before prod runs:
 
 ```bash
-export UI_BASE_URL=https://myskinandcare.com
-export MIDDLEWARE_API_BASE=https://api.myskinandcare.com
+export UI_BASE_URL=https://callsomo.com
+export MIDDLEWARE_API_BASE=https://api.callsomo.com
 ```
 
 CI deploy job uses `npm run verify:prod:routing-smoke` (routing readiness, not full Playwright matrix). See [PROD_MONITORING_WORKFLOWS.md](../runbooks/PROD_MONITORING_WORKFLOWS.md).

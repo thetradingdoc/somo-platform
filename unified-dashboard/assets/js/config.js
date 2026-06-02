@@ -31,17 +31,14 @@
     return;
   }
 
-  const PROD_API = 'https://api.myskinandcare.com';
+  const PROD_API = 'https://api.callsomo.com';
   const host = hostname.toLowerCase();
-  const isProdMarketingHost =
-    host === 'myskinandcare.com' ||
-    host === 'www.myskinandcare.com' ||
-    host.endsWith('.myskinandcare.com') ||
-    host === 'skinandcare.com' ||
-    host === 'www.skinandcare.com' ||
-    host.endsWith('.skinandcare.com');
+  const isCallsomoHost =
+    host === 'callsomo.com' ||
+    host === 'www.callsomo.com' ||
+    host.endsWith('.callsomo.com');
 
-  if (isProdMarketingHost) {
+  if (isCallsomoHost) {
     window.API_BASE = PROD_API;
     console.log('🌐 API Base URL (production):', window.API_BASE);
     return;
@@ -74,7 +71,7 @@
    * - Falls back to default if API call fails
    */
 
-  // Extract subdomain if present (e.g. tenant.myskinandcare.com)
+  // Extract subdomain if present (e.g. tenant.callsomo.com)
   let subdomain = null;
   const parts = hostname.split('.');
   if (parts.length > 2) {

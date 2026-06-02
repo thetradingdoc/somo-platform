@@ -10,6 +10,8 @@ yarn-error.log*
 
 # Local provider sign-in (never commit)
 local/provider-login.credentials
+local/*.gstmp
+local/*.db_.gstmp
 
 # PR worktrees (local only — not source of truth)
 .pr-worktrees/

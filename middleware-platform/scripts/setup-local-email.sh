@@ -52,7 +52,7 @@ EOF
     echo ""
     echo "✅ Gmail configuration added to .env"
     echo "   Note: Payment links will use http://localhost:4000"
-    echo "   For production, change BASE_URL to https://api.doclittle.site"
+    echo "   For production, change BASE_URL to https://api.callsomo.com"
     
 else
     echo ""

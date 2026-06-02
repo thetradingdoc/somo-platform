@@ -98,7 +98,7 @@ async function configureLocalEmail() {
     // Also set BASE_URL for local testing
     console.log('\n🌐 Base URL Configuration:');
     console.log('   For local testing, use: http://localhost:4000');
-    console.log('   For production, use: https://api.doclittle.site');
+    console.log('   For production, use: https://api.callsomo.com');
     const baseUrl = await question('   Base URL (default: http://localhost:4000): ') || 'http://localhost:4000';
 
     // Build .env content

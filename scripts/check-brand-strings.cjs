@@ -20,6 +20,7 @@ const SKIP_DIRS = new Set([
   'node_modules',
   'dist',
   'build',
+  'hosting-dist',
   '.git',
   'playwright-report',
   'test-results',
@@ -41,6 +42,7 @@ const ALLOW_PATH = [
   /middleware-platform\/services\/dodgecall-/i,
   /\/api\/public\/dodgecall\//i,
   /dodgecall-demo/i,
+  /business\/trial-activation\.html/i,
   /somo-landing\//i, // folder name until infra rename complete
   /brand-allowlist/i,
   /docs\/archive\//i,
@@ -51,8 +53,6 @@ const ALLOW_PATH = [
 
 const ALLOW_LINE = [
   /brand-allowlist/i,
-  /myskinandcare\.com/i,
-  /api\.myskinandcare/i,
   /process\.env\./i,
   /STEDI_/i,
   /KELLY_/i,
@@ -60,6 +60,7 @@ const ALLOW_LINE = [
   /dodgecallDemo/i,
   /isDodgecallApiPath/i,
   /\/dodgecall\//,
+  /source === 'dodgecall'/,
 ];
 
 function walk(dir, files = []) {
@@ -104,6 +105,27 @@ for (const base of SCAN_ROOTS) {
       }
     });
   }
+}
+
+const API_PUBLIC = path.join(ROOT, 'middleware-platform', 'public');
+const LOGO_BANNED_IN_API_HTML = [
+  { re: /somo-logo-wordmark\.svg/i, label: 'deprecated text-only logo (use somo-logo.png)' },
+  { re: /<span[^>]*class=["']doc["']/i, label: 'DocLittle CSS logo spans' },
+  { re: /<span[^>]*class=["']little["']/i, label: 'DocLittle CSS logo spans' },
+];
+
+for (const file of walk(API_PUBLIC).filter((f) => f.endsWith('.html'))) {
+  const rel = path.relative(ROOT, file);
+  const raw = fs.readFileSync(file, 'utf8');
+  const lines = raw.split('\n');
+  lines.forEach((line, i) => {
+    if (isAllowedLine(line)) return;
+    for (const { re, label } of LOGO_BANNED_IN_API_HTML) {
+      if (re.test(line)) {
+        violations.push({ file: rel, line: i + 1, label, snippet: line.trim().slice(0, 120) });
+      }
+    }
+  });
 }
 
 if (violations.length) {

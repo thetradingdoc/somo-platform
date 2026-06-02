@@ -10,7 +10,7 @@
  *
  * Usage (env or flags):
  *   node scripts/create-web-provider-account.js \
- *     --email=owner@myskinandcare.com \
+ *     --email=owner@callsomo.com \
  *     --name="Skin Care Admin" \
  *     --password='YourSecurePass8+' \
  *     --clinic-name="Skin & Care" \
@@ -205,8 +205,8 @@ Optional: --subdomain=my-brand   SKIP_RETELL=1
   console.log('  Landing REACT_APP_MERCHANT_ID should match:');
   console.log(`    ${resolvedMerchantId}`);
   console.log('');
-  console.log('  Subdomain URL (if using doclittle.site):');
-  console.log(`    https://${subdomain || 'YOUR_SUBDOMAIN'}.doclittle.site/unified-dashboard/login.html`);
+  console.log('  Subdomain URL (tenant.callsomo.com):');
+  console.log(`    https://${subdomain || 'YOUR_SUBDOMAIN'}.callsomo.com/unified-dashboard/login.html`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 

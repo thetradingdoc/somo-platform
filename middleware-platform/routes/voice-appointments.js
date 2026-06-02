@@ -667,8 +667,8 @@ app.post('/voice/checkout/verify', async (req, res) => {
       if (railwayUrl) {
         baseUrl = `https://${railwayUrl}`;
       } else if (process.env.NODE_ENV === 'production') {
-        // Production: use doclittle.site domain
-        baseUrl = 'https://myskinandcare.com';
+        // Production: marketing site base URL
+        baseUrl = 'https://callsomo.com';
       } else {
         // Fallback to localhost for development
         baseUrl = 'http://localhost:4000';

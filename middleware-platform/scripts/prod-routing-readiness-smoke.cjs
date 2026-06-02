@@ -11,8 +11,8 @@
  * 3) landing-assistant turn endpoint returns JSON (not SPA HTML)
  */
 
-const UI_BASE = String(process.env.UI_BASE_URL || 'https://myskinandcare.com').replace(/\/$/, '');
-const API_BASE = String(process.env.MIDDLEWARE_API_BASE || 'https://api.myskinandcare.com').replace(/\/$/, '');
+const UI_BASE = String(process.env.UI_BASE_URL || 'https://callsomo.com').replace(/\/$/, '');
+const API_BASE = String(process.env.MIDDLEWARE_API_BASE || 'https://api.callsomo.com').replace(/\/$/, '');
 const ROUTING_MODE = String(process.env.PROD_ROUTING_MODE || 'split-domain').toLowerCase();
 const REQUIRE_UI_DOMAIN_PROXY = ROUTING_MODE === 'same-domain';
 

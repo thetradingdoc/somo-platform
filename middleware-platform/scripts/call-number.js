@@ -67,7 +67,7 @@ async function main() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-  const apiBaseUrl = process.env.API_BASE_URL || 'https://api.doclittle.site';
+  const apiBaseUrl = process.env.API_BASE_URL || 'https://api.callsomo.com';
 
   if (!accountSid || !authToken || !fromNumber) {
     logError('Missing Twilio configuration');

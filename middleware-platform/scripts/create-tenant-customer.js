@@ -51,7 +51,7 @@ async function main() {
             id: merchantId,
             name: `Clinic - ${subdomain}`,
             api_key: `managed-${crypto.randomBytes(8).toString('hex')}`,
-            api_url: process.env.API_BASE_URL || 'https://api.doclittle.site',
+            api_url: process.env.API_BASE_URL || 'https://api.callsomo.com',
             webhook_url: null,
             enabled_platforms: ['voice'],
             status: 'active',

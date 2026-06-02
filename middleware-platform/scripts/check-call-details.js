@@ -16,7 +16,7 @@ const twilio = require('twilio');
 const axios = require('axios');
 
 const CALL_SID = process.argv[2] || 'CA09f41d841d3b4e499b9433aa2b3ecf67';
-const apiBaseUrl = process.env.API_BASE_URL || 'https://api.doclittle.site';
+const apiBaseUrl = process.env.API_BASE_URL || 'https://api.callsomo.com';
 
 async function main() {
   console.log('\n' + '='.repeat(70));

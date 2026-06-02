@@ -68,7 +68,7 @@ async function main() {
       `--twilio-sid=${sid}`,
       '--update-webhook'
     ], {
-      PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || process.env.API_BASE_URL || 'https://api.myskinandcare.com'
+      PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || process.env.API_BASE_URL || 'https://api.callsomo.com'
     });
   } else {
     console.warn('Skip Twilio attach — set STAGING_OWNER_TWILIO_PHONE + STAGING_OWNER_TWILIO_SID');
@@ -81,7 +81,7 @@ async function main() {
       stdio: 'inherit',
       env: {
         ...process.env,
-        API_BASE_URL: process.env.API_BASE_URL || 'https://api.myskinandcare.com'
+        API_BASE_URL: process.env.API_BASE_URL || 'https://api.callsomo.com'
       },
       cwd: mp
     });

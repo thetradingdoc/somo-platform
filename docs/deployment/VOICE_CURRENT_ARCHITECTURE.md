@@ -1,18 +1,18 @@
 # Voice architecture (current production)
 
 > **Last reviewed:** 2026-05-27  
-> **API host:** `https://api.myskinandcare.com` (Cloud Run `myskin-middleware`, `us-central1`)
+> **API host:** `https://api.callsomo.com` (Cloud Run `myskin-middleware`, `us-central1`)
 
-This document is the operational source of truth for **how voice calls work today** on myskinandcare.com production. RCM product context: [`docs/RCM/KELLY_RCM_ARCHITECTURE.md`](../RCM/KELLY_RCM_ARCHITECTURE.md).
+This document is the operational source of truth for **how voice calls work today** on callsomo.com production. RCM product context: [`docs/RCM/KELLY_RCM_ARCHITECTURE.md`](../RCM/KELLY_RCM_ARCHITECTURE.md).
 
 ## Split-domain layout
 
 | Role | Host |
 |------|------|
-| Marketing / provider SPA | `https://myskinandcare.com` |
-| Middleware API | `https://api.myskinandcare.com` |
+| Marketing / provider SPA | `https://callsomo.com` |
+| Middleware API | `https://api.callsomo.com` |
 
-Client apps must use `REACT_APP_API_BASE=https://api.myskinandcare.com` (not the marketing host for `/api/*`).
+Client apps must use `REACT_APP_API_BASE=https://api.callsomo.com` (not the marketing host for `/api/*`).
 
 ## Inbound calls (operational)
 
@@ -33,7 +33,7 @@ PSTN caller → Twilio number → POST /voice/incoming
 
 ```text
 App or script → Twilio REST calls.create
-  → webhook URL = https://api.myskinandcare.com/voice/incoming?…
+  → webhook URL = https://api.callsomo.com/voice/incoming?…
   → same register + SIP + WSS flow as inbound
 ```
 
@@ -61,9 +61,9 @@ App → Retell POST /v2/create-phone-call
 
 | Setting | Production value |
 |---------|------------------|
-| Agent ID (example) | `agent_7f0a517ec3b01fbab225749bd5` |
-| Custom LLM WebSocket | `wss://api.myskinandcare.com/webhook/retell/llm` |
-| Push config from repo | `node configure-retell.js` (with `API_BASE_URL=https://api.myskinandcare.com`) |
+| Agent ID (production) | `agent_85c66c32dec5575db0ed066130` |
+| Custom LLM WebSocket | `wss://api.callsomo.com/webhook/retell/llm` |
+| Push config from repo | `node configure-retell.js` (with `API_BASE_URL=https://api.callsomo.com`) |
 
 Machine-readable inventory for `npm run verify:agent-config`: [`retell-agent-inventory.json`](./retell-agent-inventory.json) — see [`retell-agent-inventory.md`](./retell-agent-inventory.md).
 
@@ -84,10 +84,10 @@ When configuring Retell imported number telephony against Twilio:
 
 ```bash
 # Liveness (Cloud Run startup probe path)
-curl -sS -o /dev/null -w '%{http_code}\n' https://api.myskinandcare.com/health/live
+curl -sS -o /dev/null -w '%{http_code}\n' https://api.callsomo.com/health/live
 
 # Retell LLM HTTP probe
-curl -sS https://api.myskinandcare.com/webhook/retell/llm
+curl -sS https://api.callsomo.com/webhook/retell/llm
 
 # Outbound (Twilio-direct path)
 cd middleware-platform && node scripts/make-outbound-call.js 8622307479

@@ -51,7 +51,7 @@ See also: [Medical Coding OPERATIONS](../Medical%20Coding/OPERATIONS.md), [RENDE
 
 | Surface | Host |
 |---------|------|
-| Marketing SPA | `https://myskinandcare.com` (Firebase Hosting) |
-| API | `https://api.myskinandcare.com` (Cloud Run) |
+| Marketing SPA | `https://callsomo.com` (Firebase Hosting) |
+| API | `https://api.callsomo.com` (Cloud Run) |
 
 Details: [`EDGE_ROUTING_CONFIGS.md`](../deployment/EDGE_ROUTING_CONFIGS.md).

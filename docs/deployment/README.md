@@ -1,14 +1,16 @@
 # deployment — consolidated documentation
 
-> **Note:** Sections below that reference **doclittle.site**, Azure App Service `doclittle`, or IONOS DNS are **historical runbooks**. Current production UI/API routing for **Somo** is documented in [`EDGE_ROUTING_CONFIGS.md`](./EDGE_ROUTING_CONFIGS.md) and brand/host deferral in [`../Brand/INFRA_BRAND_DEFERRAL.md`](../Brand/INFRA_BRAND_DEFERRAL.md) (**myskinandcare.com** until somopay.ai).
+> **Historical:** Most sections below reference **doclittle.site**, Azure App Service, or **myskinandcare.com**. **Do not follow them for production.**
+>
+> **Read first:** [`CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md) · [`GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md) · [`INFRA_BRAND_DEFERRAL.md`](../Brand/INFRA_BRAND_DEFERRAL.md)
 
-**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-05-27
+**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-06-02
 
 <a id="voice-current-architecture"></a>
 
 ## Voice architecture (current production)
 
-Production voice for **myskinandcare.com** runs on **Google Cloud Run** at `https://api.myskinandcare.com` (not the marketing SPA host).
+Production voice for **callsomo.com** runs on **Google Cloud Run** at `https://api.callsomo.com` (not the marketing SPA host).
 
 | Path | Status |
 |------|--------|

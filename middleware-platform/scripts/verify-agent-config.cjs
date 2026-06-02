@@ -68,17 +68,22 @@ function checkAgent(agentId, agent, canonical) {
   if (!ws) failures.push('missing_websocket_url');
   else if (!ws.endsWith(expectedPath)) failures.push(`websocket_url_not_canonical:${ws}`);
 
-  // Tool check
   const toolNames = getToolNames(agent);
-  const requiredTools = Array.isArray(canonical.required_tools) ? canonical.required_tools : [];
-  const missingTools = requiredTools.filter((t) => !toolNames.has(t));
-  if (missingTools.length) failures.push(`missing_tools:${missingTools.join(',')}`);
+  const requireTools = canonical.require_tools !== false;
+  const requirePromptMarkers = canonical.require_prompt_markers !== false;
 
-  // Prompt check (best-effort marker scan)
-  const prompt = getPrompt(agent);
-  const markers = Array.isArray(canonical.prompt_markers) ? canonical.prompt_markers : [];
-  const missingMarkers = markers.filter((m) => !prompt.includes(m));
-  if (missingMarkers.length) failures.push(`prompt_missing_markers:${missingMarkers.join(',')}`);
+  if (requireTools) {
+    const requiredTools = Array.isArray(canonical.required_tools) ? canonical.required_tools : [];
+    const missingTools = requiredTools.filter((t) => !toolNames.has(t));
+    if (missingTools.length) failures.push(`missing_tools:${missingTools.join(',')}`);
+  }
+
+  if (requirePromptMarkers) {
+    const prompt = getPrompt(agent);
+    const markers = Array.isArray(canonical.prompt_markers) ? canonical.prompt_markers : [];
+    const missingMarkers = markers.filter((m) => !prompt.includes(m));
+    if (missingMarkers.length) failures.push(`prompt_missing_markers:${missingMarkers.join(',')}`);
+  }
 
   return {
     agent_id: agentId,

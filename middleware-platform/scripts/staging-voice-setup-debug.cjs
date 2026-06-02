@@ -4,8 +4,8 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { chromium } = require('playwright');
 
-const UI = 'https://myskinandcare.com';
-const API = 'https://api.myskinandcare.com';
+const UI = 'https://callsomo.com';
+const API = 'https://api.callsomo.com';
 
 (async () => {
   const browser = await chromium.launch();

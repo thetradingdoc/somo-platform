@@ -105,7 +105,7 @@ function verifyApiKey(req, res, next) {
           id: merchantId,
           name: customer.name || customer.company_name || 'Customer',
           api_key: apiKey, // Store original key for backward compatibility
-          api_url: process.env.API_BASE_URL || 'https://api.doclittle.site',
+          api_url: process.env.API_BASE_URL || 'https://api.callsomo.com',
           enabled_platforms: ['voice'],
           status: 'active'
         });

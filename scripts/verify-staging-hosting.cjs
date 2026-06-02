@@ -44,10 +44,10 @@ for (const rel of required) {
 }
 
 const apiBase = fs.readFileSync(path.join(dist, 'assets/js/api-base.js'), 'utf8');
-if (!apiBase.includes('api.myskinandcare.com')) {
-  fail('api-base.js must point to api.myskinandcare.com');
+if (!apiBase.includes('api.callsomo.com')) {
+  fail('api-base.js must point to api.callsomo.com');
 } else {
-  pass('api-base.js → api.myskinandcare.com');
+  pass('api-base.js → api.callsomo.com');
 }
 
 if (process.exitCode) {

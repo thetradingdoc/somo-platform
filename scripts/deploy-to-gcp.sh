@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MP="$ROOT/middleware-platform"
 
-PROJECT="${GCP_PROJECT:-${GOOGLE_CLOUD_PROJECT:-doctor-little-c688d}}"
+PROJECT="${GCP_PROJECT:-${GOOGLE_CLOUD_PROJECT:-somo-callsomo}}"
 REGION="${GCP_REGION:-us-central1}"
 SERVICE="${CLOUDRUN_SERVICE:-myskin-middleware}"
 IMAGE="${ARTIFACT_IMAGE:-gcr.io/${PROJECT}/${SERVICE}:$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M)}"
@@ -40,6 +40,7 @@ DEPLOY_ARGS=(
   --region "$REGION"
   --platform managed
   --allow-unauthenticated
+  --no-invoker-iam-check
   --min-instances "${CLOUDRUN_MIN_INSTANCES:-1}"
   --concurrency "${CLOUDRUN_CONCURRENCY:-30}"
   --memory "${CLOUDRUN_MEMORY:-2Gi}"
@@ -60,4 +61,4 @@ fi
 gcloud "${DEPLOY_ARGS[@]}" --project "$PROJECT" --command="" --args=""
 
 echo "==> Done. Verify:"
-echo "    curl -sS ${CLOUDRUN_BASE_URL:-https://api.myskinandcare.com}/health/live"
+echo "    curl -sS ${CLOUDRUN_BASE_URL:-https://api.callsomo.com}/health/live"

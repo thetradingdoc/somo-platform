@@ -79,10 +79,10 @@ async function main() {
     if (customer.merchant_id) {
         const merchant = db.getMerchant(customer.merchant_id);
         if (merchant && merchant.subdomain) {
-            console.log('   https://' + merchant.subdomain + '.doclittle.site/login');
+            console.log('   https://' + merchant.subdomain + '.callsomo.com/login');
         }
     }
-    console.log('   https://api.doclittle.site/login');
+    console.log('   https://api.callsomo.com/login');
     console.log('');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }

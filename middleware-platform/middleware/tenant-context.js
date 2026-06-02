@@ -94,7 +94,7 @@ async function extractTenantFromRequest(req) {
   }
 
   // Method 3b: Subdomain from Origin or Referer header (for API calls from tenant subdomains)
-  // When frontend calls api.doclittle.site, the Origin header contains the tenant subdomain
+  // When frontend calls api.callsomo.com, the Origin header contains the tenant subdomain
   const origin = req.headers.origin || req.headers.referer;
   if (origin) {
     try {
@@ -145,7 +145,7 @@ async function extractTenantFromRequest(req) {
   }
 
   // Method 5: Session-based tenant resolution (for authenticated users)
-  // When API calls come from api.doclittle.site, check user session for merchant_id
+  // When API calls come from api.callsomo.com, check user session for merchant_id
   const sessionId = req.cookies?.customer_session;
   if (sessionId) {
     const session = db.getCustomerSession(sessionId);
@@ -196,11 +196,10 @@ function extractSubdomain(hostname) {
 
   // For known domains, extract subdomain
   if (parts.length >= 3) {
-    const knownDomains = ['doclittle.site', 'doclittle.azurewebsites.net'];
+    const knownDomains = ['callsomo.com'];
     const domain = parts.slice(-2).join('.');
-    const azureDomain = parts.slice(-3).join('.');
 
-    if (knownDomains.includes(domain) || knownDomains.includes(azureDomain)) {
+    if (knownDomains.includes(domain)) {
       return parts[0];
     }
   }

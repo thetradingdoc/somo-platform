@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * Check for appointments between a specific patient and provider
- * Usage: node scripts/check-appointment.js "Jeremiah Richard" "provider@doclittle.site"
+ * Usage: node scripts/check-appointment.js "Jeremiah Richard" "provider@doclittle.com"
  */
 
 require('dotenv').config();
 const db = require('../database');
 
 const patientName = process.argv[2] || 'Jeremiah Richard';
-const providerEmail = process.argv[3] || 'provider@doclittle.site';
+const providerEmail = process.argv[3] || 'provider@doclittle.com';
 
 function main() {
   console.log('\n🔍 Appointment search');
@@ -66,7 +66,7 @@ function main() {
           );
         });
       }
-      console.log('\n❌ No appointment found between Jeremiah Richard and provider@doclittle.site');
+      console.log('\n❌ No appointment found between Jeremiah Richard and provider@doclittle.com');
       process.exit(0);
     }
 

@@ -232,7 +232,7 @@ async function checkSpecificCall(callSid) {
 async function testWebhookDirectly() {
   logSection('4. Testing Webhook Directly (Simulating Twilio)');
   
-  const apiBaseUrl = process.env.API_BASE_URL || 'https://api.doclittle.site';
+  const apiBaseUrl = process.env.API_BASE_URL || 'https://api.callsomo.com';
   const webhookUrl = `${apiBaseUrl}/voice/incoming`;
   
   logInfo(`Webhook URL: ${webhookUrl}`);

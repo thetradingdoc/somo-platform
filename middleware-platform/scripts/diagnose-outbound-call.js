@@ -102,7 +102,7 @@ async function testEnvironmentVariables() {
         logInfo(`  → Using RETELL_AGENT_ID as fallback`);
       }
       if (key === 'API_BASE_URL') {
-        logInfo(`  → Will use default: https://api.doclittle.site`);
+        logInfo(`  → Will use default: https://api.callsomo.com`);
       }
     }
   }
@@ -461,7 +461,7 @@ async function monitorCallStatus(callId, duration = 10000) {
 async function testWebhookEndpoints() {
   logSection('7. Webhook Endpoints Test');
   
-  const apiBaseUrl = process.env.API_BASE_URL || 'https://api.doclittle.site';
+  const apiBaseUrl = process.env.API_BASE_URL || 'https://api.callsomo.com';
   
   const endpoints = [
     { name: 'Voice Incoming', url: `${apiBaseUrl}/voice/incoming` },
@@ -513,7 +513,7 @@ async function testTwilioDirectCall() {
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
     const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-    const apiBaseUrl = process.env.API_BASE_URL || 'https://api.doclittle.site';
+    const apiBaseUrl = process.env.API_BASE_URL || 'https://api.callsomo.com';
     
     if (!accountSid || !authToken || !fromNumber) {
       logWarning('Twilio credentials not configured, skipping direct call test');

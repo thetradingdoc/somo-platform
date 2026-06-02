@@ -29,7 +29,7 @@ console.log('  Webhooks:');
 console.log('    POST /webhooks/stedi/claim-status');
 console.log('    POST /webhooks/stedi/remittance-advice');
 console.log('    POST /webhooks/stedi/prior-auth-status (stub)');
-console.log('  Prod claim-status: https://api.myskinandcare.com/webhooks/stedi/claim-status\n');
+console.log('  Prod claim-status: https://api.callsomo.com/webhooks/stedi/claim-status\n');
 
 if (mode !== 'professional') {
   console.error('❌ Set STEDI_CLAIM_SUBMISSION_MODE=professional on Render before telehealth submit.');

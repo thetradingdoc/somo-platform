@@ -318,8 +318,8 @@ jobs:
 
       - name: Production routing readiness smoke (Cloud Run)
         env:
-          UI_BASE_URL: https://myskinandcare.com
-          MIDDLEWARE_API_BASE: https://api.myskinandcare.com
+          UI_BASE_URL: https://callsomo.com
+          MIDDLEWARE_API_BASE: https://api.callsomo.com
         run: npm run verify:prod:routing-smoke --prefix middleware-platform
 
       - name: Staging HTTP bootstrap check

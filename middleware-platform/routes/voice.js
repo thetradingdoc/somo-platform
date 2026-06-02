@@ -369,9 +369,9 @@ router.post('/checkout/create', async (req, res) => {
 
             // If still no email, generate a placeholder (will need verification)
             if (!email) {
-                // Generate placeholder email from phone: phone@voice-customer.doclittle.site
+                // Generate placeholder email from phone for voice-only customers
                 const phoneDigits = normalizedPhone.replace(/\D/g, '');
-                email = `voice-${phoneDigits}@doclittle.site`;
+                email = `voice-${phoneDigits}@voice.callsomo.com`;
                 console.log(`⚠️  No email found, using placeholder: ${email}`);
                 console.log(`   Customer will need to verify this email before checkout`);
             }

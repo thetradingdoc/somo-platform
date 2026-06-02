@@ -14,9 +14,9 @@ Configure in Cloud Monitoring for service `myskin-middleware` (`us-central1`):
 
 | URL | Expected |
 |-----|----------|
-| `https://api.myskinandcare.com/health/live` | 200 |
-| `https://myskinandcare.com/` | 200 |
-| `https://myskinandcare.com/signup` | 200 HTML |
+| `https://api.callsomo.com/health/live` | 200 |
+| `https://callsomo.com/` | 200 |
+| `https://callsomo.com/signup` | 200 HTML |
 
 Use `npm run gcp:bootstrap:check` for quick HTTP verification.
 

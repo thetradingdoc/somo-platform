@@ -6,8 +6,8 @@
  * Usage: npm run gcp:bootstrap:check
  */
 
-const UI = (process.env.UI_BASE_URL || 'https://myskinandcare.com').replace(/\/$/, '');
-const API = (process.env.MIDDLEWARE_API_BASE || 'https://api.myskinandcare.com').replace(/\/$/, '');
+const UI = (process.env.UI_BASE_URL || 'https://callsomo.com').replace(/\/$/, '');
+const API = (process.env.MIDDLEWARE_API_BASE || 'https://api.callsomo.com').replace(/\/$/, '');
 
 async function fetchPage(url) {
   try {
@@ -43,7 +43,11 @@ function isJsNotSpa(body, ct) {
   if (String(ct).toLowerCase().includes('javascript')) return true;
   const t = body.trim().toLowerCase();
   if (t.startsWith('<!doctype') || t.startsWith('<html')) return false;
-  return body.includes('api.myskinandcare.com') || body.includes('function') || body.includes('const ');
+  return (
+    body.includes('api.callsomo.com') ||
+    body.includes('function') ||
+    body.includes('const ')
+  );
 }
 
 async function main() {
@@ -90,12 +94,12 @@ async function main() {
     apiBase.status >= 200 &&
     apiBase.status < 400 &&
     isJsNotSpa(apiBase.text, apiBase.ct) &&
-    apiBase.text.includes('api.myskinandcare.com');
+    apiBase.text.includes('api.callsomo.com');
   all =
     (apiBaseOk ? ok : fail)(
       'UI_API_BASE_JS',
       apiBaseOk
-        ? 'api-base.js → api.myskinandcare.com'
+        ? 'api-base.js → api.callsomo.com'
         : `status=${apiBase.status} — got SPA HTML or wrong API host`
     ) && all;
 

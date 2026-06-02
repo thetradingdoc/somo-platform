@@ -16,7 +16,7 @@ const checks = [
   {
     key: 'RETELL_LLM_WEBSOCKET_URL',
     required: false,
-    hint: 'staging: wss://api.myskinandcare.com/webhook/retell/llm'
+    hint: 'production: wss://api.callsomo.com/webhook/retell/llm'
   },
   { key: 'RETELL_WEBHOOK_SECRET', required: false },
   { key: 'API_BASE_URL', required: false, hint: 'or NGROK_URL for local inbound' },

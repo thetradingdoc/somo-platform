@@ -25,8 +25,8 @@ From `middleware-platform/`:
 npm run verify:prod:routing-smoke
 
 # Browser smoke (requires playwright.prod.config.cjs)
-UI_BASE_URL=https://myskinandcare.com \
-MIDDLEWARE_API_BASE=https://api.myskinandcare.com \
+UI_BASE_URL=https://callsomo.com \
+MIDDLEWARE_API_BASE=https://api.callsomo.com \
 npm run test:prod:smoke
 ```
 
@@ -55,7 +55,7 @@ Optional webhook: `PAYOR_INGEST_METRICS_WEBHOOK_URL` in middleware `.env`. Opera
 - GitHub Advanced Security secret scanning
 - Cloud Run metrics + alerting (latency, 5xx)
 - Firebase Hosting uptime
-- External uptime on `https://api.myskinandcare.com/health`
+- External uptime on `https://api.callsomo.com/health`
 
 Secret hygiene: [SECRET_SCANNING.md](../security/SECRET_SCANNING.md).
 

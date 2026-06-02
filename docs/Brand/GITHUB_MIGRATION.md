@@ -6,7 +6,7 @@
 |------|--------|
 | New remote | `https://github.com/richiejeremiah/somo-platform` (private) |
 | Legacy remote | `doclittle-old` → `richiejeremiah/doclittle-platform` (archive after smoke) |
-| Production hosts | `myskinandcare.com` / `api.myskinandcare.com` (unchanged until somopay.ai) |
+| Production hosts | `callsomo.com` / `api.callsomo.com` (unchanged until somopay.ai) |
 
 ## Manual follow-up
 
@@ -14,10 +14,10 @@
 
 | Secret / variable | Purpose |
 |-------------------|---------|
-| `FIREBASE_TOKEN` | `firebase deploy` for `myskinandcare.com` hosting |
+| `FIREBASE_TOKEN` | `firebase deploy` for `callsomo.com` hosting |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF for deploy-staging workflow |
 | `GCP_SERVICE_ACCOUNT` | SA email with Cloud Run + Secret Manager access |
-| `CLOUDSQL_CONNECTION_NAME` (repo **variable**) | e.g. `doctor-little-c688d:us-central1:somo-staging-pg` |
+| `CLOUDSQL_CONNECTION_NAME` (repo **variable**) | e.g. `somo-callsomo:us-central1:somo-staging-pg` |
 
 **GCP Secret Manager** (`somo-staging-*` prefix): seed via `./scripts/provision-staging-secrets.sh` from operator `.env`. Keys: `JWT_SECRET`, `TWILIO_*`, `RETELL_*`, `STRIPE_*`, `SOMO_OWNER_PASSWORD`, `POSTGRES_URL`. See `middleware-platform/.env.staging.example`.
 
@@ -25,9 +25,9 @@
 
 | Check | Command / URL |
 |-------|----------------|
-| GCP project | `gcloud config get-value project` → `doctor-little-c688d` |
-| API live | `curl -sS https://api.myskinandcare.com/health/live` |
-| UI live | `curl -sS -I https://myskinandcare.com` |
+| GCP project | `gcloud config get-value project` → `somo-callsomo` |
+| API live | `curl -sS https://api.callsomo.com/health/live` |
+| UI live | `curl -sS -I https://callsomo.com` |
 | Bootstrap script | `npm run gcp:bootstrap:check` |
 
 3. **Railway** — **deprecated** for API. Production/staging API SSOT is Cloud Run `myskin-middleware`. Disconnect Railway GitHub auto-deploy if still linked.

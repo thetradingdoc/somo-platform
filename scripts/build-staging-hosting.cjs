@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Assemble Firebase Hosting bundle for myskinandcare.com staging:
+ * Assemble Firebase Hosting bundle for callsomo.com (Firebase somo-4ddf6):
  *   - Somo landing SPA (/)
  *   - Provider signup/login + business portal static HTML
  *   - Unified-dashboard assets at /assets and /unified-dashboard/assets
@@ -61,7 +61,7 @@ function main() {
   console.log('Building somo-landing…');
   const env = {
     ...process.env,
-    VITE_API_BASE: process.env.VITE_API_BASE || 'https://api.myskinandcare.com',
+    VITE_API_BASE: process.env.VITE_API_BASE || 'https://api.callsomo.com',
     VITE_SIGNUP_URL: process.env.VITE_SIGNUP_URL || '/signup?utm_source=somo',
     VITE_LOGIN_URL: process.env.VITE_LOGIN_URL || '/login?utm_source=somo'
   };

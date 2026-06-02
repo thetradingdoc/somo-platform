@@ -8,7 +8,7 @@ require('dotenv').config();
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
-const API_BASE_URL = process.env.API_BASE_URL || 'https://api.doclittle.site';
+const API_BASE_URL = process.env.API_BASE_URL || 'https://api.callsomo.com';
 
 const patientData = {
   resourceType: 'Patient',
