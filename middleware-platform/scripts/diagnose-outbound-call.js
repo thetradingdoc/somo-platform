@@ -449,7 +449,6 @@ async function monitorCallStatus(callId, duration = 10000) {
     if (finalData.call_cost) {
       logInfo(`   Cost: $${finalData.call_cost.combined_cost || '0.000'}`);
     }
- agent log
   } catch (error) {
     logError(`Failed to get final status: ${error.message}`);
   }
@@ -541,7 +540,6 @@ async function testTwilioDirectCall() {
     logInfo(`Call SID: ${call.sid}`);
     logInfo(`Status: ${call.status}`);
     logInfo(`Direction: ${call.direction}`);
- agent log
     
     return call.sid;
   } catch (error) {
