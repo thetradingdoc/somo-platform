@@ -223,7 +223,6 @@ async function testTwilioConfiguration() {
         client.trunking.v1.trunks(trunkSid).credentialLists.list(),
         client.trunking.v1.trunks(trunkSid).ipAccessControlLists.list()
       ]);
- agent log
     } catch (_) {}
     
     return true;
