@@ -22,6 +22,9 @@ function hydrateFlagsFromDb(sessionId, patientId) {
   flags.booking_intent_seen = metaBool(sessionId, 'booking_intent_seen');
   flags.basic_intake_complete = metaBool(sessionId, 'basic_intake_complete');
   flags.pending_human_handoff = metaBool(sessionId, 'pending_human_handoff');
+  flags.safety_blocked = metaBool(sessionId, 'safety_blocked');
+  flags.post_visit_confirmation_pending = metaBool(sessionId, 'post_visit_confirmation_pending');
+  flags.payment_complete = metaBool(sessionId, 'payment_complete');
 
   const appt = KellyToolExecutor._getSessionMeta(sessionId, 'last_appointment_id');
   if (appt) flags.appointment_id = appt;

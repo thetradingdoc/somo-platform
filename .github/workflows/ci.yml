@@ -43,6 +43,15 @@ jobs:
         working-directory: ./middleware-platform
         run: npm ci
 
+      - name: Kelly Rails Phase B golden (fast)
+        if: matrix.node-version == '20.x'
+        working-directory: ./middleware-platform
+        run: |
+          npm run verify:kelly-rails-env
+          KELLY_RAILS_ENV_PROFILE=staging KELLY_RAILS_V2=1 KELLY_ALLOW_HYBRID_GRAPH=0 npm run verify:kelly-rails-env
+          npm run test:kelly:rails:golden
+          npm run test:e2e:kelly:golden-conversations
+
       - name: Install and build somo-landing
         if: matrix.node-version == '20.x'
         working-directory: ./unified-dashboard/somo-landing

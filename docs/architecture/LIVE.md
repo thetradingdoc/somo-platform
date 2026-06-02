@@ -610,6 +610,21 @@ KELLY_RAILS_MAX_TOOL_ITERATIONS=2
 KELLY_ALLOW_HYBRID_GRAPH=0
 ```
 
+**Phase B gate (staging/prod):** `npm run verify:kelly-rails-env --prefix middleware-platform` (also runs in `staging:preflight`). Fails if hybrid graph is on or v2 is off in staging profile. Fast router proof: `npm run test:kelly:rails:golden --prefix middleware-platform`.
+
+**Phase B production-ready checklist:**
+
+| Gate | Command / evidence |
+|------|-------------------|
+| Fast tests | `npm run test:kelly:rails:golden` + `npm run test:e2e:kelly:golden-conversations` |
+| CI | `.github/workflows/ci.yml` — Kelly Rails Phase B step (Node 20.x) |
+| Live env | `node scripts/verify-kelly-rails-cloudrun-env.cjs` (gcloud) |
+| LLM + provider | `npm run test:e2e:rcm:conversation` with `KELLY_RAILS_V2=1` (includes clinical-prep stage) |
+| Gap audit | `node scripts/phase-b-production-gap-audit.cjs` |
+| Switch 3 | Patient confirmation in `post_payment`; provider sees appt + clinical prep (not session link) |
+
+Backlog: [`todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md`](../../todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md), Phase B+ [`todos/pending/KELLY_RAILS_PHASE_B_PLUS.md`](../../todos/pending/KELLY_RAILS_PHASE_B_PLUS.md).
+
 ## E2E
 
 ```bash

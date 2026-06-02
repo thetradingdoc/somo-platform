@@ -37,7 +37,41 @@ const PAYMENT_SIGNALS = [
   'copay now'
 ];
 
-const BILLING_FAQ_SIGNALS = ['receipt', 'claim status', 'refund', 'deductible', 'member id'];
+const BILLING_FAQ_SIGNALS = [
+  'receipt',
+  'claim status',
+  'refund',
+  'deductible',
+  'member id',
+  'what\'s my balance',
+  'my balance',
+  'balance on my account'
+];
+
+const EMERGENCY_SIGNALS = [
+  'chest pain',
+  'crushing chest',
+  'stroke',
+  'face drooping',
+  'slurred speech',
+  'suicidal',
+  'kill myself',
+  'can\'t breathe',
+  'difficulty breathing',
+  'severe bleeding'
+];
+
+const POST_VISIT_SIGNALS = [
+  'what happens next',
+  'what do i do now',
+  'what should i do next',
+  'confirmation',
+  'confirm my appointment',
+  'appointment details',
+  'just paid',
+  'i paid',
+  'payment went through'
+];
 
 const RECORDS_SIGNALS = ['last visit', 'my records', 'medical history', 'what did my doctor'];
 
@@ -53,6 +87,11 @@ const CLINICAL_SIGNALS = [
   'neck',
   'itch',
   'pain',
+  'hurt',
+  'hurting',
+  'ache',
+  'aching',
+  'sore',
   'symptom',
   'fever',
   'pelvic',
@@ -85,8 +124,21 @@ function defaultFlags() {
     copay_amount: null,
     payment_token: null,
     pending_human_handoff: false,
-    booking_intent_seen: false
+    booking_intent_seen: false,
+    post_visit_confirmation_pending: false,
+    payment_complete: false,
+    safety_blocked: false
   };
+}
+
+function isEmergencyUtterance(msg) {
+  const m = String(msg || '').toLowerCase();
+  if (/\b(not an emergency|no emergency)\b/.test(m)) return false;
+  return EMERGENCY_SIGNALS.some((s) => m.includes(s));
+}
+
+function isPostVisitUtterance(msg) {
+  return POST_VISIT_SIGNALS.some((s) => String(msg || '').toLowerCase().includes(s));
 }
 
 function normalizeState(input = {}) {
@@ -110,8 +162,25 @@ function routeOrchestratorLane(state = {}) {
   const msg = String(state.last_user_message || '').toLowerCase();
   const flags = state.flags || {};
 
-  if (flags.pending_human_handoff) {
+  if (flags.pending_human_handoff || flags.safety_blocked) {
     return { lane: KELLY_LANE.SUPPORT, step: 'handoff' };
+  }
+
+  if (isEmergencyUtterance(msg)) {
+    return {
+      lane: KELLY_LANE.SUPPORT,
+      step: 'handoff',
+      safety_blocked: true
+    };
+  }
+
+  if (
+    flags.appointment_id &&
+    (flags.post_visit_confirmation_pending ||
+      flags.payment_complete ||
+      isPostVisitUtterance(msg))
+  ) {
+    return { lane: KELLY_LANE.POST_PAYMENT, step: 'confirmation' };
   }
 
   if (PAYMENT_SIGNALS.some((s) => msg.includes(s))) {
@@ -138,6 +207,10 @@ function routeOrchestratorLane(state = {}) {
 
   if (flags.routine_intake_active && educationHit && !clinicalHit) {
     return { lane: KELLY_LANE.EDUCATION, step: LANE_FIRST_STEP[KELLY_LANE.EDUCATION] };
+  }
+
+  if (flags.routine_intake_active && clinicalHit) {
+    return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
   }
 
   if (clinicalHit && !flags.routine_intake_active) {
@@ -193,5 +266,9 @@ module.exports = {
   normalizeState,
   routeOrchestratorLane,
   paymentGateOpen,
-  PAYMENT_SIGNALS
+  PAYMENT_SIGNALS,
+  EMERGENCY_SIGNALS,
+  POST_VISIT_SIGNALS,
+  isEmergencyUtterance,
+  isPostVisitUtterance
 };

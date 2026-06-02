@@ -117,6 +117,10 @@ async function executeTurn(input = {}) {
     const route = routeOrchestratorLane(state);
     state.active_lane = route.lane;
     state.step = route.step;
+    if (route.safety_blocked) {
+      state.flags.safety_blocked = true;
+      state.flags.pending_human_handoff = true;
+    }
     if (route.lane === KELLY_LANE.PAYMENT && !paymentGateOpen(state.flags)) {
       if (state.flags.has_rag || state.flags.triage_complete) {
         state.active_lane = KELLY_LANE.BOOKING;
@@ -129,6 +133,10 @@ async function executeTurn(input = {}) {
     const route = routeOrchestratorLane(state);
     state.active_lane = route.lane;
     state.step = route.step;
+    if (route.safety_blocked) {
+      state.flags.safety_blocked = true;
+      state.flags.pending_human_handoff = true;
+    }
   }
 
   await promoteBookingWhenReady(state, ctx);
@@ -144,8 +152,13 @@ async function executeTurn(input = {}) {
   state.tools_used_last_turn = toolsUsed || [];
 
   if (state.step === 'done') {
-    state.active_lane = KELLY_LANE.ROUTER;
-    state.step = 'await_intent';
+    if (state.active_lane === KELLY_LANE.POST_PAYMENT) {
+      state.step = 'confirmation';
+      state.flags.post_visit_confirmation_pending = false;
+    } else {
+      state.active_lane = KELLY_LANE.ROUTER;
+      state.step = 'await_intent';
+    }
   }
 
   return { state, reply, toolsUsed: toolsUsed || [], endCall: !!endCall };

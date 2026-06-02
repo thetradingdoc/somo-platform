@@ -110,6 +110,17 @@ async function main() {
     await runNode('e2e-kelly-rcm-pay-gateway.cjs');
 
     try {
+      await runNode('e2e-kelly-rails-golden-conversations.cjs', {
+        KELLY_RAILS_V2: '1',
+        KELLY_ALLOW_HYBRID_GRAPH: '0',
+        KELLY_RAILS_ROLLOUT_PCT: '1'
+      });
+    } catch (goldenErr) {
+      console.warn('[rcm-suite] Kelly rails golden conversations failed:', goldenErr.message);
+      throw goldenErr;
+    }
+
+    try {
       await runNode('e2e-kelly-rcm-pay-conversation.cjs', {
         KELLY_RAILS_V2: '1',
         KELLY_RAILS_ROLLOUT_PCT: '1',
