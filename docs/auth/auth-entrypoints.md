@@ -47,6 +47,9 @@ This repository ships **two distinct user journeys** that share branding/UI toke
 - `VITE_LOGIN_URL` / `VITE_SIGNUP_URL` in `.env.development` — Hero **Sign in** uses `loginUrl()` (default `/login?utm_source=somo` on the dev server).
 - Production build on `:4000` uses same paths without a separate port.
 
-## API host (separate)
+## API developer signup (separate host)
 
-- Subdomain/API marketing signup may still use `middleware-platform/public/signup/index.html` — unchanged by provider `/login` work.
+- **Canonical doc:** [API_DEVELOPER_SIGNUP.md](./API_DEVELOPER_SIGNUP.md)
+- **Entry:** `https://api.callsomo.com/` (sign up / sign in) → `middleware-platform/public/signup/index.html`
+- **`customer_type`:** `api` (not the provider wizard on `callsomo.com/signup`)
+- **Completion:** `/docs` after terms + card verify

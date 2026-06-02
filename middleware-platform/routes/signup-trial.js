@@ -974,7 +974,7 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
         if (provisionGate.allowed && twilioPhoneService.isAvailable()) {
           // Build webhook URL with customer_id parameter
           const apiBaseUrl = process.env.API_BASE_URL || process.env.BASE_URL ||
-            (process.env.NODE_ENV === 'production' ? 'https://api.myskinandcare.com' : 'http://localhost:4000');
+            (process.env.NODE_ENV === 'production' ? 'https://api.callsomo.com' : 'http://localhost:4000');
           const webhookUrl = `${apiBaseUrl}/voice/incoming?customer_id=${customer.id}`;
 
           // Extract area code from customer's phone number if available
@@ -1055,10 +1055,13 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       redirectUrl = '/business/settings.html?billing=subscribe';
       console.log('✅ SaaS signup — redirect to voice plan checkout');
     } else if (hasPaymentMethod) {
-      redirectUrl = '/signup-complete';
-      console.log(`✅ Payment verified - redirecting to signup complete page`);
+      redirectUrl = customerType === 'api' ? '/docs' : '/signup-complete';
+      console.log(`✅ Payment verified - redirecting to ${redirectUrl}`);
     } else {
-      redirectUrl = `/verify-card?customer_type=${customerType}`;
+      redirectUrl =
+        customerType === 'api'
+          ? '/verify-card?customer_type=api&redirect=' + encodeURIComponent('/docs')
+          : `/verify-card?customer_type=${customerType}`;
       console.log(`✅ Payment required - redirecting to verify-card`);
     }
 

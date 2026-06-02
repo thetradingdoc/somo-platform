@@ -4,7 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/assets/brand/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png" />
     <title>Verify Payment Method - Somo API</title>
+    <link rel="stylesheet" href="/assets/css/api-somo-brand.css" />
     <style>
         * {
             margin: 0;
@@ -34,33 +38,6 @@
         .logo {
             text-align: center;
             margin-bottom: 30px;
-        }
-
-        .logo-brand {
-            font-size: 48px;
-            font-weight: 300;
-            color: #16a637;
-            line-height: 1;
-            margin-bottom: 10px;
-            letter-spacing: -2px;
-        }
-
-        .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-            color: #16a637;
-        }
-
-        .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-            color: #16a637;
-        }
-
-        .logo-brand .dot {
-            color: #16a637;
-            font-weight: 700;
         }
 
         .logo p {
@@ -265,7 +242,7 @@
     <div class="container">
         <div class="logo">
             <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+                <img src="/assets/brand/somo-logo.png" alt="Somo" width="200" height="auto" />
             </div>
             <p>Verify Payment Method</p>
         </div>
@@ -315,6 +292,15 @@
 
     <script>
         const API_BASE = window.location.origin;
+
+        function getPostVerifyRedirect() {
+            const qs = new URLSearchParams(window.location.search);
+            const target = qs.get('redirect');
+            if (target && target.startsWith('/') && !target.startsWith('//')) {
+                return target;
+            }
+            return '/docs';
+        }
         let stripe = null;
         let cardElement = null;
 
@@ -385,12 +371,8 @@
 
                         // Continue button - check customer_type for proper redirect
                         document.getElementById('continue-btn').addEventListener('click', async () => {
-                            let redirectUrl = null;
-
-                            // After payment, redirect to signup complete page
-                            // User will receive login details via email
-                            redirectUrl = '/signup-complete';
-                            console.log(`✅ Payment verified - redirecting to signup complete page`);
+                            const redirectUrl = getPostVerifyRedirect();
+                            console.log(`✅ Payment verified - redirecting to ${redirectUrl}`);
 
                             console.log(`🚀 Redirecting to: ${redirectUrl}`);
                             window.location.href = redirectUrl;
@@ -500,11 +482,7 @@
                         : `<div class="alert alert-success">✓ ${result.message || 'Payment method saved successfully!'} Redirecting...</div>`;
                     alert.innerHTML = successMsg;
                     setTimeout(async () => {
-                        // After payment, redirect to signup complete page
-                        // User will receive login details via email
-                        redirectUrl = '/signup-complete';
-                        console.log(`✅ Payment verified - redirecting to signup complete page`);
-
+                        const redirectUrl = getPostVerifyRedirect();
                         console.log(`🚀 Redirecting to: ${redirectUrl}`);
                         window.location.href = redirectUrl;
                     }, 2000);

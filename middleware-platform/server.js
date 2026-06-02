@@ -1807,12 +1807,9 @@ app.use(['/business/calendar.html', '/unified-dashboard/business/calendar.html']
 // otherwise browser requests with `credentials: 'include'` will fail
 // with a generic "Failed to fetch" error (as seen on tenant login).
 const allowedOrigins = [
-  'https://myskinandcare.com',
-  'https://www.myskinandcare.com',
-  'https://api.myskinandcare.com',
-  'https://skinandcare.com',
-  'https://www.skinandcare.com',
-  'https://api.skinandcare.com',
+  'https://callsomo.com',
+  'https://www.callsomo.com',
+  'https://api.callsomo.com',
   'http://localhost:4000',
   'http://localhost:3000',
   'http://localhost:3001',
@@ -1843,10 +1840,7 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (/^https?:\/\/([a-z0-9-]+\.)*skinandcare\.com$/i.test(origin)) {
-      return callback(null, true);
-    }
-    if (/^https?:\/\/([a-z0-9-]+\.)*myskinandcare\.com$/i.test(origin)) {
+    if (/^https?:\/\/([a-z0-9-]+\.)*callsomo\.com$/i.test(origin)) {
       return callback(null, true);
     }
     if (/^https?:\/\/([a-z0-9-]+\.)*dodgecall\.app$/i.test(origin)) {
@@ -2065,11 +2059,11 @@ app.get('/docs/*', (req, res, next) => {
   }
 });
 
-// Admin Portal - REMOVED: Admin portal should be on doclittle.site/admin, not api.doclittle.site/admin
+// Admin Portal - REMOVED: Admin portal should be on callsomo.com/admin, not api.callsomo.com/admin
 
 // ============================================
 // Domain-based Routing
-// Serve frontend for doclittle.site, API for api.doclittle.site
+// Serve frontend for callsomo.com, API for api.callsomo.com
 // ============================================
 
 // Helper function to extract subdomain from hostname
@@ -2088,11 +2082,11 @@ function getSubdomain(hostname) {
   }
 
   // For known domains, extract subdomain
-  // e.g., "tenant.doclittle.site" -> "tenant"
+  // e.g., "tenant.callsomo.com" -> "tenant"
   // e.g., "tenant.doclittle.azurewebsites.net" -> "tenant"
   if (parts.length >= 3) {
     // Check if it's a known domain
-    const knownDomains = ['myskinandcare.com', 'skinandcare.com'];
+    const knownDomains = ['callsomo.com'];
     const domain = parts.slice(-2).join('.');
 
     if (knownDomains.includes(domain)) {
@@ -2158,7 +2152,7 @@ function isDodgecallApiHostname(hostname) {
 /** Production API hostnames (split-domain + transition aliases). */
 function isProductionApiHostname(hostname) {
   const h = String(hostname || '').toLowerCase();
-  return h === 'api.myskinandcare.com' || h === 'api.skinandcare.com' || h === 'api.dodgecall.app';
+  return h === 'api.callsomo.com' || h === 'api.dodgecall.app';
 }
 
 // Root endpoint - route based on domain
@@ -2166,7 +2160,7 @@ app.get('/', (req, res) => {
   const hostname = getHostname(req);
   const subdomain = getSubdomain(hostname);
 
-  // Tenant subdomain routing (e.g., tenant.doclittle.site)
+  // Tenant subdomain routing (e.g., tenant.callsomo.com)
   if (subdomain && subdomain !== 'api' && subdomain !== 'www') {
     // Look up merchant by subdomain
     const merchant = db.getMerchantBySubdomain(subdomain);
@@ -2244,7 +2238,7 @@ app.get('/', (req, res) => {
             }
           } else {
             // Terms not accepted - redirect to terms page (MANDATORY)
-            return res.redirect('/terms?redirect=/docs');
+            return res.redirect('/terms?customer_type=api&redirect=/docs');
           }
         }
       }
@@ -2298,7 +2292,7 @@ registerStaticHosting(app, {
 });
 
 // ============================================
-// Unified Dashboard Routes (doclittle.site frontend) — host-based HTML routes below
+// Unified Dashboard Routes (callsomo.com frontend) — host-based HTML routes below
 // ============================================
 
 // Segment page for Team Kelly campaign traffic → Somo landing.
@@ -2448,9 +2442,7 @@ function clearCustomerSessionCookie(res, req) {
   const opts = { httpOnly: true, secure: isSecure, sameSite: 'lax', path: '/' };
   const cookieHost = (req.headers.host || '').toLowerCase();
   if (process.env.NODE_ENV === 'production') {
-    if (cookieHost.includes('myskinandcare.com')) opts.domain = '.myskinandcare.com';
-    else if (cookieHost.includes('skinandcare.com')) opts.domain = '.skinandcare.com';
-    else if (cookieHost.includes('doclittle.site')) opts.domain = '.doclittle.site';
+    if (cookieHost.includes('callsomo.com')) opts.domain = '.callsomo.com';
   }
   res.clearCookie('customer_session', opts);
 }
@@ -2513,8 +2505,8 @@ app.get('/signup/form', (req, res) => {
     // SaaS Platform signup/login - serve login.html
     res.sendFile(getUnifiedDashboardPath('login.html'));
   } else {
-    // API Integration signup - should redirect to api.doclittle.site
-    res.redirect('https://api.skinandcare.com');
+    // API Integration signup - should redirect to api.callsomo.com
+    res.redirect('https://api.callsomo.com');
   }
 });
 
@@ -2575,7 +2567,7 @@ app.use('/admin', (req, res, next) => {
   if (isProductionApiHostname(hostname)) {
     return res.status(404).json({
       error: 'Admin portal not available on API subdomain',
-      message: 'Please access admin portal at https://myskinandcare.com/admin'
+      message: 'Please access admin portal at https://callsomo.com/admin'
     });
   }
 
@@ -2929,8 +2921,9 @@ app.get('/terms', (req, res) => {
     return res.redirect('/?redirect=/terms');
   }
 
-  // Serve unified terms of service (includes both SaaS and API pricing)
-  res.sendFile(path.join(__dirname, 'public', 'signup', 'terms.html'));
+  const hostname = getHostname(req);
+  const termsFile = isProductionApiHostname(hostname) ? 'terms-api.html' : 'terms.html';
+  res.sendFile(path.join(__dirname, 'public', 'signup', termsFile));
 });
 
 app.get('/privacy', (req, res) => {
@@ -3066,7 +3059,7 @@ console.log('✅ FHIR integration enabled');
 // ============================================
 // Get API base URL - use production domain or localhost for development
 const API_BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL ||
-  (process.env.NODE_ENV === 'production' ? 'https://myskinandcare.com' : `http://localhost:${PORT}`);
+  (process.env.NODE_ENV === 'production' ? 'https://callsomo.com' : `http://localhost:${PORT}`);
 
 const retellHandler = new RetellWebSocketHandler(db, {
   apiBaseUrl: API_BASE_URL
@@ -4534,7 +4527,7 @@ app.get('/auth/google/calendar/callback', async (req, res) => {
     process.env.CALENDAR_RETURN_URL ||
     (req.headers.origin
       ? `${req.headers.origin.replace(/\/$/, '')}/business/settings.html`
-      : 'https://myskinandcare.com/unified-dashboard/business/settings.html');
+      : 'https://callsomo.com/business/settings.html');
 
   if (error) {
     console.error('❌ Google Calendar OAuth error:', error);
@@ -7637,6 +7630,23 @@ app.get('/api/provider/case-report', async (req, res) => {
       return res.json({ success: true, case_report: null });
     }
 
+    let caseSummary = null;
+    if (appointment?.id) {
+      try {
+        const csRow = db.db
+          .prepare('SELECT summary_json, session_id FROM case_summaries WHERE appointment_id = ? LIMIT 1')
+          .get(appointment.id);
+        if (csRow?.summary_json) {
+          caseSummary =
+            typeof csRow.summary_json === 'string' ? JSON.parse(csRow.summary_json) : csRow.summary_json;
+          if (!caseRecord?.session_id && csRow.session_id) {
+            caseRecord = caseRecord || {};
+            caseRecord.session_id = csRow.session_id;
+          }
+        }
+      } catch (_) {}
+    }
+
     let patientSummary = '';
     const patientId = caseRecord?.patient_id || appointment?.patient_id;
     if (patientId && db.getFHIRPatient) {
@@ -7649,7 +7659,18 @@ app.get('/api/provider/case-report', async (req, res) => {
     }
     if (!patientSummary && appointment) patientSummary = appointment.patient_name || '';
 
-    const opqrst = caseRecord?.opqrst ? (typeof caseRecord.opqrst === 'string' ? caseRecord.opqrst : JSON.stringify(caseRecord.opqrst)) : '';
+    let opqrst = caseRecord?.opqrst
+      ? typeof caseRecord.opqrst === 'string'
+        ? caseRecord.opqrst
+        : JSON.stringify(caseRecord.opqrst)
+      : '';
+    if (!opqrst && caseSummary?.opqrst) {
+      opqrst =
+        typeof caseSummary.opqrst === 'string' ? caseSummary.opqrst : JSON.stringify(caseSummary.opqrst);
+    }
+    if (!opqrst && caseSummary?.chief_complaint) {
+      opqrst = String(caseSummary.chief_complaint);
+    }
     let suggestedIcd10 = [];
     if (caseRecord?.suggested_icd10) {
       try {
@@ -7670,7 +7691,9 @@ app.get('/api/provider/case-report', async (req, res) => {
         case_number: caseRecord?.case_number || null,
         patient_summary: patientSummary,
         opqrst: opqrst || null,
-        suggested_icd10: suggestedIcd10
+        suggested_icd10: suggestedIcd10,
+        case_summary: caseSummary || null,
+        triage_session_id: caseRecord?.session_id || caseSummary?.session_id || null
       }
     });
   } catch (e) {

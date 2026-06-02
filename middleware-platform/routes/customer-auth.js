@@ -147,7 +147,7 @@ router.post('/customers/forgot-password', rateLimiter, async (req, res) => {
       }
     }
 
-    const baseDomain = process.env.BASE_DOMAIN || 'myskinandcare.com';
+    const baseDomain = process.env.BASE_DOMAIN || 'callsomo.com';
     const resetUrl = subdomain
       ? `https://${subdomain}.${baseDomain}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
       : `${process.env.BASE_URL || 'http://localhost:4000'}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
@@ -540,15 +540,37 @@ router.post('/signin/verify', rateLimiter, async (req, res) => {
     const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
     const customerType = customer.customer_type || 'saas'; // Default to saas
 
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase()
+      .replace(/:\d+$/, '');
+    const onApiHost = host === 'api.callsomo.com' || host === 'api.dodgecall.app';
+
     let nextStep = customerType === 'saas' ? 'dashboard' : 'docs';
     let redirect = customerType === 'saas' ? SAAS_PORTAL_HOME : '/docs';
+    if (customerType === 'saas' && onApiHost) {
+      redirect = 'https://callsomo.com/login';
+    }
 
     if (!termsAccepted) {
       nextStep = 'terms';
-      redirect = '/terms';
+      if (customerType === 'api') {
+        redirect = '/terms?customer_type=api&redirect=/docs';
+      } else if (onApiHost) {
+        redirect = 'https://callsomo.com/signup';
+      } else {
+        redirect = '/terms';
+      }
     } else if (!customer.card_verified) {
       nextStep = 'verify_card';
-      redirect = '/verify-card';
+      if (customerType === 'api') {
+        redirect = '/verify-card?customer_type=api&redirect=/docs';
+      } else if (onApiHost) {
+        redirect = 'https://callsomo.com/login';
+      } else {
+        redirect = '/verify-card';
+      }
     }
 
     res.json({

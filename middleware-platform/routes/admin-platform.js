@@ -5,6 +5,7 @@ const {
   handleAdminLogout,
   adminSessionStatus,
 } = require('../middleware/admin-auth');
+const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
 
 function registerAdminPlatformRoutes(app, deps) {
   const {
@@ -304,7 +305,7 @@ function createMerchantForClinic(name) {
     id: merchantId,
     name: name || merchantId,
     api_key: placeholderKey,
-    api_url: process.env.API_BASE_URL || 'https://api.skinandcare.com',
+    api_url: process.env.API_BASE_URL || 'https://api.callsomo.com',
     webhook_url: null,
     enabled_platforms: JSON.stringify(['voice']),
     status: 'active'
@@ -2822,7 +2823,9 @@ app.get('/api/admin/appointments/:id/clinical-prep', async (req, res) => {
       }
     } catch (_) {}
 
-    const triageSessionId = caseSummaryRow?.session_id || null;
+    const { resolveTriageSessionIdForAppointment } = require('../services/clinical-prep-session-resolve');
+    const triageSessionId =
+      caseSummaryRow?.session_id || resolveTriageSessionIdForAppointment(appointmentId, appt);
     const triage = triageSessionId && db.getTriageSession ? db.getTriageSession(triageSessionId) : null;
     const triageMedia = triageSessionId && db.getTriageMediaForSession ? (db.getTriageMediaForSession(triageSessionId) || []) : [];
     const phiAllowed = _canViewClinicalPhi(req);
@@ -2962,6 +2965,9 @@ app.get('/api/admin/appointments/:id/clinical-prep', async (req, res) => {
 
 app.get('/api/admin/appointments', async (req, res) => {
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7741/ingest/60c91aef-af1c-44d6-9853-4dc7e0e1d879',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'965a10'},body:JSON.stringify({sessionId:'965a10',location:'admin-platform.js:appointments',message:'GET /api/admin/appointments',data:{hasResolver:typeof resolveClinicIdFromRequest,date:req.query.date},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
     let clinicId = resolveClinicIdFromRequest(req);
     if (!clinicId && db.db) {
       try {
@@ -3302,7 +3308,7 @@ app.post('/api/admin/appointments/:id/send-video-link', async (req, res) => {
     if (!phone || !phone.trim()) {
       return res.status(400).json({ success: false, error: 'Patient has no phone number on file' });
     }
-    const baseUrl = process.env.DASHBOARD_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || `https://${req.headers.host || 'myskinandcare.com'}`;
+    const baseUrl = process.env.DASHBOARD_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || `https://${req.headers.host || 'callsomo.com'}`;
     const roomName = appointment.video_room_name || `appt-${appointmentId}`;
     const videoUrl = `${baseUrl.replace(/\/$/, '')}/patients/video-call.html?room=${encodeURIComponent(roomName)}`;
     const message = `Your telehealth video visit: ${videoUrl}\n\nClick to join when it\'s time for your appointment.`;

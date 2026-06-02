@@ -1,19 +1,21 @@
 # Canonical documentation map
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-01
 
 Use this table to avoid maintaining the same story in multiple folders. **Edit this file** when you add a new major runtime surface or split ownership.
 
 | Topic | Read first | Also useful (do not duplicate) |
 |-------|------------|----------------------------------|
 | **Repo overview & contributing** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
-| **Deploy / CI / GCP** | [`docs/deployment/README.md`](../deployment/README.md) | [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md), [`docs/runbooks/PROD_MONITORING_WORKFLOWS.md`](../runbooks/PROD_MONITORING_WORKFLOWS.md) |
+| **Deploy / CI / GCP** | [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md) | [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md), [`docs/deployment/README.md`](../deployment/README.md) (historical bulk), [`docs/runbooks/PROD_MONITORING_WORKFLOWS.md`](../runbooks/PROD_MONITORING_WORKFLOWS.md) |
 | **Environment variables** | [`docs/setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md`](../setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md) | [`docs/setup/README.md`](../setup/README.md), [`somo-landing/.env.development`](../../unified-dashboard/somo-landing/.env.development) |
+| **Logo, icon, favicon** | [`docs/Brand/LOGO_AND_ICON_SSOT.md`](../Brand/LOGO_AND_ICON_SSOT.md) | [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md), `npm run brand:sync` |
 | **Marketing UI / palette (Image 1)** | [`docs/design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md) | [`deployment/SOMO_LANDING.md`](../deployment/SOMO_LANDING.md), [`SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) |
 | **Surface ownership (code vs docs)** | [`docs/meta/SURFACE_OWNERSHIP_MAP.md`](./SURFACE_OWNERSHIP_MAP.md) | This map |
 | **HTTP routes & static SPA mounts** | [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md), [`docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) | [`middleware-platform/server.js`](../../middleware-platform/server.js) (~11k compose), [`middleware-platform/routes/`](../../middleware-platform/routes/), [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js), [`bootstrap/static-hosting.js`](../../middleware-platform/bootstrap/static-hosting.js) |
 | **Codebase review roadmap (P0/P1/P2)** | [`docs/architecture/CODEBASE_REVIEW_ROADMAP.md`](../architecture/CODEBASE_REVIEW_ROADMAP.md) | [`docs/testing/STAGING_DIAGNOSTIC_RUNBOOK.md`](../testing/STAGING_DIAGNOSTIC_RUNBOOK.md), [`docs/Database/SOMO_FOUNDATION_RUNBOOK.md`](../Database/SOMO_FOUNDATION_RUNBOOK.md) |
 | **PO surface scorecard (RAG)** | [`docs/meta/PO_SURFACE_SCORECARD.md`](../meta/PO_SURFACE_SCORECARD.md) | [`docs/STAGING_PROFILE.md`](../STAGING_PROFILE.md) |
+| **Kelly agentic rails (target + build plan)** | [`docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`](../architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md) | **V2 as-built:** [`kelly_rails_v2_as_built.md`](../architecture/kelly_rails_v2_as_built.md), [`services/kelly-rails/`](../../middleware-platform/services/kelly-rails/), [`kelly-turn-resolver.js`](../../middleware-platform/services/kelly-turn-resolver.js) |
 | **Kelly triage (patient + landing)** | [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js) | [`routes/patient-booking.js`](../../middleware-platform/routes/patient-booking.js), [`routes/public-landing-assistant.js`](../../middleware-platform/routes/public-landing-assistant.js) |
 | **Medicare plan search (payor)** | [`docs/Payor/README.md`](../Payor/README.md) | [`middleware-platform/routes/public-plan-search.js`](../../middleware-platform/routes/public-plan-search.js) |
 | **Medicaid provider directory & public search** | [`docs/Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md`](../Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md) | [`middleware-platform/services/provider-search-service.js`](../../middleware-platform/services/provider-search-service.js), [`middleware-platform/server.js`](../../middleware-platform/server.js) (`/api/public/providers` mount) |
@@ -30,4 +32,4 @@ Use this table to avoid maintaining the same story in multiple folders. **Edit t
 
 ## Middleware consolidated README
 
-Voice/commerce LLM stack (`KellyAgentService`, `KELLY_*` env vars), payments, Retell, LangGraph notes, and long-form runbooks live in one file: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Use its **table of contents** for anchors; avoid copying sections elsewhere. Customer-facing naming is **Skin & Care** / **Doctor Little LLC** per [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md).
+Voice/commerce LLM stack (`KellyAgentService`, `KELLY_*` env vars), payments, Retell, LangGraph notes, and long-form runbooks live in one file: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Use its **table of contents** for anchors; avoid copying sections elsewhere. Customer-facing naming is **Somo** per [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md).

@@ -130,7 +130,7 @@ With `middleware-platform` running (`npm start`), visit:
 | Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
 | API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |
 
-Production hosts: `myskinandcare.com`, `api.skinandcare.com` (GCP). See `docs/deployment/README.md`.
+Production hosts: `callsomo.com` (UI), `api.callsomo.com` (API). See [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](docs/runbooks/CALLSOMO_GCP_CUTOVER.md).
 
 > The `/admin` route now provides a lightweight launcher linking to the clinic, insurer, and patient portals plus the API hub.
 
@@ -198,8 +198,8 @@ EPIC_CLIENT_ID=your_epic_client_id
 EPIC_REDIRECT_URI=your_redirect_uri
 
 # Base URL (for production)
-API_BASE_URL=https://api.skinandcare.com
-BASE_URL=https://api.skinandcare.com
+API_BASE_URL=https://api.callsomo.com
+BASE_URL=https://api.callsomo.com
 # Note: API_BASE_URL takes priority over BASE_URL
 # For local development, these can be omitted (defaults to localhost)
 
