@@ -6,7 +6,7 @@
  * 2. Platform Escrow → Provider Wallet (97% - providerAmount)
  * 3. Platform Escrow → Revenue Wallet (3% - platform fee)
  * 
- * This enables DocLittle to:
+ * This enables Somo to:
  * - Hold funds in escrow for instant settlement
  * - Extract platform fee automatically
  * - Provide liquidity between insurer approval and provider payment
@@ -419,7 +419,7 @@ async function ensurePlatformWallets() {
           walletSetId: walletSetId,
           entityType: 'platform',
           entityId: 'revenue',
-          description: 'DocLittle Revenue Account'
+          description: 'Somo Revenue Account'
         });
         if (revenueResult.success) {
           const accountId = `circle-account-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;

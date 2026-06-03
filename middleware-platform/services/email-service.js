@@ -24,7 +24,13 @@ try {
   azureEmailClient = null;
 }
 
+const SomoEmail = require('../lib/somo-email-layout');
+
 class EmailService {
+  /** @private Somo-branded HTML wrapper — see lib/somo-email-layout.js */
+  static _somoLayout(title, subtitle, bodyHtml, opts = {}) {
+    return SomoEmail.layout({ title, subtitle, bodyHtml, ...opts });
+  }
   /**
    * Check if Azure Communication Services is configured
    */
@@ -326,68 +332,24 @@ class EmailService {
       ? `<p>You can upload documents (labs, images) before your visit using this link: <a href="${uploadLink}">Upload documents</a>.</p>`
       : '';
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #0891b2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .appointment-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #0891b2; }
-          .detail-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #666; }
-          .button { display: inline-block; padding: 12px 24px; background: #0891b2; color: white; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
-          .button:hover { background: #0e7490; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>📅 Appointment Confirmed</h1>
-          </div>
-          <div class="content">
-            <p>Dear ${appointment.patient_name},</p>
-            <p>Your appointment has been successfully scheduled!</p>
-            
-            <div class="appointment-details">
-              <div class="detail-row">
-                <span class="label">Date & Time:</span> ${dateTime}
-              </div>
-              <div class="detail-row">
-                <span class="label">Type:</span> ${appointment.appointment_type || 'Mental Health Consultation'}
-              </div>
-              <div class="detail-row">
-                <span class="label">Duration:</span> ${appointment.duration_minutes || 50} minutes
-              </div>
-              <div class="detail-row">
-                <span class="label">Provider:</span> ${appointment.provider || 'Somo Mental Health Team'}
-              </div>
-              ${appointment.calendar_link ? `
-              <div class="detail-row">
-                <a href="${appointment.calendar_link}" class="button">📅 Add to Calendar</a>
-              </div>
-              ` : ''}
-            </div>
-
-            <p><strong>Confirmation Number:</strong> ${confirmationNumber}</p>
-            ${uploadBlock}
-            <p>You will receive a reminder email 1 hour before your appointment.</p>
-            
-            <p>If you need to reschedule or cancel, please contact us or use the link in your reminder email.</p>
-            
-            <p>We look forward to seeing you!</p>
-            <p>Best regards,<br>Somo Mental Health Team</p>
-          </div>
-          <div class="footer">
-            <p>This is an automated confirmation. Please do not reply to this email.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const calBtn = appointment.calendar_link
+      ? `<p style="text-align:center;margin-top:16px;">${SomoEmail.button(appointment.calendar_link, 'Add to calendar')}</p>`
+      : '';
+    const html = this._somoLayout('Appointment confirmed', dateTime, `
+      <h2>Hi ${SomoEmail.escapeHtml(appointment.patient_name)},</h2>
+      <p>Your appointment is scheduled.</p>
+      ${SomoEmail.infoRows([
+        { label: 'Date & time', value: dateTime },
+        { label: 'Type', value: appointment.appointment_type || 'Consultation' },
+        { label: 'Duration', value: `${appointment.duration_minutes || 50} minutes` },
+        { label: 'Provider', value: appointment.provider || 'Somo care team' },
+        { label: 'Confirmation', value: confirmationNumber }
+      ])}
+      ${uploadBlock}
+      ${calBtn}
+      <p>You will receive a reminder about one hour before your visit.</p>
+      <p>Best regards,<br>The Somo team</p>
+    `, { preheader: `Confirmed: ${dateTime}` });
 
     return await this.sendEmail({
       to: appointment.patient_email,
@@ -419,66 +381,21 @@ class EmailService {
       ? `<p><strong>Join here:</strong> <a href="${joinLink}">${joinLink}</a></p>`
       : '';
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #f59e0b; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .appointment-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #f59e0b; }
-          .detail-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #666; }
-          .button { display: inline-block; padding: 12px 24px; color: white; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
-          .button-primary { background: #0891b2; }
-          .button-primary:hover { background: #0e7490; }
-          .button-danger { background: #dc2626; }
-          .button-danger:hover { background: #b91c1c; }
-          .button-warning { background: #f59e0b; }
-          .button-warning:hover { background: #d97706; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>⏰ Appointment Reminder</h1>
-          </div>
-          <div class="content">
-            <p>Dear ${appointment.patient_name},</p>
-            <p><strong>Your appointment is in 1 hour.</strong></p>
-            ${joinBlock}
-            <div class="appointment-details">
-              <div class="detail-row">
-                <span class="label">Date & Time:</span> ${dateTime}
-              </div>
-              <div class="detail-row">
-                <span class="label">Type:</span> ${appointment.appointment_type || 'Mental Health Consultation'}
-              </div>
-              <div class="detail-row">
-                <span class="label">Provider:</span> ${appointment.provider || 'Somo Mental Health Team'}
-              </div>
-            </div>
-
-            <p>Need to make changes?</p>
-            <p>
-              <a href="${rescheduleLink}" class="button button-warning">🔄 Reschedule</a>
-              <a href="${cancelLink}" class="button button-danger">❌ Cancel</a>
-            </p>
-            
-            <p>We look forward to seeing you soon!</p>
-            <p>Best regards,<br>Somo Mental Health Team</p>
-          </div>
-          <div class="footer">
-            <p>Confirmation Number: ${appointment.id}</p>
-            <p>This is an automated reminder. Please do not reply to this email.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const html = this._somoLayout('Appointment in 1 hour', dateTime, `
+      <h2>Hi ${SomoEmail.escapeHtml(appointment.patient_name)},</h2>
+      <p><strong>Your appointment starts in about one hour.</strong></p>
+      ${joinBlock}
+      ${SomoEmail.infoRows([
+        { label: 'Date & time', value: dateTime },
+        { label: 'Type', value: appointment.appointment_type || 'Consultation' },
+        { label: 'Provider', value: appointment.provider || 'Somo care team' }
+      ])}
+      <p style="text-align:center;">
+        ${SomoEmail.button(rescheduleLink, 'Reschedule', 'warning')}
+        ${SomoEmail.button(cancelLink, 'Cancel', 'danger')}
+      </p>
+      <p>Best regards,<br>The Somo team</p>
+    `, { preheader: `Reminder: ${dateTime}` });
 
     return await this.sendEmail({
       to: appointment.patient_email,
@@ -507,44 +424,18 @@ class EmailService {
       ? `<p>Upload documents before your visit: <a href="${uploadLink}">${uploadLink}</a></p>`
       : '';
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #0891b2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .appointment-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #0891b2; }
-          .detail-row { margin: 10px 0; }
-          .label { font-weight: bold; color: #666; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>📅 Appointment Tomorrow</h1>
-          </div>
-          <div class="content">
-            <p>Dear ${appointment.patient_name},</p>
-            <p><strong>Reminder: Your appointment is tomorrow at ${dateTime}</strong></p>
-            ${uploadBlock}
-            <div class="appointment-details">
-              <div class="detail-row"><span class="label">Type:</span> ${appointment.appointment_type || 'Mental Health Consultation'}</div>
-              <div class="detail-row"><span class="label">Provider:</span> ${appointment.provider || 'Somo Mental Health Team'}</div>
-            </div>
-            <p>You will receive another reminder 1 hour before your appointment.</p>
-            <p>Best regards,<br>Somo Mental Health Team</p>
-          </div>
-          <div class="footer">
-            <p>Confirmation: ${appointment.id}</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const html = this._somoLayout('Appointment tomorrow', dateTime, `
+      <h2>Hi ${SomoEmail.escapeHtml(appointment.patient_name)},</h2>
+      <p><strong>Your appointment is tomorrow.</strong></p>
+      ${uploadBlock}
+      ${SomoEmail.infoRows([
+        { label: 'When', value: dateTime },
+        { label: 'Type', value: appointment.appointment_type || 'Consultation' },
+        { label: 'Provider', value: appointment.provider || 'Somo care team' }
+      ])}
+      <p>We will send another reminder about one hour before your visit.</p>
+      <p>Best regards,<br>The Somo team</p>
+    `);
 
     return await this.sendEmail({
       to: appointment.patient_email,
@@ -557,50 +448,15 @@ class EmailService {
    * Send checkout verification code to email
    */
   static async sendCheckoutVerificationCode(email, code) {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #0891b2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .code-box { background: white; padding: 20px; margin: 20px 0; text-align: center; border-radius: 8px; border: 2px dashed #0891b2; }
-          .code { font-size: 32px; font-weight: bold; color: #0891b2; letter-spacing: 8px; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🔐 Verification Code</h1>
-          </div>
-          <div class="content">
-            <p>Hello,</p>
-            <p>You requested a payment link. Please use the verification code below to confirm your identity:</p>
-            
-            <div class="code-box">
-              <div class="code">${code}</div>
-            </div>
-            
-            <p>This code will expire in 10 minutes.</p>
-            <p>If you didn't request this code, please ignore this email.</p>
-            
-            <p>Best regards,<br>Somo Security Team</p>
-          </div>
-          <div class="footer">
-            <p>This is an automated email. Please do not reply.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
+    const html = this._somoLayout('Verification code', 'Checkout', `
+      <p>Enter this code to continue checkout:</p>
+      ${SomoEmail.codeBox(code)}
+      <p><strong>Expires in 15 minutes.</strong></p>
+    `, { preheader: `Code: ${code}` });
     return await this.sendEmail({
       to: email,
       subject: 'Your Verification Code',
-      html: html
+      html
     });
   }
 
@@ -608,56 +464,17 @@ class EmailService {
    * Send patient portal verification code
    */
   static async sendPatientVerificationCode(email, code) {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
-          .content { background: #f9f9f9; padding: 30px 20px; border-radius: 0 0 8px 8px; }
-          .code-box { background: white; padding: 30px; margin: 20px 0; text-align: center; border-radius: 8px; border: 2px solid #1e40af; }
-          .code { font-size: 36px; font-weight: 700; color: #1e40af; letter-spacing: 12px; font-family: 'Courier New', monospace; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-          .brand { font-size: 32px; font-weight: 800; letter-spacing: -2px; font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-          .tagline { margin-top: 6px; font-size: 13px; opacity: 0.9; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <div class="brand" style="margin-bottom: 10px;">
-              Consʌlt
-            </div>
-            <h1>🔐 Patient Portal Verification</h1>
-          </div>
-          <div class="content">
-            <p>Hello,</p>
-            <p>You requested to sign in to your Consult Patient Portal. Please use the verification code below:</p>
-            
-            <div class="code-box">
-              <div class="code">${code}</div>
-            </div>
-            
-            <p><strong>This code will expire in 10 minutes.</strong></p>
-            <p>If you didn't request this code, please ignore this email or contact support if you have concerns.</p>
-            
-            <p>Best regards,<br>Consult Patient Portal Team</p>
-          </div>
-          <div class="footer">
-            <p>This is an automated email. Please do not reply.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const html = this._somoLayout('Patient portal sign-in', 'Verification code', `
+      <p>Use this code to sign in to your Somo patient portal:</p>
+      ${SomoEmail.codeBox(code)}
+      <p><strong>Expires in 10 minutes.</strong></p>
+      <p>If you did not request this code, you can ignore this email.</p>
+    `, { preheader: `Code: ${code}` });
 
     return await this.sendEmail({
       to: email,
-      subject: 'Consult Patient Portal - Verification Code',
-      html: html
+      subject: 'Somo — Patient portal verification code',
+      html
     });
   }
 
@@ -665,58 +482,24 @@ class EmailService {
    * Send payment link email after verification (Task 37: include appointment details)
    */
   static async sendPaymentLinkEmail(email, paymentLink, order) {
-    const aptDetails = (order?.appointment_date || order?.appointment_type || order?.appointment_time)
-      ? `<div><strong>Appointment:</strong> ${order.appointment_type || 'Visit'}${order.appointment_date ? ` - ${order.appointment_date}${order.appointment_time ? ' at ' + order.appointment_time : ''}` : ''}</div>`
-      : '';
+    const aptLine =
+      order?.appointment_date || order?.appointment_type || order?.appointment_time
+        ? `${order.appointment_type || 'Visit'}${order.appointment_date ? ` — ${order.appointment_date}${order.appointment_time ? ` at ${order.appointment_time}` : ''}` : ''}`
+        : '';
     const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://api.callsomo.com';
     const appointmentsUrl = baseUrl.replace(/\/$/, '') + '/patients/appointments.html';
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #16a34a; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .order { background: white; padding: 16px; border-radius: 8px; border-left: 4px solid #16a34a; margin-bottom: 16px; }
-          .button { display: inline-block; padding: 12px 24px; background: #16a34a; color: white; text-decoration: none; border-radius: 6px; margin: 10px 0; }
-          .button:hover { background: #15803d; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>💳 Complete Your Payment</h1>
-          </div>
-          <div class="content">
-            <p>Hello,</p>
-            <p>Your email has been verified. Please use the secure link below to complete your payment.</p>
-            <div class="order">
-              <div><strong>Product:</strong> ${order?.product_name || 'Service'}</div>
-              ${aptDetails}
-              <div><strong>Amount:</strong> $${(order?.amount || 0).toFixed(2)}</div>
-            </div>
-            <p>
-              <a class="button" href="${paymentLink}">Pay Now</a>
-            </p>
-            <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-            <p>${paymentLink}</p>
-            <p style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-              <strong>Next steps:</strong> After payment, you can view your appointment at
-              <a href="${appointmentsUrl}" style="color: #16a34a;">My Appointments</a>.
-            </p>
-            <p>Thank you for choosing Somo.</p>
-          </div>
-          <div class="footer">
-            <p>This is a secure payment link. Do not share it with anyone.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const html = this._somoLayout('Complete your payment', 'Secure checkout', `
+      <p>Your email is verified. Use the button below to pay securely.</p>
+      ${SomoEmail.infoRows([
+        { label: 'Product', value: order?.product_name || 'Service' },
+        ...(aptLine ? [{ label: 'Appointment', value: aptLine }] : []),
+        { label: 'Amount', value: `$${(order?.amount || 0).toFixed(2)}` }
+      ])}
+      <p style="text-align:center;">${SomoEmail.button(paymentLink, 'Pay now')}</p>
+      <p style="word-break:break-all;font-size:14px;">${SomoEmail.escapeHtml(paymentLink)}</p>
+      <p>After payment, view your appointment at <a href="${appointmentsUrl}">My appointments</a>.</p>
+    `, { preheader: 'Complete payment for your Somo visit' });
 
     const result = await this.sendEmail({
       to: email,
@@ -976,9 +759,9 @@ class EmailService {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #1e40af; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .header { background: #16a637; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
           .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .claim-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #1e40af; }
+          .claim-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #16a637; }
           .detail-row { margin: 10px 0; }
           .label { font-weight: bold; color: #666; }
           .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
@@ -1143,155 +926,18 @@ class EmailService {
    * Send email verification code
    */
   static async sendVerificationCode(email, code, name) {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif; 
-            line-height: 1.6; 
-            color: #1e293b; 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f8fafc;
-          }
-          .container { 
-            max-width: 600px; 
-            margin: 0 auto; 
-            padding: 20px; 
-          }
-          .email-wrapper {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          }
-          .header { 
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
-            color: white; 
-            padding: 40px 30px; 
-            text-align: center; 
-          }
-          .logo-brand {
-            font-size: 48px;
-            font-weight: 300;
-            line-height: 1;
-            margin-bottom: 15px;
-            letter-spacing: -2px;
-          }
-          .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-          }
-          .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-          }
-          .logo-brand .dot {
-            font-weight: 700;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-            margin-top: 10px;
-          }
-          .header p {
-            margin: 5px 0 0 0;
-            font-size: 16px;
-            opacity: 0.95;
-          }
-          .content { 
-            background: white; 
-            padding: 40px 30px; 
-          }
-          .content h2 {
-            color: #1e293b;
-            font-size: 20px;
-            margin: 0 0 15px 0;
-            font-weight: 600;
-          }
-          .content p {
-            color: #64748b;
-            font-size: 16px;
-            margin: 15px 0;
-            line-height: 1.6;
-          }
-          .code-box {
-            background: #f8fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 30px;
-            margin: 30px 0;
-            text-align: center;
-          }
-          .code { 
-            color: #1e40af; 
-            font-size: 36px; 
-            font-weight: 700; 
-            letter-spacing: 12px; 
-            font-family: 'Courier New', monospace;
-            margin: 0;
-            display: inline-block;
-          }
-          .footer { 
-            text-align: center; 
-            margin-top: 30px; 
-            padding-top: 30px;
-            border-top: 1px solid #e2e8f0;
-            color: #64748b; 
-            font-size: 14px; 
-          }
-          .footer a {
-            color: #1e40af;
-            text-decoration: none;
-          }
-          .footer a:hover {
-            text-decoration: underline;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="email-wrapper">
-            <div class="header">
-              <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
-              </div>
-              <p>Verify Your Email</p>
-            </div>
-            <div class="content">
-              <h2>Hi ${name || 'there'},</h2>
-              <p>Thank you for signing up for Somo API! Please use the verification code below to verify your email address:</p>
-              
-              <div class="code-box">
-                <div class="code">${code}</div>
-              </div>
-              
-              <p><strong>This code will expire in 15 minutes.</strong></p>
-              
-              <p>If you didn't request this code, please ignore this email or contact support if you have concerns.</p>
-              
-              <div class="footer">
-                <p>This is an automated message from Somo API.</p>
-                <p>Visit us at <a href="https://api.callsomo.com">api.callsomo.com</a></p>
-                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const html = this._somoLayout('Verify your email', 'Somo API', `
+      <h2>Hi ${SomoEmail.escapeHtml(name) || 'there'},</h2>
+      <p>Thanks for signing up. Use this code to verify your email:</p>
+      ${SomoEmail.codeBox(code)}
+      <p><strong>Expires in 15 minutes.</strong></p>
+      <p>If you did not request this, you can ignore this email.</p>
+    `, { preheader: `Verification code: ${code}` });
 
     return await this.sendEmail({
       to: email,
-      subject: 'Somo API - Verify Your Email',
-      html: html
+      subject: 'Somo — Verify your email',
+      html
     });
   }
 
@@ -1321,242 +967,24 @@ class EmailService {
       })
       : null;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { 
-            font-family: Arial, sans-serif; 
-            line-height: 1.6; 
-            color: #333; 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f8fafc;
-          }
-          .container { 
-            max-width: 600px; 
-            margin: 0 auto; 
-            padding: 20px; 
-          }
-          .email-wrapper {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          }
-          .header { 
-            background: linear-gradient(135deg, #f59e0b 0%, #fb923c 100%); 
-            color: white; 
-            padding: 40px 30px; 
-            text-align: center; 
-          }
-          .logo-brand {
-            font-size: 48px;
-            font-weight: 300;
-            line-height: 1;
-            margin-bottom: 15px;
-            letter-spacing: -2px;
-          }
-          .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-          }
-          .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-          }
-          .header h1 {
-            margin: 15px 0 5px 0;
-            font-size: 28px;
-            font-weight: 700;
-          }
-          .header .subtitle {
-            margin: 0;
-            opacity: 0.95;
-            font-size: 16px;
-          }
-          .content { 
-            background: #f9f9f9; 
-            padding: 40px 30px; 
-          }
-          .promotion-box {
-            background: white;
-            border-radius: 8px;
-            padding: 30px;
-            margin: 25px 0;
-            border-left: 4px solid #f59e0b;
-            text-align: center;
-          }
-          .discount-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #f59e0b 0%, #fb923c 100%);
-            color: white;
-            font-size: 48px;
-            font-weight: 700;
-            padding: 20px 40px;
-            border-radius: 12px;
-            margin: 20px 0;
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-          }
-          .promotion-name {
-            font-size: 24px;
-            font-weight: 700;
-            color: #1e293b;
-            margin: 20px 0 10px 0;
-          }
-          .promotion-description {
-            color: #64748b;
-            font-size: 16px;
-            line-height: 1.6;
-            margin: 15px 0;
-          }
-          .promotion-code {
-            background: #f8fafc;
-            border: 2px dashed #f59e0b;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-            display: inline-block;
-          }
-          .promotion-code-label {
-            color: #64748b;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 5px;
-          }
-          .promotion-code-value {
-            color: #1e293b;
-            font-size: 24px;
-            font-weight: 700;
-            font-family: 'Courier New', monospace;
-            letter-spacing: 2px;
-          }
-          .promotion-details {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 4px solid #f59e0b;
-          }
-          .detail-row {
-            margin: 12px 0;
-            display: flex;
-            justify-content: space-between;
-          }
-          .detail-label {
-            font-weight: 600;
-            color: #666;
-          }
-          .detail-value {
-            color: #1e293b;
-            font-weight: 500;
-          }
-          .button { 
-            display: inline-block; 
-            padding: 14px 32px; 
-            background: #f59e0b; 
-            color: white; 
-            text-decoration: none; 
-            border-radius: 8px; 
-            margin: 20px 0;
-            font-weight: 600;
-            font-size: 16px;
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-          }
-          .button:hover { 
-            background: #d97706; 
-          }
-          .footer { 
-            text-align: center; 
-            margin-top: 30px; 
-            padding-top: 30px;
-            border-top: 1px solid #e2e8f0;
-            color: #64748b; 
-            font-size: 14px; 
-          }
-          .footer a {
-            color: #1e40af;
-            text-decoration: none;
-          }
-          .footer a:hover {
-            text-decoration: underline;
-          }
-          .urgency-text {
-            color: #dc2626;
-            font-weight: 600;
-            font-size: 14px;
-            margin-top: 15px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="email-wrapper">
-            <div class="header">
-              <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span>
-              </div>
-              <h1>🎉 Special Promotion!</h1>
-              <p class="subtitle">${merchantName}</p>
-            </div>
-            <div class="content">
-              <p>Hi ${customerName || 'there'},</p>
-              <p>We have an exciting promotion just for you!</p>
-              
-              <div class="promotion-box">
-                <div class="discount-badge">${discountText}</div>
-                <div class="promotion-name">${promotion.name || 'Special Offer'}</div>
-                ${promotion.description ? `
-                <div class="promotion-description">${promotion.description}</div>
-                ` : ''}
-                ${promotion.code ? `
-                <div class="promotion-code">
-                  <div class="promotion-code-label">Use Code</div>
-                  <div class="promotion-code-value">${promotion.code}</div>
-                </div>
-                ` : ''}
-              </div>
-
-              ${promotion.end_date ? `
-              <div class="promotion-details">
-                <div class="detail-row">
-                  <span class="detail-label">Valid Until:</span>
-                  <span class="detail-value">${endDateText}</span>
-                </div>
-              </div>
-              <div class="urgency-text">⏰ Don't miss out! This offer expires soon.</div>
-              ` : ''}
-
-              <p style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.BASE_URL || 'https://api.callsomo.com'}/storefront" class="button">Shop Now</a>
-              </p>
-
-              <p>Call us or visit our store to take advantage of this special offer!</p>
-              
-              <p>Thank you for being a valued customer!</p>
-              <p>Best regards,<br>${merchantName} Team</p>
-              
-              <div class="footer">
-                <p>This is a promotional email from ${merchantName}.</p>
-                <p>Visit us at <a href="${process.env.BASE_URL || 'https://api.callsomo.com'}">${process.env.BASE_URL || 'api.callsomo.com'}</a></p>
-                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">You're receiving this because you're a customer. <a href="#" style="color: #94a3b8;">Unsubscribe</a></p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const shopUrl = `${(process.env.BASE_URL || 'https://api.callsomo.com').replace(/\/$/, '')}/storefront`;
+    const html = this._somoLayout('Special offer', SomoEmail.escapeHtml(merchantName), `
+      <h2>Hi ${SomoEmail.escapeHtml(customerName) || 'there'},</h2>
+      <p style="text-align:center;">
+        <span style="display:inline-block;background:${SomoEmail.TOKENS.green};color:#fff;font-size:32px;font-weight:700;padding:16px 28px;border-radius:12px;">${SomoEmail.escapeHtml(discountText)}</span>
+      </p>
+      <h2 style="text-align:center;color:${SomoEmail.TOKENS.text};">${SomoEmail.escapeHtml(promotion.name || 'Special offer')}</h2>
+      ${promotion.description ? `<p>${SomoEmail.escapeHtml(promotion.description)}</p>` : ''}
+      ${promotion.code ? SomoEmail.codeBox(promotion.code) : ''}
+      ${endDateText ? SomoEmail.infoRows([{ label: 'Valid until', value: endDateText }]) : ''}
+      <p style="text-align:center;">${SomoEmail.button(shopUrl, 'Shop now')}</p>
+      <p>Best regards,<br>${SomoEmail.escapeHtml(merchantName)}</p>
+    `, { preheader: `${discountText} from ${merchantName}` });
 
     return await this.sendEmail({
       to: email,
-      subject: `🎉 ${discountText} - ${promotion.name || 'Special Promotion'} - ${merchantName}`,
-      html: html
+      subject: `${discountText} — ${promotion.name || 'Special offer'} (${merchantName})`,
+      html
     });
   }
 
@@ -1575,239 +1003,45 @@ class EmailService {
       month: 'long'
     });
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
-            line-height: 1.6;
-            color: #1e293b;
-            background: #f1f5f9;
-            margin: 0;
-            padding: 0;
-          }
-          .container {
-            max-width: 600px;
-            margin: 40px auto;
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          }
-          .email-wrapper {
-            padding: 0;
-          }
-          .header {
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-            color: white;
-            padding: 40px 30px;
-            text-align: center;
-          }
-          .logo-brand {
-            font-size: 48px;
-            font-weight: 300;
-            line-height: 1;
-            margin-bottom: 15px;
-            letter-spacing: -2px;
-          }
-          .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-          }
-          .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-          }
-          .logo-brand .dot {
-            font-weight: 700;
-          }
-          .header h1 {
-            margin: 15px 0 5px 0;
-            font-size: 24px;
-            font-weight: 600;
-          }
-          .header p {
-            margin: 0;
-            opacity: 0.9;
-            font-size: 14px;
-          }
-          .content {
-            padding: 30px;
-          }
-          .content h2 {
-            color: #1e293b;
-            margin: 0 0 15px 0;
-            font-size: 20px;
-          }
-          .content p {
-            color: #64748b;
-            margin: 0 0 20px 0;
-            line-height: 1.6;
-          }
-          .invoice-summary {
-            background: #f8fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-          }
-          .invoice-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #e2e8f0;
-          }
-          .invoice-row:last-child {
-            border-bottom: none;
-          }
-          .invoice-label {
-            color: #64748b;
-            font-weight: 500;
-          }
-          .invoice-value {
-            color: #1e293b;
-            font-weight: 600;
-          }
-          .invoice-total {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 2px solid #1e40af;
-          }
-          .invoice-total .invoice-label {
-            font-size: 18px;
-            color: #1e293b;
-          }
-          .invoice-total .invoice-value {
-            font-size: 24px;
-            color: #1e40af;
-          }
-          .invoice-details {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-          }
-          .detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            font-size: 14px;
-          }
-          .button {
-            display: inline-block;
-            background: #1e40af;
-            color: white;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 20px 0;
-            font-weight: 600;
-          }
-          .button:hover {
-            background: #1d4ed8;
-          }
-          .footer {
-            background: #f8fafc;
-            padding: 30px;
-            text-align: center;
-            border-top: 1px solid #e2e8f0;
-            color: #64748b;
-            font-size: 14px;
-          }
-          .footer a {
-            color: #1e40af;
-            text-decoration: none;
-          }
-          .footer a:hover {
-            text-decoration: underline;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="email-wrapper">
-            <div class="header">
-              <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
-              </div>
-              <h1>Monthly Invoice</h1>
-              <p>Invoice #${invoice.invoice_number}</p>
-            </div>
-            <div class="content">
-              <h2>Hi ${name || 'there'},</h2>
-              <p>Your monthly invoice for <strong>${billingMonth}</strong> is ready for review.</p>
-              
-              <div class="invoice-summary">
-                <div class="invoice-row">
-                  <span class="invoice-label">Billing Period:</span>
-                  <span class="invoice-value">${billingMonth}</span>
-                </div>
-                <div class="invoice-row">
-                  <span class="invoice-label">Invoice Number:</span>
-                  <span class="invoice-value">${invoice.invoice_number}</span>
-                </div>
-                <div class="invoice-row">
-                  <span class="invoice-label">Due Date:</span>
-                  <span class="invoice-value">${dueDate}</span>
-                </div>
-                ${invoice.voice_minutes > 0 ? `
-                <div class="invoice-row">
-                  <span class="invoice-label">Voice Minutes:</span>
-                  <span class="invoice-value">${invoice.voice_minutes.toLocaleString()} min</span>
-                </div>
-                <div class="invoice-row">
-                  <span class="invoice-label">Voice Minutes Cost:</span>
-                  <span class="invoice-value">$${invoice.voice_minutes_cost.toFixed(2)}</span>
-                </div>
-                ` : ''}
-                ${invoice.api_requests > 0 ? `
-                <div class="invoice-row">
-                  <span class="invoice-label">API Requests:</span>
-                  <span class="invoice-value">${invoice.api_requests.toLocaleString()}</span>
-                </div>
-                <div class="invoice-row">
-                  <span class="invoice-label">API Requests Cost:</span>
-                  <span class="invoice-value">$${invoice.api_requests_cost.toFixed(2)}</span>
-                </div>
-                ` : ''}
-                <div class="invoice-row invoice-total">
-                  <span class="invoice-label">Total Amount Due:</span>
-                  <span class="invoice-value">$${invoice.total.toFixed(2)}</span>
-                </div>
-              </div>
-              
-              <p>Payment is due within 15 days of the invoice date. Your stored payment method will be automatically charged on the due date.</p>
-              
-              <p>You can view your invoices and credits at any time in your account dashboard.</p>
-              
-              <div style="text-align: center;">
-                <a href="https://api.callsomo.com/docs" class="button">View Dashboard</a>
-              </div>
-              
-              <p>If you have any questions about this invoice, please contact our support team at support@callsomo.com.</p>
-              
-              <div class="footer">
-                <p>This is an automated invoice from Somo API.</p>
-                <p>Visit us at <a href="https://api.callsomo.com">api.callsomo.com</a></p>
-                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email. For support, contact support@callsomo.com</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const rows = [
+      { label: 'Billing period', value: billingMonth },
+      { label: 'Invoice number', value: invoice.invoice_number },
+      { label: 'Due date', value: dueDate }
+    ];
+    if (invoice.voice_minutes > 0) {
+      rows.push(
+        { label: 'Voice minutes', value: `${invoice.voice_minutes.toLocaleString()} min` },
+        { label: 'Voice cost', value: `$${invoice.voice_minutes_cost.toFixed(2)}` }
+      );
+    }
+    if (invoice.api_requests > 0) {
+      rows.push(
+        { label: 'API requests', value: invoice.api_requests.toLocaleString() },
+        { label: 'API cost', value: `$${invoice.api_requests_cost.toFixed(2)}` }
+      );
+    }
+    rows.push({
+      label: 'Total due',
+      valueHtml: `<strong style="font-size:20px;color:${SomoEmail.TOKENS.green}">$${invoice.total.toFixed(2)}</strong>`
+    });
+
+    const html = this._somoLayout(
+      'Monthly invoice',
+      `Invoice #${invoice.invoice_number}`,
+      `
+      <h2>Hi ${SomoEmail.escapeHtml(name) || 'there'},</h2>
+      <p>Your invoice for <strong>${SomoEmail.escapeHtml(billingMonth)}</strong> is ready.</p>
+      ${SomoEmail.infoRows(rows)}
+      <p>Payment is due within 15 days. Your stored payment method will be charged on the due date.</p>
+      <p style="text-align:center;">${SomoEmail.button('https://api.callsomo.com/docs', 'View dashboard')}</p>
+      <p>Questions? Contact <a href="mailto:${SomoEmail.SUPPORT_EMAIL}">${SomoEmail.SUPPORT_EMAIL}</a>.</p>
+    `
+    );
 
     return await this.sendEmail({
       to: email,
-      subject: `Somo API Invoice - $${invoice.total.toFixed(2)} Due (${invoice.invoice_number})`,
-      html: html
+      subject: `Somo invoice — $${invoice.total.toFixed(2)} due (${invoice.invoice_number})`,
+      html
     });
   }
 
@@ -1828,262 +1062,34 @@ class EmailService {
     const accountType = customerType === 'saas' ? 'SaaS Platform' : 'API Integration';
     const dashboardType = customerType === 'saas' ? 'business dashboard' : 'API documentation';
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif; 
-            line-height: 1.6; 
-            color: #1e293b; 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f8fafc;
-          }
-          .container { 
-            max-width: 600px; 
-            margin: 0 auto; 
-            padding: 20px; 
-            width: 100%;
-            box-sizing: border-box;
-          }
-          @media (max-width: 600px) {
-            .container {
-              padding: 10px;
-            }
-          }
-          .email-wrapper {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          }
-          .header { 
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
-            color: white; 
-            padding: 40px 30px; 
-            text-align: center; 
-          }
-          .logo-brand {
-            font-size: 48px;
-            font-weight: 300;
-            line-height: 1;
-            margin-bottom: 15px;
-            letter-spacing: -2px;
-          }
-          .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-          }
-          .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-            margin-top: 10px;
-          }
-          .content { 
-            background: white; 
-            padding: 40px 30px; 
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-          }
-          .content h2 {
-            color: #1e293b;
-            font-size: 20px;
-            margin: 0 0 15px 0;
-            font-weight: 600;
-          }
-          .content p {
-            color: #64748b;
-            font-size: 16px;
-            margin: 15px 0;
-            line-height: 1.6;
-          }
-          .info-box {
-            background: #f8fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-          }
-          .info-row {
-            display: flex;
-            flex-direction: column;
-            padding: 12px 0;
-            border-bottom: 1px solid #e2e8f0;
-          }
-          .info-row:last-child {
-            border-bottom: none;
-          }
-          .info-label {
-            color: #64748b;
-            font-weight: 500;
-            font-size: 14px;
-            margin-bottom: 6px;
-          }
-          .info-value {
-            color: #1e293b;
-            font-weight: 600;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            word-break: break-all;
-            overflow-wrap: break-word;
-            line-height: 1.5;
-          }
-          @media (max-width: 600px) {
-            .content {
-              padding: 25px 20px;
-            }
-            .header {
-              padding: 30px 20px;
-            }
-            .logo-brand {
-              font-size: 36px;
-            }
-            .header h1 {
-              font-size: 20px;
-            }
-            .content h2 {
-              font-size: 18px;
-            }
-            .content p {
-              font-size: 15px;
-            }
-            .info-box {
-              padding: 15px;
-            }
-          }
-          @media (min-width: 480px) {
-            .info-row {
-              flex-direction: row;
-              justify-content: space-between;
-              align-items: flex-start;
-            }
-            .info-label {
-              margin-bottom: 0;
-              margin-right: 15px;
-              flex-shrink: 0;
-            }
-            .info-value {
-              text-align: right;
-              flex: 1;
-            }
-          }
-          .button { 
-            display: inline-block; 
-            background: #1e40af; 
-            color: white; 
-            padding: 14px 28px; 
-            text-decoration: none; 
-            border-radius: 6px; 
-            margin: 20px 0;
-            font-weight: 600;
-            font-size: 16px;
-          }
-          .button:hover {
-            background: #1d4ed8;
-          }
-          .footer { 
-            text-align: center; 
-            margin-top: 30px; 
-            padding-top: 30px;
-            border-top: 1px solid #e2e8f0;
-            color: #64748b; 
-            font-size: 14px; 
-          }
-          .footer a {
-            color: #1e40af;
-            text-decoration: none;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="email-wrapper">
-            <div class="header">
-              <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span>.
-              </div>
-              <h1>Welcome to Somo!</h1>
-            </div>
-            <div class="content">
-              <h2>Hi ${customerName || 'there'},</h2>
-              <p>Thank you for signing up for Somo! Your account has been successfully created and is ready to use.</p>
-              
-              <div class="info-box">
-                <div class="info-row">
-                  <span class="info-label">Account Type:</span>
-                  <span class="info-value">${accountType}</span>
-                </div>
-                ${subdomain ? `
-                <div class="info-row">
-                  <span class="info-label">Your Dashboard URL:</span>
-                  <span class="info-value">${subdomain}.${baseDomain}</span>
-                </div>
-                ` : ''}
-                <div class="info-row">
-                  <span class="info-label">Email:</span>
-                  <span class="info-value">${customerEmail}</span>
-                </div>
-                ${password ? `
-                <div class="info-row" style="border-top: 2px solid #1e40af; margin-top: 10px; padding-top: 10px;">
-                  <span class="info-label" style="color: #1e40af; font-weight: 700;">Password:</span>
-                  <span class="info-value" style="color: #1e40af; font-weight: 700; font-size: 18px;">${password}</span>
-                </div>
-                ` : ''}
-              </div>
-              
-              <p><strong>Getting Started:</strong></p>
-              <p>To access your ${dashboardType}, please log in using your email and the password provided above.</p>
-              
-              ${password ? `
-              <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 6px;">
-                <p style="margin: 0; color: #92400e; font-weight: 600;">🔐 Important: Save this password securely. You can change it later in your account settings.</p>
-              </div>
-              ` : ''}
-              
-              <div style="text-align: center;">
-                <a href="${loginUrl}" class="button">Log In to Dashboard</a>
-              </div>
-              
-              ${subdomain ? `
-              <p><strong>Your Unique Domain:</strong></p>
-              <p>You can access your dashboard directly at:</p>
-              <div style="text-align: center; margin: 20px 0;">
-                <a href="https://${subdomain}.${baseDomain}" style="color: #1e40af; font-weight: 600; font-size: 18px;">https://${subdomain}.${baseDomain}</a>
-              </div>
-              ` : ''}
-              
-              <p>If you have any questions or need help getting started, please don't hesitate to contact our support team.</p>
-              
-              <p>Best regards,<br>The Somo Team</p>
-              
-              <div class="footer">
-                <p>This is an automated welcome email from Somo.</p>
-                <p>Visit us at <a href="https://callsomo.com">callsomo.com</a></p>
-                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const infoRows = [
+      { label: 'Account type', value: accountType },
+      { label: 'Email', value: customerEmail }
+    ];
+    if (subdomain) {
+      infoRows.push({ label: 'Dashboard URL', value: `${subdomain}.${baseDomain}` });
+    }
+    if (password) {
+      infoRows.push({
+        label: 'Temporary password',
+        valueHtml: `<strong style="color:${SomoEmail.TOKENS.green}">${SomoEmail.escapeHtml(password)}</strong>`
+      });
+    }
+
+    const html = this._somoLayout('Welcome to Somo', 'Your account is ready', `
+      <h2>Hi ${SomoEmail.escapeHtml(customerName) || 'there'},</h2>
+      <p>Your Somo account is ready. Sign in to access your ${SomoEmail.escapeHtml(dashboardType)}.</p>
+      ${SomoEmail.infoRows(infoRows)}
+      ${password ? SomoEmail.panel('<p style="margin:0;color:#92400e;font-weight:600;">Save this password securely. You can change it in account settings.</p>', 'warning') : ''}
+      <p style="text-align:center;">${SomoEmail.button(loginUrl, 'Log in')}</p>
+      ${subdomain ? `<p style="text-align:center;"><a href="https://${SomoEmail.escapeHtml(subdomain)}.${SomoEmail.escapeHtml(baseDomain)}">https://${SomoEmail.escapeHtml(subdomain)}.${SomoEmail.escapeHtml(baseDomain)}</a></p>` : ''}
+      <p>Best regards,<br>The Somo team</p>
+    `);
 
     return await this.sendEmail({
       to: customerEmail,
-      subject: `Welcome to Somo - Your Account is Ready!`,
-      html: html
+      subject: 'Welcome to Somo — your account is ready',
+      html
     });
   }
 
@@ -2091,160 +1097,19 @@ class EmailService {
    * Send password reset email
    */
   static async sendPasswordResetEmail(email, name, resetUrl) {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif; 
-            line-height: 1.6; 
-            color: #1e293b; 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f8fafc;
-          }
-          .container { 
-            max-width: 600px; 
-            margin: 0 auto; 
-            padding: 20px; 
-          }
-          .email-wrapper {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          }
-          .header { 
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
-            color: white; 
-            padding: 40px 30px; 
-            text-align: center; 
-          }
-          .logo-brand {
-            font-size: 48px;
-            font-weight: 300;
-            line-height: 1;
-            margin-bottom: 15px;
-            letter-spacing: -2px;
-          }
-          .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-          }
-          .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-            margin-top: 10px;
-          }
-          .content { 
-            background: white; 
-            padding: 40px 30px; 
-          }
-          .content h2 {
-            color: #1e293b;
-            font-size: 20px;
-            margin: 0 0 15px 0;
-            font-weight: 600;
-          }
-          .content p {
-            color: #64748b;
-            font-size: 16px;
-            margin: 15px 0;
-            line-height: 1.6;
-          }
-          .button { 
-            display: inline-block; 
-            background: #1e40af; 
-            color: white; 
-            padding: 14px 28px; 
-            text-decoration: none; 
-            border-radius: 6px; 
-            margin: 20px 0;
-            font-weight: 600;
-            font-size: 16px;
-          }
-          .button:hover {
-            background: #1d4ed8;
-          }
-          .footer { 
-            text-align: center; 
-            margin-top: 30px; 
-            padding-top: 30px;
-            border-top: 1px solid #e2e8f0;
-            color: #64748b; 
-            font-size: 14px; 
-          }
-          .footer a {
-            color: #1e40af;
-            text-decoration: none;
-          }
-          .warning-box {
-            background: #fef3c7;
-            border-left: 4px solid #f59e0b;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 6px;
-          }
-          .warning-box p {
-            margin: 0;
-            color: #92400e;
-            font-size: 14px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="email-wrapper">
-            <div class="header">
-              <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span>.
-              </div>
-              <h1>Reset Your Password</h1>
-            </div>
-            <div class="content">
-              <h2>Hi ${name || 'there'},</h2>
-              <p>You requested to reset your password. Click the button below to create a new password:</p>
-              
-              <div style="text-align: center;">
-                <a href="${resetUrl}" class="button">Reset Password</a>
-              </div>
-              
-              <p>Or copy and paste this link into your browser:</p>
-              <p style="word-break: break-all; color: #1e40af; font-family: monospace; font-size: 14px;">${resetUrl}</p>
-              
-              <div class="warning-box">
-                <p><strong>⚠️ This link will expire in 1 hour.</strong> If you didn't request a password reset, please ignore this email.</p>
-              </div>
-              
-              <p>If you have any questions, please contact our support team.</p>
-              
-              <p>Best regards,<br>The Somo Team</p>
-              
-              <div class="footer">
-                <p>This is an automated email from Somo.</p>
-                <p>Visit us at <a href="https://callsomo.com">callsomo.com</a></p>
-                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    const html = this._somoLayout('Reset your password', 'Somo account', `
+      <h2>Hi ${SomoEmail.escapeHtml(name) || 'there'},</h2>
+      <p>We received a request to reset your password.</p>
+      <p style="text-align:center;">${SomoEmail.button(resetUrl, 'Reset password')}</p>
+      <p style="word-break:break-all;font-family:monospace;font-size:14px;">${SomoEmail.escapeHtml(resetUrl)}</p>
+      ${SomoEmail.panel('<p style="margin:0;color:#92400e;"><strong>This link expires in 1 hour.</strong> If you did not request a reset, ignore this email.</p>', 'warning')}
+      <p>Best regards,<br>The Somo team</p>
+    `);
 
     return await this.sendEmail({
       to: email,
-      subject: 'Somo - Reset Your Password',
-      html: html
+      subject: 'Somo — Reset your password',
+      html
     });
   }
 
@@ -2287,7 +1152,7 @@ class EmailService {
             overflow: hidden;
           }
           .header {
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            background: linear-gradient(135deg, #16a637 0%, #3b82f6 100%);
             color: white;
             padding: 30px;
             text-align: center;
@@ -2366,7 +1231,7 @@ class EmailService {
         <div class="container">
           <div class="header">
             <div class="logo">
-              <span class="doc">Doc</span><span class="little">Little</span>.
+              .
             </div>
             <h2 style="margin: 0; font-size: 20px; font-weight: 400;">New Feature Request</h2>
           </div>
@@ -2496,7 +1361,7 @@ class EmailService {
           .button { 
             display: inline-block; 
             padding: 16px 32px; 
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
+            background: linear-gradient(135deg, #16a637 0%, #3b82f6 100%); 
             color: white; 
             text-decoration: none; 
             border-radius: 8px; 
@@ -2554,15 +1419,15 @@ class EmailService {
 
               <p style="margin-top: 20px; color: #64748b; font-size: 14px;">
                 <strong>Need help?</strong><br>
-                Contact us at <a href="mailto:support@callsomo.com" style="color: #1e40af;">support@callsomo.com</a> 
+                Contact us at <a href="mailto:support@callsomo.com" style="color: #16a637;">support@callsomo.com</a> 
                 or visit your dashboard to manage your account.
               </p>
             </div>
             <div class="footer">
               <p>This is an automated alert from Somo.</p>
               <p style="margin-top: 10px;">
-                <a href="${dashboardUrl}" style="color: #1e40af; text-decoration: none;">Manage Credits</a> | 
-                <a href="https://callsomo.com" style="color: #1e40af; text-decoration: none;">Visit Website</a>
+                <a href="${dashboardUrl}" style="color: #16a637; text-decoration: none;">Manage Credits</a> | 
+                <a href="https://callsomo.com" style="color: #16a637; text-decoration: none;">Visit Website</a>
               </p>
             </div>
           </div>
@@ -2633,7 +1498,7 @@ class EmailService {
           <a href="${feedbackUrl + '&helpful=1'}" style="display:inline-block;padding:10px 16px;margin-right:8px;background:#16a34a;color:white!important;text-decoration:none;border-radius:8px;font-weight:600;">👍 Yes</a>
           <a href="${feedbackUrl + '&helpful=0'}" style="display:inline-block;padding:10px 16px;background:#dc2626;color:white!important;text-decoration:none;border-radius:8px;font-weight:600;">👎 No</a>
         </p>
-        <p style="margin-top:12px;font-size:13px;color:#6b7280;">Or leave detailed feedback: <a href="${feedbackUrl}" style="color:#1e40af;">${feedbackUrl}</a></p>
+        <p style="margin-top:12px;font-size:13px;color:#6b7280;">Or leave detailed feedback: <a href="${feedbackUrl}" style="color:#16a637;">${feedbackUrl}</a></p>
       </div>
     `;
     return this.sendEmail({ to: appointment.patient_email, subject, html });

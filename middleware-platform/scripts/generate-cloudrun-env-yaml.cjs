@@ -110,19 +110,31 @@ const merged = {
   API_BASE_URL: baseUrl,
   BASE_DOMAIN: parsed.BASE_DOMAIN || 'callsomo.com',
   RETELL_LLM_WEBSOCKET_URL: parsed.RETELL_LLM_WEBSOCKET_URL || retellLlmWsUrl,
-  DB_PATH: isStaging
-    ? process.env.CLOUDRUN_DB_PATH || '/var/data/middleware-staging.db'
-    : parsed.DB_PATH || './middleware-dev.db',
-  GCS_DB_BUCKET: isStaging ? process.env.GCS_DB_BUCKET || 'somo-staging-db' : parsed.GCS_DB_BUCKET || '',
+  DB_PATH:
+    process.env.CLOUDRUN_DB_PATH ||
+    parsed.DB_PATH ||
+    (isStaging ? '/var/data/middleware-staging.db' : '/var/data/middleware-staging.db'),
+  GCS_DB_BUCKET:
+    process.env.GCS_DB_BUCKET ||
+    parsed.GCS_DB_BUCKET ||
+    'somo-staging-db-somo-callsomo',
   SKIP_STARTUP_MIGRATIONS: isStaging ? '0' : parsed.SKIP_STARTUP_MIGRATIONS || '1',
   MIGRATIONS_STRICT: isStaging ? '1' : '0',
   CLOUDRUN_BOOT_DEBUG: parsed.CLOUDRUN_BOOT_DEBUG || (isStaging ? '0' : '1'),
   TRIAL_SIM_FLOW_ENABLED: parsed.TRIAL_SIM_FLOW_ENABLED || (isStaging ? '1' : parsed.TRIAL_SIM_FLOW_ENABLED || '0'),
   SAAS_VOICE_FAIL_CLOSED: parsed.SAAS_VOICE_FAIL_CLOSED || (isStaging ? '1' : parsed.SAAS_VOICE_FAIL_CLOSED || '1'),
-  SOMO_OWNER_EMAIL: parsed.SOMO_OWNER_EMAIL || 'drlittlekids@gmail.com',
+  SOMO_OWNER_EMAIL: parsed.SOMO_OWNER_EMAIL || 'richard@callsomo.com',
   STAGING: isStaging ? '1' : '0',
   ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0'
 };
+
+if (!isStaging) {
+  merged.KELLY_RAILS_V2 = parsed.KELLY_RAILS_V2 || '1';
+  merged.KELLY_RAILS_ROLLOUT_PCT = parsed.KELLY_RAILS_ROLLOUT_PCT ?? '1';
+  merged.KELLY_ALLOW_HYBRID_GRAPH = parsed.KELLY_ALLOW_HYBRID_GRAPH ?? '0';
+  merged.KELLY_RAILS_FAST_RAG = parsed.KELLY_RAILS_FAST_RAG ?? '1';
+  merged.KELLY_VOICE_FILLER_MS = parsed.KELLY_VOICE_FILLER_MS ?? '1200';
+}
 
 if (isStaging) {
   delete merged.NGROK_URL;

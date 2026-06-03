@@ -22,10 +22,10 @@ Tracking rule:
 - [x] Run staged diff review before commit (scope + secrets + artifacts).
 - [x] Write focused commit message (why + impact).
 - [x] Verify post-commit cleanliness with `git status`.
-- [x] Choose deploy path: code push, hosting deploy, or both — see [`docs/deployment/GCP_DEPLOY_ROLLBACK.md`](../../docs/deployment/GCP_DEPLOY_ROLLBACK.md).
+- [x] Choose deploy path: code push, hosting deploy, or both — see [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../../docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md).
 - [ ] Execute deploy with checklist and capture output.
 - [ ] Run post-deploy smoke (`/health`, `/api`, payor/public routes, critical UI flow).
-- [ ] Record rollback plan: prior commit SHA + rollback command (template in GCP_DEPLOY_ROLLBACK.md).
+- [ ] Record rollback plan: prior commit SHA + rollback command (template in GCP_DEPLOY_ROLLBACK_RUNBOOK.md).
 
 ## Summary
 

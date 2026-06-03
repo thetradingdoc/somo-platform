@@ -46,6 +46,12 @@ if (process.env.KELLY_RAILS_ROLLOUT_PCT === undefined) {
 if (process.env.LANGGRAPH_KELLY_ROLLOUT_PCT === undefined) {
   process.env.LANGGRAPH_KELLY_ROLLOUT_PCT = '0';
 }
+if (process.env.RCM_E2E_DIRECT_TOOLS === undefined) {
+  process.env.RCM_E2E_DIRECT_TOOLS = '1';
+}
+process.env.API_BASE_URL =
+  process.env.API_BASE_URL || process.env.BASE_URL || 'http://127.0.0.1:4000';
+process.env.BASE_URL = process.env.API_BASE_URL;
 
 const path = require('path');
 const crypto = require('crypto');
@@ -63,7 +69,7 @@ const API_BASE = (process.env.BASE_URL || process.env.PW_API_BASE_URL || 'http:/
   ''
 );
 const CLINIC_ID = process.env.TEST_CLINIC_ID || process.env.RCM_E2E_CLINIC_ID || 'clinic-default';
-const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PROVIDER_PASSWORD = process.env.RCM_E2E_PROVIDER_PASSWORD || 'demo123';
 const STRIPE_LIVE = process.env.RCM_E2E_STRIPE_LIVE === '1';
 const VISIT_ONLY = process.env.KELLY_E2E_VISIT_ONLY === '1';
@@ -283,11 +289,13 @@ async function main() {
   }
 
   const inProcessOnly = process.env.RCM_E2E_USE_EXISTING_SERVER !== '1';
+  const inProcessPay =
+    inProcessOnly || String(process.env.RCM_E2E_DIRECT_TOOLS || '').trim() === '1';
 
   const health = inProcessOnly
     ? { status: 0 }
     : await Promise.race([
-    apiRequest('GET', '/health'),
+        apiRequest('GET', '/health').catch(() => ({ status: 0 })),
         new Promise((resolve) => setTimeout(() => resolve({ status: 0 }), 5000)),
       ]);
   if (!inProcessOnly && health.status !== 200) {
@@ -694,7 +702,7 @@ async function main() {
     if (!ctx.payToken) throw new Error('No pay_token');
 
     let body;
-    if (inProcessOnly) {
+    if (inProcessPay) {
       const settlement = require('../services/rcm-payment-settlement');
       body = await settlement.getPaymentContext(ctx.payToken);
       if (!body?.success) throw new Error(body?.error || 'getPaymentContext failed');
@@ -718,7 +726,7 @@ async function main() {
   if (STRIPE_LIVE && process.env.STRIPE_SECRET_KEY && ctx.payToken && s9.ok && s10.ok) {
     await runStage('Payment gateway — POST create-intent', async () => {
       let body;
-      if (inProcessOnly) {
+      if (inProcessPay) {
         const settlement = require('../services/rcm-payment-settlement');
         body = await settlement.createStripeIntent(ctx.payToken);
       } else {
@@ -787,7 +795,7 @@ async function main() {
 
     await runStage('Pay link idempotency — already_paid=true', async () => {
       let body;
-      if (inProcessOnly) {
+      if (inProcessPay) {
         const settlement = require('../services/rcm-payment-settlement');
         body = await settlement.getPaymentContext(ctx.payToken);
       } else {

@@ -1,0 +1,320 @@
+/**
+ * Settings page — aligned with provider portal theme
+ */
+.pp-content--settings {
+  max-width: 920px;
+  padding: 20px 24px 28px;
+}
+
+.pp-content--settings .settings-panel[hidden] {
+  display: none !important;
+}
+
+.pp-content--settings .pp-settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pp-content--settings .settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pp-content--settings .settings-tab-btn,
+.pp-content--settings .pp-ptab {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pp-text-secondary);
+  padding: 10px 16px;
+  min-height: 44px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.pp-content--settings .settings-tab-btn.active,
+.pp-content--settings .pp-ptab.act {
+  color: var(--rev-teal-text);
+  border-bottom-color: var(--somo-green, var(--blue));
+  font-weight: 600;
+}
+
+.pp-content--settings .settings-section {
+  background: var(--pp-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  margin-bottom: 16px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.pp-content--settings .settings-section h3,
+.pp-content--settings .settings-section .pp-settings-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pp-content--settings .settings-section h3 .pp-inline-icon svg,
+.pp-content--settings .settings-section .pp-inline-icon svg {
+  width: 16px;
+  height: 16px;
+  color: var(--rev-teal-text);
+}
+
+.pp-content--settings .setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pp-content--settings .setting-row:last-child {
+  border-bottom: none;
+}
+
+.pp-content--settings .setting-info h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+.pp-content--settings .setting-description,
+.pp-content--settings .service-status {
+  font-size: 13px;
+  color: var(--pp-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.pp-content--settings .setting-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pp-content--settings .service-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--pp-tile);
+  border-bottom: 1px solid var(--border);
+  margin: 0;
+  border-radius: 0;
+}
+
+.pp-content--settings .service-card:last-child {
+  border-bottom: none;
+}
+
+.pp-content--settings .service-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
+  background: var(--rev-teal-bg);
+  color: var(--rev-teal-text);
+}
+
+.pp-content--settings .service-icon.stripe { background: #635bff; color: #fff; }
+.pp-content--settings .service-icon.twilio { background: #f22f46; color: #fff; }
+.pp-content--settings .service-icon.google { background: #4285f4; color: #fff; }
+
+.pp-content--settings .service-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pp-content--settings .service-info h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+
+.pp-content--settings .service-status.connected {
+  color: var(--rev-teal-text);
+  font-weight: 600;
+}
+
+.pp-content--settings .readiness-stack {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pp-content--settings .readiness-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--pp-canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.pp-content--settings .readiness-badge.live {
+  background: var(--rev-teal-bg);
+  color: var(--rev-teal-text);
+}
+
+.pp-content--settings .readiness-badge.blocks {
+  background: var(--rev-amber-bg);
+  color: var(--rev-amber-text);
+}
+
+.pp-content--settings .readiness-badge.unavailable {
+  background: var(--rev-red-bg);
+  color: var(--rev-red-text);
+}
+
+.pp-content--settings .readiness-note {
+  color: var(--rev-amber-text);
+  background: var(--rev-amber-bg);
+  border: 1px solid var(--rev-amber-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.pp-content--settings .danger-zone {
+  background: var(--rev-red-bg);
+  border: 1px solid var(--rev-red-border);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.pp-content--settings .danger-zone h3 {
+  color: var(--rev-red-text);
+  border-bottom: 1px solid var(--rev-red-border);
+  padding: 14px 16px;
+  margin: 0;
+}
+
+.pp-content--settings .danger-zone .setting-row {
+  border-bottom-color: var(--rev-red-border);
+  background: transparent;
+}
+
+.pp-content--settings .danger-zone .setting-row:last-child {
+  border-bottom: none;
+}
+
+.pp-content--settings .btn,
+.pp-content--settings .btn-secondary,
+.pp-content--settings .btn-primary {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  font-family: var(--font);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pp-content--settings .btn-secondary,
+.pp-content--settings .btn.btn-secondary {
+  background: var(--pp-canvas);
+  color: var(--ink3);
+  border: 1px solid var(--border);
+}
+
+.pp-content--settings .btn-primary,
+.pp-content--settings .btn.btn-primary {
+  background: var(--somo-green, var(--blue));
+  color: #fff;
+  border: 1px solid transparent;
+}
+
+.pp-content--settings .btn-sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.pp-content--settings .voice-settings-block {
+  padding: 16px;
+}
+
+.pp-content--settings .btn-danger,
+.pp-content--settings .btn.btn-danger {
+  background: var(--rev-red-bg);
+  color: var(--rev-red-text);
+  border: 1px solid var(--rev-red-border);
+}
+
+.pp-content--settings .voice-agent-intro h3 {
+  border-bottom: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pp-content--settings .voice-agent-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pp-content--settings .voice-agent-intro p {
+  color: var(--pp-text-secondary);
+  font-size: 13px;
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.pp-content--settings .voice-agent-footnote {
+  font-size: 13px;
+  color: var(--pp-text-secondary);
+  margin: 12px 16px 16px;
+}
+
+.pp-content--settings .voice-agent-footnote a {
+  color: var(--rev-teal-text);
+}
+
+.pp-content--settings input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--somo-green, var(--blue));
+}

@@ -5,6 +5,23 @@ const KellyToolExecutor = require('../kelly-tool-executor');
 const { KELLY_LANE } = require('./state-schema');
 const { runNodeStep } = require('./node-runner');
 const { PAYMENT_SIGNALS } = require('./state-schema');
+const { getAllowedToolNames } = require('./tool-allowlists');
+
+function assertDeterministicToolAllowed(lane, step, toolName) {
+  const allowed = getAllowedToolNames(lane, step, {});
+  if (!allowed.includes(toolName)) {
+    const msg = `[kelly-rails] deterministic tool ${toolName} not allowed for ${lane}/${step}`;
+    if (process.env.NODE_ENV === 'test' || process.env.KELLY_RAILS_STRICT_TOOLS === '1') {
+      throw new Error(msg);
+    }
+    console.warn(msg);
+  }
+}
+
+async function executeDeterministicTool(lane, step, toolName, args, ctx) {
+  assertDeterministicToolAllowed(lane, step, toolName);
+  return KellyToolExecutor.execute(toolName, args, ctx);
+}
 
 const NEXT_STEP = {
   basic_intake: { identity: 'contact', contact: 'policy', policy: 'done' },
@@ -20,6 +37,7 @@ const NEXT_STEP = {
   post_payment: { finish: 'scheduled', scheduled: 'confirmation', confirmation: 'done' },
   reschedule: { find_booking: 'move_or_cancel', move_or_cancel: 'done' },
   account: { billing: 'insurance', insurance: 'done' },
+  records: { records_qa: 'fhir_read', fhir_read: 'done' },
   education: { education: 'clinical_advice', clinical_advice: 'done' },
   support: { faq: 'handoff', handoff: 'done' }
 };
@@ -49,7 +67,68 @@ function opqrstComplete(row) {
   );
 }
 
+async function runDeterministicSafety(state, ctx) {
+  if (state.active_lane !== KELLY_LANE.SUPPORT || state.step !== 'handoff' || !state.flags.safety_blocked) {
+    return null;
+  }
+  return {
+    reply:
+      'This sounds like a medical emergency. Please call 911 or go to the nearest emergency room right now. I cannot schedule visits or take payments during an emergency.',
+    toolsUsed: [],
+    endCall: true
+  };
+}
+
+async function runDeterministicPostPaymentConfirmation(state, ctx) {
+  if (state.active_lane !== KELLY_LANE.POST_PAYMENT) return null;
+
+  const apptId = state.flags.appointment_id || argsFromMeta(ctx.sessionId, 'last_appointment_id');
+  let when = '';
+  let specialty = 'your visit';
+  const dateMeta = argsFromMeta(ctx.sessionId, 'last_slot_date');
+  const timeMeta = argsFromMeta(ctx.sessionId, 'last_slot_time');
+  if (dateMeta || timeMeta) {
+    when = [dateMeta, timeMeta].filter(Boolean).join(' at ');
+  }
+
+  if (apptId && db.db) {
+    try {
+      const row = db.db
+        .prepare(
+          `SELECT appointment_date, appointment_time, specialty FROM appointments WHERE id = ? OR appointment_id = ? LIMIT 1`
+        )
+        .get(apptId, apptId);
+      if (row) {
+        when = when || [row.appointment_date, row.appointment_time].filter(Boolean).join(' at ');
+        if (row.specialty) specialty = row.specialty;
+      }
+    } catch (_) {}
+  }
+
+  const row = sessionRow(ctx.sessionId);
+  if (row?.target_specialty) specialty = row.target_specialty;
+
+  const paidNote = state.flags.payment_complete
+    ? ' We have your copay payment on file.'
+    : state.flags.payment_token
+      ? ' Your secure payment link was sent if you still need to pay.'
+      : '';
+
+  const whenPart = when ? ` scheduled for ${when}` : ' on file';
+  const reply = `You're all set — your ${specialty} appointment is confirmed${whenPart}.${paidNote} You'll receive details by email or text if we have them on file. If you need to change anything, say reschedule or call the clinic.`;
+
+  state.step = 'done';
+  state.flags.post_visit_confirmation_pending = false;
+  try {
+    KellyToolExecutor._setSessionMeta(ctx.sessionId, 'post_visit_confirmation_pending', '0');
+  } catch (_) {}
+
+  return { reply, toolsUsed: ['get_triage_session'], endCall: false };
+}
+
 async function runDeterministicPayment(state, ctx) {
+  if (state.active_lane !== KELLY_LANE.PAYMENT) return null;
+
   const { sessionId, clinicId, patientId, callerPhone, channel, message } = ctx;
   const msg = String(message || '').toLowerCase();
   if (!PAYMENT_SIGNALS.some((s) => msg.includes(s)) && state.step !== 'pay_invoice') {
@@ -62,7 +141,9 @@ async function runDeterministicPayment(state, ctx) {
   }
 
   const journeyId = KellyToolExecutor._getSessionMeta(sessionId, 'rcm_journey_id') || null;
-  const out = await KellyToolExecutor.execute(
+  const out = await executeDeterministicTool(
+    state.active_lane,
+    state.step,
     'request_patient_payment',
     { amount: Number(amount), journey_id: journeyId, patient_id: patientId, delivery: 'both' },
     { sessionId, clinicId, patientId, callerPhone, channel }
@@ -74,6 +155,14 @@ async function runDeterministicPayment(state, ctx) {
     state.flags.payment_token = out.pay_token;
     KellyToolExecutor._setSessionMeta(sessionId, 'rcm_pay_token', out.pay_token);
   }
+  state.flags.payment_complete = true;
+  try {
+    KellyToolExecutor._setSessionMeta(sessionId, 'payment_complete', '1');
+    if (state.flags.appointment_id) {
+      KellyToolExecutor._setSessionMeta(sessionId, 'post_visit_confirmation_pending', '1');
+      state.flags.post_visit_confirmation_pending = true;
+    }
+  } catch (_) {}
 
   const reply =
     out.pay_url
@@ -149,10 +238,21 @@ async function runDeterministicSchedule(state, ctx) {
     if (sched && !sched.error && (sched.appointment_id || sched.id)) {
       const apptId = sched.appointment_id || sched.id;
       KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_appointment_id', apptId);
+      if (state.flags.copay_amount == null) {
+        state.flags.copay_amount = 25;
+        try {
+          KellyToolExecutor._setSessionMeta(ctx.sessionId, 'copay_amount', '25');
+        } catch (_) {}
+      }
+      state.flags.appointment_id = apptId;
       toolsUsed.push('schedule_appointment');
       try {
         const { persistCaseSummaryForAppointment } = require('../case-summary-service');
         persistCaseSummaryForAppointment({ appointmentId: apptId, sessionId: ctx.sessionId });
+      } catch (_) {}
+      state.flags.post_visit_confirmation_pending = true;
+      try {
+        KellyToolExecutor._setSessionMeta(ctx.sessionId, 'post_visit_confirmation_pending', '1');
       } catch (_) {}
       return {
         reply: `Your appointment is booked${sched.date ? ` for ${sched.date}` : ''}${sched.time ? ` at ${sched.time}` : ''}. Confirmation will go to your email.`,
@@ -233,7 +333,12 @@ function advanceAfterStep(state, toolsUsed) {
           appointmentId: apptId,
           sessionId: state.session_id
         });
+        const { linkSessionToAppointment, persistRailsSessionState } = require('./session-ssot');
+        linkSessionToAppointment(state.session_id, apptId);
         state.flags.appointment_id = apptId;
+        state.flags.post_visit_confirmation_pending = true;
+        KellyToolExecutor._setSessionMeta(state.session_id, 'post_visit_confirmation_pending', '1');
+        persistRailsSessionState(state.session_id, state);
       }
     } catch (_) {}
     state.step = 'done';
@@ -253,6 +358,10 @@ function advanceAfterStep(state, toolsUsed) {
   if (lane === KELLY_LANE.SUPPORT && state.step === 'handoff') {
     state.flags.pending_human_handoff = true;
     KellyToolExecutor._setSessionMeta(state.session_id, 'pending_human_handoff', '1');
+  }
+
+  if (lane === KELLY_LANE.SUPPORT && state.step === 'handoff' && state.flags.safety_blocked) {
+    return;
   }
 
   const next = chain[state.step];
@@ -342,6 +451,18 @@ async function runDeterministicOpqrst(state, ctx) {
 }
 
 async function executeLaneStep(state, ctx) {
+  const detSafety = await runDeterministicSafety(state, ctx);
+  if (detSafety) {
+    advanceAfterStep(state, detSafety.toolsUsed || []);
+    return detSafety;
+  }
+
+  const detConfirm = await runDeterministicPostPaymentConfirmation(state, ctx);
+  if (detConfirm) {
+    advanceAfterStep(state, detConfirm.toolsUsed || []);
+    return detConfirm;
+  }
+
   const detPay = await runDeterministicPayment(state, ctx);
   if (detPay) {
     advanceAfterStep(state, detPay.toolsUsed);
@@ -386,4 +507,11 @@ async function executeLaneStep(state, ctx) {
   return result;
 }
 
-module.exports = { executeLaneStep, advanceAfterStep, NEXT_STEP };
+module.exports = {
+  executeLaneStep,
+  advanceAfterStep,
+  NEXT_STEP,
+  runDeterministicSafety,
+  runDeterministicPostPaymentConfirmation,
+  runDeterministicPayment
+};

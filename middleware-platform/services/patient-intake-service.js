@@ -3,7 +3,7 @@ const FHIRService = require('./fhir-service');
 const SMSService = require('./sms-service');
 const { v4: uuidv4 } = require('uuid');
 
-const PLACE_ID_EXT_URL = 'http://doclittle.ai/fhir/StructureDefinition/placeId';
+const PLACE_ID_EXT_URL = 'http://callsomo.com/fhir/StructureDefinition/placeId';
 
 function safeJson(v) {
   try {

@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 /**
  * Kelly Rails V2 rollout — parallel to legacy processTurn when KELLY_RAILS_V2=0.
  */
@@ -29,11 +32,40 @@ function shouldUseKellyRailsV2(sessionId, _clinicId = null) {
   const pct = getRolloutPct();
   if (pct >= 1) return true;
   if (pct <= 0) return false;
-  return hashSessionId(sessionId) % 100 < pct * 100;
+  const useV2 = hashSessionId(sessionId) % 100 < pct * 100;
+  return useV2;
+}
+
+function envTruthy(name) {
+  const v = String(process.env[name] || '').trim().toLowerCase();
+  return v === '1' || v === 'true';
+}
+
+function isKellyRailsEsEnabled() {
+  return envTruthy('KELLY_RAILS_ES_ENABLED');
+}
+
+function hasOpqrstEsSignoffFile() {
+  const clinicalDir = path.join(__dirname, '..', '..', '..', 'docs', 'clinical');
+  try {
+    const files = fs.readdirSync(clinicalDir);
+    return files.some((f) => /^OPQRST_ES_SIGNOFF_\d{4}-\d{2}-\d{2}\.md$/i.test(f));
+  } catch (_) {
+    return false;
+  }
+}
+
+function isOpqrstEsPackActive() {
+  const pack = String(process.env.KELLY_OPQRST_ES_PACK || '').trim();
+  if (pack !== 'v1') return false;
+  return hasOpqrstEsSignoffFile();
 }
 
 module.exports = {
   isKellyRailsV2Enabled,
   shouldUseKellyRailsV2,
-  getRolloutPct
+  getRolloutPct,
+  isKellyRailsEsEnabled,
+  isOpqrstEsPackActive,
+  hasOpqrstEsSignoffFile
 };

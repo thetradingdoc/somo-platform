@@ -156,7 +156,6 @@ async function testRetellAPI() {
         response.data.llm_websocket_url ||
         'N/A';
       logInfo(`WebSocket URL: ${wsUrl}`);
- agent log
       try {
         const phonesResp = await axios.get('https://api.retellai.com/v2/list-phone-numbers', {
           headers: { 'Authorization': `Bearer ${apiKey}` },
@@ -165,7 +164,6 @@ async function testRetellAPI() {
         const items = Array.isArray(phonesResp.data?.items) ? phonesResp.data.items : [];
         const fromNumber = process.env.TWILIO_PHONE_NUMBER;
         const matched = items.find((i) => i.phone_number === fromNumber);
- agent log
       } catch (_) {}
       return true;
     }
@@ -225,7 +223,6 @@ async function testTwilioConfiguration() {
         client.trunking.v1.trunks(trunkSid).credentialLists.list(),
         client.trunking.v1.trunks(trunkSid).ipAccessControlLists.list()
       ]);
- agent log
     } catch (_) {}
     
     return true;
@@ -276,7 +273,7 @@ async function testRetellAgentConfiguration() {
     logInfo('Updating agent configuration...');
     const updateResult = await retellService.updateAgent(salesAgentId, {
       system_prompt: salesPrompt,
-      agent_name: 'DocLittle Sales Agent - Alex',
+      agent_name: 'Somo Sales Agent - Alex',
       functions: salesFunctions
     });
     
@@ -452,7 +449,6 @@ async function monitorCallStatus(callId, duration = 10000) {
     if (finalData.call_cost) {
       logInfo(`   Cost: $${finalData.call_cost.combined_cost || '0.000'}`);
     }
- agent log
   } catch (error) {
     logError(`Failed to get final status: ${error.message}`);
   }
@@ -544,7 +540,6 @@ async function testTwilioDirectCall() {
     logInfo(`Call SID: ${call.sid}`);
     logInfo(`Status: ${call.status}`);
     logInfo(`Direction: ${call.direction}`);
- agent log
     
     return call.sid;
   } catch (error) {

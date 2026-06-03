@@ -1,6 +1,6 @@
 // middleware-platform/scripts/agent-e2e-performance-report.js
 //
-// DocLittle — Full End-to-End Performance & Correctness Harness
+// Somo — Full End-to-End Performance & Correctness Harness
 //
 // Covers:
 //   1. Triage behavior  — OPQRST collection, tool order, emergency gate, language, LLM failure modes
@@ -915,7 +915,7 @@ async function main() {
   const wallStart = Date.now();
 
   console.log('\n╔══════════════════════════════════════════════════════════════╗');
-  console.log('║         DocLittle — E2E Performance & Correctness Report     ║');
+  console.log('║         Somo — E2E Performance & Correctness Report     ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log(`  API:     ${API_BASE}`);
   console.log(`  Clinic:  ${CLINIC_ID}`);

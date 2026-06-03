@@ -1,5 +1,5 @@
 /**
- * FHIR API Routes - DocLittle Telehealth Platform
+ * FHIR API Routes - Somo Telehealth Platform
  *
  * RESTful FHIR R4 compliant API endpoints
  * Implements standard FHIR operations: Create, Read, Update, Search
@@ -856,7 +856,7 @@ router.get('/metadata', (req, res) => {
     date: new Date().toISOString(),
     kind: 'instance',
     software: {
-      name: 'DocLittle Telehealth Platform',
+      name: 'Somo Telehealth Platform',
       version: '1.0.0'
     },
     fhirVersion: '4.0.1',

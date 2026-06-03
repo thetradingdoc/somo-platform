@@ -6,6 +6,7 @@ const {
   adminSessionStatus,
 } = require('../middleware/admin-auth');
 const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
+const { canViewClinicalPhi } = require('../lib/clinical-phi-access');
 
 function registerAdminPlatformRoutes(app, deps) {
   const {
@@ -2731,7 +2732,19 @@ app.get('/api/admin/patients/:id/eob', async (req, res) => {
 
 app.get('/api/admin/billing/eob', async (req, res) => {
   try {
-    const patients = db.db.prepare('SELECT resource_id, name, phone, email FROM fhir_patients').all();
+    const clinicId = String(req.query.clinic_id || req.headers['x-clinic-id'] || '').trim();
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
+    }
+
+    const patients = db.db
+      .prepare(
+        `SELECT DISTINCT p.resource_id, p.name, p.phone, p.email
+         FROM fhir_patients p
+         INNER JOIN appointments a ON a.patient_id = p.resource_id
+         WHERE p.is_deleted = 0 AND a.clinic_id = ?`
+      )
+      .all(clinicId);
 
     const billingData = await Promise.all(patients.map(async (patient) => {
       try {
@@ -2769,10 +2782,22 @@ app.get('/api/admin/billing/eob', async (req, res) => {
 
     const filtered = billingData.filter(p => p !== null);
 
+    const summary = filtered.reduce(
+      (acc, p) => {
+        acc.total_billed += Number(p.total_billed || 0);
+        acc.total_paid += Number(p.total_paid || 0);
+        acc.total_owed += Number(p.total_owed || 0);
+        return acc;
+      },
+      { total_billed: 0, total_paid: 0, total_owed: 0 }
+    );
+
     return res.json({
       success: true,
+      clinic_id: clinicId,
       patients: filtered,
-      count: filtered.length
+      count: filtered.length,
+      summary,
     });
   } catch (error) {
     console.error('❌ Error fetching billing EOB list:', error);
@@ -2828,7 +2853,7 @@ app.get('/api/admin/appointments/:id/clinical-prep', async (req, res) => {
       caseSummaryRow?.session_id || resolveTriageSessionIdForAppointment(appointmentId, appt);
     const triage = triageSessionId && db.getTriageSession ? db.getTriageSession(triageSessionId) : null;
     const triageMedia = triageSessionId && db.getTriageMediaForSession ? (db.getTriageMediaForSession(triageSessionId) || []) : [];
-    const phiAllowed = _canViewClinicalPhi(req);
+    const phiAllowed = canViewClinicalPhi(req);
 
     const documentItems = triageMedia.map(m => {
       const type = (m.mime_type || '').startsWith('image/') ? 'image' : (m.media_type || 'document');
@@ -2965,9 +2990,6 @@ app.get('/api/admin/appointments/:id/clinical-prep', async (req, res) => {
 
 app.get('/api/admin/appointments', async (req, res) => {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7741/ingest/60c91aef-af1c-44d6-9853-4dc7e0e1d879',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'965a10'},body:JSON.stringify({sessionId:'965a10',location:'admin-platform.js:appointments',message:'GET /api/admin/appointments',data:{hasResolver:typeof resolveClinicIdFromRequest,date:req.query.date},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
     let clinicId = resolveClinicIdFromRequest(req);
     if (!clinicId && db.db) {
       try {
@@ -3231,7 +3253,7 @@ app.post('/api/admin/appointments/create', async (req, res) => {
               name: 'Default Clinic',
               slug: 'default',
               phone_number: process.env.DEFAULT_CLINIC_PHONE || '+15550000000',
-              email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@doclittle.com'
+              email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@callsomo.com'
             });
           } catch (e) {
             if (!e.message?.includes('UNIQUE') && !e.message?.includes('duplicate')) throw e;

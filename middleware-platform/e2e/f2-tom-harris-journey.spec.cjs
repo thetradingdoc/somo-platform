@@ -31,7 +31,7 @@ process.env.RCM_E2E_RECORD_EMAIL = process.env.RCM_E2E_RECORD_EMAIL || '1';
 
 const BASE = getBaseUrl();
 const STRIPE_LIVE = process.env.RCM_E2E_STRIPE_LIVE === '1';
-const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+const PROVIDER_EMAIL = process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PROVIDER_PASSWORD = process.env.RCM_E2E_PROVIDER_PASSWORD || 'demo123';
 
 let ctx = null;

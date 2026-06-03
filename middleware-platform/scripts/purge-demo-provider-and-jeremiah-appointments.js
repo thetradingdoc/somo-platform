@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Soft-delete (deleted_at) appointments that are either:
- *   - tied to the demo provider SaaS customer (provider@doclittle.com), or
+ *   - tied to the demo provider SaaS customer (provider@callsomo.com), or
  *   - patient display name is "Jeremiah Richard" (any phone — fixes duplicate-phone confusion).
  *
  * Usage (from middleware-platform):
@@ -16,7 +16,7 @@ process.chdir(path.join(__dirname, '..'));
 const db = require('../database');
 
 const DRY = process.argv.includes('--dry-run');
-const DEMO_EMAIL = 'provider@doclittle.com';
+const DEMO_EMAIL = 'provider@callsomo.com';
 
 function normName(n) {
   return String(n || '')

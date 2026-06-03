@@ -4,11 +4,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-export GCP_PROJECT="${GCP_PROJECT:-somo-callsomo}"
-export GCP_REGION="${GCP_REGION:-us-central1}"
-export CLOUDRUN_SERVICE="${CLOUDRUN_SERVICE:-myskin-middleware}"
+# shellcheck source=scripts/lib/cloudrun-deploy-env.sh
+source "$ROOT/scripts/lib/cloudrun-deploy-env.sh"
+
+export GCP_PROJECT="${GCP_PROJECT:-$CLOUDRUN_GCP_PROJECT}"
+export GCP_REGION="${GCP_REGION:-$CLOUDRUN_REGION}"
+export CLOUDRUN_SERVICE="${CLOUDRUN_SERVICE:-$CLOUDRUN_SERVICE}"
 export UI_BASE_URL="${UI_BASE_URL:-https://callsomo.com}"
-export MIDDLEWARE_API_BASE="${MIDDLEWARE_API_BASE:-https://api.callsomo.com}"
+export MIDDLEWARE_API_BASE="${MIDDLEWARE_API_BASE:-$CLOUDRUN_API_HOST}"
 export GCS_DB_BUCKET="${GCS_DB_BUCKET:-somo-staging-db-${GCP_PROJECT}}"
 export FIREBASE_HOSTING_PROJECT="${FIREBASE_HOSTING_PROJECT:-somo-4ddf6}"
 

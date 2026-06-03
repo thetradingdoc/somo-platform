@@ -1,7 +1,7 @@
 'use strict';
 
 const OFF_BASE = (process.env.OPEN_FOOD_FACTS_BASE_URL || 'https://world.openfoodfacts.org').replace(/\/$/, '');
-const UA = process.env.OPEN_FOOD_FACTS_USER_AGENT || 'doclittle-platform/1.0 (integration; support@doclittle.com)';
+const UA = process.env.OPEN_FOOD_FACTS_USER_AGENT || 'somo-platform/1.0 (integration; info@callsomo.com)';
 const OFF_TIMEOUT_MS = Number(process.env.OFF_HTTP_TIMEOUT_MS || 3500);
 const OFF_MAX_RETRIES = Math.max(0, Number(process.env.OFF_HTTP_MAX_RETRIES || 1));
 const db = require('../database');

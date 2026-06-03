@@ -49,7 +49,7 @@ async function resolveTelephonyWebhookBase() {
     const httpsTunnel = tunnels.find((t) => t.proto === 'https');
     if (httpsTunnel?.public_url) {
       const base = normalizeBase(httpsTunnel.public_url);
-      console.log(`🔗 DodgeCall/Twilio webhooks using ngrok: ${base}`);
+      console.log(`🔗 Somo demo/Twilio webhooks using ngrok: ${base}`);
       return base;
     }
   } catch {

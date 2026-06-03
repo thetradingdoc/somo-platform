@@ -24,7 +24,8 @@
   color: var(--dc-navy);
 }
 
-.dc-btn-navy {
+.dc-btn-navy,
+.dc-btn-primary {
   background: var(--somo-green);
   color: var(--somo-text);
   border-radius: 10px;
@@ -34,7 +35,8 @@
   font-weight: 700;
 }
 
-.dc-btn-navy:hover {
+.dc-btn-navy:hover,
+.dc-btn-primary:hover {
   background: var(--somo-green-hover);
 }
 
@@ -176,12 +178,35 @@
     0 8px 24px rgba(15, 23, 42, 0.05);
 }
 
+.dc-pill-group-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--somo-msu, #164437);
+  margin: 0 0 0.65rem;
+  text-align: center;
+}
+
+.dc-pill-group-helper {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--dc-muted);
+  text-align: center;
+  max-width: 320px;
+  margin: 0.75rem 0 0;
+}
+
 .dc-persona-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
   justify-content: center;
   max-width: 400px;
+}
+
+.dc-field-visual {
+  width: 100%;
+  max-width: 280px;
+  margin-top: 1rem;
 }
 
 .dc-pill {
@@ -266,7 +291,7 @@
 .dc-form {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
 }
 
 .dc-field {
@@ -307,10 +332,25 @@
 .dc-field-underline select:focus {
   outline: none;
   border-bottom-color: var(--dc-label);
+  box-shadow: 0 2px 0 0 var(--somo-msu, #164437);
+}
+
+.dc-field-underline input:focus-visible,
+.dc-field-underline select:focus-visible {
+  outline: 2px solid var(--somo-msu, #164437);
+  outline-offset: 2px;
 }
 
 .dc-field-underline input::placeholder {
   color: #a1a1aa;
+}
+
+.dc-field-helper {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--dc-muted);
+  margin-top: 0.25rem;
 }
 
 .dc-consent {
@@ -368,6 +408,24 @@
   font-size: 0.9rem;
   font-weight: 500;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  max-width: calc(100vw - 2rem);
+}
+
+@media (max-width: 480px) {
+  .dc-floating-demo {
+    right: 1rem;
+    bottom: 1rem;
+    left: auto;
+    font-size: 0.82rem;
+    padding: 0.55rem 0.55rem 0.55rem 1rem;
+  }
+
+  .dc-floating-demo-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 11rem;
+  }
 }
 
 .dc-floating-demo:hover {

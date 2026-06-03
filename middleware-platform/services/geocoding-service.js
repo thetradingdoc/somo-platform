@@ -88,7 +88,7 @@ async function geocodeWithNominatim(address, useCache = true) {
         addressdetails: 1
       },
       headers: {
-        'User-Agent': 'DocLittle-Delivery-Tracking/1.0' // Required by Nominatim
+        'User-Agent': 'Somo-Delivery-Tracking/1.0' // Required by Nominatim
       },
       timeout: 5000
     });
@@ -283,7 +283,7 @@ async function reverseGeocodeWithNominatim(latitude, longitude, useCache = true)
         addressdetails: 1
       },
       headers: {
-        'User-Agent': 'DocLittle-Delivery-Tracking/1.0' // Required by Nominatim
+        'User-Agent': 'Somo-Delivery-Tracking/1.0' // Required by Nominatim
       },
       timeout: 5000
     });

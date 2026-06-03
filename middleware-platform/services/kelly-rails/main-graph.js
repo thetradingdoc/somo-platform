@@ -108,7 +108,9 @@ async function invokeMainGraph(opts = {}) {
       message: opts.message,
       clinicId: opts.clinicId,
       patientId: opts.patientId,
-      callerPhone: opts.callerPhone
+      callerPhone: opts.callerPhone,
+      locale: opts.locale || opts.preferredLanguage,
+      preferredLanguage: opts.preferredLanguage || opts.locale
     });
     return direct;
   }
@@ -121,17 +123,27 @@ async function invokeMainGraph(opts = {}) {
     metadata: { session_id: sessionId, clinic_id: opts.clinicId || null }
   };
 
+  const db = require('../../database');
+  let locale = opts.locale || opts.preferredLanguage;
+  if (!locale && sessionId && db.getKellySessionLanguage) {
+    locale = db.getKellySessionLanguage(sessionId);
+  }
+  locale = String(locale || 'en').slice(0, 2);
+
   const input = {
     session_id: sessionId,
     clinic_id: opts.clinicId || null,
     patient_id: opts.patientId || null,
     channel: opts.channel || 'chat',
+    locale,
+    preferredLanguage: locale,
     last_user_message: String(opts.message || ''),
     turn_context: {
       message: opts.message,
       clinicId: opts.clinicId,
       patientId: opts.patientId,
-      callerPhone: opts.callerPhone
+      callerPhone: opts.callerPhone,
+      locale
     }
   };
 
@@ -151,7 +163,9 @@ async function invokeMainGraph(opts = {}) {
       clinicId: opts.clinicId,
       patientId: opts.patientId,
       callerPhone: opts.callerPhone,
-      channel: opts.channel
+      channel: opts.channel,
+      locale: opts.locale || opts.preferredLanguage,
+      preferredLanguage: opts.preferredLanguage || opts.locale
     });
   }
 }

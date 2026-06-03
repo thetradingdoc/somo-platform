@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "description": "10 golden conversations — 2 per rail. Guardrails: toolsRequired/toolsForbidden per rail allow-lists.",
+  "rails": ["visit", "payment", "post_payment", "education", "support"],
+  "conversations": [
+    {
+      "id": "visit_1_clinical_intake",
+      "rail": "visit",
+      "mode": "executeTurn",
+      "message": "I have a rash on my leg that will not go away",
+      "flags": { "routine_intake_active": false },
+      "expect": {
+        "lane": "clinical",
+        "toolsForbidden": ["request_patient_payment", "schedule_appointment", "evaluate_skincare_routine"]
+      }
+    },
+    {
+      "id": "visit_2_booking_intent",
+      "rail": "visit",
+      "mode": "executeTurn",
+      "message": "I want to book a dermatology appointment for tomorrow",
+      "flags": { "has_rag": true, "triage_complete": true, "routine_intake_active": false },
+      "expect": {
+        "laneIn": ["clinical", "booking"],
+        "toolsForbidden": ["request_patient_payment", "evaluate_skincare_routine"]
+      }
+    },
+    {
+      "id": "payment_1_copay_link",
+      "rail": "payment",
+      "mode": "executeTurn",
+      "message": "I need to pay my copay now please send a secure payment link",
+      "flags": { "copay_amount": 25, "appointment_id": "appt-pay-1" },
+      "expect": {
+        "lane": "payment",
+        "toolsRequired": ["request_patient_payment"],
+        "toolsForbidden": ["schedule_appointment", "evaluate_skincare_routine"]
+      }
+    },
+    {
+      "id": "payment_2_pay_before_book_guard",
+      "rail": "payment",
+      "mode": "executeTurn",
+      "message": "I want to pay my copay now before I book",
+      "flags": {
+        "copay_amount": 25,
+        "appointment_id": null,
+        "has_rag": true,
+        "triage_complete": true
+      },
+      "expect": {
+        "lane": "booking",
+        "toolsForbidden": ["request_patient_payment"]
+      }
+    },
+    {
+      "id": "post_payment_1_after_book",
+      "rail": "post_payment",
+      "mode": "executeTurn",
+      "message": "What happens next after I book?",
+      "sessionMeta": {
+        "last_appointment_id": "appt-pp-1",
+        "last_slot_date": "2026-06-15",
+        "last_slot_time": "14:00"
+      },
+      "flags": {
+        "appointment_id": "appt-pp-1",
+        "post_visit_confirmation_pending": true
+      },
+      "expect": {
+        "lane": "post_payment",
+        "replyMatches": "confirmed|appointment",
+        "toolsForbidden": ["schedule_appointment", "request_patient_payment", "evaluate_skincare_routine"]
+      }
+    },
+    {
+      "id": "post_payment_2_after_pay",
+      "rail": "post_payment",
+      "mode": "executeTurn",
+      "message": "I just paid, what do I do now?",
+      "flags": {
+        "appointment_id": "appt-pp-2",
+        "payment_complete": true
+      },
+      "expect": {
+        "lane": "post_payment",
+        "replyMatches": "confirmed|appointment",
+        "toolsForbidden": ["schedule_appointment", "request_patient_payment"]
+      }
+    },
+    {
+      "id": "education_1_routine_stay",
+      "rail": "education",
+      "mode": "router",
+      "message": "What moisturizer should I use for dry skin?",
+      "flags": { "routine_intake_active": true },
+      "expect": {
+        "lane": "education",
+        "step": "education",
+        "toolsForbidden": ["schedule_appointment", "request_patient_payment"]
+      }
+    },
+    {
+      "id": "education_2_escape_to_visit",
+      "rail": "education",
+      "mode": "executeTurn",
+      "message": "I have an itchy rash and need a dermatology appointment",
+      "active_lane": "education",
+      "step": "education",
+      "flags": { "routine_intake_active": true },
+      "expect": {
+        "laneIn": ["clinical", "booking"],
+        "toolsForbidden": ["evaluate_skincare_routine"]
+      }
+    },
+    {
+      "id": "support_1_receipt_faq",
+      "rail": "support",
+      "mode": "router",
+      "message": "I need a receipt for my last appointment",
+      "flags": {},
+      "expect": {
+        "lane": "support",
+        "step": "faq",
+        "toolsForbidden": ["schedule_appointment", "request_patient_payment"]
+      }
+    },
+    {
+      "id": "support_2_emergency_handoff",
+      "rail": "support",
+      "mode": "executeTurn",
+      "message": "I'm having chest pain",
+      "flags": {},
+      "expect": {
+        "lane": "support",
+        "step": "handoff",
+        "safety_blocked": true,
+        "endCall": true,
+        "replyMatches": "911|emergency",
+        "toolsForbidden": ["schedule_appointment", "request_patient_payment", "evaluate_skincare_routine"]
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 'use strict';
 
 const OBF_BASE = (process.env.OPEN_BEAUTY_FACTS_BASE_URL || 'https://world.openbeautyfacts.org').replace(/\/$/, '');
-const UA = process.env.OPEN_BEAUTY_FACTS_USER_AGENT || 'doclittle-platform/1.0 (integration; support@doclittle.com)';
+const UA = process.env.OPEN_BEAUTY_FACTS_USER_AGENT || 'somo-platform/1.0 (integration; info@callsomo.com)';
 /** Single attempt default avoids ~2× timeout (slow OBF upstream looked like 6s+ in logs). Override OBF_HTTP_MAX_RETRIES=1 to retry. */
 const OBF_TIMEOUT_MS = Number(process.env.OBF_HTTP_TIMEOUT_MS || 4000);
 const OBF_MAX_RETRIES = Math.max(0, Number(process.env.OBF_HTTP_MAX_RETRIES || 0));

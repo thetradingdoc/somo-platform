@@ -45,7 +45,7 @@ if (isProd) {
   }
 }
 
-// LangSmith: route traces to Doctor Little project
+// LangSmith: route traces to Somo middleware project (LANGCHAIN_PROJECT)
 try {
   require('./utils/langsmith-config');
 } catch (e) { /* ignore */ }
@@ -69,6 +69,8 @@ const {
   getHostname,
   isSomoMarketingHostname,
   isLocalDevRootHost,
+  SOMO_LANDING_BUILD_INSTRUCTIONS_HTML,
+  isSomoLandingBuildReady: landingBuildReady,
 } = require('./lib/static-hosting-paths');
 const { registerEarlySomoLandingStatic } = require('./bootstrap/static-hosting');
 // Node 18+ has global fetch; fallback to axios where needed
@@ -1822,10 +1824,7 @@ const allowedOrigins = [
   'http://127.0.0.1:8080',
   'http://[::1]:8080',
   'http://localhost:5180',
-  'http://127.0.0.1:5180',
-  'https://dodgecall.app',
-  'https://www.dodgecall.app',
-  'https://api.dodgecall.app'
+  'http://127.0.0.1:5180'
 ];
 
 const corsOptions = {
@@ -1843,10 +1842,6 @@ const corsOptions = {
     if (/^https?:\/\/([a-z0-9-]+\.)*callsomo\.com$/i.test(origin)) {
       return callback(null, true);
     }
-    if (/^https?:\/\/([a-z0-9-]+\.)*dodgecall\.app$/i.test(origin)) {
-      return callback(null, true);
-    }
-
     // Allow ngrok domains (for HTTPS testing: https://xxxx.ngrok-free.app)
     if (/^https:\/\/[a-z0-9-]+\.ngrok-free\.app$/.test(origin) || /^https:\/\/[a-z0-9-]+\.ngrok\.io$/.test(origin)) {
       return callback(null, true);
@@ -2120,20 +2115,10 @@ function getSomoLandingBuildPath(...subPaths) {
 }
 
 function trySendSomoLanding(res) {
-  const fs = require('fs');
-  const landingBuild = path.resolve(getSomoLandingBuildPath('index.html'));
-  if (fs.existsSync(landingBuild)) {
-    res.sendFile(landingBuild);
-    return true;
-  }
-  return false;
+  if (!landingBuildReady(getSomoLandingBuildPath)) return false;
+  res.sendFile(path.resolve(getSomoLandingBuildPath('index.html')));
+  return true;
 }
-
-const SOMO_LANDING_BUILD_INSTRUCTIONS_HTML =
-  '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
-  '<h1>Somo</h1><p>Landing build not found. Run:</p>' +
-  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/somo-landing && npm install && npm run build</pre>' +
-  '</body></html>';
 
 function sendSomoLandingOrInstructions(res) {
   if (trySendSomoLanding(res)) return;
@@ -2145,14 +2130,9 @@ function redirectLegacyLandingPath(req, res) {
   return res.redirect(301, `/${qs}`);
 }
 
-function isDodgecallApiHostname(hostname) {
-  return String(hostname || '').toLowerCase() === 'api.dodgecall.app';
-}
-
-/** Production API hostnames (split-domain + transition aliases). */
+/** Production API hostnames (split-domain). */
 function isProductionApiHostname(hostname) {
-  const h = String(hostname || '').toLowerCase();
-  return h === 'api.callsomo.com' || h === 'api.dodgecall.app';
+  return String(hostname || '').toLowerCase() === 'api.callsomo.com';
 }
 
 // Root endpoint - route based on domain
@@ -2211,12 +2191,8 @@ app.get('/', (req, res) => {
     return sendSomoLandingOrInstructions(res);
   }
 
-  if (isDodgecallApiHostname(hostname)) {
-    return res.json({ ok: true, service: 'dodgecall-api', demo: '/api/public/dodgecall/health' });
-  }
-
   // API subdomain - check if user is already logged in
-  if (isProductionApiHostname(hostname) && !isDodgecallApiHostname(hostname)) {
+  if (isProductionApiHostname(hostname)) {
     // Check if user has valid session
     const sessionId = req.cookies?.customer_session;
     if (sessionId) {
@@ -2891,8 +2867,8 @@ const rcmRoutes = require('./routes/rcm');
 app.use('/api/rcm', rcmRoutes);
 const rcmPublicRoutes = require('./routes/rcm-public');
 app.use('/api/public/rcm', rcmPublicRoutes);
-const dodgecallPublicRoutes = require('./routes/dodgecall-public');
-app.use('/api/public/dodgecall', dodgecallPublicRoutes);
+const somoDemoPublicRoutes = require('./routes/somo-demo-public');
+app.use('/api/public/somo-demo', somoDemoPublicRoutes);
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
 app.use('/api/internal/service-ops', internalServiceOpsRoutes);
 const impactPublicRoutes = require('./routes/impact-public');
@@ -3226,9 +3202,8 @@ function escapeXml(s) {
     .replace(/'/g, '&apos;');
 }
 
-// Twilio async AMD for DodgeCall demo outbound
-app.post(
-  '/voice/dodgecall-amd-callback',
+// Twilio async AMD for Somo demo outbound
+const somoDemoAmdHandler = [
   express.urlencoded({ extended: true }),
   twilioSignatureRequired,
   async (req, res) => {
@@ -3237,10 +3212,10 @@ app.post(
       const answeredBy = req.body.AnsweredBy || req.body.MachineDetectionResult || '';
       if (callSid && /machine|fax/i.test(String(answeredBy))) {
         const row = db.db
-          .prepare('SELECT id FROM dodgecall_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+          .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
           .get(callSid);
         if (row?.id) {
-          db.updateDodgecallDemoRequest(row.id, {
+          db.updateSomoDemoRequest(row.id, {
             voicemail_detected: 1,
             outcome: 'voicemail',
             status: 'completed'
@@ -3248,11 +3223,12 @@ app.post(
         }
       }
     } catch (e) {
-      console.warn('DodgeCall AMD callback error:', e.message);
+      console.warn('Somo demo AMD callback error:', e.message);
     }
     res.sendStatus(200);
   }
-);
+];
+app.post('/voice/somo-demo-amd-callback', ...somoDemoAmdHandler);
 
 // Twilio Status Callback - receives call status updates
 app.post(
@@ -3288,10 +3264,10 @@ app.post(
     if (callSid) {
       setImmediate(async () => {
         try {
-          const dodgecallDemo = db.db
-            .prepare('SELECT id FROM dodgecall_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+          const somoDemo = db.db
+            .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
             .get(callSid);
-          if (dodgecallDemo?.id) {
+          if (somoDemo?.id) {
             const patch = {};
             if (callStatus) patch.status = callStatus;
             if (callDuration) {
@@ -3304,7 +3280,7 @@ app.post(
               patch.outcome = callStatus;
             }
             if (Object.keys(patch).length) {
-              db.updateDodgecallDemoRequest(dodgecallDemo.id, patch);
+              db.updateSomoDemoRequest(somoDemo.id, patch);
             }
           }
 
@@ -4879,6 +4855,9 @@ app.use('/api/admin/impact', impactAdminRoutes);
 
 const paymentOpsRoutes = require('./routes/payment-ops');
 app.use('/api/admin/payment-ops', paymentOpsRoutes);
+
+const adminKellyCallsRoutes = require('./routes/admin-kelly-calls');
+app.use('/api/admin/kelly', adminKellyCallsRoutes);
 
 // Visit pricing admin (Task 16)
 
@@ -7308,14 +7287,7 @@ function _maskPhone(phone) {
   return `(***) ***-${digits.slice(-4)}`;
 }
 
-function _canViewClinicalPhi(req) {
-  // Staff-only gate for clinical prep PHI.
-  const scope = String(req?.user?.scope || '').toLowerCase();
-  const role = String(req?.user?.role || '').toLowerCase();
-  const isStaffScope = scope === 'clinician' || scope === 'staff' || scope === 'admin';
-  const isStaffRole = role.includes('admin') || role.includes('clinician') || role.includes('staff');
-  return !!(req?.providerId || req?.headers?.['x-provider-id'] || isStaffScope || isStaffRole);
-}
+// Clinical prep PHI gate: middleware-platform/lib/clinical-phi-access.js (admin-platform route)
 
 // Dashboard: merged clinical prep payload for provider drawer
 
@@ -9039,26 +9011,26 @@ app.post('/api/ehr/epic/sync', async (req, res) => {
       const encPatientId = encounter.subject?.reference?.replace('Patient/', '') ||
         encounter.subject?.id || epicPatientId;
 
-      // Find matching DocLittle patient by Epic patient ID
+      // Find matching Somo patient by Epic patient ID
       // First, try to find by resource_id matching Epic patient ID
-      let doclittlePatient = db.db.prepare(`
+      let platformPatient = db.db.prepare(`
         SELECT * FROM fhir_patients WHERE resource_id = ?
       `).get(encPatientId);
 
       // If not found, use the first patient or create a link
-      if (!doclittlePatient && epicPatientId) {
+      if (!platformPatient && epicPatientId) {
         // For now, we'll use the connection's patient_id if available
-        doclittlePatient = db.db.prepare(`
+        platformPatient = db.db.prepare(`
           SELECT * FROM fhir_patients WHERE resource_id = ?
         `).get(epicPatientId);
       }
 
-      if (!doclittlePatient) {
-        console.warn(`   ⚠️  Patient ${encPatientId} not found in DocLittle, skipping encounter ${encounter.id}`);
+      if (!platformPatient) {
+        console.warn(`   ⚠️  Patient ${encPatientId} not found in Somo, skipping encounter ${encounter.id}`);
         continue;
       }
 
-      const patientId = doclittlePatient.resource_id;
+      const patientId = platformPatient.resource_id;
       const encounterId = encounter.id;
       const startTime = encounter.period?.start || null;
       const endTime = encounter.period?.end || null;
@@ -10170,8 +10142,19 @@ function onServerListening() {
           console.warn('⚠️  Financial close generation failed:', e.message);
         }
       };
-      runReconciliation();
-      runDailyClose();
+      const kickoffFinancialJobs = () => {
+        runReconciliation();
+        runDailyClose();
+      };
+      const isProdEnv = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+      const devLightStart = process.env.DEV_LIGHT_START === '1';
+      if (isProdEnv) {
+        kickoffFinancialJobs();
+      } else if (!devLightStart) {
+        setImmediate(kickoffFinancialJobs);
+      } else {
+        console.log('ℹ️  DEV_LIGHT_START=1 — skipping financial integrity kickoff on startup');
+      }
       setInterval(runReconciliation, reconMs);
       setInterval(runDailyClose, closeMs);
       console.log(

@@ -1,5 +1,5 @@
 /**
- * Booking Service - DocLittle Mental Health Telehealth Platform
+ * Booking Service - Somo Mental Health Telehealth Platform
  *
  * Handles appointment scheduling, confirmation, and cancellation
  * Integrates with Google Calendar API for calendar management
@@ -507,7 +507,7 @@ class BookingService {
         duration_minutes: typeConfig.duration_minutes,
         buffer_before_minutes: typeConfig.buffer_before_minutes,
         buffer_after_minutes: typeConfig.buffer_after_minutes,
-        provider: appointmentData.provider || 'DocLittle Mental Health Team',
+        provider: appointmentData.provider || 'Somo Mental Health Team',
         practitioner_id: appointmentData.practitioner_id || null,
         status: 'scheduled',
         visit_mode: visitMode,
@@ -704,7 +704,7 @@ class BookingService {
       start_time: null,
       end_time: null,
       duration_minutes: 15,
-      provider: data.provider || 'DocLittle Specialist Team',
+      provider: data.provider || 'Somo Specialist Team',
       status: 'pending_review',
       visit_mode: 'async_review',
       place_of_service: asyncPos,
@@ -1832,7 +1832,7 @@ Appointment ID: ${appointment.id}
    * @param {Date|string} options.date - Appointment date (Date object or YYYY-MM-DD string)
    * @param {string} options.time - Appointment time (HH:MM format, 24-hour)
    * @param {string} [options.timezone] - Timezone (default: BUSINESS_HOURS.timezone)
-   * @param {string} [options.provider] - Provider name (default: 'DocLittle Mental Health Team')
+   * @param {string} [options.provider] - Provider name (default: 'Somo Mental Health Team')
    * @param {string} [options.notes] - Appointment notes
    * @param {string} [options.clinic_id] - Clinic ID (default: 'clinic-001')
    * @param {string} [options.customer_id] - Customer ID for tenant isolation
@@ -1900,7 +1900,7 @@ Appointment ID: ${appointment.id}
       date: dateStr,
       time: timeStr,
       timezone: options.timezone || BUSINESS_HOURS.timezone,
-      provider: options.provider || 'DocLittle Mental Health Team',
+      provider: options.provider || 'Somo Mental Health Team',
       notes: options.notes || '',
       clinic_id: options.clinic_id,
       customer_id: options.customer_id || null

@@ -32,7 +32,7 @@ const CATALOG = {
 };
 
 async function ensurePrice(name, amountCents, recurring) {
-  const product = await stripe.products.create({ name: `DocLittle ${name}` });
+  const product = await stripe.products.create({ name: `Somo ${name}` });
   const price = await stripe.prices.create({
     product: product.id,
     unit_amount: amountCents,

@@ -769,7 +769,7 @@ router.post('/customers/me/export', rateLimiter, requireCustomerAuth, async (req
     };
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="doclittle-export-${customerId}-${Date.now()}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="somo-export-${customerId}-${Date.now()}.json"`);
     res.send(JSON.stringify(exportData, null, 2));
   } catch (error) {
     console.error('Export error:', error);

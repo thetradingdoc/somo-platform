@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#16a637">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>Somo Provider — RCM Journey</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/provider-portal.css">
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
+  <script src="/assets/js/revenue/revenue-ui.js"></script>
+</head>
+<body class="provider-portal provider-portal--scroll" data-page="journey">
+  <main class="main-content pp-content pp-content--journey" id="ppMainContent">
+    <section class="pp-panel">
+      <div class="pp-panel-head">
+        <div>
+          <div class="pp-panel-title">Pipeline stages</div>
+          <div class="pp-panel-sub" id="journeySub">Loading journey…</div>
+        </div>
+        <a class="pp-btn pp-btn-outline pp-btn-sm" id="journeyWorkspaceLink" href="revenue.html?tab=pipeline" hidden>Open workspace</a>
+      </div>
+      <div class="pp-journey-meta" id="journeyMeta" hidden>
+        <span class="pp-journey-meta-id" id="journeyMetaId"></span>
+        <span id="journeyMetaStatus"></span>
+      </div>
+      <div class="pp-panel-body pp-journey-stages" id="stageList">Loading stages…</div>
+    </section>
+
+    <section class="pp-panel">
+      <div class="pp-panel-head">
+        <div class="pp-panel-title">Events</div>
+      </div>
+      <div class="pp-panel-body" id="eventList"></div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+    const clinicId = () => (window.ppGetClinicId ? window.ppGetClinicId() : 'clinic-default');
+    const UI = () => window.RevenueUI;
+
+    function escapeHtml(s) {
+      return UI()?.escapeHtml ? UI().escapeHtml(s) : String(s ?? '');
+    }
+
+    function resolveHref(href) {
+      return typeof window.resolveBusinessPath === 'function' ? window.resolveBusinessPath(href) : href;
+    }
+
+    function iconHtml(name) {
+      return typeof window.getNavIcon === 'function' ? window.getNavIcon(name) : '';
+    }
+
+    function resolveBackHref() {
+      const params = new URLSearchParams(window.location.search);
+      const from = params.get('from');
+      const patientId = params.get('patient_id');
+      if (from === 'payments') return 'revenue.html?tab=payments';
+      if (from === 'claims') return 'revenue.html?tab=claims';
+      if (from === 'work') return 'revenue.html?tab=work';
+      if (from === 'patient' && patientId) {
+        return `patient-case.html?patient_id=${encodeURIComponent(patientId)}`;
+      }
+      return 'revenue.html?tab=pipeline';
+    }
+
+    function resolveBackLabel() {
+      const from = new URLSearchParams(window.location.search).get('from');
+      if (from === 'payments') return 'Back to patient pay';
+      if (from === 'claims') return 'Back to claims';
+      if (from === 'work') return 'Back to work queue';
+      if (from === 'patient') return 'Back to patient case';
+      return 'Back to pipeline';
+    }
+
+    async function loadContract() {
+      const res = await fetch(`${API_BASE}/api/rcm/journeys/stage-contract`, { credentials: 'include' });
+      const json = await res.json();
+      return json.success && Array.isArray(json.stages) ? json.stages : [];
+    }
+
+    async function loadJourney(journeyId) {
+      const url = new URL(`${API_BASE}/api/rcm/journeys`);
+      url.searchParams.set('clinic_id', clinicId());
+      url.searchParams.set('limit', '50');
+      const res = await fetch(url.toString(), { credentials: 'include', headers: window.ppGetAuthHeaders?.() || {} });
+      const json = await res.json();
+      const list = json.journeys || [];
+      return list.find((j) => String(j.id) === String(journeyId)) || list[0] || null;
+    }
+
+    async function loadEvents(journeyId) {
+      const url = new URL(`${API_BASE}/api/rcm/journeys/${encodeURIComponent(journeyId)}/timeline`);
+      url.searchParams.set('clinic_id', clinicId());
+      const res = await fetch(url.toString(), { credentials: 'include', headers: window.ppGetAuthHeaders?.() || {} });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.success && Array.isArray(json.events) ? json.events : [];
+    }
+
+    function stageIndex(stages, currentId) {
+      const norm = String(currentId || '').toLowerCase();
+      return stages.findIndex((s) => s.id === norm);
+    }
+
+    function renderStages(stages, journey) {
+      const curIdx = stageIndex(stages, journey.stage);
+      return stages.map((s, i) => {
+        const done = i < curIdx;
+        const active = i === curIdx;
+        const href =
+          typeof window.ppJourneyStageHref === 'function'
+            ? resolveHref(window.ppJourneyStageHref(s.id))
+            : '#';
+        const stateClass = done ? 'pp-journey-stage--done' : active ? 'pp-journey-stage--active' : '';
+        const check = done
+          ? `<span class="pp-journey-stage-check" aria-hidden="true">${iconHtml('check-circle')}</span>`
+          : '';
+        const arrow = active ? '<span class="pp-journey-stage-arrow" aria-hidden="true">→</span>' : '';
+        const owner = s.owner
+          ? `<span class="pp-journey-owner">${escapeHtml(String(s.owner).replace(/_/g, ' '))}</span>`
+          : '';
+        return `<a class="pp-journey-stage ${stateClass}" href="${escapeHtml(href)}">
+          <span class="pp-journey-stage-label">${check}${escapeHtml(s.label)}${arrow}</span>
+          ${owner}
+        </a>`;
+      }).join('');
+    }
+
+    function renderEvents(events) {
+      if (!events.length) {
+        return UI()?.renderEmptyState
+          ? UI().renderEmptyState('clock', 'No journey events yet.')
+          : '<div class="pp-empty">No journey events yet.</div>';
+      }
+      const rows = events.map((e) => {
+        const when = (e.created_at || '').slice(0, 16).replace('T', ' ');
+        const stageTo = e.stage_to ? e.stage_to.replace(/_/g, ' ') : '—';
+        return [
+          `<span style="font-weight:600">${escapeHtml((e.event_type || 'event').replace(/_/g, ' '))}</span>`,
+          `<span class="pp-table-amount">${escapeHtml(when || '—')}</span>`,
+          `<span>${escapeHtml(stageTo)}</span>`,
+        ];
+      });
+      return UI().renderTable({
+        colsClass: 'pp-table-cols-journey-events',
+        columns: ['Event', 'When', 'Stage'],
+        rows,
+      });
+    }
+
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const journeyId = params.get('journey_id');
+
+      mountProviderPage({
+        activeId: 'revenue',
+        eyebrow: 'Revenue',
+        title: 'RCM journey',
+        backHref: resolveBackHref(),
+        backLabel: resolveBackLabel(),
+      });
+
+      const stages = await loadContract();
+      const journey = journeyId ? await loadJourney(journeyId) : null;
+
+      if (!journey) {
+        document.getElementById('stageList').innerHTML = UI()?.renderEmptyState
+          ? UI().renderEmptyState('clipboard', 'No journey found. Start one from the revenue pipeline.')
+          : '<div class="pp-empty">No journey found. Start one from the revenue pipeline.</div>';
+        document.getElementById('journeySub').textContent = 'Journey not found';
+        document.getElementById('eventList').innerHTML = '';
+        return;
+      }
+
+      const titleEl = document.getElementById('ppPageTitle');
+      const subEl = document.getElementById('ppPageSub');
+      const patientLabel = journey.patient_name || journey.patient_id || 'Patient';
+      const stageLabel = journey.stage_label || (journey.stage || '').replace(/_/g, ' ');
+      const statusLabel = journey.status || 'open';
+
+      if (titleEl) titleEl.textContent = `Journey ${journey.id}`;
+      if (subEl) {
+        subEl.textContent = `${patientLabel} · ${stageLabel} · ${statusLabel}`;
+        subEl.hidden = false;
+      }
+
+      document.getElementById('journeySub').textContent = `${stages.length} stages · current: ${stageLabel}`;
+      document.getElementById('journeyMeta').hidden = false;
+      document.getElementById('journeyMetaId').textContent = journey.id;
+      document.getElementById('journeyMetaStatus').innerHTML = UI()?.renderStatusPill
+        ? UI().renderStatusPill(statusLabel)
+        : escapeHtml(statusLabel);
+
+      const workspace = document.getElementById('journeyWorkspaceLink');
+      if (workspace && typeof window.ppJourneyStageHref === 'function') {
+        workspace.href = resolveHref(window.ppJourneyStageHref(journey.stage));
+        workspace.hidden = false;
+      }
+
+      document.getElementById('stageList').innerHTML = renderStages(stages, journey);
+
+      const events = await loadEvents(journey.id);
+      document.getElementById('eventList').innerHTML = renderEvents(events);
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

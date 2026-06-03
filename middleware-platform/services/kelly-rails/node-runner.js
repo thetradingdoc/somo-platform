@@ -5,6 +5,7 @@ const KellyToolExecutor = require('../kelly-tool-executor');
 const { getAllowedToolNames } = require('./tool-allowlists');
 const { laneSystemPrompt } = require('./prompts');
 const { loadHistory, appendHistory } = require('./history');
+const { formatVoiceReply } = require('../voice-reply-formatter');
 
 const MAX_ITERATIONS = parseInt(process.env.KELLY_RAILS_MAX_TOOL_ITERATIONS || '2', 10);
 const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300', 10);
@@ -27,7 +28,7 @@ async function runNodeStep(state, ctx) {
   const { sessionId, clinicId, patientId, callerPhone, channel, message } = ctx;
   const lane = state.active_lane;
   const step = state.step;
-  const allowedNames = getAllowedToolNames(lane, step);
+  const allowedNames = getAllowedToolNames(lane, step, state.flags || {});
   const allTools = getKellyTools();
   const tools = filterTools(allTools, allowedNames);
 
@@ -54,8 +55,12 @@ async function runNodeStep(state, ctx) {
       console.warn('[kelly-rails] LLM call failed:', e.message);
       reply =
         channel === 'voice'
-          ? "I'm having trouble right now. Please hold on a moment."
-          : "I'm temporarily unavailable. Please try again in a moment.";
+          ? state.locale === 'es'
+            ? 'Tengo un problema técnico. Un momento, por favor.'
+            : "I'm having trouble right now. Please hold on a moment."
+          : state.locale === 'es'
+            ? 'No estoy disponible por un momento. Inténtelo de nuevo.'
+            : "I'm temporarily unavailable. Please try again in a moment.";
       break;
     }
 
@@ -94,7 +99,14 @@ async function runNodeStep(state, ctx) {
   }
 
   if (!reply) {
-    reply = 'Thanks — I am still working on that. Could you tell me a bit more?';
+    reply =
+      state.locale === 'es'
+        ? 'Gracias — sigo trabajando en eso. ¿Puede contarme un poco más?'
+        : 'Thanks — I am still working on that. Could you tell me a bit more?';
+  }
+
+  if (channel === 'voice') {
+    reply = formatVoiceReply(reply, state);
   }
 
   appendHistory(sessionId, 'assistant', reply);

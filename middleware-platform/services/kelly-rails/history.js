@@ -4,7 +4,22 @@ const db = require('../../database');
 
 const MAX_HISTORY_TURNS = parseInt(process.env.KELLY_MAX_HISTORY_TURNS || '20', 10);
 
+function ensureHistoryTable() {
+  try {
+    db.db.prepare(`
+      CREATE TABLE IF NOT EXISTS kelly_conversation_history (
+        id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+        session_id  TEXT NOT NULL,
+        role        TEXT NOT NULL,
+        content     TEXT NOT NULL,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `).run();
+  } catch (_) {}
+}
+
 function loadHistory(sessionId) {
+  ensureHistoryTable();
   try {
     const rows = db.db
       .prepare(
@@ -22,6 +37,7 @@ function loadHistory(sessionId) {
 
 function appendHistory(sessionId, role, content) {
   if (!sessionId || !content) return;
+  ensureHistoryTable();
   try {
     db.db
       .prepare(

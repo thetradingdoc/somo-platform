@@ -11,6 +11,8 @@
 
 | File | Focus |
 |------|--------|
+| [`PROVIDER_UI_RCM_IMPROVEMENT_TODOS.md`](PROVIDER_UI_RCM_IMPROVEMENT_TODOS.md) | Provider visibility — Kelly feed, roster chips, nav, collection resend (**completed**) |
+| [`REVENUE_HUB_REDESIGN_TODOS.md`](REVENUE_HUB_REDESIGN_TODOS.md) | Revenue hub — 4-tab shell, UI audit fixes, legacy redirects (**completed**) |
 | [`KELLY_CONVERSATION_RAILS_TODOS.md`](KELLY_CONVERSATION_RAILS_TODOS.md) | Short backlog — **SSOT:** [`docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`](../../docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md) |
 | [`KELLY_RCM_PIPELINE_TODOS.md`](KELLY_RCM_PIPELINE_TODOS.md) | Kelly identity + RCM backbone + financial rails (TODO-01–24) |
 | [`AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Open checkout debt (#2, #4–#7, #9–#10, #12) |
@@ -35,7 +37,7 @@
 | File | Focus |
 |------|--------|
 | [`Orchestration-todos.md`](Orchestration-todos.md) | Transcript replay QA, landing↔checkout E2E parity, security checklist refresh |
-| [`DODGECALL_DEMO_LAUNCH_CHECKLIST.md`](DODGECALL_DEMO_LAUNCH_CHECKLIST.md) | Human/ops P0 before first demo call (code complete) |
+| [`SOMO_DEMO_LAUNCH_CHECKLIST.md`](SOMO_DEMO_LAUNCH_CHECKLIST.md) | Human/ops P0 before first Somo demo call (code complete) |
 | [`LANDING_NAVIGATOR_REGRESSION_TODOS.md`](LANDING_NAVIGATOR_REGRESSION_TODOS.md) | ZIP race/scope regression tests (UI otherwise done) |
 | [`PHOTO_TO_BILL_EXTRACTION_TODOS.md`](PHOTO_TO_BILL_EXTRACTION_TODOS.md) | Key rotation + Phase 5 rollout only |
 
@@ -49,7 +51,7 @@
 | Kelly golden path (Sprints 0–3) | [`../archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md`](../archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md) |
 | Agentic reasoning (unified pipeline) | [`../archive/AGENTIC_REASONING_TODOS_COMPLETED_2026-05-31.md`](../archive/AGENTIC_REASONING_TODOS_COMPLETED_2026-05-31.md) |
 | Landing navigator UI (Batches 1–14) | [`../archive/LANDING_NAVIGATOR_UI_UX_TODOS_COMPLETED_2026-05-31.md`](../archive/LANDING_NAVIGATOR_UI_UX_TODOS_COMPLETED_2026-05-31.md) |
-| DodgeCall demo agent (code) | [`../archive/DODGECALL_DEMO_AGENT_TODOS_COMPLETED_2026-05-31.md`](../archive/DODGECALL_DEMO_AGENT_TODOS_COMPLETED_2026-05-31.md) |
+| Somo demo agent (code) | [`../archive/DODGECALL_DEMO_AGENT_TODOS_COMPLETED_2026-05-31.md`](../archive/DODGECALL_DEMO_AGENT_TODOS_COMPLETED_2026-05-31.md) |
 | Derm Q&A backend (Phases 0–5) | [`../archive/DERM_PATIENT_QA_BACKEND_COMPLETED_2026-05-31.md`](../archive/DERM_PATIENT_QA_BACKEND_COMPLETED_2026-05-31.md) |
 
 ---

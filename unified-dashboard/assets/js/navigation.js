@@ -5,9 +5,10 @@
  */
 
 function renderNavigation(activeId = null) {
-    if (document.getElementById('ppSidebarNav')) {
-        if (typeof window.renderProviderSidebar === 'function' && activeId) {
-            window.renderProviderSidebar(activeId);
+    if (document.getElementById('ppSidebarNav') || document.body.classList.contains('provider-portal')) {
+        if (typeof window.renderProviderSidebar === 'function') {
+            const id = activeId || (typeof window.resolveProviderActiveId === 'function' ? window.resolveProviderActiveId() : 'today');
+            window.renderProviderSidebar(id);
         }
         return;
     }

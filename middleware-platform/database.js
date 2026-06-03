@@ -2101,7 +2101,7 @@ db.exec(`
     start_time DATETIME NOT NULL,
     end_time DATETIME NOT NULL,
     duration_minutes INTEGER DEFAULT 50,
-    provider TEXT DEFAULT 'DocLittle Mental Health Team',
+    provider TEXT DEFAULT 'Somo Care Team',
     status TEXT DEFAULT 'scheduled',
     payment_status TEXT DEFAULT 'unpaid',
     requires_prior_auth INTEGER DEFAULT 0,
@@ -3833,11 +3833,11 @@ function migrateProviderTrialSim() {
   }
 }
 
-// Migration: DodgeCall public demo requests
-function migrateDodgecallDemoRequests() {
+// Migration: Somo demo public demo requests
+function migrateSomoDemoRequests() {
   try {
     db.exec(`
-      CREATE TABLE IF NOT EXISTS dodgecall_demo_requests (
+      CREATE TABLE IF NOT EXISTS somo_demo_requests (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         phone TEXT NOT NULL,
@@ -3849,12 +3849,35 @@ function migrateDodgecallDemoRequests() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_phone ON dodgecall_demo_requests(phone);
-      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_created ON dodgecall_demo_requests(created_at);
-      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_ip_created ON dodgecall_demo_requests(client_ip, created_at);
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_phone ON somo_demo_requests(phone);
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_created ON somo_demo_requests(created_at);
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_ip_created ON somo_demo_requests(client_ip, created_at);
+      CREATE TABLE IF NOT EXISTS somo_demo_phone_daily_lock (
+        phone TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (phone, day_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_phone_lock_created
+        ON somo_demo_phone_daily_lock(created_at);
+      CREATE TABLE IF NOT EXISTS somo_demo_phone_window_lock (
+        phone TEXT PRIMARY KEY,
+        request_id TEXT NOT NULL,
+        locked_until DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_somo_demo_phone_window_until
+        ON somo_demo_phone_window_lock(locked_until);
     `);
     const extraCols = [
       ['template_id', 'TEXT'],
+      ['language', 'TEXT'],
+      ['country', 'TEXT'],
+      ['city', 'TEXT'],
+      ['practice_specialty', 'TEXT'],
+      ['practice_size', 'TEXT'],
+      ['questions_asked', 'TEXT'],
       ['conversation_stage', 'TEXT'],
       ['interest_level', 'TEXT'],
       ['cta_offered_at', 'TEXT'],
@@ -3865,16 +3888,37 @@ function migrateDodgecallDemoRequests() {
       ['attribution_json', 'TEXT']
     ];
     const existing = new Set(
-      db.prepare('PRAGMA table_info(dodgecall_demo_requests)').all().map((c) => c.name)
+      db.prepare('PRAGMA table_info(somo_demo_requests)').all().map((c) => c.name)
     );
     for (const [col, type] of extraCols) {
       if (!existing.has(col)) {
-        db.exec(`ALTER TABLE dodgecall_demo_requests ADD COLUMN ${col} ${type}`);
+        db.exec(`ALTER TABLE somo_demo_requests ADD COLUMN ${col} ${type}`);
       }
     }
-    console.log('✅ Migration complete: dodgecall_demo_requests');
+    const legacyExists = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='dodgecall_demo_requests'"
+      )
+      .get();
+    if (legacyExists) {
+      db.exec(`
+        INSERT OR IGNORE INTO somo_demo_requests (
+          id, name, phone, use_case, status, twilio_call_sid, client_ip, error_message, created_at, updated_at
+        )
+        SELECT
+          id, name, phone, use_case, status, twilio_call_sid, client_ip, error_message, created_at, updated_at
+        FROM dodgecall_demo_requests
+      `);
+    }
+    db.exec(`
+      DELETE FROM somo_demo_phone_daily_lock
+      WHERE created_at < datetime('now', '-2 days');
+      DELETE FROM somo_demo_phone_window_lock
+      WHERE locked_until <= datetime('now');
+    `);
+    console.log('✅ Migration complete: somo_demo_requests');
   } catch (error) {
-    console.error('❌ DodgeCall demo migration failed:', error.message);
+    console.error('❌ Somo demo migration failed:', error.message);
   }
 }
 
@@ -5797,7 +5841,7 @@ runStartupMigrations(
     migrateCustomerCreditsExpiration,
     migrateVoiceSubscriptionBilling,
     migrateProviderTrialSim,
-    migrateDodgecallDemoRequests,
+    migrateSomoDemoRequests,
     migrateFHIRPatientsMerchantId,
     migrateFHIRPatientsMergedInto,
     migrateCircleAccountsMerchantId,
@@ -10463,7 +10507,10 @@ module.exports = {
 
     const patientId = encounterResource.subject?.reference?.replace('Patient/', '');
     const callId = encounterResource.extension?.find(
-      e => e.url === 'https://doclittle.health/extension/voice-call-id'
+      e => {
+        const fhirIds = require('./lib/fhir-brand-identifiers');
+        return fhirIds.matchesExtensionUrl(e.url, 'voice-call-id');
+      }
     )?.valueString;
 
     return stmt.run(
@@ -16612,14 +16659,14 @@ module.exports = {
     `).run(customerId);
   },
 
-  insertDodgecallDemoRequest(row) {
+  insertSomoDemoRequest(row) {
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO dodgecall_demo_requests (
-        id, name, phone, use_case, template_id, status, client_ip, attribution_json, created_at, updated_at
+      INSERT INTO somo_demo_requests (
+        id, name, phone, use_case, template_id, language, country, city, practice_specialty, practice_size, questions_asked, status, client_ip, attribution_json, created_at, updated_at
       )
       VALUES (
-        @id, @name, @phone, @use_case, @template_id, @status, @client_ip, @attribution_json, @created_at, @updated_at
+        @id, @name, @phone, @use_case, @template_id, @language, @country, @city, @practice_specialty, @practice_size, @questions_asked, @status, @client_ip, @attribution_json, @created_at, @updated_at
       )
     `).run({
       id: row.id,
@@ -16627,6 +16674,12 @@ module.exports = {
       phone: row.phone,
       use_case: row.use_case,
       template_id: row.template_id || null,
+      language: row.language || null,
+      country: row.country || null,
+      city: row.city || null,
+      practice_specialty: row.practice_specialty || null,
+      practice_size: row.practice_size || null,
+      questions_asked: row.questions_asked || null,
       status: row.status || 'pending',
       client_ip: row.client_ip || null,
       attribution_json: row.attribution_json || null,
@@ -16636,7 +16689,7 @@ module.exports = {
     return row.id;
   },
 
-  updateDodgecallDemoRequest(id, patch) {
+  updateSomoDemoRequest(id, patch) {
     if (!id) return;
     const fields = [];
     const params = { id, updated_at: new Date().toISOString() };
@@ -16645,6 +16698,13 @@ module.exports = {
       'twilio_call_sid',
       'error_message',
       'template_id',
+      'language',
+      'country',
+      'city',
+      'use_case',
+      'practice_specialty',
+      'practice_size',
+      'questions_asked',
       'conversation_stage',
       'interest_level',
       'cta_offered_at',
@@ -16662,44 +16722,74 @@ module.exports = {
     }
     if (!fields.length) return;
     fields.push('updated_at = @updated_at');
-    db.prepare(`UPDATE dodgecall_demo_requests SET ${fields.join(', ')} WHERE id = @id`).run(params);
+    db.prepare(`UPDATE somo_demo_requests SET ${fields.join(', ')} WHERE id = @id`).run(params);
   },
 
-  countDodgecallDemoRequestsToday() {
+  countSomoDemoRequestsToday() {
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const row = db
       .prepare(
-        `SELECT COUNT(*) AS c FROM dodgecall_demo_requests WHERE created_at >= ?`
+        `SELECT COUNT(*) AS c FROM somo_demo_requests WHERE created_at >= ?`
       )
       .get(dayAgo);
     return row?.c || 0;
   },
 
-  countActiveDodgecallDemoCalls() {
+  countActiveSomoDemoCalls() {
     const row = db
       .prepare(
-        `SELECT COUNT(*) AS c FROM dodgecall_demo_requests
+        `SELECT COUNT(*) AS c FROM somo_demo_requests
          WHERE status IN ('initiated', 'ringing', 'answered', 'in-progress')`
       )
       .get();
     return row?.c || 0;
   },
 
-  getDodgecallDemoRequest(id) {
+  getSomoDemoRequest(id) {
     if (!id) return null;
-    return db.prepare('SELECT * FROM dodgecall_demo_requests WHERE id = ?').get(id) || null;
+    return db.prepare('SELECT * FROM somo_demo_requests WHERE id = ?').get(id) || null;
   },
 
-  countDodgecallDemoRequestsSince({ client_ip, phone, since, statuses }) {
+  acquireSomoDemoDailyPhoneLock(phone, requestId, nowIso = new Date().toISOString()) {
+    if (!phone || !requestId) return false;
+    try {
+      const now = nowIso || new Date().toISOString();
+      const lockUntil = new Date(Date.parse(now) + (24 * 60 * 60 * 1000)).toISOString();
+      db.prepare(`
+        DELETE FROM somo_demo_phone_window_lock
+        WHERE phone = ? AND locked_until <= ?
+      `).run(phone, now);
+      db.prepare(`
+        INSERT INTO somo_demo_phone_window_lock (phone, request_id, locked_until, created_at)
+        VALUES (?, ?, ?, ?)
+      `).run(phone, requestId, lockUntil, now);
+      return true;
+    } catch (err) {
+      if (String(err && err.message || '').includes('UNIQUE constraint failed')) {
+        return false;
+      }
+      throw err;
+    }
+  },
+
+  releaseSomoDemoDailyPhoneLock(phone, _nowIso = new Date().toISOString()) {
+    if (!phone) return;
+    db.prepare(`
+      DELETE FROM somo_demo_phone_window_lock
+      WHERE phone = ?
+    `).run(phone);
+  },
+
+  countSomoDemoRequestsSince({ client_ip, phone, since, statuses }) {
     if (client_ip) {
       const row = db.prepare(`
-        SELECT COUNT(*) AS c FROM dodgecall_demo_requests
+        SELECT COUNT(*) AS c FROM somo_demo_requests
         WHERE client_ip = ? AND created_at >= ?
       `).get(client_ip, since);
       return row?.c || 0;
     }
     if (phone) {
-      let sql = `SELECT COUNT(*) AS c FROM dodgecall_demo_requests WHERE phone = ? AND created_at >= ?`;
+      let sql = `SELECT COUNT(*) AS c FROM somo_demo_requests WHERE phone = ? AND created_at >= ?`;
       const params = [phone, since];
       if (statuses && statuses.length) {
         sql += ` AND status IN (${statuses.map(() => '?').join(',')})`;
@@ -16709,6 +16799,126 @@ module.exports = {
       return row?.c || 0;
     }
     return 0;
+  },
+
+  insertKellyCallEvent(event = {}) {
+    if (!event.event_type) return null;
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS kelly_call_events (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        call_id TEXT,
+        event_type TEXT NOT NULL,
+        payload_json TEXT,
+        clinic_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_kelly_call_events_session_created
+        ON kelly_call_events(session_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_kelly_call_events_type_created
+        ON kelly_call_events(event_type, created_at);
+    `);
+    try {
+      const cols = db.prepare('PRAGMA table_info(kelly_call_events)').all();
+      if (!cols.some((c) => c.name === 'clinic_id')) {
+        db.exec('ALTER TABLE kelly_call_events ADD COLUMN clinic_id TEXT');
+      }
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_kelly_call_events_clinic_created ON kelly_call_events(clinic_id, created_at DESC)'
+      );
+    } catch (_) {}
+
+    const payload = event.payload_json || {};
+    const clinicId =
+      event.clinic_id ||
+      payload.clinic_id ||
+      null;
+
+    const id = event.id || `kce_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO kelly_call_events (id, session_id, call_id, event_type, payload_json, clinic_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      event.session_id || null,
+      event.call_id || null,
+      event.event_type,
+      safeStringify(payload),
+      clinicId,
+      event.created_at || new Date().toISOString()
+    );
+    return id;
+  },
+
+  listKellyCallEventsForClinic(clinicId, { limit = 60, since = null } = {}) {
+    if (!clinicId) return [];
+    const cap = Math.max(1, Math.min(500, Number(limit) || 60));
+    const cid = String(clinicId);
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS kelly_call_events (
+          id TEXT PRIMARY KEY,
+          session_id TEXT,
+          call_id TEXT,
+          event_type TEXT NOT NULL,
+          payload_json TEXT,
+          clinic_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      const cols = db.prepare('PRAGMA table_info(kelly_call_events)').all();
+      if (!cols.some((c) => c.name === 'clinic_id')) {
+        db.exec('ALTER TABLE kelly_call_events ADD COLUMN clinic_id TEXT');
+      }
+    } catch (_) {}
+
+    const params = [cid, cid, cid];
+    let sinceClause = '';
+    if (since) {
+      sinceClause = ' AND e.created_at >= ?';
+      params.push(String(since));
+    }
+    params.push(cap);
+
+    try {
+      return db.prepare(`
+        SELECT DISTINCT e.*
+        FROM kelly_call_events e
+        LEFT JOIN voice_call_log v ON v.call_id = e.session_id OR v.call_id = e.call_id
+        WHERE (
+          e.clinic_id = ?
+          OR v.clinic_id = ?
+          OR json_extract(e.payload_json, '$.clinic_id') = ?
+        )
+        ${sinceClause}
+        ORDER BY e.created_at DESC
+        LIMIT ?
+      `).all(...params);
+    } catch (_) {
+      return db.prepare(`
+        SELECT * FROM kelly_call_events
+        WHERE json_extract(payload_json, '$.clinic_id') = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(cid, cap);
+    }
+  },
+
+  listKellyCallEvents({ session_id, limit = 100 } = {}) {
+    const cap = Math.max(1, Math.min(500, Number(limit) || 100));
+    if (session_id) {
+      return db.prepare(`
+        SELECT * FROM kelly_call_events
+        WHERE session_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(session_id, cap);
+    }
+    return db.prepare(`
+      SELECT * FROM kelly_call_events
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(cap);
   },
 
   insertUsageEvent(row) {
@@ -17678,7 +17888,7 @@ module.exports = {
 
     const leadPayload = {
       title: options.title || `Inbound - ${customer.use_case || 'API Signup'}`,
-      clinic_name: customer.company_name || customer.name || 'DocLittle Prospect',
+      clinic_name: customer.company_name || customer.name || 'Somo Prospect',
       clinic_phone: customer.phone_number || null,
       clinic_email: normalizedEmail,
       location: customer.business_size || customer.use_case || null,

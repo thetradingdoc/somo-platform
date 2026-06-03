@@ -303,7 +303,7 @@ async function callGroqLangChain({ systemContent, userContent, callId, clinicId,
     streaming: false,
     response_format: { type: 'json_object' }
   });
-  const tags = ['medical-coding', 'doctor-little', operation];
+  const tags = ['medical-coding', 'somo', operation];
   if (clinicId) tags.push(`clinic:${clinicId}`);
   if (callId) tags.push(`call:${callId}`);
   const runnableConfig = {

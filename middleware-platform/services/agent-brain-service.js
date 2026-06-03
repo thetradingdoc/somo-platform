@@ -1,7 +1,7 @@
 /**
  * AgentBrainService
  *
- * Channel-agnostic "brain" for DocLittle agents.
+ * Channel-agnostic "brain" for Somo agents.
  * This service owns:
  * - Prompt assembly (base system prompt + clinic config + session context)
  * - LLM invocation
@@ -77,7 +77,7 @@ class AgentBrainService {
    */
   getBaseSystemPrompt() {
     return [
-      'You are the DocLittle medical front-desk assistant.',
+      'You are the Somo medical front-desk assistant.',
       'You handle inbound and outbound calls for clinics and doctors.',
       '',
       'Goals:',

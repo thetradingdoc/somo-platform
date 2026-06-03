@@ -106,6 +106,26 @@ async function main() {
 
   recordOwnerFromDb(manifest);
 
+  console.log('\n==> Kelly Rails v2 env');
+  const kellyEnv = spawnSync('node', ['scripts/verify-kelly-rails-env.cjs'], {
+    cwd: mpRoot,
+    stdio: 'pipe',
+    encoding: 'utf8',
+    env: { ...process.env, KELLY_RAILS_ENV_PROFILE: 'staging', STAGING: '1' }
+  });
+  const kellyEnvPass = kellyEnv.status === 0;
+  manifest.checks.kelly_rails_env = {
+    pass: kellyEnvPass,
+    exit_code: kellyEnv.status ?? 1,
+    stdout: (kellyEnv.stdout || '').trim().slice(0, 500),
+    stderr: (kellyEnv.stderr || '').trim().slice(0, 500)
+  };
+  console.log(kellyEnv.stdout || kellyEnv.stderr || '');
+  if (!kellyEnvPass) {
+    console.error('❌ Kelly Rails env check failed — set KELLY_RAILS_V2=1 and KELLY_ALLOW_HYBRID_GRAPH=0 on Cloud Run.');
+    ok = false;
+  }
+
   if (manifest.db_checks && !manifest.db_checks.skipped && !manifest.db_checks.error) {
     if (!manifest.db_checks.owner_retell_agent_id) {
       manifest.db_checks.owner_retell_warning =

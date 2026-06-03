@@ -98,7 +98,7 @@ const RCM_STAGE_CONTRACT = [
     required_inputs: ['patient_balance', 'collection_strategy'],
     success_criteria: 'payment plan or payment outcome recorded',
     fallback: 'manual collections and payment reminders',
-    primary_cta: { label: 'Open patient payments', href: 'patient-payments.html' },
+    primary_cta: { label: 'Open patient payments', href: 'revenue.html?tab=payments' },
     secondary_cta: { label: 'Open invoices', href: 'billing.html?section=invoices' },
   },
   {

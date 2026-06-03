@@ -6,6 +6,7 @@ export default function FloatingDemoCta() {
   useEffect(() => {
     const hero = document.querySelector('.somo-hero');
     const demo = document.getElementById('demo');
+    const footer = document.querySelector('.somo-footer');
     if (!window.IntersectionObserver) {
       setHidden(false);
       return undefined;
@@ -13,8 +14,9 @@ export default function FloatingDemoCta() {
 
     let heroVisible = true;
     let demoVisible = false;
+    let footerVisible = false;
 
-    const update = () => setHidden(heroVisible || demoVisible);
+    const update = () => setHidden(heroVisible || demoVisible || footerVisible);
 
     const observers = [];
 
@@ -42,6 +44,18 @@ export default function FloatingDemoCta() {
       );
       demoObs.observe(demo);
       observers.push(demoObs);
+    }
+
+    if (footer) {
+      const footerObs = new IntersectionObserver(
+        ([entry]) => {
+          footerVisible = entry.isIntersecting;
+          update();
+        },
+        { threshold: 0.12 }
+      );
+      footerObs.observe(footer);
+      observers.push(footerObs);
     }
 
     update();

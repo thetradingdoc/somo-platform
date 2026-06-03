@@ -369,8 +369,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const detectPreferredLanguage = () => {
     if (preferredLanguageFromBody) return preferredLanguageFromBody;
     try {
-      const { detectLanguageFromText } = require('./patient-orchestrator-service');
-      const detected = detectLanguageFromText(trimmedMessage)?.code || '';
+      const { detectLanguageFromText } = require('./kelly-rails/language');
+      const detected = detectLanguageFromText(trimmedMessage)?.language || '';
       return String(detected || '').trim().toLowerCase() || '';
     } catch (_) {
       return '';
@@ -605,12 +605,12 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     }
     // orch-4: Persist preferred_language from first 1–2 turns or explicit language request
     try {
-      const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./patient-orchestrator-service');
+      const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./kelly-rails/language');
       const langReq = detectLanguagePreferenceRequest(trimmedMessage);
       if (langReq?.isLanguageRequest && langReq?.code) {
         preferredLanguage = langReq.code;
       } else if (preferredLanguageFromBody !== 'en' && newTurnCount <= 2) {
-        preferredLanguage = detectLanguageFromText(trimmedMessage).code || preferredLanguage;
+        preferredLanguage = detectLanguageFromText(trimmedMessage).language || preferredLanguage;
       }
     } catch (_) {}
     try {
@@ -691,8 +691,8 @@ async function handlePatientTriageMessage(req) {
   return runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId: sid });
 }
 
-/** Anonymous Skin & Care landing assistant — same Kelly triage stack as /api/patient/triage/message (rate-limited). */
-async function handlePublicLandingAssistantMessage(req) {
+/** Somo public landing assistant — same Kelly triage stack as /api/patient/triage/message (rate-limited). */
+async function handlePublicLandingAssistantFromRequest(req) {
   const { startTrace, endTrace } = require('./langsmith-trace-service');
   const sessionId = String(req.body?.session_id || '').trim() || null;
   const traceCtx = await startTrace({
@@ -735,42 +735,6 @@ async function handlePatientTriageFromRequest(req) {
   const email = sessionValidation?.email || null;
   const mappedPatientId = sessionValidation?.patient_id || null;
   return runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId: sid });
-}
-
-async function handlePublicLandingAssistantFromRequest(req) {
-  const { startTrace, endTrace } = require('./langsmith-trace-service');
-  const sessionId = String(req.body?.session_id || '').trim() || null;
-  const traceCtx = await startTrace({
-    name: 'landing_assistant_turn',
-    inputs: {
-      session_id: sessionId,
-      message: String(req.body?.message || ''),
-      category_route: String(req.body?.category_route || req.body?.route || '').trim() || null,
-      scan_chat_mode: String(req.body?.scan_chat_mode || '').trim() || null
-    },
-    metadata: {
-      route: '/api/public/landing-assistant/turn',
-      source: 'landing_page'
-    },
-    tags: ['landing-page', 'chat', 'kelly']
-  });
-  try {
-    const out = await runKellyTriageTurnForHttpRequest(req, { mappedPatientId: null, email: null, portalSessionId: null });
-    await endTrace(traceCtx, {
-      outputs: {
-        success: !!out?.json?.success,
-        status: out?.status || 200,
-        session_id: out?.json?.session_id || sessionId,
-        next_step: out?.json?.next_step || null,
-        scan_chat_mode: String(out?.json?.state?.turn_planner?.flags?.scan_chat_mode || '').trim() || null
-      },
-      usage: out?.json?.llm_usage || null
-    });
-    return out;
-  } catch (e) {
-    await endTrace(traceCtx, { error: e?.message || 'landing_assistant_turn_failed' });
-    throw e;
-  }
 }
 
 module.exports = {

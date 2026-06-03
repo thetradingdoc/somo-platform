@@ -1,10 +1,29 @@
 # Local-only credentials (not committed)
 
+## GCP CLI / ADC
+
+For `somo-callsomo`, use **`richard@callsomo.com`** for `gcloud` and for Application Default Credentials (ADC). See [CALLSOMO_GCP_CUTOVER.md](../docs/runbooks/CALLSOMO_GCP_CUTOVER.md#local-gcloud-and-adc).
+
 ## Database path (read first)
 
 Dev SQLite SSoT: [`docs/Database/ENV_AND_DB_SSOT.md`](../docs/Database/ENV_AND_DB_SSOT.md).
 
 From repo root [`run`](../run): `export DB_PATH=./middleware-dev.db` in `middleware-platform/`. Confirm at boot: log line `📁 Database path: …` or `GET /health?show_db_path=1`.
+
+## Local URLs on port 4000
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:4000/` | Somo marketing landing (requires `somo-landing/build`; built automatically on `npm start` / `npm run dev`) |
+| `http://localhost:4000/login` | Provider portal sign-in |
+| `http://localhost:4000/business/today.html` | Provider Today dashboard (after login) |
+| `http://localhost:4000/health` | API health check |
+
+**Provider work only:** use `/login` or set `LOCAL_DEV_ROOT=login` in `middleware-platform/.env` so `/` redirects to login.
+
+**Faster API startup:** `npm run start:landing` in `middleware-platform/` (skips heavy background workers; `DEV_LIGHT_START=1`).
+
+**Landing-only Vite dev server:** `npm run dev:somo-landing` (port 5180, proxies API to `:4000`).
 
 ## Provider sign-in (Somo portal)
 

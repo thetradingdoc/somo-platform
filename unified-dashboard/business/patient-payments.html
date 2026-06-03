@@ -2,90 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>Somo Provider - Patient Payments</title>
-  <link rel="stylesheet" href="/assets/css/provider-portal.css" />
-  <script src="/assets/js/config.js"></script>
-  <script src="/assets/js/navigation.js"></script>
-  <script src="/assets/js/provider-shell.js"></script>
-  <script src="/assets/js/provider-layout.js"></script>
+  <meta http-equiv="refresh" content="0;url=revenue.html?tab=payments" />
+  <script src="/assets/js/legacy-provider-redirect.js"></script>
+  <title>Redirecting…</title>
 </head>
-<body class="provider-portal">
-  <main class="main-content">
-    <section class="pp-panel">
-      <div class="pp-panel-head">
-        <div>
-          <div class="pp-panel-title">Patient Payments</div>
-          <div class="pp-panel-sub">Requests, statuses, and payment totals</div>
-        </div>
-      </div>
-      <div class="pp-panel-body" id="paymentsSummary">Loading...</div>
-    </section>
-    <section class="pp-panel" style="margin-top:12px">
-      <div class="pp-panel-head"><div class="pp-panel-title">Recent Requests</div></div>
-      <div class="pp-panel-body" id="paymentsList">Loading...</div>
-    </section>
-  </main>
-  <script>
-    const API_BASE = window.API_BASE || 'http://localhost:4000';
-    const clinicId = () => (window.ppGetClinicId ? window.ppGetClinicId() : 'clinic-default');
-    function fmtTs(v) {
-      if (!v) return '—';
-      const d = new Date(v);
-      return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString();
-    }
-    async function loadPayments() {
-      const summaryUrl = new URL(`${API_BASE}/api/rcm/payments/summary`);
-      summaryUrl.searchParams.set('clinic_id', clinicId());
-      const listUrl = new URL(`${API_BASE}/api/rcm/payments`);
-      listUrl.searchParams.set('clinic_id', clinicId());
-      const [summaryRes, listRes] = await Promise.all([
-        fetch(summaryUrl.toString(), { credentials: 'include' }),
-        fetch(listUrl.toString(), { credentials: 'include' })
-      ]);
-      const summaryJson = await summaryRes.json();
-      const listJson = await listRes.json();
-      if (!summaryJson.success || !listJson.success) throw new Error('Unable to load payments');
-      const s = summaryJson.summary || {};
-      document.getElementById('paymentsSummary').innerHTML = `
-        <div class="pp-snap-row"><span class="pp-snap-label">Requested total</span><span class="pp-snap-val">$${Number(s.requested_total || 0).toFixed(2)}</span></div>
-        <div class="pp-snap-row"><span class="pp-snap-label">Paid total</span><span class="pp-snap-val">$${Number(s.paid_total || 0).toFixed(2)}</span></div>
-        <div class="pp-snap-row"><span class="pp-snap-label">Remittance total</span><span class="pp-snap-val">$${Number(s.remittance_total || 0).toFixed(2)}</span></div>
-        <div class="pp-snap-row" style="border-bottom:none"><span class="pp-snap-label">Payment requests</span><span class="pp-snap-val">${Number(s.payment_count || 0)}</span></div>`;
-      const rows = listJson.payments || [];
-      if (!rows.length) {
-        document.getElementById('paymentsList').innerHTML = '<div class="pp-empty">No patient payment requests yet.</div>';
-      } else {
-        document.getElementById('paymentsList').innerHTML = rows.slice(0, 30).map((p) => {
-          const label = [
-            p.patient_name || p.patient_id || 'Patient',
-            p.stage_label || p.journey_stage || '',
-            String(p.status || 'requested'),
-            p.method || ''
-          ].filter(Boolean).join(' · ');
-          const copy = p.pay_url
-            ? `<button type="button" class="btn btn-secondary" data-copy="${encodeURIComponent(p.pay_url)}" style="padding:6px 8px;font-size:12px;">Copy link</button>`
-            : '';
-          return `
-          <div class="pp-snap-row" style="flex-wrap:wrap;gap:8px;">
-            <span class="pp-snap-label" style="flex:1;min-width:200px;">${label}<br><span style="font-weight:400;opacity:0.8;">${fmtTs(p.requested_at)}${p.paid_at ? ' → paid ' + fmtTs(p.paid_at) : ''}</span></span>
-            <span class="pp-snap-val" style="display:flex;align-items:center;gap:8px;">$${Number(p.amount || 0).toFixed(2)} ${copy}</span>
-          </div>`;
-        }).join('');
-        document.querySelectorAll('[data-copy]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const url = decodeURIComponent(btn.getAttribute('data-copy') || '');
-            navigator.clipboard.writeText(url).catch(() => {});
-            btn.textContent = 'Copied';
-            setTimeout(() => { btn.textContent = 'Copy link'; }, 1500);
-          });
-        });
-      }
-    }
-    document.addEventListener('DOMContentLoaded', async () => {
-      mountProviderPage({ activeId: 'payments', eyebrow: 'Revenue', title: 'Patient Payments' });
-      try { await loadPayments(); } catch (e) { document.getElementById('paymentsSummary').innerHTML = `<div class="pp-empty">${e.message}</div>`; }
-    });
-  </script>
-</body>
+<body><p><a href="revenue.html?tab=payments">Go to Revenue — Patient pay</a></p></body>
 </html>

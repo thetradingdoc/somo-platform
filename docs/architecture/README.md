@@ -9,6 +9,19 @@
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
 
+### Start here (2026) — do not read this 12k-line file first
+
+**Live architecture:** [`LIVE.md`](./LIVE.md) (platform snapshot, routes, Kelly rails, patient timeline APIs).
+
+| Topic | Anchor in `LIVE.md` |
+|-------|---------------------|
+| Platform snapshot | [#current-state-architecture](./LIVE.md#current-state-architecture) |
+| Route ownership | [#runtime-entrypoints-and-route-ownership](./LIVE.md#runtime-entrypoints-and-route-ownership) |
+| Kelly rails | [#kelly-rails-v2-as-built](./LIVE.md#kelly-rails-v2-as-built) |
+| Patient timeline | [#patient-timeline-routine-and-billing](./LIVE.md#patient-timeline-routine-and-billing) |
+
+The sections below are a **consolidated archive** of former per-folder markdown files (searchable TOC). Prefer [`LIVE.md`](./LIVE.md) for new work.
+
 ## Existing Documentation Body
 
 This document is the single source of truth for this subfolder. It consolidates architecture, system design, operational behavior, and implementation notes previously split across multiple markdown files.
@@ -52,7 +65,7 @@ This document is the single source of truth for this subfolder. It consolidates 
 - [Skin & Care landing — Try now & LiveKit (`experience/LANDING_TRY_NOW_LIVEKIT.md`)](#experience-landing-try-now-livekit)
 - [Skin & Care — tokens, assets, and env (frontend) (`experience/SKIN_CARE_TOKENS_AND_ASSETS.md`)](#experience-skin-care-tokens-and-assets)
 - [FHIR‑Native RCM Mapping (2026) — EMPI + EDI → FHIR (`financial/FHIR_NATIVE_RCM_MAPPING.md`)](#financial-fhir-native-rcm-mapping)
-- [DocLittle Financial Layer - Detailed Architecture Document (`financial/FINANCIAL_LAYER_ARCHITECTURE.md`)](#financial-financial-layer-architecture)
+- [Somo Financial Layer - Detailed Architecture Document (`financial/FINANCIAL_LAYER_ARCHITECTURE.md`)](#financial-financial-layer-architecture)
 - [Impact Community and Token Strategy (`financial/IMPACT_COMMUNITY_TOKEN_STRATEGY.md`)](#financial-impact-community-token-strategy)
 - [Provider Trust Score Probationary Period (`financial/PROVIDER_TRUST_PROBATION.md`)](#financial-provider-trust-probation)
 - [Static Records Audit (`financial/STATIC_RECORDS_AUDIT.md`)](#financial-static-records-audit)
@@ -63,12 +76,12 @@ This document is the single source of truth for this subfolder. It consolidates 
 - [Multimodal Medical AI Agent Architecture (`intelligence-layer/MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md`)](#intelligence-layer-multimodal-medical-ai-architecture)
 - [Intelligence Layer Architecture (`intelligence-layer/README.md`)](#intelligence-layer-readme)
 - [Architecture Issues Analysis (`maintenance/ARCHITECTURE_ISSUES.md`)](#maintenance-architecture-issues)
-- [DocLittle Media Layer – Architecture Document (`media/MEDIA_LAYER_ARCHITECTURE.md`)](#media-media-layer-architecture)
+- [Somo Media Layer – Architecture Document (`media/MEDIA_LAYER_ARCHITECTURE.md`)](#media-media-layer-architecture)
 - [Middleware Brain Improvements - Gap Analysis & Implementation Status (`middleware/MIDDLEWARE_BRAIN_GAP_ANALYSIS.md`)](#middleware-middleware-brain-gap-analysis)
 - [Middleware Brain Improvements: Code Changes & Impact (`middleware/MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md`)](#middleware-middleware-brain-improvements-implementation)
 - [Multi-Tenant Voice Agent Architecture (`multi-tenant/MULTI_TENANT_VOICE_AGENT.md`)](#multi-tenant-multi-tenant-voice-agent)
 - [Multi-Tenant Clinic Signup Implementation (`multi-tenant/multi-tenant-signup-implementation.md`)](#multi-tenant-multi-tenant-signup-implementation)
-- [DocLittle Platform: Architecture Overview & Colab RAG Integration (`overview/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`)](#overview-architecture-overview-and-colab-rag)
+- [Somo Platform: Architecture Overview & Colab RAG Integration (`overview/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`)](#overview-architecture-overview-and-colab-rag)
 - [Hybrid Architecture — Improvements (Implemented) (`overview/HYBRID_ARCHITECTURE_IMPROVEMENTS.md`)](#overview-hybrid-architecture-improvements)
 - [Hybrid Architecture — One-Page Overview (`overview/HYBRID_ARCHITECTURE_OVERVIEW.md`)](#overview-hybrid-architecture-overview)
 - [RAG Integration: File Extraction vs Translation Layer (`overview/RAG_INTEGRATION_APPROACHES.md`)](#overview-rag-integration-approaches)
@@ -107,7 +120,7 @@ Browse by anchor above. Each section notes the former file path.
 ## LangChain, LangGraph & RAG — Implementation Architecture
 
 
-This document describes how LangChain, LangGraph, and RAG are implemented in the DocLittle middleware platform, and how state, memory, context window, evaluation, and strategy are architected.
+This document describes how LangChain, LangGraph, and RAG are implemented in the Somo middleware platform, and how state, memory, context window, evaluation, and strategy are architected.
 
 ---
 
@@ -610,7 +623,7 @@ result.checks.push({ field: 'urgency', expected: expected.urgency, actual: triag
 
 ## branding/LITTLELAB_BRAND (deprecated)
 
-**Superseded (2026):** Consumer brand, palette, typography, and logo rules for **skinandcare** / **Skin & Care** live in **[`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md)**. The narrative below described an older **LittleLab** positioning; do not use it for new Skin & Care surfaces.
+**Superseded (2026):** Consumer brand lives in **[`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md)**. Sections below that reference LittleLab / Skin & Care are historical archive only.
 
 ---
 
@@ -1936,7 +1949,7 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 4. **LiveKit** — If `REACT_APP_API_BASE` points at middleware with `LIVEKIT_*` set, **`POST /api/livekit/token`** runs and the client connects with **`livekit-client`**. Preview tracks are **stopped only after** LiveKit’s camera track is attached (avoids a black flash).
 5. **Without API base** — Local preview only; pill shows **Preview** and copy notes demo mode.
 
-**Production API origin:** the public landing build uses split-domain routing — set `REACT_APP_API_BASE` to the middleware host (e.g. `https://api.myskinandcare.com`), not the Firebase Hosting UI origin. See EDGE_ROUTING_CONFIGS.md (`../deployment/EDGE_ROUTING_CONFIGS.md`).
+**Production API origin:** the public landing build uses split-domain routing — set `REACT_APP_API_BASE` to the middleware host (e.g. `https://api.callsomo.com`), not the Firebase Hosting UI origin. See EDGE_ROUTING_CONFIGS.md (`../deployment/EDGE_ROUTING_CONFIGS.md`).
 
 ---
 
@@ -1958,7 +1971,7 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 
 | Variable | Where | Role |
 |----------|--------|------|
-| `REACT_APP_API_BASE` | CRA build | Middleware origin for Kelly **and** `/api/livekit/token`. Local e.g. `http://localhost:4000`; production split-domain e.g. `https://api.myskinandcare.com`. |
+| `REACT_APP_API_BASE` | CRA build | Middleware origin for Kelly **and** `/api/livekit/token`. Local e.g. `http://localhost:4000`; production split-domain e.g. `https://api.callsomo.com`. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Middleware `.env` | Issuing JWTs; see [VIDEO_CONSULT.md §3](./README.md#care-delivery-video-consult). |
 | CSP | Static host | If you add `Content-Security-Policy`, allow `connect-src` to `wss://*.livekit.cloud` (see middleware `security.js` for API pages). |
 
@@ -1994,7 +2007,7 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 
 ## Skin & Care — tokens, assets, and env (frontend)
 
-**Brand canonical doc:** [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md) (palette, typography, S&C lockup, surface scope).
+**Brand canonical doc:** [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md) (palette, typography, Somo lockup, surface scope).
 
 ### CSS tokens (web)
 
@@ -2023,7 +2036,7 @@ See `patient-app/.env.example` and `patient-app/config.ts`.
 | `REACT_APP_MERCHANT_ID` | Merchant id on archived littlelab catalog |
 | `REACT_APP_PATIENT_PORTAL_PREFIX` | Patient HTML base path |
 | `REACT_APP_CHAT_FIRST_CHECKOUT` | `false` to hide Ask-first CTA |
-| `REACT_APP_PUBLIC_SITE_URL` | Marketing origin (production: `https://myskinandcare.com`) |
+| `REACT_APP_PUBLIC_SITE_URL` | Marketing origin (production: `https://callsomo.com`) |
 
 ### Brand assets
 
@@ -2155,7 +2168,7 @@ All financial agents must write audit records:
 
 <a id="financial-financial-layer-architecture"></a>
 
-## DocLittle Financial Layer - Detailed Architecture Document
+## Somo Financial Layer - Detailed Architecture Document
 
 
 > **Note on Naming:** The codebase uses **Stedi** (not "Stepi") for the healthcare EDI API. Stedi is the insurance claims/eligibility provider.
@@ -2762,7 +2775,7 @@ When payer fee schedule data is available:
 
 ## Purpose
 
-This document reviews the proposed "impact-first" token plan and adapts it to the current DocLittle stack.  
+This document reviews the proposed "impact-first" token plan and adapts it to the current Somo stack.  
 Goal: build a trusted community around measurable social impact while reducing legal, technical, and reputational risk.
 
 This is a product and infrastructure strategy document, not legal advice.
@@ -2833,7 +2846,7 @@ Token can be powerful if utility is real and measurable.
   - staking for quality assurance and anti-spam participation
 - Avoid direct "token equals stock" framing unless under explicit securities structure.
 
-## Why This Order Makes Sense for DocLittle
+## Why This Order Makes Sense for Somo
 
 - Current stack already supports impact tracking and payment telemetry.
 - Conventional payment rails let you serve users immediately while wallet rails mature.
@@ -2916,7 +2929,7 @@ Token can be powerful if utility is real and measurable.
 
 ## Recommended Positioning
 
-"DocLittle is building an impact network for care delivery.  
+"Somo is building an impact network for care delivery.  
 We measure real outcomes, route support transparently, and reward verified contribution.  
 Financial upside follows trusted impact and product utility, not hype."
 
@@ -3027,7 +3040,7 @@ This document lists all hardcoded/static records found in the codebase (frontend
    // Creates default merchant with hardcoded values
    db.createMerchant({
      id: merchantId,
-     name: 'DocLittle Default Merchant',
+     name: 'Somo Default Merchant',
      api_key: 'default-api-key',
      api_url: 'https://api.example.com',
      webhook_url: null,
@@ -6212,7 +6225,7 @@ User signs up → Creates `customer` record
 **Problem**: Multiple ways to identify tenants, no single source of truth.
 
 **Methods Used**:
-1. **Subdomain** (`akin-dunbar.doclittle.site`) → `merchant.subdomain`
+1. **Subdomain** (`akin-dunbar.api.callsomo.com`) → `merchant.subdomain`
 2. **Merchant ID** → `merchant_id` in requests
 3. **Clinic ID** → `clinic_id` in database
 4. **Phone Number** → `clinic_phone_numbers` lookup
@@ -6376,7 +6389,7 @@ const merchant = db.getMerchantBySubdomain(subdomain);
 
 **Issues**:
 - ❌ Clinics have `slug` field but routing uses `merchant.subdomain`
-- ❌ No way to route `clinic.doclittle.site` to a clinic
+- ❌ No way to route `clinic.api.callsomo.com` to a clinic
 - ❌ Only works for merchants
 
 **Fix Required**: 
@@ -6520,7 +6533,7 @@ const appointments = db.getAppointmentsByClinic(clinic_id);
 
 <a id="media-media-layer-architecture"></a>
 
-## DocLittle Media Layer – Architecture Document
+## Somo Media Layer – Architecture Document
 
 
 > **Purpose:** Documents the media infrastructure (voice, video, transcription) that connects patients, providers, and the AI agent. Single agent + LLM orchestrate multiple media channels.
@@ -6866,7 +6879,7 @@ Call start
 
 ---
 
-*Created: January 2026. Media layer architecture for DocLittle.*
+*Created: January 2026. Media layer architecture for Somo.*
 
 
 ---
@@ -7931,7 +7944,7 @@ Patient Calls → Twilio → /voice/incoming → Retell Agent → WebSocket → 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Clinic A (doclittle.site/clinicA)                     │
+│  Clinic A (api.callsomo.com/clinicA)                     │
 │  - Twilio Number: +1-555-0100                           │
 │  - Retell Agent: agent_clinicA                         │
 │  - Merchant ID: clinicA-merchant-id                    │
@@ -8152,13 +8165,13 @@ async handleScheduleAppointment(callId, args) {
 - Agent ID: `agent_clinicA_123`
 - Prompt: "You are Kelly, the receptionist for Clinic A..."
 - Functions: Same functions, but backend routes to Clinic A
-- Webhook URL: `https://doclittle.site/voice/incoming` (same for all)
+- Webhook URL: `https://api.callsomo.com/voice/incoming` (same for all)
 
 **Clinic B Agent:**
 - Agent ID: `agent_clinicB_456`
 - Prompt: "You are Kelly, the receptionist for Clinic B..."
 - Functions: Same functions, but backend routes to Clinic B
-- Webhook URL: `https://doclittle.site/voice/incoming` (same for all)
+- Webhook URL: `https://api.callsomo.com/voice/incoming` (same for all)
 
 **Key Point:** All agents use the SAME webhook URL, but backend identifies tenant from phone number.
 
@@ -8167,7 +8180,7 @@ async handleScheduleAppointment(callId, args) {
 ### Step 7: Twilio Configuration
 
 **Option A: One Twilio Account, Multiple Numbers**
-- One Twilio account for DocLittle
+- One Twilio account for Somo
 - Each clinic gets a phone number
 - All numbers point to same webhook: `/voice/incoming`
 - Backend identifies tenant from `To` number
@@ -8188,7 +8201,7 @@ async handleScheduleAppointment(callId, args) {
 1. **Patient calls:** `+1-555-0100` (Clinic A's number)
 
 2. **Twilio receives call:**
-   - Sends webhook to: `https://doclittle.site/voice/incoming`
+   - Sends webhook to: `https://api.callsomo.com/voice/incoming`
    - Includes: `To: +15550100`, `From: +15551234567`
 
 3. **Backend identifies tenant:**
@@ -8273,7 +8286,7 @@ CREATE TABLE clinic_phone_numbers (
 **For each clinic:**
 1. Create Retell agent in Retell dashboard
 2. Configure agent with clinic-specific prompt
-3. Set webhook URL: `https://doclittle.site/voice/incoming` (same for all)
+3. Set webhook URL: `https://api.callsomo.com/voice/incoming` (same for all)
 4. Store agent ID in `clinics.retell_agent_id`
 
 **Agent Prompt Example (Clinic A):**
@@ -8516,7 +8529,7 @@ node tests/test-clinic-signup.js
 Required in `.env`:
 - `RETELL_API_KEY` - Retell AI API key (optional, will use mock mode if not set)
 - `RETELL_API_BASE_URL` - Retell API base URL (default: 'https://api.retellai.com')
-- `RETELL_LLM_WEBSOCKET_URL` - WebSocket URL for Retell LLM (default: 'wss://doclittle.site/retell-llm')
+- `RETELL_LLM_WEBSOCKET_URL` - WebSocket URL for Retell LLM (default: 'wss://api.callsomo.com/retell-llm')
 
 ### Retell API Endpoints
 
@@ -8544,7 +8557,7 @@ Required in `.env`:
    - Returns clinic slug
 
 3. Frontend redirects:
-   - Production: `doclittle.site/{clinic_slug}/dashboard.html`
+   - Production: `api.callsomo.com/{clinic_slug}/dashboard.html`
    - Development: `business/today.html` (provider portal home; legacy `business-dashboard.html` is redirect-only)
 
 ### Clinic Slug Generation
@@ -8564,9 +8577,9 @@ Example:
 ### 1. URL Routing
 
 Set up server-side routing for clinic-specific URLs:
-- `doclittle.site/{clinic_slug}` → Load clinic dashboard
-- `doclittle.site/{clinic_slug}/settings` → Clinic settings
-- `doclittle.site/{clinic_slug}/patients` → Patient management
+- `api.callsomo.com/{clinic_slug}` → Load clinic dashboard
+- `api.callsomo.com/{clinic_slug}/settings` → Clinic settings
+- `api.callsomo.com/{clinic_slug}/patients` → Patient management
 
 ### 2. Twilio Phone Number Integration
 
@@ -8724,7 +8737,7 @@ The multi-tenant clinic signup flow is now fully functional and ready for testin
 
 <a id="overview-architecture-overview-and-colab-rag"></a>
 
-## DocLittle Platform: Architecture Overview & Colab RAG Integration
+## Somo Platform: Architecture Overview & Colab RAG Integration
 
 
 **Document Purpose**: Single reference for (1) connecting Colab RAG, (2) billing/medical coding agent architecture, (3) medical reasoning flow, (4) voice agent integration, and (5) payment for appointments.
@@ -9302,7 +9315,7 @@ Twilio receives call → POST /voice/incoming
 
 | Function | Purpose |
 |----------|---------|
-| `addCustomDomain(subdomain, rootDomain, appName, resourceGroup)` | Add `{subdomain}.doclittle.site` to Azure App Service |
+| `addCustomDomain(subdomain, rootDomain, appName, resourceGroup)` | Add `{subdomain}.api.callsomo.com` to Azure App Service |
 | `createSSLCertificate(...)` | Create managed SSL certificate for subdomain |
 | `bindSSLCertificate(...)` | Bind certificate to domain |
 | `setupTenantDomain(subdomain)` | End-to-end: domain + SSL for new tenant |
@@ -9315,7 +9328,7 @@ Twilio receives call → POST /voice/incoming
 ### 11.3 Relationship to FHIR
 
 - **FHIR** is stored in local DB (`fhir_patients`, `fhir_encounters`, etc.).
-- **Azure** hosts the middleware app (App Service); `AzureDomainService` configures `tenant.doclittle.site` → that app.
+- **Azure** hosts the middleware app (App Service); `AzureDomainService` configures `tenant.api.callsomo.com` → that app.
 - There is no Azure Healthcare FHIR integration in the current codebase.
 
 ---
@@ -9777,7 +9790,7 @@ API at `http://localhost:4000`.
 3. **Login** — `patient@doclittle.com` + code from logs
 4. **Onboarding** — Complete 3 steps
 5. **Dashboard** — Verify seeded appointment, wallet
-6. **Provider** — Log in as `provider@doclittle.com` / `demo123` → see same appointment
+6. **Provider** — Log in as `provider@callsomo.com` / `demo123` → see same appointment
 
 ---
 
@@ -10872,7 +10885,7 @@ GET https://api.retellai.com/get-agent/{agent_id}
 
 ### When Clinic Signs Up
 
-1. **Clinic registers** on DocLittle
+1. **Clinic registers** on Somo
    - Provides: Name, phone number, etc.
 
 2. **Backend automatically:**
@@ -10882,7 +10895,7 @@ GET https://api.retellai.com/get-agent/{agent_id}
      'https://api.retellai.com/create-agent',
      {
        agent_name: `${clinicName} Voice Assistant`,
-       llm_websocket_url: 'wss://doclittle.site/retell-llm',
+       llm_websocket_url: 'wss://api.callsomo.com/retell-llm',
        voice_id: '11labs-Adrian', // or clinic's preferred voice
        language: 'en-US',
        enable_transcription: true,
@@ -11028,7 +11041,7 @@ async function createRetellAgent(clinicData) {
       'https://api.retellai.com/create-agent',
       {
         agent_name: `${clinicData.name} Voice Assistant`,
-        llm_websocket_url: process.env.RETELL_LLM_WEBSOCKET_URL || 'wss://doclittle.site/retell-llm',
+        llm_websocket_url: process.env.RETELL_LLM_WEBSOCKET_URL || 'wss://api.callsomo.com/retell-llm',
         voice_id: clinicData.voice_id || '11labs-Adrian',
         language: 'en-US',
         enable_transcription: true,
@@ -12172,7 +12185,7 @@ Merged from: MEDICAL_CODING_AGENT_TODO, AI_AGENT_FINANCIAL_LAYER_TODO, IMPLEMENT
 
 ## 1) Executive Summary
 
-DocLittle is a multi-surface healthcare platform centered on a Node/Express middleware (`middleware-platform`) that orchestrates:
+Somo is a multi-surface healthcare platform centered on a Node/Express middleware (`middleware-platform`) that orchestrates:
 
 - Voice workflows (Retell + Twilio + booking/payment/insurance tools)
 - Patient web portal and native mobile app experiences

@@ -1,16 +1,20 @@
 # Somo Platform Documentation
-> Last reviewed: 2026-05-30
+> Last reviewed: 2026-06-02
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-02
 
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
 > **Overlapping topics:** start with **[meta/CANONICAL_DOC_MAP.md](./meta/CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
+>
+> **Doc count policy (June 2026):** Each `docs/<folder>/` keeps at most **two** markdown files (`README.md` + one companion). Retired paths are listed in [`_consolidated_path_redirects.json`](./_consolidated_path_redirects.json). Regenerate merges: `node scripts/consolidate-docs-two-per-folder.cjs`.
 
-### Consumer brand (Skin & Care / skinandcare)
+### Consumer brand (Somo)
 
-- **Single source of truth:** **[Brand guidelines](./Brand/GUIDELINES.md)** — palette, typography, S&C lockup, scope vs provider admin CSS.
+- **Single source of truth:** **[SOMO_GUIDELINES.md](./Brand/SOMO_GUIDELINES.md)** — naming, tokens, typography.
+- **Logo / favicon / email HTML:** **[LOGO_AND_ICON_SSOT.md](./Brand/LOGO_AND_ICON_SSOT.md)**
 - **Index:** **[Brand folder README](./Brand/README.md)**
+- **Doc hygiene (what to read first):** **[meta/ENGINEERING_DOC_HYGIENE.md](./meta/ENGINEERING_DOC_HYGIENE.md)**
 
 ### Documentation placement policy (April 2026)
 
@@ -56,26 +60,34 @@
 ### 📖 Core Documentation
 
 #### DevOps source of truth (GCP-only)
-- **[Deployment (GCP Source of Truth)](./deployment/README.md)** - canonical deploy commands and CI gates
-- **[GCP rollback runbook](./runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md)** - rollback procedure and verification steps
-- **[Prod monitoring workflows (GitHub Actions)](./runbooks/PROD_MONITORING_WORKFLOWS.md)** - scheduled Playwright + payor signal jobs
-- **[Runbooks index](./runbooks/README.md)** - operational playbooks and incident response
+- **[Deployment archive](./deployment/README.md)** — historical bulk (3.7k lines; search only)
+- **[Live deploy & staging](./deployment/OPERATIONS.md)** — Cloud Run, landing, staging cron, Retell inventory
+- **[Live runbooks](./runbooks/OPERATIONS.md)** — cutover, rollback, monitoring, payor/voice incidents
+- **[Runbooks index](./runbooks/README.md)** — TOC for merged incident archive
 
 #### Documentation health and gap tracking
-- **[Surface ownership map](./meta/SURFACE_OWNERSHIP_MAP.md)** — code paths vs doc owners (marketing, archive, middleware)
-- **[Codebase Batch Review And Documentation Gaps](./meta/README.md#codebase-batch-review-and-documentation-gaps)** - tracked gap list by batch (`all codebase`, `routes`, `services`)
+- **[Canonical map](./meta/CANONICAL_DOC_MAP.md)** — one doc per topic
+- **[Meta README](./meta/README.md)** — hygiene, staging profile, gap tracker anchors
+
+#### Somo demo (production API + outbound)
+- **[Agent index](./agent/README.md)** — Somo demo vs Kelly
+- **[Somo demo reference](./agent/somo-demo/README.md)** — architecture, ADRs, templates
+- **[Somo demo runbook](./agent/somo-demo/RUNBOOK.md)** — local dev, Phase A prod gates, outbound sales
+- Backlog: [`../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md`](../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md)
 
 #### Marketing landing (Somo)
-- **[Somo landing runbook](./deployment/SOMO_LANDING.md)** — build, hosts, demo API, local dev
-- **[Image 1 marketing colors](./design/SOMO_MARKETING_COLORS.md)** — lizard / MSU / grass palette and UI mapping
-- **[Hero layout](./deployment/SOMO_LANDING_HERO.md)** — nav, copy, breakpoints
+- **[Somo landing](./deployment/OPERATIONS.md#somo-landing)** — build, hosts, demo API
+- **[Image 1 marketing colors](./design/SOMO_MARKETING_COLORS.md)** — lizard / MSU / grass palette
+- **[Hero layout](./deployment/OPERATIONS.md#somo-landing-hero)** — nav, copy, breakpoints
 
 #### Database and voice foundation (2026)
-- **[Database index](./Database/README.md)** — SSOT, migrations, tenant model
-- **[Somo foundation runbook](./Database/SOMO_FOUNDATION_RUNBOOK.md)** — Week 1 gate
-- **[Voice inbound troubleshooting](./runbooks/voice-inbound-troubleshooting.md)**
+- **[Database index](./Database/README.md)** — SSOT, migrations
+- **[Database operations](./Database/OPERATIONS.md)** — foundation runbook, tenant model, env
+- **[Voice inbound troubleshooting](./runbooks/OPERATIONS.md#voice-inbound-troubleshooting)**
 
 #### Architecture
+- **[Kelly agentic rails (build plan)](./architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md)** — LangGraph-first roadmap
+- **[Kelly rails v2 as-built](./architecture/kelly_rails_v2_as_built.md)** — `kelly-rails/` orchestrator SSOT
 - **[Patient Timeline & billing (mobile + APIs)](./architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)** — Expo tabs, routine APIs, `calendar-range`, billing events, SQLite vs Postgres scope
 - **[`server.js` decomposition (phase 6+)](./architecture/SERVER_DECOMPOSITION.md)** — extracted `routes/patient-*`, Kelly triage service, landing assistant, checkout-chat, admin/voice; ~11k lines remain in compose entry
 - **[Runtime entrypoints & route ownership](./architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)** — what mounts where on port 4000

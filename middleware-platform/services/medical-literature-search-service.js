@@ -52,7 +52,7 @@ function _sessionPubmedBudget(sessionId) {
 
 function _contactParam() {
   const email = String(process.env.NCBI_CONTACT_EMAIL || process.env.TOOL_USER_EMAIL || '').trim();
-  const tool = String(process.env.NCBI_TOOL_NAME || 'doclittle_middleware').trim();
+  const tool = String(process.env.NCBI_TOOL_NAME || 'somo_middleware').trim();
   return { email: email || 'dev@localhost', tool };
 }
 

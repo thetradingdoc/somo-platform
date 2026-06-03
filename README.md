@@ -5,7 +5,7 @@
 **Status**: Production ready for defined surfaces — see [`docs/meta/PO_SURFACE_SCORECARD.md`](docs/meta/PO_SURFACE_SCORECARD.md)  
 **Last Updated:** 2026-05-31
 
-> **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production UI/API hosts remain **myskinandcare.com** until **somopay.ai** cutover — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
+> **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
 
@@ -17,7 +17,7 @@
 
 ## 📋 Overview
 
-**Somo** is an agentic AI front desk and revenue cycle platform for healthcare and business. Somo front desk handles inbound calls; Somo pay runs eligibility, claims, and patient collections. Production may still be served from **myskinandcare.com** until **somopay.ai** — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
+**Somo** is an agentic AI front desk and revenue cycle platform for healthcare and business. Somo front desk handles inbound calls; Somo pay runs eligibility, claims, and patient collections. Production runs on **callsomo.com** — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
 ### Key Features
 

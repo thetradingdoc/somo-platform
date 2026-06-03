@@ -1,22 +1,13 @@
 # Legacy DocLittle / myskinandcare archive index
 
-**Retired:** 2026-06-02 (callsomo.com cutover)
+Historical branding and hosting paths. **Active product: Somo** on `callsomo.com` / `api.callsomo.com`.
 
-## Removed from repo
+| Retired | Replacement |
+|---------|-------------|
+| DocLittle consumer brand | Somo |
+| DodgeCall demo product | Somo demo (`/api/public/somo-demo`) |
+| `myskinandcare.com` | `callsomo.com` (DNS 301 — operator) |
+| `doclittle.site` / Azure `doclittle` App Service | GCP Cloud Run `somo-middleware` |
+| `docs/agent/dodgecall/` | `docs/agent/somo-demo/` |
 
-- Azure App Service deploy scripts (`deploy-to-azure.sh`, `configure-azure-env*`, etc.)
-- `.github/workflows/deploy-infrastructure.yml`
-- `middleware-platform/services/azure-domain-service.js`
-- IONOS / doclittle.site DNS helper scripts
-- `infra/edge-routing` myskin nginx + Cloudflare proxy
-- `unified-dashboard/_archive/littlelab-landing/`
-
-## Canonical replacement
-
-| Topic | Doc |
-|-------|-----|
-| Production cutover | [`CALLSOMO_GCP_CUTOVER.md`](../../runbooks/CALLSOMO_GCP_CUTOVER.md) |
-| Legacy DNS redirects | [`LEGACY_DOMAIN_RETIREMENT.md`](../../runbooks/LEGACY_DOMAIN_RETIREMENT.md) |
-| Deploy / rollback | [`GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md) |
-
-Historical Azure/debug notes remain under [`../azure-debug-scripts/`](../azure-debug-scripts/).
+See [`../../Brand/INFRA_BRAND_DEFERRAL.md`](../../Brand/INFRA_BRAND_DEFERRAL.md) and [`../../deployment/SOMO_CLOUD_RUN_DEPLOY.md`](../../deployment/SOMO_CLOUD_RUN_DEPLOY.md).

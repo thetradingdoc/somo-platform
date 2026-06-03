@@ -436,7 +436,7 @@ function _buildCompactSystemPrompt(context) {
     KellyOrchestratorPhase.orchestratorEnabled() && orchestration
       ? ` Phase: ${orchestration.phase}.`
       : '';
-  return `You are Kelly (DocLittle).${orchHint}
+  return `You are Kelly (Somo).${orchHint}
 
 GOAL: triage OPQRST and route to the right specialist, then book (cash-only; no insurance step).
 
@@ -1099,7 +1099,7 @@ function _buildSystemPromptLegacy(context) {
       ? `\n${KellyOrchestratorPhase.buildOrchestrationPromptSection(orchestration)}\n`
       : '';
 
-  return `You are Kelly, a warm and empathetic medical voice assistant for DocLittle.
+  return `You are Kelly, a warm and empathetic medical voice assistant for Somo.
 ${orchestrationBlock}
 ## Your Role
 You help patients:
@@ -2280,6 +2280,15 @@ Antworten Sie durchgehend auf Deutsch.`,
    */
   /** @deprecated Use kelly-turn-resolver with KELLY_RAILS_V2=1. Legacy monolith turn host. */
   static async processTurn(params) {
+    const { isLegacyProcessTurnAllowed, isProductionKellyEnforced } = require('./kelly-rails/runtime-guard');
+    if (isProductionKellyEnforced() && !isLegacyProcessTurnAllowed()) {
+      const err = new Error(
+        'KellyAgentService.processTurn is disabled in production. Enable KELLY_RAILS_V2=1.'
+      );
+      err.code = 'KELLY_LEGACY_DISABLED';
+      throw err;
+    }
+
     let message = String(params.message || '');
     const {
       sessionId,
@@ -6052,7 +6061,7 @@ Antworten Sie durchgehend auf Deutsch.`,
 
       if (endCall) {
         // Do one more LLM call to get a closing reply (LLMRouter respects forceProvider / primary)
-        let closeReply = 'Thank you for calling DocLittle. Take care!';
+        let closeReply = 'Thank you for calling Somo. Take care!';
         try {
           const closeOpts = { messages, tools: [], channel, maxTokens: 100 };
           if (forceProvider) closeOpts.forceProvider = forceProvider;

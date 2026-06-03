@@ -11,23 +11,23 @@ function createVoiceIncomingHandler(deps) {
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
-    const { isDemoTwilioNumber, resolveTemplate: resolveDodgecallTemplate } = require('./dodgecall-template-registry');
+    const { isDemoTwilioNumber, resolveTemplate: resolveSomoDemoTemplate } = require('./somo-demo-template-registry');
 
     // Check if this is an outbound sales call (from query params) or inbound to demo line
-    let isDodgecallDemo = req.query.call_type === 'dodgecall_demo';
+    let isSomoDemoDemo = req.query.call_type === 'somo_demo';
     const normalizedToForDemo = normalizePhoneNumber(req.body.To);
-    if (!isDodgecallDemo && isDemoTwilioNumber(normalizedToForDemo)) {
-      isDodgecallDemo = true;
-      console.log('📞 Inbound call to DodgeCall demo Twilio number');
+    if (!isSomoDemoDemo && isDemoTwilioNumber(normalizedToForDemo)) {
+      isSomoDemoDemo = true;
+      console.log('📞 Inbound call to Somo demo demo Twilio number');
     }
     const demoRequestId = req.query.demo_request_id;
-    const dodgecallUseCase = req.query.use_case ? String(req.query.use_case) : null;
-    const dodgecallProspectName = req.query.prospect_name
+    const somoDemoUseCase = req.query.use_case ? String(req.query.use_case) : null;
+    const somoDemoProspectName = req.query.prospect_name
       ? decodeURIComponent(String(req.query.prospect_name))
       : null;
 
     const isOutboundSales =
-      !isDodgecallDemo && (req.query.call_type === 'sales_outbound' || req.query.lead_id);
+      !isSomoDemoDemo && (req.query.call_type === 'sales_outbound' || req.query.lead_id);
     const leadId = req.query.lead_id;
     const clinicName = req.query.clinic_name ? decodeURIComponent(req.query.clinic_name) : null;
 
@@ -38,12 +38,12 @@ function createVoiceIncomingHandler(deps) {
     let customerId = req.query.customer_id ? String(req.query.customer_id).trim() : null;
     let matchedCustomer = null;
 
-    // For outbound sales / DodgeCall demo, use dedicated agents; otherwise use default
+    // For outbound sales / Somo demo demo, use dedicated agents; otherwise use default
     let retellAgentId = isOutboundSales
         ? (process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a')
         : (process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a');
 
-    if (customerId && !isOutboundSales && !isDodgecallDemo) {
+    if (customerId && !isOutboundSales && !isSomoDemoDemo) {
       matchedCustomer = db.getCustomer(customerId);
       if (matchedCustomer) {
         console.log(`✅ Matched customer from query customer_id: ${customerId}`);
@@ -56,12 +56,12 @@ function createVoiceIncomingHandler(deps) {
       }
     }
 
-    if (isDodgecallDemo) {
+    if (isSomoDemoDemo) {
       try {
-        const tpl = resolveDodgecallTemplate({ use_case: dodgecallUseCase || 'receptionist' });
+        const tpl = resolveSomoDemoTemplate({ use_case: somoDemoUseCase || 'receptionist' });
         retellAgentId = req.query.agent_id || tpl.agentId;
       } catch (e) {
-        console.error('❌ DodgeCall demo agent not configured:', e.message);
+        console.error('❌ Somo demo demo agent not configured:', e.message);
         const errTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">Demo calls are temporarily unavailable. Please try again later.</Say>
@@ -71,16 +71,16 @@ function createVoiceIncomingHandler(deps) {
       }
     }
 
-    if (isDodgecallDemo) {
-      console.log('📞 DODGECALL DEMO CALL');
+    if (isSomoDemoDemo) {
+      console.log('📞 SOMO DEMO CALL');
       console.log(`   Demo request: ${demoRequestId}`);
-      console.log(`   Use case: ${dodgecallUseCase}`);
-      console.log(`   Prospect: ${dodgecallProspectName}`);
+      console.log(`   Use case: ${somoDemoUseCase}`);
+      console.log(`   Prospect: ${somoDemoProspectName}`);
       console.log(`   Agent: ${retellAgentId}`);
       if (demoRequestId) {
-        const demoRow = db.getDodgecallDemoRequest(demoRequestId);
+        const demoRow = db.getSomoDemoRequest(demoRequestId);
         if (demoRow) {
-          db.updateDodgecallDemoRequest(demoRequestId, { status: 'ringing' });
+          db.updateSomoDemoRequest(demoRequestId, { status: 'ringing' });
         }
       }
     } else if (isOutboundSales) {
@@ -170,7 +170,7 @@ function createVoiceIncomingHandler(deps) {
     const retellResolution = resolveInboundRetellAgent({
       matchedCustomer,
       customerId,
-      isDodgecallDemo,
+      isSomoDemoDemo,
       isOutboundSales,
       currentRetellAgentId: retellAgentId,
       defaultAgentId: process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a'
@@ -183,7 +183,7 @@ function createVoiceIncomingHandler(deps) {
     }
     retellAgentId = retellResolution.retellAgentId;
 
-    if (customerId && !isOutboundSales && !isDodgecallDemo) {
+    if (customerId && !isOutboundSales && !isSomoDemoDemo) {
       const { canAcceptInboundCall, buildBlockedTwiml } = require('./billing-access');
       const access = canAcceptInboundCall(db, customerId);
       if (!access.allowed) {
@@ -197,7 +197,7 @@ function createVoiceIncomingHandler(deps) {
       }
     }
 
-    if (matchedCustomer && !isOutboundSales && !isDodgecallDemo) {
+    if (matchedCustomer && !isOutboundSales && !isSomoDemoDemo) {
       try {
         const VoiceAgentRuntime = require('./voice-agent-runtime');
         const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
@@ -221,8 +221,8 @@ function createVoiceIncomingHandler(deps) {
     }
 
     // Per-clinic rate limit (Section 17) — tier-aware when customer known
-    const tenantKey = isDodgecallDemo
-      ? `dodgecall_demo:${demoRequestId || retellAgentId}`
+    const tenantKey = isSomoDemoDemo
+      ? `somo_demo:${demoRequestId || retellAgentId}`
       : clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
     let tierRateLimit;
     if (matchedCustomer) {
@@ -247,11 +247,11 @@ function createVoiceIncomingHandler(deps) {
       metadata.twilio_call_sid = req.body.CallSid;
     }
     // Add lead metadata for outbound sales calls
-    if (isDodgecallDemo) {
-      metadata.call_type = 'dodgecall_demo';
+    if (isSomoDemoDemo) {
+      metadata.call_type = 'somo_demo';
       if (demoRequestId) metadata.demo_request_id = demoRequestId;
-      if (dodgecallUseCase) metadata.use_case = dodgecallUseCase;
-      if (dodgecallProspectName) metadata.prospect_name = dodgecallProspectName;
+      if (somoDemoUseCase) metadata.use_case = somoDemoUseCase;
+      if (somoDemoProspectName) metadata.prospect_name = somoDemoProspectName;
     }
     if (isOutboundSales && leadId) {
       metadata.lead_id = leadId;
@@ -403,24 +403,24 @@ function createVoiceIncomingHandler(deps) {
       dynamicVariables.merchant_id = String(merchantId);
     }
 
-    // DodgeCall public demo — per-use-case opener for Retell
-    if (isDodgecallDemo) {
-      const { getUseCaseContext } = require('./dodgecall-demo-service');
-      const useCaseKey = dodgecallUseCase || 'receptionist';
+    // Somo demo public demo — per-use-case opener for Retell
+    if (isSomoDemoDemo) {
+      const { getUseCaseContext } = require('./somo-demo-service');
+      const useCaseKey = somoDemoUseCase || 'receptionist';
       const ctx = getUseCaseContext(useCaseKey);
-      dynamicVariables.company_name = 'DodgeCall';
-      dynamicVariables.prospect_name = String(dodgecallProspectName || 'there');
+      dynamicVariables.company_name = 'Somo demo';
+      dynamicVariables.prospect_name = String(somoDemoProspectName || 'there');
       dynamicVariables.use_case = String(useCaseKey);
       dynamicVariables.use_case_label = String(ctx.use_case_label);
       dynamicVariables.use_case_opener = String(ctx.use_case_opener);
-      dynamicVariables.call_type = 'dodgecall_demo';
+      dynamicVariables.call_type = 'somo_demo';
       dynamicVariables.persona_name = 'Sam';
       if (demoRequestId) dynamicVariables.demo_request_id = String(demoRequestId);
       try {
-        const tpl = resolveDodgecallTemplate({ use_case: useCaseKey });
+        const tpl = resolveSomoDemoTemplate({ use_case: useCaseKey });
         dynamicVariables.template_id = tpl.template_id;
       } catch (_) {}
-      console.log('📋 Added DodgeCall demo context to dynamic variables');
+      console.log('📋 Added Somo demo demo context to dynamic variables');
     }
 
     // For outbound sales calls, add lead-specific variables

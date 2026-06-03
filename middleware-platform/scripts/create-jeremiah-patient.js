@@ -14,7 +14,7 @@ const patientData = {
   resourceType: 'Patient',
   id: `patient-${uuidv4()}`,
   identifier: [{
-    system: 'https://doclittle.health/patient-id',
+    system: require('../lib/fhir-brand-identifiers').patientIdSystem(),
     value: `PAT-${Date.now()}`
   }],
   active: true,

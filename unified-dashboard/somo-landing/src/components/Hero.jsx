@@ -32,8 +32,6 @@ export default function Hero() {
             src="/assets/brand/somo-logo.png"
             alt="Somo"
             className="somo-logo-img"
-            width={199}
-            height={68}
             fetchPriority="high"
           />
         </a>
@@ -55,7 +53,7 @@ export default function Hero() {
 
           <h1>Never answer business calls again.</h1>
           <p className="somo-hero-sub">
-            Somo is your smartest assistant. It answers calls, books appointments, and handles billing so you can focus on what matters.
+            Somo is your smartest assistant. It answers calls, books appointments, and handles billing for dental and medical practices.
           </p>
 
           <div className="somo-hero-actions">

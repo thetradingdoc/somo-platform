@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+  <script src="/assets/js/legacy-provider-redirect.js"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Somo — Your line is live</title>
@@ -136,7 +137,7 @@
         } catch (_) {}
 
         const source = String(attr.utm_source || '').toLowerCase();
-        const demoAware = (source === 'somo' || source === 'dodgecall') && hadDemoPrefill();
+        const demoAware = (source === 'somo' || source === 'somo-demo') && hadDemoPrefill();
 
         if (demoAware) {
           document.getElementById('activationHeadline').textContent = 'Your AI receptionist line is live';

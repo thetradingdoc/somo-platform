@@ -9,6 +9,7 @@ const KELLY_LANE = {
   POST_PAYMENT: 'post_payment',
   RESCHEDULE: 'reschedule',
   ACCOUNT: 'account',
+  RECORDS: 'records',
   EDUCATION: 'education',
   SUPPORT: 'support'
 };
@@ -21,6 +22,7 @@ const LANE_FIRST_STEP = {
   [KELLY_LANE.POST_PAYMENT]: 'finish',
   [KELLY_LANE.RESCHEDULE]: 'find_booking',
   [KELLY_LANE.ACCOUNT]: 'billing',
+  [KELLY_LANE.RECORDS]: 'records_qa',
   [KELLY_LANE.EDUCATION]: 'education',
   [KELLY_LANE.SUPPORT]: 'faq'
 };
@@ -37,7 +39,49 @@ const PAYMENT_SIGNALS = [
   'copay now'
 ];
 
-const BILLING_FAQ_SIGNALS = ['receipt', 'claim status', 'refund', 'deductible', 'member id'];
+const BILLING_FAQ_SIGNALS = [
+  'receipt',
+  'claim status',
+  'refund',
+  'deductible',
+  'member id',
+  'what\'s my balance',
+  'my balance',
+  'balance on my account'
+];
+
+const EMERGENCY_SIGNALS = [
+  'chest pain',
+  'crushing chest',
+  'stroke',
+  'face drooping',
+  'slurred speech',
+  'suicidal',
+  'kill myself',
+  'can\'t breathe',
+  'difficulty breathing',
+  'severe bleeding',
+  'me duele el pecho',
+  'dolor en el pecho',
+  'dolor de pecho',
+  'no puedo respirar',
+  'no puedo respirar bien',
+  'dificultad para respirar',
+  'pensamientos suicidas',
+  'quiero matarme'
+];
+
+const POST_VISIT_SIGNALS = [
+  'what happens next',
+  'what do i do now',
+  'what should i do next',
+  'confirmation',
+  'confirm my appointment',
+  'appointment details',
+  'just paid',
+  'i paid',
+  'payment went through'
+];
 
 const RECORDS_SIGNALS = ['last visit', 'my records', 'medical history', 'what did my doctor'];
 
@@ -53,6 +97,11 @@ const CLINICAL_SIGNALS = [
   'neck',
   'itch',
   'pain',
+  'hurt',
+  'hurting',
+  'ache',
+  'aching',
+  'sore',
   'symptom',
   'fever',
   'pelvic',
@@ -62,7 +111,28 @@ const CLINICAL_SIGNALS = [
   'period',
   'dermatolog',
   'skin concern',
-  'not an emergency'
+  'not an emergency',
+  'erupcion',
+  'erupción',
+  'pierna',
+  'cuello',
+  'brazo',
+  'dolor',
+  'duele',
+  'me duele',
+  'síntoma',
+  'sintoma',
+  'fiebre',
+  'cita',
+  'doctor',
+  'dermatolog',
+  'visita',
+  'clínica',
+  'clinica',
+  'picor',
+  'comezón',
+  'comezon',
+  'no es una emergencia'
 ];
 
 const EDUCATION_SIGNALS = [
@@ -85,8 +155,26 @@ function defaultFlags() {
     copay_amount: null,
     payment_token: null,
     pending_human_handoff: false,
-    booking_intent_seen: false
+    booking_intent_seen: false,
+    post_visit_confirmation_pending: false,
+    payment_complete: false,
+    safety_blocked: false
   };
+}
+
+function isEmergencyUtterance(msg) {
+  const m = String(msg || '').toLowerCase();
+  if (/\b(not an emergency|no emergency)\b/.test(m)) return false;
+  return EMERGENCY_SIGNALS.some((s) => m.includes(s));
+}
+
+function isPostVisitUtterance(msg) {
+  return POST_VISIT_SIGNALS.some((s) => String(msg || '').toLowerCase().includes(s));
+}
+
+function resolveLocale(input = {}) {
+  const raw = input.locale || input.preferredLanguage || input.preferred_language || 'en';
+  return String(raw).slice(0, 2) || 'en';
 }
 
 function normalizeState(input = {}) {
@@ -96,6 +184,7 @@ function normalizeState(input = {}) {
     clinic_id: input.clinic_id || input.clinicId || null,
     patient_id: input.patient_id || input.patientId || null,
     channel: input.channel || 'chat',
+    locale: resolveLocale(input),
     active_lane: input.active_lane || KELLY_LANE.ROUTER,
     step: input.step || 'await_intent',
     flags,
@@ -110,11 +199,34 @@ function routeOrchestratorLane(state = {}) {
   const msg = String(state.last_user_message || '').toLowerCase();
   const flags = state.flags || {};
 
-  if (flags.pending_human_handoff) {
+  if (flags.pending_human_handoff || flags.safety_blocked) {
     return { lane: KELLY_LANE.SUPPORT, step: 'handoff' };
   }
 
+  if (isEmergencyUtterance(msg)) {
+    return {
+      lane: KELLY_LANE.SUPPORT,
+      step: 'handoff',
+      safety_blocked: true
+    };
+  }
+
+  if (
+    flags.appointment_id &&
+    (flags.post_visit_confirmation_pending ||
+      flags.payment_complete ||
+      isPostVisitUtterance(msg))
+  ) {
+    return { lane: KELLY_LANE.POST_PAYMENT, step: 'confirmation' };
+  }
+
   if (PAYMENT_SIGNALS.some((s) => msg.includes(s))) {
+    if (paymentGateOpen(flags)) {
+      return { lane: KELLY_LANE.PAYMENT, step: LANE_FIRST_STEP[KELLY_LANE.PAYMENT] };
+    }
+    if (flags.has_rag || flags.triage_complete) {
+      return { lane: KELLY_LANE.BOOKING, step: 'schedule_visit' };
+    }
     return { lane: KELLY_LANE.PAYMENT, step: LANE_FIRST_STEP[KELLY_LANE.PAYMENT] };
   }
 
@@ -123,7 +235,7 @@ function routeOrchestratorLane(state = {}) {
   }
 
   if (RECORDS_SIGNALS.some((s) => msg.includes(s))) {
-    return { lane: KELLY_LANE.ACCOUNT, step: LANE_FIRST_STEP[KELLY_LANE.ACCOUNT] };
+    return { lane: KELLY_LANE.RECORDS, step: LANE_FIRST_STEP[KELLY_LANE.RECORDS] };
   }
 
   try {
@@ -140,6 +252,10 @@ function routeOrchestratorLane(state = {}) {
     return { lane: KELLY_LANE.EDUCATION, step: LANE_FIRST_STEP[KELLY_LANE.EDUCATION] };
   }
 
+  if (flags.routine_intake_active && clinicalHit) {
+    return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+  }
+
   if (clinicalHit && !flags.routine_intake_active) {
     if (!flags.basic_intake_complete) {
       return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
@@ -151,7 +267,7 @@ function routeOrchestratorLane(state = {}) {
     return { lane: KELLY_LANE.PAYMENT, step: LANE_FIRST_STEP[KELLY_LANE.PAYMENT] };
   }
 
-  const db = require('../database');
+  const db = require('../../database');
   const sessionRow = state.session_id && db.getTriageSession ? db.getTriageSession(state.session_id) : null;
   const opqrstOk =
     sessionRow &&
@@ -171,8 +287,15 @@ function routeOrchestratorLane(state = {}) {
     return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
   }
 
-  if (educationHit) {
+  if (educationHit && flags.routine_intake_active) {
     return { lane: KELLY_LANE.EDUCATION, step: LANE_FIRST_STEP[KELLY_LANE.EDUCATION] };
+  }
+
+  if (educationHit && !flags.routine_intake_active) {
+    if (clinicalHit) {
+      return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+    }
+    return { lane: KELLY_LANE.SUPPORT, step: LANE_FIRST_STEP[KELLY_LANE.SUPPORT] };
   }
 
   if (clinicalHit) {
@@ -193,5 +316,10 @@ module.exports = {
   normalizeState,
   routeOrchestratorLane,
   paymentGateOpen,
-  PAYMENT_SIGNALS
+  PAYMENT_SIGNALS,
+  EMERGENCY_SIGNALS,
+  POST_VISIT_SIGNALS,
+  RECORDS_SIGNALS,
+  isEmergencyUtterance,
+  isPostVisitUtterance
 };

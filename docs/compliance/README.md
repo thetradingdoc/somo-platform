@@ -174,7 +174,7 @@ If a legal hold applies, pause cleanup for affected tables. Document hold in `do
 
 *Former path: `docs/compliance/HEALTHCARE_LEGAL_REQUIREMENTS.md`*
 
-**Purpose**: Document legal and regulatory obligations for the DocLittle platform when handling healthcare providers and patient data.  
+**Purpose**: Document legal and regulatory obligations for the Somo platform when handling healthcare providers and patient data.  
 **Scope**: US healthcare context; platform must abide by applicable federal and state law.  
 **Last Updated**: March 2025
 
@@ -182,7 +182,7 @@ If a legal hold applies, pause cleanup for affected tables. Document hold in `do
 
 ## 1. Overview
 
-DocLittle operates in healthcare delivery and must comply with:
+Somo operates in healthcare delivery and must comply with:
 
 - **HIPAA** — Privacy and security of Protected Health Information (PHI)
 - **State medical licensing** — Provider credential verification
@@ -195,7 +195,7 @@ DocLittle operates in healthcare delivery and must comply with:
 
 ### 2.1 Business Associate Obligations
 
-- **BAA**: When DocLittle handles PHI on behalf of covered entities (e.g., providers, clinics), a Business Associate Agreement (BAA) is required.
+- **BAA**: When Somo handles PHI on behalf of covered entities (e.g., providers, clinics), a Business Associate Agreement (BAA) is required.
 - **Data minimization**: Collect only what is necessary for the stated purpose.
 - **Access controls**: Limit access to PHI to authorized personnel; log access where required.
 - **Encryption**: PHI at rest and in transit must be encrypted per HIPAA Security Rule.

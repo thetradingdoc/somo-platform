@@ -1,39 +1,24 @@
 'use strict';
 
+const path = require('path');
 const { KELLY_LANE, routeOrchestratorLane } = require('../services/kelly-rails/state-schema');
 
-describe('kelly-rails routeOrchestratorLane', () => {
-  test('rash routes to clinical lane', () => {
-    const r = routeOrchestratorLane({
-      last_user_message: 'I have an itchy rash on my arm. I need dermatology.',
-      flags: { routine_intake_active: false }
-    });
-    expect(r.lane).toBe(KELLY_LANE.CLINICAL);
-  });
+const fixture = require('../tests/fixtures/kelly-rails-golden-utterances.json');
 
-  test('pay copay routes to payment lane', () => {
-    const r = routeOrchestratorLane({
-      last_user_message: 'I want to pay my copay now with a secure payment link',
-      flags: {}
+describe('kelly-rails routeOrchestratorLane golden utterances', () => {
+  for (const row of fixture.cases) {
+    test(`${row.id} (${row.bucket})`, () => {
+      const r = routeOrchestratorLane({
+        last_user_message: row.last_user_message,
+        flags: row.flags || {}
+      });
+      expect(r.lane).toBe(row.expect.lane);
+      expect(r.step).toBe(row.expect.step);
+      if (row.expect.safety_blocked) {
+        expect(r.safety_blocked).toBe(true);
+      }
     });
-    expect(r.lane).toBe(KELLY_LANE.PAYMENT);
-  });
-
-  test('receipt routes to support', () => {
-    const r = routeOrchestratorLane({
-      last_user_message: 'I need a receipt for my last appointment',
-      flags: {}
-    });
-    expect(r.lane).toBe(KELLY_LANE.SUPPORT);
-  });
-
-  test('reschedule routes to reschedule lane', () => {
-    const r = routeOrchestratorLane({
-      last_user_message: 'I need to reschedule my appointment please',
-      flags: {}
-    });
-    expect(r.lane).toBe(KELLY_LANE.RESCHEDULE);
-  });
+  }
 });
 
 describe('kelly-rails config', () => {
@@ -47,5 +32,15 @@ describe('kelly-rails config', () => {
     process.env.KELLY_RAILS_V2 = '1';
     const { shouldUseKellyRailsV2 } = require('../services/kelly-rails/config');
     expect(shouldUseKellyRailsV2('sess-1')).toBe(true);
+  });
+});
+
+describe('kelly-rails routeOrchestratorLane legacy spot checks', () => {
+  test('pay copay routes to payment lane', () => {
+    const r = routeOrchestratorLane({
+      last_user_message: 'I want to pay my copay now with a secure payment link',
+      flags: {}
+    });
+    expect(r.lane).toBe(KELLY_LANE.PAYMENT);
   });
 });

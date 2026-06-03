@@ -54,7 +54,7 @@ function verifyRetellSecret(req, res, next) {
  *   "call": { "call_id": "..." },
  *   "parameters": {
  *     "to_email": "clinic@example.com",
- *     "subject": "Follow-up from DocLittle",
+ *     "subject": "Follow-up from Somo",
  *     "body": "Email content here",
  *     "lead_id": "lead-uuid" (optional)
  *   }
@@ -74,7 +74,7 @@ router.post('/send-followup-email', verifyRetellSecret, express.json(), async (r
     const leadId = parameters.lead_id || null;
 
     const toEmail = parameters.to_email || parameters.email;
-    const subject = parameters.subject || 'Follow-up from DocLittle';
+    const subject = parameters.subject || 'Follow-up from Somo';
     const body = parameters.body || parameters.message || '';
 
     if (!toEmail) {
@@ -109,13 +109,13 @@ router.post('/send-followup-email', verifyRetellSecret, express.json(), async (r
       <body>
         <div class="container">
           <div class="header">
-            <h1>DocLittle Voice Assistant</h1>
+            <h1>Somo Voice Assistant</h1>
           </div>
           <div class="content">
             ${body.replace(/\n/g, '<br>')}
           </div>
           <div class="footer">
-            <p>This email was sent by the DocLittle voice assistant during a call.</p>
+            <p>This email was sent by the Somo voice assistant during a call.</p>
           </div>
         </div>
       </body>

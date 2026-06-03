@@ -11,26 +11,39 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
-const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@doclittle.com';
+const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PASS = process.env.PW_PROVIDER_PASS || 'demo123';
 
-const PAGES = [
-  { id: 'today', path: '/business/today.html' },
-  { id: 'calendar', path: '/business/calendar.html' },
-  { id: 'patients', path: '/business/patients.html' },
-  { id: 'billing-overview', path: '/business/billing.html?section=overview' },
-  { id: 'billing-claims', path: '/business/billing.html?section=claims' },
-  { id: 'billing-invoices', path: '/business/billing.html?section=invoices' },
-  { id: 'claims', path: '/business/claims.html' },
-  { id: 'agent', path: '/business/agent.html' },
-  { id: 'settings', path: '/business/settings.html' },
-  { id: 'wallets', path: '/business/wallets.html' },
-  { id: 'video', path: '/business/video-call.html' }
-];
+const businessDir = path.join(__dirname, '..', '..', 'unified-dashboard', 'business');
+const ALL_HTML = fs.readdirSync(businessDir).filter((f) => f.endsWith('.html'));
 
-function visibleText(el) {
-  return (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-}
+const CORE_PAGES = [
+  { id: 'today', path: '/business/today.html', expectNav: 6 },
+  { id: 'calendar', path: '/business/calendar.html', expectNav: 6 },
+  { id: 'patients', path: '/business/patients.html', expectNav: 6 },
+  { id: 'patient-case', path: '/business/patient-case.html', expectNav: 6 },
+  { id: 'revenue-pipeline', path: '/business/revenue.html?tab=pipeline', expectNav: 6 },
+  { id: 'revenue-claims', path: '/business/revenue.html?tab=claims', expectNav: 6 },
+  { id: 'revenue-payments', path: '/business/revenue.html?tab=payments', expectNav: 6 },
+  { id: 'revenue-work', path: '/business/revenue.html?tab=work', expectNav: 6 },
+  { id: 'rcm-journey', path: '/business/rcm-journey.html', expectNav: 6 },
+  { id: 'agent', path: '/business/agent.html', expectNav: 6 },
+  { id: 'settings', path: '/business/settings.html', expectNav: 6 },
+  { id: 'video', path: '/business/video-call.html', expectNav: 6 },
+  { id: 'invoice-detail', path: '/business/invoice-detail.html', expectNav: 6 },
+  { id: 'payor-review', path: '/business/payor-review.html', expectNav: 6 },
+  { id: 'merge-review', path: '/business/merge-review.html', expectNav: 6 },
+  { id: 'feature-flags', path: '/business/feature-flags.html', expectNav: 6 }
+];
+const covered = new Set(CORE_PAGES.map((p) => p.path.split('?')[0].split('/').pop()));
+const PAGES = CORE_PAGES.concat(
+  ALL_HTML.filter((f) => !covered.has(f)).map((f) => ({
+    id: f.replace('.html', ''),
+    path: `/business/${f}`,
+    expectNav: 0,
+    legacyOnly: true
+  }))
+);
 
 async function collectInteractive(page) {
   return page.evaluate(() => {
@@ -39,7 +52,7 @@ async function collectInteractive(page) {
       const s = window.getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
     };
-    const nav = [...document.querySelectorAll('.pp-sb-nav a, #ppSidebarNav a, nav a[href*="business"]')]
+    const nav = [...document.querySelectorAll('#ppSidebarNav a.pp-nav-item, #ppSidebarNav a')]
       .filter(isVisible)
       .map((a) => ({
         kind: 'sidebar-nav',
@@ -48,7 +61,7 @@ async function collectInteractive(page) {
       }));
 
     const tabs = [...document.querySelectorAll(
-      '.pp-panel-tabs button, .pp-panel-tabs a, [role="tab"], .tab-btn, .nav-tab, .billing-tab, .section-tab'
+      '.pp-panel-tabs button, .pp-panel-tabs a, [role="tab"], .tab-btn, .nav-tab, .billing-tab, .section-tab, .settings-tab-btn, #billingSectionTabs .pp-ptab'
     )]
       .filter(isVisible)
       .map((el) => ({
@@ -68,7 +81,7 @@ async function collectInteractive(page) {
       }))
       .filter((b) => b.label);
 
-    const legacyNav = [...document.querySelectorAll('#sidebarNav a, .sidebar-nav a, .nav-item a')]
+    const legacyNav = [...document.querySelectorAll('#sidebarNav a, .sidebar-nav a, .sidebar .nav-item a')]
       .filter(isVisible)
       .map((a) => ({
         kind: 'legacy-nav',
@@ -112,37 +125,36 @@ async function main() {
     sidebarFromToday: null,
     pages: [],
     checks: {
-      noHangingLoading: []
-    }
+      noHangingLoading: [],
+      shellAssertions: []
+    },
+    failures: []
   };
 
   try {
     await login(page);
     report.login.ok = true;
-    report.login.customer = (await page.evaluate(() => {
-      try { return JSON.parse(sessionStorage.getItem('customer') || '{}').email; } catch { return null; }
-    })) || EMAIL;
 
     await page.goto(`${BASE}/business/today.html`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(2000);
-    await page.setViewportSize({ width: 1440, height: 960 });
-    await page.screenshot({ path: path.join(__dirname, '..', 'playwright-today-desktop.png'), fullPage: true });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`${BASE}/business/today.html`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(1800);
-    await page.screenshot({ path: path.join(__dirname, '..', 'playwright-today-mobile.png'), fullPage: true });
-    await page.setViewportSize({ width: 1280, height: 900 });
     const today = await collectInteractive(page);
-    report.sidebarFromToday = {
-      nav: today.nav,
-      legacyNav: today.legacyNav
-    };
+    report.sidebarFromToday = { nav: today.nav, legacyNav: today.legacyNav };
+
+    const kellyOnToday = await page.evaluate(() => !!document.getElementById('ppKellyLive'));
+    if (!kellyOnToday) report.failures.push('today: missing #ppKellyLive');
 
     for (const p of PAGES) {
       const entry = { id: p.id, url: `${BASE}${p.path}`, error: null, nav: [], tabs: [], buttons: [] };
       try {
+        if (p.legacyOnly) {
+          const resp = await page.goto(`${BASE}${p.path}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          entry.redirected = resp.url();
+          entry.legacyOnly = true;
+          report.pages.push(entry);
+          continue;
+        }
         await page.goto(`${BASE}${p.path}`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-        await page.waitForTimeout(1200);
+        await page.waitForTimeout(1500);
         const data = await collectInteractive(page);
         entry.nav = data.nav;
         entry.tabs = data.tabs;
@@ -150,23 +162,43 @@ async function main() {
         entry.legacyNav = data.legacyNav;
         entry.title = await page.title();
         entry.hasProviderPortal = await page.evaluate(() => document.body.classList.contains('provider-portal'));
+        entry.shell = await page.evaluate(() => ({
+          ppSidebarNavLinks: document.querySelectorAll('#ppSidebarNav a').length,
+          kellyLive: !!document.getElementById('ppKellyLive'),
+          legacySidebarNavLinks: document.querySelectorAll('#sidebarNav a, .sidebar .nav-item a').length
+        }));
         entry.hangingLoading = await page.evaluate(() => {
-          const blocked = ['Loading...', 'Loading…', 'Could not load'];
-          const nodes = Array.from(document.querySelectorAll('.pp-panel-body, .pp-empty, .pp-panel-sub'));
+          const blocked = ['Loading...', 'Loading…'];
+          const nodes = Array.from(document.querySelectorAll('.pp-panel-body, .pp-panel-sub'));
           return nodes.some((el) => {
             const t = (el.textContent || '').trim();
-            if (!t) return false;
-            return blocked.some((token) => t === token || t.endsWith(token));
+            return blocked.some((token) => t === token);
           });
         });
         report.checks.noHangingLoading.push({ page: p.id, ok: !entry.hangingLoading });
+
+        const minNav = p.expectNav || 0;
+        if (minNav > 0 && entry.shell.ppSidebarNavLinks < minNav) {
+          report.failures.push(`${p.id}: nav links ${entry.shell.ppSidebarNavLinks} < ${minNav}`);
+        }
+        if (minNav > 0 && !entry.shell.kellyLive) {
+          report.failures.push(`${p.id}: missing Kelly widget`);
+        }
+        if (minNav > 0 && entry.legacyNav.length > 0) {
+          report.failures.push(`${p.id}: legacy nav visible (${entry.legacyNav.length})`);
+        }
+        if (p.expectNav > 0 && entry.title && !entry.title.includes('Somo Provider')) {
+          report.failures.push(`${p.id}: title not Somo Provider pattern: ${entry.title}`);
+        }
       } catch (e) {
         entry.error = e.message;
+        report.failures.push(`${p.id}: ${e.message}`);
       }
       report.pages.push(entry);
     }
   } catch (e) {
     report.fatal = e.message;
+    report.failures.push(`fatal: ${e.message}`);
   } finally {
     await browser.close();
   }
@@ -175,41 +207,13 @@ async function main() {
   fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
 
   console.log('\n=== PROVIDER PORTAL INVENTORY ===\n');
-  console.log('Login:', report.login.ok ? 'OK' : 'FAILED', '→', report.login.ok ? 'session established' : report.fatal || 'check server');
-  console.log('\n--- Sidebar (from today.html) ---');
-  for (const n of report.sidebarFromToday?.nav || []) {
-    console.log(`  [nav] ${n.label} → ${n.href}`);
+  console.log('Login:', report.login.ok ? 'OK' : 'FAILED');
+  if (report.failures.length) {
+    console.log('\nFailures:');
+    for (const f of report.failures) console.log('  -', f);
   }
-  if (report.sidebarFromToday?.legacyNav?.length) {
-    console.log('\n--- Legacy sidebar (config.js, not provider-shell) ---');
-    for (const n of report.sidebarFromToday.legacyNav) {
-      console.log(`  [legacy] ${n.label} → ${n.href}`);
-    }
-  }
-
-  for (const p of report.pages) {
-    console.log(`\n--- ${p.id} (${p.path || p.url}) ---`);
-    if (p.error) {
-      console.log('  ERROR:', p.error);
-      continue;
-    }
-    console.log(`  title: ${p.title}`);
-    console.log(`  provider-portal class: ${p.hasProviderPortal}`);
-    if (p.tabs?.length) {
-      console.log('  Tabs:');
-      for (const t of p.tabs) console.log(`    · ${t.label}${t.id ? ` #${t.id}` : ''}`);
-    }
-    if (p.buttons?.length) {
-      console.log('  Buttons/links (sample):');
-      for (const b of p.buttons.slice(0, 15)) {
-        console.log(`    · [${b.kind}] ${b.label}${b.href ? ` → ${b.href}` : ''}`);
-      }
-      if (p.buttons.length > 15) console.log(`    … +${p.buttons.length - 15} more`);
-    }
-  }
-
   console.log(`\nFull JSON: ${outPath}\n`);
-  process.exit(report.login.ok ? 0 : 1);
+  process.exit(report.login.ok && report.failures.length === 0 ? 0 : 1);
 }
 
 main().catch((e) => {

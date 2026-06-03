@@ -1,7 +1,7 @@
 # Medical Coding documentation
 
 > **Last reviewed:** 2026-05-25  
-> **Canonical home** for outpatient ICD-10 / CPT / HCPCS coding on the DocLittle platform.
+> **Canonical home** for outpatient ICD-10 / CPT / HCPCS coding on the Somo platform.
 
 ## Read first
 

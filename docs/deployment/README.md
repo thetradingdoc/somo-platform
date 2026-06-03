@@ -1,6 +1,6 @@
 # deployment — consolidated documentation
 
-> **Historical:** Most sections below reference **doclittle.site**, Azure App Service, or **myskinandcare.com**. **Do not follow them for production.**
+> **Historical:** Most sections below reference **api.callsomo.com**, Azure App Service, or **callsomo.com**. **Do not follow them for production.**
 >
 > **Read first:** [`CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md) · [`GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md) · [`INFRA_BRAND_DEFERRAL.md`](../Brand/INFRA_BRAND_DEFERRAL.md)
 
@@ -43,17 +43,17 @@ Canonical architecture: [docs/Medical Coding/ARCHITECTURE.md](../Medical%20Codin
 - [Postgres Migration & Infrastructure Hardening (`database/POSTGRES_MIGRATION.md`)](#database-postgres-migration)
 - [Postgres Testing Guide (`database/POSTGRES_TESTING.md`)](#database-postgres-testing)
 - [DNS Records to Add for Tenant Subdomains (`dns/DNS_RECORDS_TO_ADD.md`)](#dns-dns-records-to-add)
-- [IONOS DNS Setup — doclittle.site (`dns/ionos/IONOS_DNS_SETUP.md`)](#dns-ionos-ionos-dns-setup)
-- [doclittle.site SSL & Domain Setup (`dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md`)](#dns-ssl-doclittle-site-ssl-setup)
+- [IONOS DNS Setup — api.callsomo.com (`dns/ionos/IONOS_DNS_SETUP.md`)](#dns-ionos-ionos-dns-setup)
+- [api.callsomo.com SSL & Domain Setup (`dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md`)](#dns-ssl-doclittle-site-ssl-setup)
 - [Tenant Subdomain & DNS Setup (`dns/TENANT_AND_DNS_SETUP.md`)](#dns-tenant-and-dns-setup)
 - [CI/CD Setup for Infrastructure Deployment (`guides/advanced/CI_CD_SETUP.md`)](#guides-advanced-ci-cd-setup)
 - [Deployment Checklist - Language Detection Fix (`guides/advanced/DEPLOYMENT_CHECKLIST.md`)](#guides-advanced-deployment-checklist)
-- [Signup Flow Implementation - api.doclittle.site (`guides/advanced/SIGNUP_FLOW_IMPLEMENTATION.md`)](#guides-advanced-signup-flow-implementation)
+- [Signup Flow Implementation - api.api.callsomo.com (`guides/advanced/SIGNUP_FLOW_IMPLEMENTATION.md`)](#guides-advanced-signup-flow-implementation)
 - [Database Backup Strategy (`guides/BACKUP_STRATEGY.md`)](#guides-backup-strategy)
 - [Quick Deployment Guide - Azure App Service (`guides/basic/QUICK_DEPLOYMENT_GUIDE.md`)](#guides-basic-quick-deployment-guide)
 - [Deployment Guide (`guides/DEPLOYMENT_GUIDE.md`)](#guides-deployment-guide)
 - [Deployment Documentation (`README.md`)](#readme)
-- [DocLittle.Site Setup Guide - SaaS Frontend on Azure (`security/DOCLITTLE_SITE_SETUP.md`)](#security-doclittle-site-setup)
+- [Somo.Site Setup Guide - SaaS Frontend on Azure (`security/DOCLITTLE_SITE_SETUP.md`)](#security-doclittle-site-setup)
 - [Production Deployment - Per-Client API Keys & Admin Portal (`security/PRODUCTION_DEPLOYMENT_API_KEYS.md`)](#security-production-deployment-api-keys)
 - [Security & Production Improvements (`security/SECURITY_IMPROVEMENTS.md`)](#security-security-improvements)
 ---
@@ -106,7 +106,7 @@ When a tenant completes signup in `server.js`:
 ```javascript
 // After welcome email is sent:
 AzureDomainService.setupTenantDomain(subdomain, {
-  rootDomain: 'doclittle.site',
+  rootDomain: 'api.callsomo.com',
   appName: 'doclittle',
   resourceGroup: 'doclittle'
 });
@@ -130,7 +130,7 @@ Add these to your Azure App Settings (or `.env` for local):
 
 ```bash
 # Azure Configuration (optional - defaults provided)
-AZURE_ROOT_DOMAIN=doclittle.site
+AZURE_ROOT_DOMAIN=api.callsomo.com
 AZURE_APP_NAME=doclittle
 AZURE_RESOURCE_GROUP=doclittle
 
@@ -208,7 +208,7 @@ The Azure account needs:
 const AzureDomainService = require('./services/azure-domain-service');
 
 const result = await AzureDomainService.setupTenantDomain('doctor-little', {
-  rootDomain: 'doclittle.site',
+  rootDomain: 'api.callsomo.com',
   appName: 'doclittle',
   resourceGroup: 'doclittle'
 });
@@ -217,7 +217,7 @@ console.log(result);
 // {
 //   success: true,
 //   subdomain: 'doctor-little',
-//   domain: 'doctor-little.doclittle.site',
+//   domain: 'doctor-little.api.callsomo.com',
 //   steps: {
 //     customDomain: { success: true, ... },
 //     sslCertificate: { success: true, thumbprint: '...' },
@@ -235,11 +235,11 @@ console.log(result);
 ```
 ✅ Welcome email sent to user@example.com with subdomain: doctor-little
 🌐 Starting automated Azure domain setup for subdomain: doctor-little
-✅ Custom domain doctor-little.doclittle.site added to Azure App Service
-📝 Creating SSL certificate for doctor-little.doclittle.site...
-✅ SSL certificate created for doctor-little.doclittle.site (thumbprint: ABC123...)
-✅ SSL certificate bound to doctor-little.doclittle.site
-✅ Azure domain setup completed for doctor-little.doctor-little.doclittle.site
+✅ Custom domain doctor-little.api.callsomo.com added to Azure App Service
+📝 Creating SSL certificate for doctor-little.api.callsomo.com...
+✅ SSL certificate created for doctor-little.api.callsomo.com (thumbprint: ABC123...)
+✅ SSL certificate bound to doctor-little.api.callsomo.com
+✅ Azure domain setup completed for doctor-little.doctor-little.api.callsomo.com
 ```
 
 ### Error Handling
@@ -337,23 +337,23 @@ The automation tracks each step:
 {
   success: true,
   subdomain: 'doctor-little',
-  domain: 'doctor-little.doclittle.site',
+  domain: 'doctor-little.api.callsomo.com',
   steps: {
     customDomain: {
       success: true,
       alreadyExists: false,
-      domain: 'doctor-little.doclittle.site'
+      domain: 'doctor-little.api.callsomo.com'
     },
     sslCertificate: {
       success: true,
       alreadyExists: false,
-      domain: 'doctor-little.doclittle.site',
+      domain: 'doctor-little.api.callsomo.com',
       thumbprint: 'ABC123...'
     },
     sslBinding: {
       success: true,
       alreadyBound: false,
-      domain: 'doctor-little.doclittle.site',
+      domain: 'doctor-little.api.callsomo.com',
       thumbprint: 'ABC123...'
     }
   }
@@ -407,8 +407,8 @@ Add these to your `.env` file (or Azure App Settings in production):
 # Azure App Service Configuration
 # ============================================
 
-# Root domain (e.g., doclittle.site)
-AZURE_ROOT_DOMAIN=doclittle.site
+# Root domain (e.g., api.callsomo.com)
+AZURE_ROOT_DOMAIN=api.callsomo.com
 
 # Azure App Service name
 AZURE_APP_NAME=doclittle
@@ -439,7 +439,7 @@ AZURE_SSL_RETRY_DELAY_MS=60000
 
 If you don't set these variables, the system uses these defaults:
 
-- `AZURE_ROOT_DOMAIN` → `doclittle.site`
+- `AZURE_ROOT_DOMAIN` → `api.callsomo.com`
 - `AZURE_APP_NAME` → `doclittle`
 - `AZURE_RESOURCE_GROUP` → `doclittle`
 - `AZURE_SKIP_SSL` → `false`
@@ -461,7 +461,7 @@ PORT=4000
 DATABASE_URL=...
 
 # Azure Configuration
-AZURE_ROOT_DOMAIN=doclittle.site
+AZURE_ROOT_DOMAIN=api.callsomo.com
 AZURE_APP_NAME=doclittle
 AZURE_RESOURCE_GROUP=doclittle
 
@@ -486,7 +486,7 @@ In Azure Portal, add these as **App Settings**:
 
 | Name | Value | Example |
 |------|-------|---------|
-| `AZURE_ROOT_DOMAIN` | Your root domain | `doclittle.site` |
+| `AZURE_ROOT_DOMAIN` | Your root domain | `api.callsomo.com` |
 | `AZURE_APP_NAME` | App Service name | `doclittle` |
 | `AZURE_RESOURCE_GROUP` | Resource group | `doclittle` |
 | `AZURE_SKIP_SSL` | `false` or `true` | `false` |
@@ -910,7 +910,7 @@ Value: doclittle.azurewebsites.net
 TTL: 3600 (or default)
 ```
 
-**Why**: This routes `akin-dunbar.doclittle.site` to your Azure App Service.
+**Why**: This routes `akin-dunbar.api.callsomo.com` to your Azure App Service.
 
 ---
 
@@ -924,13 +924,13 @@ Value: doclittle.azurewebsites.net
 TTL: 3600 (or default)
 ```
 
-**Why**: This routes `doctor-little.doclittle.site` to your Azure App Service.
+**Why**: This routes `doctor-little.api.callsomo.com` to your Azure App Service.
 
 ---
 
 ## 🎯 How to Add in IONOS
 
-1. Go to: https://my.ionos.com/domain-dns-settings/doclittle.site
+1. Go to: https://my.ionos.com/domain-dns-settings/api.callsomo.com
 2. Click **"Add record"** button (top right)
 3. Fill in:
    - **Type**: Select `CNAME`
@@ -948,17 +948,17 @@ After adding the CNAME record, verify it:
 
 ```bash
 # Check DNS propagation
-dig doctor-little.doclittle.site CNAME
+dig doctor-little.api.callsomo.com CNAME
 
 # Should show:
-# doctor-little.doclittle.site. 3600 IN CNAME doclittle.azurewebsites.net.
+# doctor-little.api.callsomo.com. 3600 IN CNAME doclittle.azurewebsites.net.
 ```
 
 ---
 
 ## 🔍 Why `akin-dunbar` Might Be Working
 
-If `akin-dunbar.doclittle.site` is working but you don't see a CNAME record, it might be:
+If `akin-dunbar.api.callsomo.com` is working but you don't see a CNAME record, it might be:
 
 1. **Using the A record** - But this would only work for root domain, not subdomains
 2. **Configured directly in Azure** - Azure might be handling it differently
@@ -966,7 +966,7 @@ If `akin-dunbar.doclittle.site` is working but you don't see a CNAME record, it 
 
 **Check if `akin-dunbar` actually works:**
 ```bash
-curl -I https://akin-dunbar.doclittle.site
+curl -I https://akin-dunbar.api.callsomo.com
 # If you get SSL errors, it needs the CNAME + SSL certificate
 ```
 
@@ -996,7 +996,7 @@ For a proper multi-tenant setup, you'll need:
    az webapp config hostname add \
      --resource-group doclittle \
      --webapp-name doclittle \
-     --hostname doctor-little.doclittle.site
+     --hostname doctor-little.api.callsomo.com
    ```
 
 2. **Wait for DNS propagation** (5-30 minutes)
@@ -1006,7 +1006,7 @@ For a proper multi-tenant setup, you'll need:
    az webapp config ssl create \
      --resource-group doclittle \
      --name doclittle \
-     --hostname doctor-little.doclittle.site
+     --hostname doctor-little.api.callsomo.com
    ```
 
 4. **Bind SSL certificate** (see [TENANT_AND_DNS_SETUP.md](./TENANT_AND_DNS_SETUP.md))
@@ -1022,7 +1022,7 @@ For a proper multi-tenant setup, you'll need:
 
 <a id="dns-ionos-ionos-dns-setup"></a>
 
-## IONOS DNS Setup — doclittle.site
+## IONOS DNS Setup — api.callsomo.com
 
 *Former path: `docs/deployment/dns/ionos/IONOS_DNS_SETUP.md`*
 
@@ -1042,7 +1042,7 @@ az webapp show --name doclittle --resource-group doclittle \
 ```
 
 ### IONOS Configuration
-1. Go to https://my.ionos.com/domain-dns-settings/doclittle.site
+1. Go to https://my.ionos.com/domain-dns-settings/api.callsomo.com
 2. Add **A Record**: Type `A`, Name `@`, Value `<Azure IP>`, TTL `3600`
 3. Save
 
@@ -1050,7 +1050,7 @@ az webapp show --name doclittle --resource-group doclittle \
 
 ### Verify
 ```bash
-dig doclittle.site
+dig api.callsomo.com
 # Should show Azure IP
 ```
 
@@ -1059,33 +1059,33 @@ dig doclittle.site
 az webapp config hostname add \
   --resource-group doclittle \
   --webapp-name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ---
 
 ## 2. API Subdomain (CNAME)
 
-- `api` → `doclittle.azurewebsites.net` (for api.doclittle.site)
+- `api` → `doclittle.azurewebsites.net` (for api.api.callsomo.com)
 
 ---
 
 ## 3. Tenant Subdomains
 
-See [TENANT_AND_DNS_SETUP.md](../TENANT_AND_DNS_SETUP.md) for adding tenant subdomains (e.g. `doctor-little.doclittle.site`).
+See [TENANT_AND_DNS_SETUP.md](../TENANT_AND_DNS_SETUP.md) for adding tenant subdomains (e.g. `doctor-little.api.callsomo.com`).
 
 
 ---
 
 <a id="dns-ssl-doclittle-site-ssl-setup"></a>
 
-## doclittle.site SSL & Domain Setup
+## api.callsomo.com SSL & Domain Setup
 
 *Former path: `docs/deployment/dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md`*
 
 ## Current Status
-- ✅ `api.doclittle.site` is configured and working with SSL
-- ❌ `doclittle.site` (root domain) is NOT configured yet
+- ✅ `api.api.callsomo.com` is configured and working with SSL
+- ❌ `api.callsomo.com` (root domain) is NOT configured yet
 - ❌ SSL certificate not created for root domain
 
 ---
@@ -1097,12 +1097,12 @@ See [TENANT_AND_DNS_SETUP.md](../TENANT_AND_DNS_SETUP.md) for adding tenant subd
 ### IONOS DNS Configuration
 
 1. **Log in to IONOS:** https://www.ionos.com
-2. **Go to DNS Settings:** https://my.ionos.com/domain-dns-settings/doclittle.site
+2. **Go to DNS Settings:** https://my.ionos.com/domain-dns-settings/api.callsomo.com
 3. **Add TXT Record:**
 
    **Configuration:**
    - **Type:** `TXT`
-   - **Name:** `asuid.doclittle.site` (or just `asuid` if IONOS adds `.doclittle.site` automatically)
+   - **Name:** `asuid.api.callsomo.com` (or just `asuid` if IONOS adds `.api.callsomo.com` automatically)
    - **Value:** `e81a8b6649a65b93adedf7874dff6c695e9750b24ba940f1261ac373549c5ff2`
    - **TTL:** `3600` (or default)
 
@@ -1111,14 +1111,14 @@ See [TENANT_AND_DNS_SETUP.md](../TENANT_AND_DNS_SETUP.md) for adding tenant subd
 **Visual Guide:**
 ```
 Type:     [TXT ▼]
-Name:     [asuid.doclittle.site]
+Name:     [asuid.api.callsomo.com]
 Value:    [e81a8b6649a65b93adedf7874dff6c695e9750b24ba940f1261ac373549c5ff2]
 TTL:      [3600]
 ```
 
 **Note:** This is different from the `asuid.api` TXT record. You need BOTH:
-- `asuid.api` → Already exists (for api.doclittle.site)
-- `asuid.doclittle.site` → **NEW** (for root domain)
+- `asuid.api` → Already exists (for api.api.callsomo.com)
+- `asuid.api.callsomo.com` → **NEW** (for root domain)
 
 ---
 
@@ -1128,7 +1128,7 @@ TTL:      [3600]
 
 **Verify TXT record:**
 ```bash
-dig TXT asuid.doclittle.site +short
+dig TXT asuid.api.callsomo.com +short
 ```
 
 **Expected output:**
@@ -1137,7 +1137,7 @@ dig TXT asuid.doclittle.site +short
 ```
 
 Or use online tool:
-https://dnschecker.org/#TXT/asuid.doclittle.site
+https://dnschecker.org/#TXT/asuid.api.callsomo.com
 
 ---
 
@@ -1149,13 +1149,13 @@ Once the TXT record is verified, add the domain:
 az webapp config hostname add \
   --resource-group doclittle \
   --webapp-name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 **Expected Output:**
 ```
 {
-  "name": "doclittle.site",
+  "name": "api.callsomo.com",
   "slot": "production"
 }
 ```
@@ -1170,7 +1170,7 @@ Azure will automatically create and manage the SSL certificate:
 az webapp config ssl create \
   --resource-group doclittle \
   --name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 **Note:** This may take 10-30 minutes. Azure needs to:
@@ -1186,7 +1186,7 @@ az webapp config ssl create \
 ```bash
 az webapp config ssl list \
   --resource-group doclittle \
-  --query "[?name=='doclittle.site']" \
+  --query "[?name=='api.callsomo.com']" \
   --output table
 ```
 
@@ -1197,7 +1197,7 @@ az webapp config ssl list \
 THUMBPRINT=$(az webapp config ssl show \
   --resource-group doclittle \
   --name doclittle \
-  --certificate-name doclittle.site \
+  --certificate-name api.callsomo.com \
   --query thumbprint \
   --output tsv)
 
@@ -1207,7 +1207,7 @@ az webapp config ssl bind \
   --name doclittle \
   --certificate-thumbprint "$THUMBPRINT" \
   --ssl-type SNI \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ---
@@ -1216,7 +1216,7 @@ az webapp config ssl bind \
 
 **Test HTTPS:**
 ```bash
-curl -I https://doclittle.site
+curl -I https://api.callsomo.com
 ```
 
 **Expected:**
@@ -1226,7 +1226,7 @@ HTTP/2 200
 ```
 
 **In Browser:**
-- Visit: https://doclittle.site
+- Visit: https://api.callsomo.com
 - Should show green padlock (valid SSL)
 - No SSL warnings
 
@@ -1237,7 +1237,7 @@ HTTP/2 200
 ### TXT Record to Add (IONOS)
 ```
 Type: TXT
-Name: asuid.doclittle.site
+Name: asuid.api.callsomo.com
 Value: e81a8b6649a65b93adedf7874dff6c695e9750b24ba940f1261ac373549c5ff2
 ```
 
@@ -1247,24 +1247,24 @@ Value: e81a8b6649a65b93adedf7874dff6c695e9750b24ba940f1261ac373549c5ff2
 az webapp config hostname add \
   --resource-group doclittle \
   --webapp-name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 
 # 2. Create SSL certificate
 az webapp config ssl create \
   --resource-group doclittle \
   --name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 
 # 3. Wait 10-30 minutes, then check status
 az webapp config ssl list \
   --resource-group doclittle \
-  --query "[?name=='doclittle.site']"
+  --query "[?name=='api.callsomo.com']"
 
 # 4. Bind certificate (after status is "Issued")
 THUMBPRINT=$(az webapp config ssl show \
   --resource-group doclittle \
   --name doclittle \
-  --certificate-name doclittle.site \
+  --certificate-name api.callsomo.com \
   --query thumbprint --output tsv)
 
 az webapp config ssl bind \
@@ -1272,7 +1272,7 @@ az webapp config ssl bind \
   --name doclittle \
   --certificate-thumbprint "$THUMBPRINT" \
   --ssl-type SNI \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ---
@@ -1282,7 +1282,7 @@ az webapp config ssl bind \
 ### Error: "TXT record not found"
 **Solution:** 
 - Wait 5-15 minutes after adding TXT record
-- Verify with: `dig TXT asuid.doclittle.site`
+- Verify with: `dig TXT asuid.api.callsomo.com`
 - Check IONOS saved the record correctly
 
 ### Certificate Status Stays "PendingIssuance"
@@ -1308,12 +1308,12 @@ az webapp config ssl bind \
 | A | `@` | `20.99.227.36` | ✅ Exists |
 | CNAME | `api` | `doclittle.azurewebsites.net` | ✅ Exists |
 | TXT | `asuid.api` | `e81a8b...` | ✅ Exists |
-| **TXT** | **`asuid.doclittle.site`** | **`e81a8b...`** | **❌ NEED TO ADD** |
+| **TXT** | **`asuid.api.callsomo.com`** | **`e81a8b...`** | **❌ NEED TO ADD** |
 
 ---
 
 **Status:** ⏳ Waiting for TXT record to be added in IONOS  
-**Next Step:** Add `asuid.doclittle.site` TXT record in IONOS DNS settings
+**Next Step:** Add `asuid.api.callsomo.com` TXT record in IONOS DNS settings
 
 
 
@@ -1333,7 +1333,7 @@ Merged from: TENANT_SUBDOMAIN_SETUP, SUBDOMAIN_SSL_FIX, WILDCARD_DNS_EXPLANATION
 
 ## 1. Overview
 
-For each tenant subdomain (e.g. `doctor-little.doclittle.site`):
+For each tenant subdomain (e.g. `doctor-little.api.callsomo.com`):
 
 1. Add CNAME in IONOS
 2. Add custom domain in Azure
@@ -1365,16 +1365,16 @@ For each tenant subdomain (e.g. `doctor-little.doclittle.site`):
 az webapp config hostname add \
   --resource-group doclittle \
   --webapp-name doclittle \
-  --hostname doctor-little.doclittle.site
+  --hostname doctor-little.api.callsomo.com
 ```
 
 ### SSL Certificate
 ```bash
 az webapp config ssl create --resource-group doclittle --name doclittle \
-  --hostname doctor-little.doclittle.site
+  --hostname doctor-little.api.callsomo.com
 az webapp config ssl bind --resource-group doclittle --name doclittle \
   --certificate-thumbprint <THUMBPRINT> --ssl-type SNI \
-  --hostname doctor-little.doclittle.site
+  --hostname doctor-little.api.callsomo.com
 ```
 
 ---
@@ -1383,7 +1383,7 @@ az webapp config ssl bind --resource-group doclittle --name doclittle \
 
 **Options:**
 1. **Cloudflare** — Provides free SSL for all subdomains; point nameservers to Cloudflare
-2. **Azure Wildcard** — Purchase/upload `*.doclittle.site` cert
+2. **Azure Wildcard** — Purchase/upload `*.api.callsomo.com` cert
 3. **Per-subdomain** — Create and bind cert per tenant (as above)
 
 ---
@@ -1732,17 +1732,17 @@ Or better yet, explicitly include the docs folder:
 
 <a id="guides-advanced-signup-flow-implementation"></a>
 
-## Signup Flow Implementation - api.doclittle.site
+## Signup Flow Implementation - api.api.callsomo.com
 
 *Former path: `docs/deployment/guides/advanced/SIGNUP_FLOW_IMPLEMENTATION.md`*
 
 ## ✅ Implementation Complete
 
 ### Overview
-Completely rebuilt the signup and authentication flow for `api.doclittle.site`:
+Completely rebuilt the signup and authentication flow for `api.api.callsomo.com`:
 
 - ✅ **Root endpoint (`/`)**: Now serves signup page (removed JSON metadata - moved to `/api`)
-- ✅ **Removed admin portal** from `api.doclittle.site/admin` (will be on `doclittle.site/admin` later)
+- ✅ **Removed admin portal** from `api.api.callsomo.com/admin` (will be on `api.callsomo.com/admin` later)
 - ✅ **Email verification** required before accessing docs
 - ✅ **Terms of Service** acceptance required
 - ✅ **API key creation** in `/docs` (only when user clicks "Create API Key")
@@ -1755,7 +1755,7 @@ Completely rebuilt the signup and authentication flow for `api.doclittle.site`:
 **Specialist Provider Portal** (individual medical specialists; no company signup)
 
 ```
-User visits signup page (e.g. api.doclittle.site or unified-dashboard)
+User visits signup page (e.g. api.api.callsomo.com or unified-dashboard)
   ↓
 Signup Page (Step 1) — Provider details
   - First name, Last name, Work email, Phone (required)
@@ -1979,15 +1979,15 @@ This enables:
    ```
 
 4. **Verify deployment:**
-   - Test signup flow: `https://api.doclittle.site`
+   - Test signup flow: `https://api.api.callsomo.com`
    - Test email verification (check email)
-   - Test terms acceptance: `https://api.doclittle.site/terms`
-   - Test docs protection: `https://api.doclittle.site/docs` (should redirect if not authenticated)
+   - Test terms acceptance: `https://api.api.callsomo.com/terms`
+   - Test docs protection: `https://api.api.callsomo.com/docs` (should redirect if not authenticated)
    - Test API key creation in docs
 
 5. **Test API key authentication:**
    ```bash
-   curl -X POST https://api.doclittle.site/voice/products/search \
+   curl -X POST https://api.api.callsomo.com/voice/products/search \
      -H "Authorization: Bearer YOUR_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{"merchant_id": "your-customer-id", "query": "test"}'
@@ -2009,13 +2009,13 @@ This enables:
 - [ ] API key shown only once
 - [ ] API key authentication works for API calls
 - [ ] Usage tracking logs `customer_id` correctly
-- [ ] Admin portal removed from `api.doclittle.site/admin`
+- [ ] Admin portal removed from `api.api.callsomo.com/admin`
 
 ---
 
 ## 🔄 Next Steps (Future)
 
-1. **Admin Portal on `doclittle.site/admin`**
+1. **Admin Portal on `api.callsomo.com/admin`**
    - Build admin dashboard on main domain
    - Track all customer signups
    - View per-customer usage and billing
@@ -2295,12 +2295,12 @@ find middleware-platform/backups/ -name "*.db" -mtime -1
 
 > **Note**: This is a quick reference. For complete deployment guide, see [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md)
 
-## 🚀 Deploy doclittle.site to Azure (Demo Ready)
+## 🚀 Deploy api.callsomo.com to Azure (Demo Ready)
 
 ### Prerequisites
 - Azure CLI installed
 - Logged in to Azure: `az login`
-- Domain `doclittle.site` managed in IONOS
+- Domain `api.callsomo.com` managed in IONOS
 
 ---
 
@@ -2332,14 +2332,14 @@ chmod +x scripts/add-root-domain.sh
 az webapp config hostname add \
   --resource-group doclittle \
   --webapp-name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ---
 
 ## Step 3: Configure DNS in IONOS
 
-1. Go to: https://my.ionos.com/domain-dns-settings/doclittle.site
+1. Go to: https://my.ionos.com/domain-dns-settings/api.callsomo.com
 2. Click **"Add record"**
 3. Add **A Record** (or **ALIAS** if supported):
 
@@ -2360,7 +2360,7 @@ az webapp config hostname add \
 
 **Verify DNS:**
 ```bash
-dig doclittle.site
+dig api.callsomo.com
 # Should show Azure App Service IP or azurewebsites.net
 ```
 
@@ -2368,19 +2368,19 @@ dig doclittle.site
 
 ## Step 4: Create SSL Certificate
 
-**After DNS propagates (check with `dig doclittle.site`):**
+**After DNS propagates (check with `dig api.callsomo.com`):**
 
 ```bash
 # Create managed certificate (free)
 az webapp config ssl create \
   --resource-group doclittle \
   --name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 
 # Get certificate thumbprint
 az webapp config ssl show \
   --resource-group doclittle \
-  --certificate-name doclittle.site \
+  --certificate-name api.callsomo.com \
   --query thumbprint \
   --output tsv
 
@@ -2390,7 +2390,7 @@ az webapp config ssl bind \
   --name doclittle \
   --certificate-thumbprint <THUMBPRINT> \
   --ssl-type SNI \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ---
@@ -2401,29 +2401,29 @@ az webapp config ssl bind \
 
 ```bash
 # Root domain - should show landing page
-curl https://doclittle.site
+curl https://api.callsomo.com
 
 # API subdomain - should show signup page
-curl https://api.doclittle.site
+curl https://api.api.callsomo.com
 
 # Health check
-curl https://api.doclittle.site/health
+curl https://api.api.callsomo.com/health
 
 # Admin portal (should be accessible on root domain)
-open https://doclittle.site/admin
+open https://api.callsomo.com/admin
 ```
 
 ### Expected Results:
 
 | URL | Should Show |
 |-----|-------------|
-| `https://doclittle.site` | Landing page (unified-dashboard) |
-| `https://doclittle.site/login` | Login page |
-| `https://doclittle.site/admin` | Admin portal |
-| `https://doclittle.site/business/*` | Business dashboard |
-| `https://api.doclittle.site` | Signup page |
-| `https://api.doclittle.site/docs` | API docs (protected) |
-| `https://api.doclittle.site/health` | `{"status":"ok"}` |
+| `https://api.callsomo.com` | Landing page (unified-dashboard) |
+| `https://api.callsomo.com/login` | Login page |
+| `https://api.callsomo.com/admin` | Admin portal |
+| `https://api.callsomo.com/business/*` | Business dashboard |
+| `https://api.api.callsomo.com` | Signup page |
+| `https://api.api.callsomo.com/docs` | API docs (protected) |
+| `https://api.api.callsomo.com/health` | `{"status":"ok"}` |
 
 ---
 
@@ -2433,8 +2433,8 @@ open https://doclittle.site/admin
 
 ```bash
 # Check DNS propagation
-dig doclittle.site
-nslookup doclittle.site
+dig api.callsomo.com
+nslookup api.callsomo.com
 
 # If not resolving, wait 30 minutes and try again
 ```
@@ -2448,7 +2448,7 @@ az webapp config ssl list \
   --name doclittle
 
 # Verify DNS first before creating certificate
-dig doclittle.site
+dig api.callsomo.com
 ```
 
 ### Frontend Not Loading
@@ -2497,14 +2497,14 @@ az webapp log tail --name doclittle --resource-group doclittle
 
 Before showing to clients:
 
-- [ ] `https://doclittle.site` loads landing page
-- [ ] `https://doclittle.site/login` works
-- [ ] `https://doclittle.site/admin` accessible
-- [ ] `https://api.doclittle.site` shows signup page
-- [ ] `https://api.doclittle.site/health` returns `{"status":"ok"}`
+- [ ] `https://api.callsomo.com` loads landing page
+- [ ] `https://api.callsomo.com/login` works
+- [ ] `https://api.callsomo.com/admin` accessible
+- [ ] `https://api.api.callsomo.com` shows signup page
+- [ ] `https://api.api.callsomo.com/health` returns `{"status":"ok"}`
 - [ ] SSL certificates valid (no browser warnings)
 - [ ] All static assets load (CSS, JS, images)
-- [ ] Frontend connects to `https://api.doclittle.site` API
+- [ ] Frontend connects to `https://api.api.callsomo.com` API
 
 ---
 
@@ -2531,7 +2531,7 @@ Azure will:
 **Azure Portal:** https://portal.azure.com
 - Navigate to: Resource Groups → doclittle → doclittle
 
-**IONOS DNS:** https://my.ionos.com/domain-dns-settings/doclittle.site
+**IONOS DNS:** https://my.ionos.com/domain-dns-settings/api.callsomo.com
 
 **View Logs:**
 ```bash
@@ -2584,7 +2584,7 @@ git push origin main
 5. **Configure Subdomain SSL**: See [TENANT_AND_DNS_SETUP.md](../README.md#dns-tenant-and-dns-setup) for tenant subdomains
 6. **Verify**: Test all URLs and health endpoints
 
-**⚠️ Important**: Azure managed certificates only cover the root domain. For tenant subdomains (e.g., `doctor-little.doclittle.site`), you need either:
+**⚠️ Important**: Azure managed certificates only cover the root domain. For tenant subdomains (e.g., `doctor-little.api.callsomo.com`), you need either:
 - **Cloudflare** (recommended) - automatic SSL for all subdomains
 - **Wildcard certificate** - manual setup required
 
@@ -2644,8 +2644,8 @@ See detailed steps below.
 **Required:**
 - `NODE_ENV=production`
 - `PORT=4000` (or Azure/Railway assigned port)
-- `API_BASE_URL=https://doclittle.site` (or your domain)
-- `BASE_URL=https://doclittle.site`
+- `API_BASE_URL=https://api.callsomo.com` (or your domain)
+- `BASE_URL=https://api.callsomo.com`
 
 **Optional (for backward compatibility):**
 - `DEFAULT_TENANT_SUBDOMAIN=akin-dunbar` (if different from default)
@@ -2688,12 +2688,12 @@ chmod +x scripts/add-root-domain.sh
 az webapp config hostname add \
   --resource-group doclittle \
   --webapp-name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ### Step 1c: Configure DNS in IONOS
 
-1. Go to: https://my.ionos.com/domain-dns-settings/doclittle.site
+1. Go to: https://my.ionos.com/domain-dns-settings/api.callsomo.com
 2. Click **"Add record"**
 3. Add **A Record**:
    - **Type:** A
@@ -2705,7 +2705,7 @@ az webapp config hostname add \
 
 **Verify DNS:**
 ```bash
-dig doclittle.site
+dig api.callsomo.com
 # Should show Azure App Service IP
 ```
 
@@ -2716,12 +2716,12 @@ dig doclittle.site
 az webapp config ssl create \
   --resource-group doclittle \
   --name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 
 # Get certificate thumbprint
 az webapp config ssl show \
   --resource-group doclittle \
-  --certificate-name doclittle.site \
+  --certificate-name api.callsomo.com \
   --query thumbprint \
   --output tsv
 
@@ -2731,7 +2731,7 @@ az webapp config ssl bind \
   --name doclittle \
   --certificate-thumbprint <THUMBPRINT> \
   --ssl-type SNI \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ### Step 2: Verify Environment Variables
@@ -2764,14 +2764,14 @@ az webapp show --name doclittle --resource-group doclittle --query state
 
 ```bash
 # Health check
-curl https://doclittle.site/health
+curl https://api.callsomo.com/health
 
 # API check
-curl https://api.doclittle.site/health
+curl https://api.api.callsomo.com/health
 
 # Test tenant resolution (should work without hardcoded fallbacks)
-curl https://api.doclittle.site/api/voice/products/search \
-  -H "Host: akin-dunbar.doclittle.site" \
+curl https://api.api.callsomo.com/api/voice/products/search \
+  -H "Host: akin-dunbar.api.callsomo.com" \
   -d '{"merchant_id": "your_merchant_id"}'
 ```
 
@@ -2822,10 +2822,10 @@ git push origin main
 
 ```bash
 # Main health check
-curl https://doclittle.site/health
+curl https://api.callsomo.com/health
 
 # API health check
-curl https://api.doclittle.site/health
+curl https://api.api.callsomo.com/health
 
 # Should return: {"status":"ok"}
 ```
@@ -2834,7 +2834,7 @@ curl https://api.doclittle.site/health
 
 ```bash
 # Test with subdomain (should resolve tenant)
-curl https://akin-dunbar.doclittle.site/api/voice/products/search \
+curl https://akin-dunbar.api.callsomo.com/api/voice/products/search \
   -d '{"merchant_id": "test"}'
 
 # Should NOT fallback to hardcoded tenant
@@ -3080,7 +3080,7 @@ Deployment guides, infrastructure setup, and operational documentation.
 
 <a id="security-doclittle-site-setup"></a>
 
-## DocLittle.Site Setup Guide - SaaS Frontend on Azure
+## Somo.Site Setup Guide - SaaS Frontend on Azure
 
 *Former path: `docs/deployment/security/DOCLITTLE_SITE_SETUP.md`*
 
@@ -3088,7 +3088,7 @@ Deployment guides, infrastructure setup, and operational documentation.
 
 **YES - Confirmed Architecture:**
 
-1. **`doclittle.site`** - Main SaaS Site (Root Domain)
+1. **`api.callsomo.com`** - Main SaaS Site (Root Domain)
    - Frontend: Unified Dashboard (`/unified-dashboard/`)
    - Canonical landing page: `/`
    - Legacy `/landing.html` redirects to `/`
@@ -3096,7 +3096,7 @@ Deployment guides, infrastructure setup, and operational documentation.
    - Customer signup: `/signup` (from middleware-platform/public/signup)
    - Main SaaS frontend and backend
 
-2. **`api.doclittle.site`** - API Subdomain (Already Deployed)
+2. **`api.api.callsomo.com`** - API Subdomain (Already Deployed)
    - API endpoints: All `/api/*` routes
    - Documentation: `/docs` (protected)
    - Webhooks: `/webhook/*`
@@ -3108,8 +3108,8 @@ Deployment guides, infrastructure setup, and operational documentation.
 
 ### Option 1: Single App Service (Recommended)
 **Use the same Azure App Service for both domains:**
-- Root domain `doclittle.site` → Serves frontend (unified-dashboard)
-- API subdomain `api.doclittle.site` → Serves API endpoints
+- Root domain `api.callsomo.com` → Serves frontend (unified-dashboard)
+- API subdomain `api.api.callsomo.com` → Serves API endpoints
 
 **Advantages:**
 - Single App Service = Lower cost
@@ -3143,15 +3143,15 @@ Add route to serve unified-dashboard from root domain:
 ```javascript
 // In middleware-platform/server.js
 
-// Serve frontend from root domain (doclittle.site)
+// Serve frontend from root domain (api.callsomo.com)
 app.get('/', (req, res) => {
   // Check if request is for root domain or API subdomain
   const host = req.headers.host;
   
-  if (host === 'doclittle.site' || host === 'www.doclittle.site') {
+  if (host === 'api.callsomo.com' || host === 'www.api.callsomo.com') {
     // Serve unified dashboard frontend
     res.sendFile(path.join(__dirname, '..', 'unified-dashboard', 'landing.html'));
-  } else if (host === 'api.doclittle.site') {
+  } else if (host === 'api.api.callsomo.com') {
     // API subdomain - serve signup page (or API info)
     res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   } else {
@@ -3184,7 +3184,7 @@ app.get('/admin', (req, res) => {
 
 ### Step 2: Configure DNS in IONOS
 
-Add DNS records for root domain `doclittle.site`:
+Add DNS records for root domain `api.callsomo.com`:
 
 **CNAME Record:**
 - **Type:** CNAME
@@ -3200,7 +3200,7 @@ Add DNS records for root domain `doclittle.site`:
 **Alternative: Use Azure App Service Domain (Easier)**
 1. Go to Azure Portal → App Service → Custom domains
 2. Click **"Buy App Service Domain"**
-3. Search for `doclittle.site` (if available)
+3. Search for `api.callsomo.com` (if available)
 4. Azure will automatically configure DNS
 
 ### Step 3: Add Root Domain in Azure App Service
@@ -3210,7 +3210,7 @@ Add DNS records for root domain `doclittle.site`:
 az webapp config hostname add \
   --resource-group doclittle \
   --webapp-name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 
 # Verify DNS (Azure will check if domain resolves)
 az webapp config hostname list \
@@ -3221,7 +3221,7 @@ az webapp config hostname list \
 **Or via Azure Portal:**
 1. Go to Azure Portal → App Service `doclittle`
 2. Click **Custom domains** → **+ Add custom domain**
-3. Enter: `doclittle.site`
+3. Enter: `api.callsomo.com`
 4. Azure will verify DNS automatically
 
 ### Step 4: Create SSL Certificate for Root Domain
@@ -3231,12 +3231,12 @@ az webapp config hostname list \
 az webapp config ssl create \
   --resource-group doclittle \
   --name doclittle \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 
 # Get certificate thumbprint
 az webapp config ssl show \
   --resource-group doclittle \
-  --certificate-name doclittle.site \
+  --certificate-name api.callsomo.com \
   --query thumbprint
 
 # Bind certificate to domain
@@ -3245,7 +3245,7 @@ az webapp config ssl bind \
   --name doclittle \
   --certificate-thumbprint <THUMBPRINT> \
   --ssl-type SNI \
-  --hostname doclittle.site
+  --hostname api.callsomo.com
 ```
 
 ### Step 5: Update Environment Variables
@@ -3254,8 +3254,8 @@ Add to Azure App Service Configuration:
 
 ```bash
 # Frontend configuration
-FRONTEND_BASE_URL=https://doclittle.site
-API_BASE_URL=https://api.doclittle.site
+FRONTEND_BASE_URL=https://api.callsomo.com
+API_BASE_URL=https://api.api.callsomo.com
 
 # Enable frontend serving
 SERVE_FRONTEND=true
@@ -3271,8 +3271,8 @@ Edit `unified-dashboard/assets/js/config.js`:
 
 ```javascript
 // Production configuration
-const API_BASE_URL = 'https://api.doclittle.site';
-const FRONTEND_BASE_URL = 'https://doclittle.site';
+const API_BASE_URL = 'https://api.api.callsomo.com';
+const FRONTEND_BASE_URL = 'https://api.callsomo.com';
 
 // Development configuration (for local testing)
 // const API_BASE_URL = 'http://localhost:4000';
@@ -3283,13 +3283,13 @@ const FRONTEND_BASE_URL = 'https://doclittle.site';
 
 ## 📋 DNS Configuration Summary
 
-### IONOS DNS Records for `doclittle.site`:
+### IONOS DNS Records for `api.callsomo.com`:
 
-**Root Domain (`doclittle.site`):**
+**Root Domain (`api.callsomo.com`):**
 - **A Record** or **ALIAS** → Azure App Service IP or `doclittle.azurewebsites.net`
 - **OR** Use Azure App Service Domain (recommended)
 
-**API Subdomain (`api.doclittle.site`):** ✅ Already configured
+**API Subdomain (`api.api.callsomo.com`):** ✅ Already configured
 - **CNAME:** `api` → `doclittle.azurewebsites.net`
 
 **TXT Records:**
@@ -3303,10 +3303,10 @@ const FRONTEND_BASE_URL = 'https://doclittle.site';
 ```javascript
 // Middleware-platform/server.js structure:
 
-// Root domain (doclittle.site) - Frontend
+// Root domain (api.callsomo.com) - Frontend
 app.get('/', (req, res) => {
   const host = req.headers.host;
-  if (host === 'doclittle.site' || host === 'www.doclittle.site') {
+  if (host === 'api.callsomo.com' || host === 'www.api.callsomo.com') {
     return res.sendFile(path.join(__dirname, '..', 'unified-dashboard', 'landing.html'));
   }
   // API subdomain handled by signup routes
@@ -3318,7 +3318,7 @@ app.use('/business', express.static(path.join(__dirname, '..', 'unified-dashboar
 app.use('/patients', express.static(path.join(__dirname, '..', 'unified-dashboard', 'patients')));
 app.use('/admin', express.static(path.join(__dirname, '..', 'unified-dashboard', 'admin')));
 
-// API subdomain (api.doclittle.site) - API endpoints
+// API subdomain (api.api.callsomo.com) - API endpoints
 // Routes defined in routes/signup.js handle signup
 // API routes handle all /api/* endpoints
 ```
@@ -3329,15 +3329,15 @@ app.use('/admin', express.static(path.join(__dirname, '..', 'unified-dashboard',
 
 | Domain | Path | Purpose |
 |--------|------|---------|
-| `doclittle.site` | `/` | Landing page |
-| `doclittle.site` | `/login` | Login page |
-| `doclittle.site` | `/admin` | Admin portal |
-| `doclittle.site` | `/business/*` | Business dashboard |
-| `doclittle.site` | `/patients/*` | Patient portal |
-| `api.doclittle.site` | `/` | Signup page |
-| `api.doclittle.site` | `/docs` | API documentation (protected) |
-| `api.doclittle.site` | `/api/*` | API endpoints |
-| `api.doclittle.site` | `/webhook/*` | Webhooks |
+| `api.callsomo.com` | `/` | Landing page |
+| `api.callsomo.com` | `/login` | Login page |
+| `api.callsomo.com` | `/admin` | Admin portal |
+| `api.callsomo.com` | `/business/*` | Business dashboard |
+| `api.callsomo.com` | `/patients/*` | Patient portal |
+| `api.api.callsomo.com` | `/` | Signup page |
+| `api.api.callsomo.com` | `/docs` | API documentation (protected) |
+| `api.api.callsomo.com` | `/api/*` | API endpoints |
+| `api.api.callsomo.com` | `/webhook/*` | Webhooks |
 
 ---
 
@@ -3352,19 +3352,19 @@ app.use('/admin', express.static(path.join(__dirname, '..', 'unified-dashboard',
 
 ### Azure Configuration:
 
-- [ ] Add `doclittle.site` as custom domain in Azure
+- [ ] Add `api.callsomo.com` as custom domain in Azure
 - [ ] Configure DNS in IONOS (A record or ALIAS)
-- [ ] Create SSL certificate for `doclittle.site`
+- [ ] Create SSL certificate for `api.callsomo.com`
 - [ ] Bind SSL certificate to domain
 - [ ] Verify DNS propagation
 
 ### Testing:
 
-- [ ] Visit `https://doclittle.site` → Should show landing page
-- [ ] Visit `https://doclittle.site/admin` → Should show admin portal
-- [ ] Visit `https://api.doclittle.site` → Should show signup page
-- [ ] Visit `https://api.doclittle.site/docs` → Should show API docs (if authenticated)
-- [ ] Test API calls: `curl https://api.doclittle.site/health`
+- [ ] Visit `https://api.callsomo.com` → Should show landing page
+- [ ] Visit `https://api.callsomo.com/admin` → Should show admin portal
+- [ ] Visit `https://api.api.callsomo.com` → Should show signup page
+- [ ] Visit `https://api.api.callsomo.com/docs` → Should show API docs (if authenticated)
+- [ ] Test API calls: `curl https://api.api.callsomo.com/health`
 
 ---
 
@@ -3373,8 +3373,8 @@ app.use('/admin', express.static(path.join(__dirname, '..', 'unified-dashboard',
 ### DNS Not Resolving
 ```bash
 # Check DNS propagation
-dig doclittle.site
-nslookup doclittle.site
+dig api.callsomo.com
+nslookup api.callsomo.com
 
 # Should point to Azure App Service IP
 ```
@@ -3389,7 +3389,7 @@ az webapp config ssl list \
 # Check certificate binding
 az webapp config ssl show \
   --resource-group doclittle \
-  --certificate-name doclittle.site
+  --certificate-name api.callsomo.com
 ```
 
 ### Frontend Not Loading
@@ -3420,7 +3420,7 @@ az webapp config ssl show \
 1. **Update server.js** to serve unified-dashboard
 2. **Configure DNS** in IONOS for root domain
 3. **Add custom domain** in Azure
-4. **Create SSL certificate** for `doclittle.site`
+4. **Create SSL certificate** for `api.callsomo.com`
 5. **Deploy code** and test
 6. **Update frontend config** with production URLs
 
@@ -3439,7 +3439,7 @@ az webapp config ssl show \
 
 *Former path: `docs/deployment/security/PRODUCTION_DEPLOYMENT_API_KEYS.md`*
 
-## 🚀 Quick Deployment to api.doclittle.site
+## 🚀 Quick Deployment to api.api.callsomo.com
 
 ### Step 1: Set ADMIN_PORTAL_SECRET in Azure
 
@@ -3506,14 +3506,14 @@ az webapp log tail --name doclittle --resource-group doclittle
 
 **Test health endpoint:**
 ```bash
-curl https://api.doclittle.site/health
+curl https://api.api.callsomo.com/health
 # Should return: {"status":"ok"}
 ```
 
 ### Step 4: Test Admin Portal
 
 1. **Open admin portal:**
-   - URL: `https://api.doclittle.site/admin/portal`
+   - URL: `https://api.api.callsomo.com/admin/portal`
    - You should see the login screen (if `ADMIN_PORTAL_SECRET` is set)
 
 2. **Login:**
@@ -3533,7 +3533,7 @@ curl https://api.doclittle.site/health
 
 **1. Create a test client:**
 ```bash
-curl -X POST https://api.doclittle.site/api/admin/clients \
+curl -X POST https://api.api.callsomo.com/api/admin/clients \
   -H "Content-Type: application/json" \
   -H "Cookie: admin_session=YOUR_SESSION_COOKIE" \
   -d '{
@@ -3545,7 +3545,7 @@ curl -X POST https://api.doclittle.site/api/admin/clients \
 
 **2. Generate API key for client:**
 ```bash
-curl -X POST https://api.doclittle.site/api/admin/clients/{CLINIC_ID}/api-keys \
+curl -X POST https://api.api.callsomo.com/api/admin/clients/{CLINIC_ID}/api-keys \
   -H "Content-Type: application/json" \
   -H "Cookie: admin_session=YOUR_SESSION_COOKIE" \
   -d '{
@@ -3556,7 +3556,7 @@ curl -X POST https://api.doclittle.site/api/admin/clients/{CLINIC_ID}/api-keys \
 
 **3. Test API key authentication:**
 ```bash
-curl https://api.doclittle.site/api/admin/clients \
+curl https://api.api.callsomo.com/api/admin/clients \
   -H "X-API-Key: sk_xxxxxxxxxxxxxxxx"
 ```
 
@@ -3628,13 +3628,13 @@ curl https://api.doclittle.site/api/admin/clients \
 **Check these endpoints:**
 ```bash
 # Health check
-curl https://api.doclittle.site/health
+curl https://api.api.callsomo.com/health
 
 # Admin portal
-curl -I https://api.doclittle.site/admin/portal
+curl -I https://api.api.callsomo.com/admin/portal
 
 # API docs
-curl -I https://api.doclittle.site/docs
+curl -I https://api.api.callsomo.com/docs
 ```
 
 ---

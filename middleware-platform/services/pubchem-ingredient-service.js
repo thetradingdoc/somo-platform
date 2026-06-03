@@ -7,7 +7,7 @@ async function resolveCidByName(name) {
   if (q.length < 2) return { success: false, error: 'empty', cid: null };
   const url = `${BASE}/compound/name/${encodeURIComponent(q)}/cids/JSON?MaxRecords=1`;
   try {
-    const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'doclittle-platform/1.0' } });
+    const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'somo-platform/1.0' } });
     if (!r.ok) return { success: false, error: `http_${r.status}`, cid: null };
     const data = await r.json();
     const list = data?.IdentifierList?.CID;

@@ -55,7 +55,7 @@ async function createTrialCustomerViaApi(request) {
       company_name: 'Voice E2E Clinic',
       business_size: '1-10',
       api_features: ['voice_agent'],
-      attribution: { utm_source: 'dodgecall', utm_campaign: 'voice-e2e' }
+      attribution: { utm_source: 'somo-demo', utm_campaign: 'voice-e2e' }
     }
   });
   if (!signup.ok()) {

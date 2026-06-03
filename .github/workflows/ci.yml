@@ -43,6 +43,18 @@ jobs:
         working-directory: ./middleware-platform
         run: npm ci
 
+      - name: Kelly Rails Phase B golden (fast)
+        if: matrix.node-version == '20.x'
+        working-directory: ./middleware-platform
+        run: |
+          npm run verify:kelly-rails-env
+          KELLY_RAILS_ENV_PROFILE=staging KELLY_RAILS_V2=1 KELLY_ALLOW_HYBRID_GRAPH=0 npm run verify:kelly-rails-env
+          npm run test:kelly:rails:golden
+          npm run test:kelly:rails:language
+          npm run test:e2e:kelly:golden-conversations
+          npm run test:e2e:kelly:golden-conversations:es
+          npm run test:voice:slo-smoke
+
       - name: Install and build somo-landing
         if: matrix.node-version == '20.x'
         working-directory: ./unified-dashboard/somo-landing
@@ -77,7 +89,7 @@ jobs:
       
       - name: Run Jest tests (middleware-platform)
         working-directory: ./middleware-platform
-        run: npm test
+        run: npm test -- --runInBand --forceExit
 
       - name: Voice inbound + booking smoke (Jest)
         working-directory: ./middleware-platform
@@ -187,6 +199,22 @@ jobs:
           else
             echo "No middleware-platform/cypress directory — browser E2E skipped (see docs/deployment/README.md#ci-and-deploy-source-of-truth)"
           fi
+
+      - name: Install Playwright browsers (provider portal)
+        if: matrix.node-version == '20.x'
+        working-directory: ./middleware-platform
+        run: PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers npx playwright install chromium --with-deps
+
+      - name: Provider portal Playwright (shell + RCM)
+        if: matrix.node-version == '20.x'
+        working-directory: ./middleware-platform
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: .playwright-browsers
+          PW_API_BASE_URL: http://127.0.0.1:4000
+          SKIP_STARTUP_MIGRATIONS: "1"
+        run: |
+          npm run test:e2e:provider-portal
+          npm run test:e2e -- --project provider-rcm
 
       - name: Reasoning scan-chat gate (Playwright)
         if: false

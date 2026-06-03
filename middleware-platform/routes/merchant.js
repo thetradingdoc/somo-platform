@@ -235,7 +235,7 @@ router.post('/me/test-webhook', async (req, res) => {
       event: 'webhook_test',
       timestamp: new Date().toISOString(),
       merchant_id: merchant.id,
-      message: 'This is a test webhook from DocLittle settings. If you receive this, your webhook is configured correctly.'
+      message: 'This is a test webhook from Somo settings. If you receive this, your webhook is configured correctly.'
     };
 
     const axiosRes = await axios.post(webhookUrl.trim(), testPayload, {

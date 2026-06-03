@@ -20,7 +20,7 @@ Browse by anchor above. Each section notes the former file path.
 
 *Former path: `docs/onboarding/CLINIC_ONBOARDING_CHECKLIST.md`*
 
-**Purpose**: Complete guide for onboarding a new clinic (tenant) into the DocLittle platform  
+**Purpose**: Complete guide for onboarding a new clinic (tenant) into the Somo platform  
 **Current Tenants**: 
 - Tenant 1: `akin-dunbar` (existing)
 - Tenant 2: `clinic` (new - to be onboarded)
@@ -104,7 +104,7 @@ POST https://api.retellai.com/create-agent
   "agent_name": "Clinic Receptionist - [Clinic Name]",
   "voice_id": "openai-Alloy",
   "language": "en-US",
-  "llm_websocket_url": "wss://doclittle.site/webhook/retell/llm",
+  "llm_websocket_url": "wss://api.callsomo.com/webhook/retell/llm",
   "general_prompt": "[Hydrated prompt from template + config]",
   "enable_backchannel: true,
   "ambient_sound": "office"
@@ -231,7 +231,7 @@ tenant_config (
 **Options**:
 1. **Twilio** (Recommended)
    - Buy number via Twilio API
-   - Configure webhook: `https://doclittle.site/voice/incoming`
+   - Configure webhook: `https://api.callsomo.com/voice/incoming`
    - Store in `clinic_phone_numbers` table
 
 2. **Retell** (Alternative)
@@ -423,7 +423,7 @@ Since automated provisioning isn't ready, here's how to manually onboard a clini
 const clinic = {
   clinic_id: 'clinic-' + uuidv4(),
   name: 'New Clinic',
-  slug: 'clinic',  // URL-friendly: clinic.doclittle.site
+  slug: 'clinic',  // URL-friendly: clinic.api.callsomo.com
   phone_number: '+15551234567',
   email: 'admin@clinic.com',
   address: '123 Main St',
@@ -442,7 +442,7 @@ db.createClinic(clinic);
    - Go to Retell Dashboard
    - Create new agent
    - Set name: "Clinic Receptionist - [Clinic Name]"
-   - Set webhook: `wss://doclittle.site/webhook/retell/llm`
+   - Set webhook: `wss://api.callsomo.com/webhook/retell/llm`
    - Set prompt: Use `RetellService.generateClinicPrompt(clinic)`
    - Copy `agent_id`
    - Update clinic: `db.updateClinic(clinic.clinic_id, { retell_agent_id: 'agent_xxx' })`
@@ -450,7 +450,7 @@ db.createClinic(clinic);
 3. **Provision Phone Number** (Manual):
    - Go to Twilio Console
    - Buy number
-   - Configure webhook: `https://doclittle.site/voice/incoming`
+   - Configure webhook: `https://api.callsomo.com/voice/incoming`
    - Store in database:
    ```javascript
    db.createClinicPhoneNumber({
@@ -585,7 +585,7 @@ For immediate clinic onboarding, you need:
 
 - [ ] **Step 2**: Create Retell agent
   - Agent name: "Clinic Receptionist - New Clinic"
-  - Webhook: `wss://doclittle.site/webhook/retell/llm`
+  - Webhook: `wss://api.callsomo.com/webhook/retell/llm`
   - Prompt: Generated from template
   - Store `retell_agent_id` in database
 
@@ -743,7 +743,7 @@ db.createClinic(clinic);
    - Go to Retell Dashboard
    - Create new agent
    - Name: "Clinic Receptionist - New Clinic"
-   - Webhook: `wss://doclittle.site/webhook/retell/llm`
+   - Webhook: `wss://api.callsomo.com/webhook/retell/llm`
    - Prompt: Use `RetellService.generateClinicPrompt(clinic)`
    - Copy `agent_id`
    - Update: `db.updateClinic(clinic.clinic_id, { retell_agent_id: 'agent_xxx', retell_agent_status: 'active' })`
@@ -751,7 +751,7 @@ db.createClinic(clinic);
 3. **Provision Phone Number** (5 min)
    - Go to Twilio Console
    - Buy number (e.g., +15551234567)
-   - Configure webhook: `https://doclittle.site/voice/incoming`
+   - Configure webhook: `https://api.callsomo.com/voice/incoming`
    - Store: `db.createClinicPhoneNumber({ phone_number: '+15551234567', clinic_id: clinic.clinic_id, is_primary: true })`
 
 4. **Test** (3 min)

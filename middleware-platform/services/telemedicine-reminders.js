@@ -91,8 +91,8 @@ async function sendBookingConfirmationWithUploadLink(appointment) {
   if (SMSService && appointment.patient_phone) {
     try {
       const smsText = uploadUrl
-        ? `DocLittle: Your appointment is confirmed for ${dateTimeStr}. Upload documents: ${uploadUrl}`
-        : `DocLittle: Your appointment is confirmed for ${dateTimeStr}.`;
+        ? `Somo: Your appointment is confirmed for ${dateTimeStr}. Upload documents: ${uploadUrl}`
+        : `Somo: Your appointment is confirmed for ${dateTimeStr}.`;
       const res = await SMSService.sendSMS(appointment.patient_phone, smsText);
       if (res && res.success) console.log('✅ Booking confirmation SMS sent');
     } catch (e) {

@@ -1,707 +1,169 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Somo Provider - Patients</title>
-    <link rel="stylesheet" href="/assets/css/global.css">
-    <link rel="stylesheet" href="/assets/css/provider-portal.css">
-    <script src="/assets/js/config.js"></script>
-    <script src="/assets/js/auth-utils.js"></script>
-    <script src="/assets/js/provider-shell.js"></script>
-    <script src="/assets/js/provider-layout.js"></script>
-    <style>
-        :root {
-            --primary: #16a637;
-            --primary-dark: #1e3a8a;
-            --primary-light: #16a637;
-        }
-
-
-        .layout {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        .sidebar {
-            width: 260px;
-            background: white;
-            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-        }
-
-        .sidebar-header {
-            padding: 24px;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .sidebar-logo {
-            font-size: 32px;
-            line-height: 1;
-            letter-spacing: -2px;
-            color: #2d3748;
-            margin-bottom: 4px;
-            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-weight: 300;
-        }
-
-        .sidebar-subtitle {
-            font-size: 12px;
-            color: var(--gray-500);
-            margin-top: 4px;
-        }
-
-        .sidebar-nav {
-            padding: 16px;
-        }
-
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: var(--gray-700);
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-bottom: 4px;
-            text-decoration: none;
-        }
-
-        .nav-item:hover {
-            background: var(--gray-50);
-            color: var(--primary);
-        }
-
-        .nav-item.active {
-            background: var(--primary);
-            color: white;
-        }
-
-        .nav-icon {
-            font-size: 20px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--gray-200);
-            position: absolute;
-            bottom: 0;
-            width: 260px;
-            background: white;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            border-radius: 8px;
-            background: var(--gray-50);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .user-info:hover {
-            background: var(--gray-100);
-            transform: translateY(-1px);
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--primary);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-        }
-
-        .user-details {
-            flex: 1;
-        }
-
-        .user-name {
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--gray-900);
-        }
-
-        .user-role {
-            font-size: 12px;
-            color: var(--gray-500);
-        }
-
-        .logout-btn {
-            background: none;
-            border: none;
-            color: var(--gray-500);
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .logout-btn:hover {
-            background: var(--danger-light);
-            color: var(--danger);
-        }
-
-        .main-content {
-            margin-left: 260px;
-            flex: 1;
-            padding: 32px;
-            background: var(--gray-50);
-        }
-
-        .page-header {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 32px;
-            box-shadow: var(--shadow-md);
-        }
-
-        .page-title {
-            font-size: 28px;
-            margin-bottom: 8px;
-        }
-
-        .page-subtitle {
-            color: var(--gray-600);
-            font-size: 14px;
-        }
-
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-
-        .stat-card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: var(--shadow-md);
-            transition: all 0.3s;
-        }
-
-        .stat-card:hover {
-            box-shadow: var(--shadow-xl);
-            transform: translateY(-4px);
-        }
-
-        .stat-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .stat-title {
-            font-size: 14px;
-            color: var(--gray-600);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .stat-icon {
-            font-size: 32px;
-        }
-
-        .stat-value {
-            font-size: 36px;
-            font-weight: 700;
-            color: var(--gray-900);
-            margin-bottom: 8px;
-        }
-
-        .stat-change {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--gray-600);
-        }
-
-        /* Search Bar */
-        .search-bar {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 32px;
-            box-shadow: var(--shadow-md);
-        }
-
-        .search-input-wrapper {
-            position: relative;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 12px 16px 12px 48px;
-            border: 1px solid var(--gray-300);
-            border-radius: 8px;
-            font-size: 16px;
-            transition: all 0.2s;
-        }
-
-        .search-input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(210, 105, 30, 0.1);
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 20px;
-            color: var(--gray-400);
-        }
-
-        /* Clients Grid */
-        .patients-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-            gap: 24px;
-        }
-
-        .customer-card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: var(--shadow-md);
-            transition: all 0.3s;
-        }
-
-        .customer-card:hover {
-            box-shadow: var(--shadow-xl);
-            transform: translateY(-4px);
-        }
-
-        .customer-header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .customer-avatar {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 20px;
-        }
-
-        .customer-info {
-            flex: 1;
-        }
-
-        .customer-name {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--gray-900);
-            margin-bottom: 4px;
-        }
-
-        .customer-contact {
-            font-size: 14px;
-            color: var(--gray-600);
-        }
-
-        .badge {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .badge-success {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .badge-info {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-
-        .badge-danger {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .customer-stats {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-            margin-bottom: 20px;
-        }
-
-        .stat-item {
-            text-align: center;
-            padding: 12px;
-            background: var(--gray-50);
-            border-radius: 8px;
-        }
-
-        .stat-item .stat-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 4px;
-        }
-
-        .stat-item .stat-label {
-            font-size: 12px;
-            color: var(--gray-600);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .customer-purchases {
-            margin-bottom: 20px;
-            padding: 16px;
-            background: var(--gray-50);
-            border-radius: 8px;
-        }
-
-        .customer-purchases h4 {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--gray-900);
-            margin-bottom: 12px;
-        }
-
-        .purchase-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--gray-200);
-            font-size: 14px;
-        }
-
-        .purchase-item:last-child {
-            border-bottom: none;
-        }
-
-        .customer-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 48px;
-            color: var(--gray-600);
-            background: white;
-            border-radius: 12px;
-            box-shadow: var(--shadow-md);
-            grid-column: 1 / -1;
-        }
-
-        .empty-state-icon {
-            font-size: 64px;
-            margin-bottom: 16px;
-        }
-
-        /* Mobile Menu Toggle */
-        .mobile-menu-toggle {
-            display: none;
-            position: fixed;
-            top: 16px;
-            left: 16px;
-            z-index: 1001;
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 12px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            transition: all 0.3s ease;
-        }
-
-        .mobile-menu-toggle:hover {
-            background: var(--primary-dark);
-            transform: scale(1.05);
-        }
-
-        /* Sidebar Overlay for Mobile */
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 999;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .sidebar-overlay.active {
-            display: block;
-            opacity: 1;
-        }
-
-        @media (max-width: 768px) {
-            .mobile-menu-toggle {
-                display: block;
-            }
-
-            .sidebar {
-                position: fixed;
-                left: 0;
-                top: 0;
-                height: 100vh;
-                width: 280px;
-                max-width: 85vw;
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
-                z-index: 1000;
-                box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
-            }
-
-            .sidebar.open {
-                transform: translateX(0);
-            }
-
-            .main-content {
-                margin-left: 0;
-                padding: 16px;
-                padding-top: 70px;
-            }
-
-            .page-header {
-                padding: 16px;
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
-            }
-
-            .page-title {
-                font-size: 24px;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-                gap: 16px;
-            }
-
-            .patients-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .customer-stats {
-                grid-template-columns: 1fr;
-            }
-
-            .customer-card {
-                padding: 16px;
-            }
-
-            /* Touch-friendly buttons */
-            .btn {
-                min-height: 44px;
-                padding: 12px 20px;
-            }
-
-            .nav-item {
-                min-height: 48px;
-                padding: 14px 16px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .main-content {
-                padding: 12px;
-                padding-top: 70px;
-            }
-
-            .page-title {
-                font-size: 20px;
-            }
-
-            .mobile-menu-toggle {
-                top: 12px;
-                left: 12px;
-                padding: 10px 14px;
-                font-size: 18px;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#16a637">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Somo Provider - Patients</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/provider-portal.css">
+  <link rel="stylesheet" href="/assets/css/provider-patients.css?v=7">
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
 </head>
-
-<body class="provider-portal provider-portal--scroll">
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
-    
-    <!-- Sidebar Overlay -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    
-    <div class="layout">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-subtitle sidebar-subtitle-portal">Somo Provider</div>
+<body class="provider-portal provider-portal--patients" data-page="patients">
+  <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+  <div class="pp-app">
+    <aside class="pp-sidebar" id="ppSidebar">
+      <div class="pp-clinic-header">
+        <a class="pp-sb-brand pp-sb-brand--icon" href="today.html">
+          <img src="/assets/brand/somo-icon.png" alt="Somo" class="pp-sb-logo-img" width="36" height="36" />
+        </a>
+        <div class="pp-sb-clinic-meta">
+          <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
+          <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
+          <div class="pp-sb-av pp-sb-av--sm" id="ppClinicAv" aria-hidden="true">CL</div>
+        </div>
+      </div>
+      <a class="pp-kelly-live kelly-provisioning" id="ppKellyLive" href="agent.html">
+        <span class="pp-kelly-dot" aria-hidden="true"></span>
+        <div>
+          <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
+          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
+          <div class="pp-kelly-phone" id="ppKellyPhone"></div>
+        </div>
+        <button type="button" class="pp-kelly-toggle" id="ppKellyToggle">Activate</button>
+      </a>
+      <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
+      <div class="pp-sb-footer">
+        <a class="pp-sb-clinic" id="ppClinicCard" href="settings.html">
+          <div class="pp-sb-av">CL</div>
+          <div>
+            <div class="pp-sb-cn">Clinic profile</div>
+            <div class="pp-sb-cr">Manage provider details</div>
+          </div>
+        </a>
+      </div>
+    </aside>
+    <div class="pp-main">
+      <header class="pp-topbar pp-topbar--page">
+        <div class="pp-topbar-left">
+          <p class="pp-page-eyebrow">Patients</p>
+          <h1 class="pp-page-title">Patient roster</h1>
+          <p class="pp-page-sub">Patients, payers, and billing summary.</p>
+        </div>
+        <div class="pp-topbar-right">
+          <div class="pp-date-chip" id="ppDateChip"></div>
+          <button type="button" class="pp-btn pp-btn-outline pp-btn-sm" id="ppFocusSearchBtn">Search roster</button>
+        </div>
+      </header>
+      <main class="pp-content pp-content--patients" id="ppMainContent">
+        <div class="pp-alert-strip" id="ppAlertStrip" hidden aria-live="polite"></div>
+        <div id="patientsDebugStrip" class="pp-patients-debug" hidden aria-live="polite"></div>
+        <div class="pp-kpi-row pp-kpi-row-4" id="patientsKpiRow">
+          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
+          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
+          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
+          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
+        </div>
+        <section class="pp-panel pp-panel--primary">
+          <div class="pp-panel-head">
+            <div>
+              <div class="pp-panel-title">Patient roster</div>
+              <div class="pp-panel-sub">Search and open a patient case <span id="patientsBuildTag" class="pp-patients-build" hidden></span></div>
+              <div class="pp-patients-filter-hint" id="patientsFilterHint" hidden aria-live="polite"></div>
             </div>
-
-            <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Will be populated by tenant config -->
-            </nav>
-
-            <div class="sidebar-footer">
-                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
-                    <div class="user-avatar" id="userAvatar">HP</div>
-                    <div class="user-details">
-                        <div class="user-name" id="userName">Healthcare Provider</div>
-                        <div class="user-role">Provider</div>
-                    </div>
-                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
-                        🚪
-                    </button>
-                </div>
+            <div class="pp-panel-tabs" id="patientFilters" role="tablist" aria-label="Patient filters">
+              <button type="button" class="pp-ptab act" data-filter="all" role="tab" aria-selected="true">All patients</button>
+              <button type="button" class="pp-ptab" data-filter="ehr" role="tab" aria-selected="false">EHR linked</button>
+              <button type="button" class="pp-ptab" data-filter="coverage" role="tab" aria-selected="false">With coverage</button>
             </div>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <div class="page-header">
-                <h1 class="page-title">Patient roster</h1>
-                <p class="page-subtitle">Patients, payers, and billing summary</p>
+          </div>
+          <div class="pp-panel-body pp-panel-body--patients">
+            <div class="pp-patients-search">
+              <div class="pp-patients-search-wrap">
+                <span class="pp-search-icon" aria-hidden="true">&#128269;</span>
+                <input type="search" id="searchInput" class="pp-input" placeholder="Search by name, phone, or email…" autocomplete="off" />
+              </div>
             </div>
-
-            <!-- Stats Grid -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-title">Total Patients</span>
-                        <span class="stat-icon">Patients</span>
-                    </div>
-                    <div class="stat-value" id="totalCustomers">0</div>
-                    <div class="stat-change">All patients</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-title">With EHR data</span>
-                        <span class="stat-icon">✅</span>
-                    </div>
-                    <div class="stat-value" id="newCustomers">0</div>
-                    <div class="stat-change">Epic encounters synced</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-title">EHR synced</span>
-                        <span class="stat-icon">Coverage</span>
-                    </div>
-                    <div class="stat-value" id="repeatCustomers">0</div>
-                    <div class="stat-change">Linked in EHR</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-title">With coverage</span>
-                        <span class="stat-icon">Billing</span>
-                    </div>
-                    <div class="stat-value" id="avgOrderValue">0</div>
-                    <div class="stat-change">Eligibility on file</div>
-                </div>
+            <div class="pp-patients-grid" id="patientsRosterGrid" data-roster-mount>
+              <div class="pp-patients-empty" id="patientsRosterLoading">
+                <div class="pp-patients-empty-title">Loading patients</div>
+                <p>Fetching roster from your clinic…</p>
+              </div>
             </div>
-
-            <!-- Filter Buttons -->
-            <div class="filter-buttons" style="display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap;">
-                <button class="btn btn-primary btn-sm" id="filterAll" onclick="filterCustomers('all')">All
-                    Patients</button>
-                <button class="btn btn-secondary btn-sm" id="filterTherapist" onclick="filterCustomers('ehr')">EHR
-                    Linked</button>
-                <button class="btn btn-secondary btn-sm" id="filterActive" onclick="filterCustomers('coverage')">With
-                    Coverage</button>
-            </div>
-
-            <!-- Search Bar -->
-            <div class="search-bar">
-                <div class="search-input-wrapper">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" class="search-input"
-                        placeholder="Search patients by name, phone, or email..." oninput="searchCustomers()">
-                </div>
-            </div>
-
-            <!-- Clients Grid -->
-            <div class="patients-grid" id="customersList">
-                <div class="empty-state">
-                    <div class="empty-state-icon">No patients found</div>
-                    <p>Loading client data...</p>
-                </div>
-            </div>
-
-            <!-- Optional: Insurance & Coverage panel (visible when ?patientId=FHIR_ID) -->
-            <div class="stat-card" id="insCoveragePanel" style="margin-top:24px; display:none;">
-                <div class="stat-header">
-                    <span class="stat-title">Insurance & Coverage</span>
-                    <span class="stat-icon">EHR</span>
-                </div>
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
-                    <div>
-                        <div style="font-size:12px;color:#64748b;">Provider</div>
-                        <div style="font-weight:700;" id="uiInsProvider">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:12px;color:#64748b;">Member ID</div>
-                        <div style="font-weight:700;" id="uiInsMember">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:12px;color:#64748b;">Eligibility</div>
-                        <div style="font-weight:700;" id="uiInsEligible">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:12px;color:#64748b;">Copay (this visit)</div>
-                        <div style="font-weight:700;" id="uiInsCopay">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:12px;color:#64748b;">Deductible</div>
-                        <div style="font-weight:700;" id="uiInsDeductible">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:12px;color:#64748b;">Coinsurance</div>
-                        <div style="font-weight:700;" id="uiInsCoins">—</div>
-                    </div>
-                </div>
-                <div style="margin-top:12px;">
-                    <div style="font-size:12px;color:#64748b;">Plan Summary</div>
-                    <div id="uiInsPlanSummary" style="white-space:pre-wrap;">—</div>
-                </div>
-            </div>
-        </main>
+            <div id="insCoverageMount"></div>
+          </div>
+        </section>
+      </main>
     </div>
-
-    <script>
-        const API_BASE = window.API_BASE || 'http://localhost:4000';
+  </div>
+  <script>
+        const API_BASE = window.API_BASE || window.location.origin || 'http://localhost:4000';
         const MERCHANT_API = `${API_BASE}/api`;
-        let userData = null;
+        const PATIENTS_BUILD = 'roster-grid-2026-06-03c';
+        const PATIENTS_DEBUG = /[?&]debug=1/.test(location.search)
+            || localStorage.getItem('patientsDebug') === '1';
         let allCustomers = [];
+        let patientContextMap = {};
+        let patientsBooted = false;
+        let rosterLoadState = 'idle';
+        const PATIENTS_TELEMETRY_PHASES = new Set([
+            'init:start', 'init:pre-load', 'init:done', 'init:error',
+            'load:merged', 'render:enter', 'render:done', 'render:no-container'
+        ]);
+
+        function patientsTelemetry(phase, data, status) {
+            if (!PATIENTS_DEBUG || !PATIENTS_TELEMETRY_PHASES.has(phase)) return;
+            const detail = JSON.stringify({ build: PATIENTS_BUILD, ...(data || {}) }).slice(0, 480);
+            fetch(`${API_BASE}/api/rcm/ui-telemetry`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(window.ppGetAuthHeaders?.() || {})
+                },
+                body: JSON.stringify({ page: 'patients', panel: phase, status: status || 'info', detail })
+            }).catch(() => {});
+        }
+
+        function patientsDbg(phase, data, status) {
+            const payload = { build: PATIENTS_BUILD, phase, ...(data || {}) };
+            if (!PATIENTS_DEBUG) return payload;
+            console.info('[patients]', payload);
+            patientsTelemetry(phase, data, status);
+            const strip = document.getElementById('patientsDebugStrip');
+            if (strip) {
+                strip.hidden = false;
+                strip.textContent = `${phase}: ${JSON.stringify(data || {})}`;
+            }
+            return payload;
+        }
+
+        function rosterDomSnapshot() {
+            const grid = document.getElementById('patientsRosterGrid');
+            const main = document.getElementById('ppMainContent');
+            return {
+                readyState: document.readyState,
+                hasGrid: !!grid,
+                hasMain: !!main,
+                gridChildCount: grid ? grid.childElementCount : 0,
+                cardCount: document.querySelectorAll('#patientsRosterGrid .pp-patient-card').length,
+                loadingText: grid ? /Loading patients/i.test(grid.textContent) : null,
+                containerId: document.getElementById('patientsRosterGrid')?.id
+                    || document.getElementById('customersList')?.id
+                    || null
+            };
+        }
         const requestedPatientId = (() => {
             try {
                 const p = new URLSearchParams(window.location.search);
@@ -709,112 +171,347 @@
             } catch (_) { return ''; }
         })();
 
-        // Mobile sidebar toggle functions
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            if (sidebar && overlay) {
-                sidebar.classList.toggle('open');
-                overlay.classList.toggle('active');
-                if (sidebar.classList.contains('open')) {
-                    document.body.style.overflow = 'hidden';
-                } else {
-                    document.body.style.overflow = '';
+        function escapeHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        }
+
+        function authFetchOpts(extraHeaders) {
+            return {
+                credentials: 'include',
+                headers: {
+                    Accept: 'application/fhir+json, application/json',
+                    ...(window.ppGetAuthHeaders?.() || {}),
+                    ...(extraHeaders || {})
                 }
-            }
+            };
         }
 
-        function closeSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            if (sidebar && overlay) {
-                sidebar.classList.remove('open');
-                overlay.classList.remove('active');
-                document.body.style.overflow = '';
-            }
+        function patientsPanelBody() {
+            return document.querySelector('.pp-panel-body--patients');
         }
 
-        function setupMobileNavClose() {
-            const navItems = document.querySelectorAll('.nav-item');
-            navItems.forEach(item => {
-                item.addEventListener('click', () => {
-                    if (window.innerWidth <= 768) {
-                        closeSidebar();
-                    }
+        function scrubPatientsPanelDebris(panelBody) {
+            const panel = panelBody || patientsPanelBody();
+            if (!panel) return;
+            panel.classList.remove('pp-inline-iconized');
+            const grid = document.getElementById('patientsRosterGrid');
+            const keepIds = new Set(['patientsRosterGrid', 'insCoverageMount']);
+            [...panel.children].forEach((child) => {
+                if (child.classList.contains('pp-patients-search')) return;
+                if (keepIds.has(child.id)) return;
+                if (/Loading patients/i.test(child.textContent || '')) {
+                    child.remove();
+                    return;
+                }
+                if (child.classList.contains('pp-inline-iconized') || child.classList.contains('pp-patients-empty')) {
+                    child.remove();
+                }
+            });
+            panel.querySelectorAll('.pp-inline-iconized, .pp-patients-empty').forEach((el) => {
+                if (grid && grid.contains(el)) return;
+                if (/Loading patients/i.test(el.textContent || '')) el.remove();
+            });
+            removeOrphanRosterPlaceholders(panel, grid);
+        }
+
+        function removeOrphanRosterPlaceholders(panelBody, grid) {
+            if (!panelBody) return;
+            panelBody.querySelectorAll('#patientsRosterLoading, .pp-patients-empty').forEach((el) => {
+                if (grid && (grid === el || grid.contains(el))) return;
+                el.remove();
+            });
+        }
+
+        function showRosterLoading() {
+            rosterLoadState = 'loading';
+            const container = rosterContainer();
+            if (!container) return;
+            container.innerHTML = `
+                <div class="pp-patients-empty" id="patientsRosterLoading">
+                    <div class="pp-patients-empty-title">Loading patients</div>
+                    <p>Fetching roster from your clinic…</p>
+                </div>`;
+        }
+
+        function ensureRosterMount() {
+            let grid = document.getElementById('patientsRosterGrid');
+            const panelBody = document.querySelector('.pp-panel-body--patients')
+                || document.querySelector('.pp-panel-body')
+                || document.getElementById('ppMainContent');
+            if (grid) {
+                scrubPatientsPanelDebris(panelBody);
+                return grid;
+            }
+
+            const legacy = document.getElementById('customersList');
+            if (legacy) {
+                legacy.classList.add('pp-patients-grid');
+                legacy.id = 'patientsRosterGrid';
+                legacy.setAttribute('data-roster-mount', '');
+                removeOrphanRosterPlaceholders(panelBody, legacy);
+                patientsDbg('mount:legacy-customersList', { className: legacy.className }, 'warn');
+                return legacy;
+            }
+
+            const oldRoster = document.getElementById('patientsRoster');
+            if (oldRoster && oldRoster.parentElement) {
+                grid = document.createElement('div');
+                grid.className = 'pp-patients-grid';
+                grid.id = 'patientsRosterGrid';
+                grid.setAttribute('data-roster-mount', '');
+                while (oldRoster.firstChild) grid.appendChild(oldRoster.firstChild);
+                oldRoster.parentElement.replaceChild(grid, oldRoster);
+                patientsDbg('mount:replaced-patientsRoster', {}, 'warn');
+                return grid;
+            }
+
+            if (!panelBody) return null;
+            removeOrphanRosterPlaceholders(panelBody, null);
+            grid = document.createElement('div');
+            grid.className = 'pp-patients-grid';
+            grid.id = 'patientsRosterGrid';
+            grid.setAttribute('data-roster-mount', '');
+            grid.innerHTML = `
+                <div class="pp-patients-empty" id="patientsRosterLoading">
+                    <div class="pp-patients-empty-title">Loading patients</div>
+                    <p>Fetching roster from your clinic…</p>
+                </div>`;
+            const search = panelBody.querySelector('.pp-patients-search');
+            if (search && search.nextSibling) {
+                panelBody.insertBefore(grid, search.nextSibling);
+            } else {
+                panelBody.appendChild(grid);
+            }
+            patientsDbg('mount:created-grid', { panel: panelBody.className }, 'warn');
+            scrubPatientsPanelDebris(panelBody);
+            return grid;
+        }
+
+        function rosterContainer() {
+            return (
+                ensureRosterMount() ||
+                document.querySelector('[data-roster-mount]') ||
+                document.querySelector('#ppMainContent .pp-patients-grid') ||
+                document.querySelector('.pp-panel-body--patients .pp-patients-grid')
+            );
+        }
+
+        async function parseJsonResponse(res) {
+            const ct = (res.headers.get('content-type') || '').toLowerCase();
+            if (ct.includes('text/html')) {
+                throw new Error('Server returned HTML instead of data. Restart middleware after pulling latest changes.');
+            }
+            return res.json();
+        }
+
+        function showRosterError(message) {
+            rosterLoadState = 'error';
+            const container = rosterContainer();
+            scrubPatientsPanelDebris();
+            if (!container) {
+                patientsDbg('render:no-container', { message, ...rosterDomSnapshot() }, 'error');
+                console.error('patients roster container missing:', message, rosterDomSnapshot());
+                return;
+            }
+            container.innerHTML = `
+                    <div class="pp-patients-empty">
+                        <div class="pp-patients-empty-title">Could not load patients</div>
+                        <p>${escapeHtml(message || 'Make sure middleware is running.')}</p>
+                        <button type="button" class="pp-btn pp-btn-outline pp-btn-sm" id="patientsRetryBtn">Retry</button>
+                    </div>
+                `;
+            document.getElementById('patientsRetryBtn')?.addEventListener('click', () => loadCustomers());
+        }
+
+        function wirePatientsPage() {
+            document.getElementById('patientFilters')?.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('[data-filter]');
+                if (!btn) return;
+                filterCustomers(btn.getAttribute('data-filter') || 'all');
+                document.querySelectorAll('#patientFilters .pp-ptab').forEach((t) => {
+                    t.classList.remove('act');
+                    t.setAttribute('aria-selected', 'false');
                 });
+                btn.classList.add('act');
+                btn.setAttribute('aria-selected', 'true');
+            });
+            document.getElementById('searchInput')?.addEventListener('input', () => searchCustomers());
+            document.getElementById('ppFocusSearchBtn')?.addEventListener('click', () => {
+                document.getElementById('searchInput')?.focus();
+            });
+            const rosterEl = rosterContainer();
+            if (rosterEl && !rosterEl.dataset.rosterClickBound) {
+                rosterEl.dataset.rosterClickBound = '1';
+                rosterEl.addEventListener('click', (ev) => {
+                if (ev.target.closest('[data-action-chip]')) {
+                    ev.stopPropagation();
+                    return;
+                }
+                const actionBtn = ev.target.closest('button[data-action]');
+                if (actionBtn) {
+                    ev.stopPropagation();
+                    const card = actionBtn.closest('.pp-patient-card');
+                    const pid = card?.getAttribute('data-patient-id');
+                    if (!pid) return;
+                    const action = actionBtn.getAttribute('data-action');
+                    if (action === 'case') viewPatientBilling(pid);
+                    else if (action === 'contact') contactCustomer(actionBtn.getAttribute('data-phone') || '');
+                    else if (action === 'ehr') viewPatientEhrDetails(pid);
+                    return;
+                }
+                const card = ev.target.closest('.pp-patient-card');
+                if (!card) return;
+                const href = card.getAttribute('data-case-href');
+                if (href) window.location.href = href;
+                });
+            }
+        }
+
+        async function initPatients() {
+            patientsDbg('init:start', rosterDomSnapshot());
+            if (typeof window.requireAuth === 'function' && !window.requireAuth()) {
+                patientsDbg('init:auth-blocked', {});
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 150));
+            window.initProviderShell({ activeId: 'patients', useGreeting: false });
+            scrubPatientsPanelDebris();
+            ensureRosterMount();
+            wirePatientsPage();
+            patientsDbg('init:pre-load', rosterDomSnapshot());
+            await loadCustomers();
+            patientsDbg('init:done', rosterDomSnapshot());
+        }
+
+        function bootPatients(force) {
+            if (patientsBooted && !force) return;
+            patientsBooted = true;
+            const buildTag = document.getElementById('patientsBuildTag');
+            if (buildTag) {
+                if (PATIENTS_DEBUG) {
+                    buildTag.hidden = false;
+                    buildTag.textContent = `· ${PATIENTS_BUILD}`;
+                } else {
+                    buildTag.hidden = true;
+                    buildTag.textContent = '';
+                }
+            }
+            if (PATIENTS_DEBUG) document.documentElement.dataset.patientsBuild = PATIENTS_BUILD;
+            initPatients().catch((e) => {
+                patientsDbg('init:error', { message: e && e.message }, 'error');
+                showRosterError(e.message);
             });
         }
 
-        // Provider shell: mountProviderPage() in DOMContentLoaded
-
-        if (sessionStorage.getItem('authenticated') !== 'true') {
-            window.location.href = '../login.html';
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => bootPatients(false), { once: true });
+        } else {
+            bootPatients(false);
         }
 
-        userData = JSON.parse(sessionStorage.getItem('user'));
-
-        document.addEventListener('DOMContentLoaded', () => {
-            mountProviderPage({
-                activeId: 'patients',
-                eyebrow: 'Patient roster',
-                title: 'Patients'
-            });
-            loadCustomers();
-
-            // Close sidebar on window resize if switching to desktop
-            window.addEventListener('resize', () => {
-                if (window.innerWidth > 768) {
-                    closeSidebar();
-                }
-            });
-
-            // Close sidebar on Escape key
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    closeSidebar();
-                }
-            });
+        window.addEventListener('pageshow', (ev) => {
+            if (!ev.persisted) return;
+            patientsBooted = false;
+            patientsDbg('pageshow:bfcache', rosterDomSnapshot(), 'warn');
+            bootPatients(true);
         });
 
-        function loadUserInfo() {
-            if (userData) {
-                document.getElementById('userName').textContent = userData.name;
-                const initials = userData.name.split(' ').map(n => n[0]).join('');
-                document.getElementById('userAvatar').textContent = initials;
-            }
+        window.__patientsPage = {
+            build: PATIENTS_BUILD,
+            snapshot: rosterDomSnapshot,
+            getAllCustomers: () => allCustomers,
+            rerender: () => applyPatientFilters()
+        };
+
+        function normalizeFhirPatientId(raw) {
+            const s = String(raw || '').trim();
+            if (!s) return '';
+            return s.replace(/^Patient\//i, '');
         }
 
-        async function loadCustomers() {
-            try {
-                const response = await fetch(`${API_BASE}/fhir/Patient`);
-                const bundle = await response.json();
-
-                if (bundle.resourceType !== 'Bundle') {
-                    throw new Error('Invalid FHIR response');
+        function mergeRosterLists(...lists) {
+            const byId = new Map();
+            for (const list of lists) {
+                for (const p of list || []) {
+                    const id = normalizeFhirPatientId(p.fhir_id || p.fhir_patient_id || p.id);
+                    if (!id) continue;
+                    const prev = byId.get(id);
+                    byId.set(id, prev ? { ...prev, ...p, fhir_id: id } : { ...p, fhir_id: id });
                 }
+            }
+            return [...byId.values()];
+        }
 
-                const patients = (bundle.entry || []).map(e => e.resource).map(r => {
-                    const name = (r.name && r.name[0]) ? `${(r.name[0].given || [''])[0]} ${r.name[0].family || ''}`.trim() : 'Unknown Patient';
-                    const telecom = r.telecom || [];
-                    const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
-                    const email = (telecom.find(t => t.system === 'email') || {}).value || '';
-                    return {
-                        fhir_id: r.id,
-                        customer_name: name,
-                        customer_phone: phone,
-                        customer_email: email,
-                        birthDate: r.birthDate || null,
-                        address: r.address && r.address[0] ? r.address[0] : null
-                    };
-                });
+        async function mergePatientsFromAppointments(existing) {
+            const byId = new Map((existing || []).map((p) => [normalizeFhirPatientId(p.fhir_id), p]));
+            try {
+                const end = new Date();
+                const start = new Date(end);
+                start.setDate(start.getDate() - 90);
+                const url = new URL(`${API_BASE}/api/admin/appointments`);
+                url.searchParams.set('start_date', start.toISOString().slice(0, 10));
+                url.searchParams.set('end_date', end.toISOString().slice(0, 10));
+                const res = await fetch(url, authFetchOpts());
+                const json = await parseJsonResponse(res);
+                if (!json.success || !Array.isArray(json.appointments)) return [...byId.values()];
+                for (const appt of json.appointments) {
+                    const pid = normalizeFhirPatientId(appt.fhir_patient_id || appt.patient_id || appt.patient_fhir_id);
+                    if (!pid || byId.has(pid)) continue;
+                    byId.set(pid, {
+                        fhir_id: pid,
+                        customer_name: appt.patient_name || appt.patient_display || 'Patient',
+                        customer_phone: appt.patient_phone || '',
+                        customer_email: appt.patient_email || '',
+                        birthDate: null,
+                        address: null,
+                        eligibility: null,
+                        ehr_data: null
+                    });
+                }
+            } catch (err) {
+                console.debug('Appointments roster fallback skipped', err);
+            }
+            return [...byId.values()];
+        }
 
-                // For each patient, fetch their eligibility data (Stedi) and EHR data
-                const enriched = await Promise.all(patients.map(async p => {
+        async function fetchFhirPatientRows() {
+            const url = new URL(`${API_BASE}/fhir/Patient`);
+            url.searchParams.set('_count', '100');
+            const response = await fetch(url, authFetchOpts());
+            const bundle = await parseJsonResponse(response);
+            if (!response.ok || bundle.resourceType === 'OperationOutcome') {
+                throw new Error(bundle.issue?.[0]?.diagnostics || 'Failed to load patients');
+            }
+            if (bundle.resourceType !== 'Bundle') {
+                throw new Error('Invalid FHIR response');
+            }
+            return (bundle.entry || []).map((e) => e.resource).map((r) => {
+                const name = (r.name && r.name[0]) ? `${(r.name[0].given || [''])[0]} ${r.name[0].family || ''}`.trim() : 'Unknown Patient';
+                const telecom = r.telecom || [];
+                const phone = (telecom.find((t) => t.system === 'phone') || {}).value || '';
+                const email = (telecom.find((t) => t.system === 'email') || {}).value || '';
+                return {
+                    fhir_id: normalizeFhirPatientId(r.id),
+                    customer_name: name,
+                    customer_phone: phone,
+                    customer_email: email,
+                    birthDate: r.birthDate || null,
+                    address: r.address && r.address[0] ? r.address[0] : null,
+                    eligibility: null,
+                    ehr_data: null
+                };
+            }).filter((p) => p.fhir_id);
+        }
+
+        async function enrichPatients(patients) {
+            const cap = 40;
+            const slice = patients.slice(0, cap);
+            const enriched = await Promise.all(slice.map(async (p) => {
                     try {
                         // Fetch eligibility data (Stedi coverage/benefits)
                         let eligibilityData = null;
                         try {
-                            const eligRes = await fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(p.fhir_id)}/eligibility`);
+                            const eligRes = await fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(p.fhir_id)}/eligibility`, authFetchOpts());
                             const eligResult = await eligRes.json();
                             if (eligResult.success && eligResult.eligibility && eligResult.eligibility.length > 0) {
                                 // Get the most recent eligibility check
@@ -828,10 +525,12 @@
                         // Fetch EHR data from Epic
                         let ehrData = null;
                         try {
-                            const ehrRes = await fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(p.fhir_id)}/ehr-summary`);
-                            const ehrResult = await ehrRes.json();
-                            if (ehrResult.success && ehrResult.encounters && ehrResult.encounters.length > 0) {
-                                ehrData = ehrResult;
+                            const ehrRes = await fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(p.fhir_id)}/ehr-summary`, authFetchOpts());
+                            if (ehrRes.ok) {
+                                const ehrResult = await ehrRes.json();
+                                if (ehrResult.success && ehrResult.encounters && ehrResult.encounters.length > 0) {
+                                    ehrData = ehrResult;
+                                }
                             }
                         } catch (ehrError) {
                             // EHR data not available - silently continue
@@ -845,95 +544,226 @@
                         };
                     } catch { return { ...p, eligibility: null, ehr_data: null }; }
                 }));
+            if (patients.length > cap) return enriched.concat(patients.slice(cap));
+            const enrichedList = enriched;
+            try {
+                if (typeof window.ppFetchPatientContext === 'function') {
+                    const ids = enrichedList.map((p) => p.fhir_id).filter(Boolean);
+                    const ctx = await window.ppFetchPatientContext(ids);
+                    patientContextMap = { ...patientContextMap, ...ctx };
+                }
+            } catch (ctxErr) {
+                console.debug('[patients] patient context skipped', ctxErr);
+            }
+            return enrichedList;
+        }
 
-                allCustomers = enriched;
-                displayCustomers(allCustomers);
-                updateStatsFromPatients(allCustomers);
+        async function loadCustomers() {
+            showRosterLoading();
+            try {
+                const fromAppts = await mergePatientsFromAppointments([]);
+                let fromFhir = [];
+                try {
+                    fromFhir = await fetchFhirPatientRows();
+                } catch (fhirErr) {
+                    console.warn('[patients] FHIR roster skipped:', fhirErr.message);
+                }
+
+                allCustomers = mergeRosterLists(fromFhir, fromAppts);
+                patientsDbg('load:merged', { fhir: fromFhir.length, appts: fromAppts.length, total: allCustomers.length });
+                applyPatientFilters();
+                renderPatientsKpis(allCustomers);
+
+                if (!allCustomers.length) {
+                    rosterLoadState = 'ready';
+                    applyPatientFilters();
+                    return;
+                }
+
+                // Enrich eligibility/EHR in background — roster already visible.
+                enrichPatients(allCustomers).then((enriched) => {
+                    allCustomers = enriched;
+                    applyPatientFilters();
+                    renderPatientsKpis(allCustomers);
+                }).catch((err) => console.warn('[patients] enrichment skipped', err));
             } catch (error) {
                 console.error('Error loading patients/customers:', error);
-                document.getElementById('customersList').innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">❌</div>
-                        <p>Failed to load customer data. Make sure middleware is running.</p>
-                        <button class="btn btn-secondary" onclick="loadCustomers()">Retry</button>
-                    </div>
-                `;
+                showRosterError(error.message);
+                renderPatientsKpis(allCustomers || []);
             }
         }
 
-        function updateStatsFromPatients(customers) {
+        function renderPatientsKpis(customers) {
             const total = customers.length;
             const withEhr = customers.filter(c => c.ehr_data && c.ehr_data.encounters && c.ehr_data.encounters.length > 0).length;
             const withFhir = customers.filter(c => c.fhir_id).length;
             const withCoverage = customers.filter(c => c.eligibility && c.eligibility.eligible).length;
-
-            document.getElementById('totalCustomers').textContent = total;
-            document.getElementById('newCustomers').textContent = withEhr;
-            document.getElementById('repeatCustomers').textContent = withFhir;
-            document.getElementById('avgOrderValue').textContent = withCoverage;
+            const row = document.getElementById('patientsKpiRow');
+            if (!row) return;
+            row.innerHTML = `
+                <div class="pp-kpi pp-kpi--blue">
+                    <div class="pp-kpi-eyebrow">Total patients</div>
+                    <div class="pp-kpi-val">${total}</div>
+                    <div class="pp-kpi-trend"><span class="pp-chip">Roster</span></div>
+                </div>
+                <div class="pp-kpi pp-kpi--teal">
+                    <div class="pp-kpi-eyebrow">With EHR data</div>
+                    <div class="pp-kpi-val">${withEhr}</div>
+                    <div class="pp-kpi-trend"><span class="pp-chip">${withEhr ? 'Synced' : 'None yet'}</span></div>
+                </div>
+                <div class="pp-kpi pp-kpi--violet">
+                    <div class="pp-kpi-eyebrow">FHIR linked</div>
+                    <div class="pp-kpi-val">${withFhir}</div>
+                    <div class="pp-kpi-trend"><span class="pp-chip">Identifiers</span></div>
+                </div>
+                <div class="pp-kpi pp-kpi--amber">
+                    <div class="pp-kpi-eyebrow">With coverage</div>
+                    <div class="pp-kpi-val">${withCoverage}</div>
+                    <div class="pp-kpi-trend"><span class="pp-chip">Eligibility</span></div>
+                </div>`;
         }
 
-        // Filter customers function
         let currentFilter = 'all';
+
+        function filterByTab(customers) {
+            if (currentFilter === 'ehr') {
+                return customers.filter(c => c.ehr_data && c.ehr_data.encounters && c.ehr_data.encounters.length > 0);
+            }
+            if (currentFilter === 'coverage') {
+                return customers.filter(c => c.eligibility && c.eligibility.eligible);
+            }
+            return customers;
+        }
+
         function filterCustomers(filter) {
-            if (!allCustomers || allCustomers.length === 0) {
-                console.warn('No customers loaded yet');
+            currentFilter = filter || 'all';
+            applyPatientFilters();
+        }
+
+        function applyPatientFilters() {
+            if (!allCustomers) return;
+            let filtered = filterByTab([...allCustomers]);
+            const term = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+            if (term) {
+                filtered = filtered.filter((customer) =>
+                    (customer.customer_name && customer.customer_name.toLowerCase().includes(term)) ||
+                    (customer.customer_phone && customer.customer_phone.includes(term)) ||
+                    (customer.customer_email && customer.customer_email.toLowerCase().includes(term))
+                );
+            }
+            updateFilterHint(filtered.length, allCustomers.length, term);
+            displayCustomers(filtered);
+        }
+
+        function updateFilterHint(shown, total, searchTerm) {
+            const hint = document.getElementById('patientsFilterHint');
+            if (!hint) return;
+            const filteredByTab = currentFilter !== 'all';
+            if (rosterLoadState !== 'ready' || shown >= total || (!filteredByTab && !searchTerm)) {
+                hint.hidden = true;
+                hint.textContent = '';
                 return;
             }
-
-            currentFilter = filter;
-
-            // Update button states
-            const filterAllBtn = document.getElementById('filterAll');
-            const filterTherapistBtn = document.getElementById('filterTherapist');
-            const filterActiveBtn = document.getElementById('filterActive');
-
-            if (filterAllBtn) {
-                filterAllBtn.classList.remove('btn-primary', 'btn-secondary');
-                filterAllBtn.classList.add(filter === 'all' ? 'btn-primary' : 'btn-secondary');
-            }
-            if (filterTherapistBtn) {
-                filterTherapistBtn.classList.remove('btn-primary', 'btn-secondary');
-                filterTherapistBtn.classList.add(filter === 'ehr' || filter === 'therapist' ? 'btn-primary' : 'btn-secondary');
-            }
-            if (filterActiveBtn) {
-                filterActiveBtn.classList.remove('btn-primary', 'btn-secondary');
-                filterActiveBtn.classList.add(filter === 'coverage' || filter === 'active' ? 'btn-primary' : 'btn-secondary');
-            }
-
-            // Filter customers
-            let filtered = [...allCustomers]; // Create a copy
-            if (filter === 'ehr') {
-                filtered = allCustomers.filter(c => c.ehr_data && c.ehr_data.encounters && c.ehr_data.encounters.length > 0);
-            } else if (filter === 'coverage') {
-                filtered = allCustomers.filter(c => c.eligibility && c.eligibility.eligible);
-            } else if (filter === 'therapist') {
-                filtered = allCustomers.filter(c => c.fhir_id);
-            } else if (filter === 'active') {
-                filtered = allCustomers.filter(c => c.eligibility && c.eligibility.eligible);
-            }
-
-            displayCustomers(filtered);
-            // Update stats with filtered results
-            updateStatsFromPatients(filtered);
+            hint.hidden = false;
+            hint.textContent = `Showing ${shown} of ${total}`;
         }
 
-        // Old function removed - using updateStatsFromPatients above
+        function rosterEmptyCopy(customers, searchTerm) {
+            const total = allCustomers.length;
+            if (searchTerm) {
+                return {
+                    title: 'No patients match your search',
+                    body: 'Try a different name, phone, or email.'
+                };
+            }
+            if (currentFilter === 'ehr') {
+                return {
+                    title: 'No patients with EHR data',
+                    body: total
+                        ? `0 of ${total} in roster · connect EHR sync in clinic settings.`
+                        : 'Patients appear here after EHR sync.'
+                };
+            }
+            if (currentFilter === 'coverage') {
+                return {
+                    title: 'No patients with verified coverage',
+                    body: total
+                        ? `0 of ${total} in roster · run eligibility from a patient case.`
+                        : 'Verified coverage appears after eligibility checks.'
+                };
+            }
+            return {
+                title: 'No patients found',
+                body: 'Patients appear here when synced from your EHR or created via scheduling.'
+            };
+        }
+
+        function renderRosterEmpty(customers, searchTerm) {
+            const container = rosterContainer();
+            if (!container) return;
+            const copy = rosterEmptyCopy(customers, searchTerm);
+            container.innerHTML = `
+                <div class="pp-patients-empty">
+                    <div class="pp-patients-empty-title">${escapeHtml(copy.title)}</div>
+                    <p>${escapeHtml(copy.body)}</p>
+                </div>`;
+        }
 
         function displayCustomers(customers) {
-            const container = document.getElementById('customersList');
-
-            if (customers.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">No patient matches</div>
-                        <p>No patients yet. Patients appear here when synced from your EHR or created via scheduling.</p>
-                    </div>
-                `;
+            scrubPatientsPanelDebris();
+            const container = rosterContainer();
+            const searchTerm = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+            patientsDbg('render:enter', {
+                customerCount: customers.length,
+                rosterLoadState,
+                containerId: container ? container.id : null,
+                ...rosterDomSnapshot()
+            });
+            if (!container) {
+                patientsDbg('render:no-container', rosterDomSnapshot(), 'error');
+                console.error('[patients] roster container not found', rosterDomSnapshot());
                 return;
             }
 
-            container.innerHTML = customers.map(customer => createCustomerCard(customer)).join('');
+            if (rosterLoadState === 'loading') {
+                if (customers.length) rosterLoadState = 'ready';
+                else if (!allCustomers.length && rosterLoadState !== 'error') {
+                    /* still loading — keep skeleton */
+                }
+            }
+
+            if (!customers.length) {
+                if (rosterLoadState === 'loading' && !allCustomers.length) {
+                    return;
+                }
+                rosterLoadState = 'ready';
+                renderRosterEmpty(customers, searchTerm);
+                scrubPatientsPanelDebris();
+                patientsDbg('render:done', { partsBuilt: 0, empty: true, ...rosterDomSnapshot() });
+                return;
+            }
+
+            rosterLoadState = 'ready';
+            const parts = [];
+            for (const customer of customers) {
+                try {
+                    parts.push(createCustomerCard(customer));
+                } catch (err) {
+                    console.warn('[patients] card render skipped', customer?.fhir_id, err);
+                }
+            }
+            container.innerHTML = parts.length
+                ? parts.join('')
+                : `<div class="pp-patients-empty"><div class="pp-patients-empty-title">Could not render roster</div><p>Try refreshing the page.</p></div>`;
+
+            scrubPatientsPanelDebris();
+            patientsDbg('render:done', {
+                partsBuilt: parts.length,
+                htmlLen: container.innerHTML.length,
+                cardCount: document.querySelectorAll('#patientsRosterGrid .pp-patient-card').length,
+                stillLoading: /Loading patients/i.test(document.querySelector('.pp-panel-body--patients')?.textContent || '')
+            });
+
             if (requestedPatientId) {
                 requestAnimationFrame(() => focusPatientCard(requestedPatientId));
             }
@@ -943,204 +773,93 @@
             const id = String(patientId || '').trim();
             if (!id) return;
             const safe = id.replace(/"/g, '\\"');
-            const card = document.querySelector(`.customer-card[data-patient-id="${safe}"]`);
+            const card = document.querySelector(`.pp-patient-card[data-patient-id="${safe}"]`);
             if (!card) return;
-            card.style.outline = '2px solid #128a2e';
-            card.style.outlineOffset = '2px';
+            card.classList.add('pp-patient-card--focus');
             card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setTimeout(() => {
-                card.style.outline = '';
-                card.style.outlineOffset = '';
-            }, 3000);
+            setTimeout(() => card.classList.remove('pp-patient-card--focus'), 3000);
+        }
+
+        function patientCoverageChip(eligibility) {
+            if (!eligibility) {
+                return '<span class="pp-chip pp-patient-chip pp-patient-chip--muted">Coverage not checked</span>';
+            }
+            if (eligibility.eligible) {
+                const payer = eligibility.payer_name || eligibility.payer_id;
+                const label = payer ? `Coverage · ${escapeHtml(payer)}` : 'Coverage verified';
+                return `<span class="pp-chip pp-patient-chip pp-patient-chip--ok">${label}</span>`;
+            }
+            return '<span class="pp-chip pp-patient-chip pp-patient-chip--warn">Not eligible</span>';
         }
 
         function createCustomerCard(patient) {
-            const initials = (patient.customer_name || 'U').split(' ').map(n => n[0]).join('');
-            const phone = patient.customer_phone || 'No phone';
+            const initials = (patient.customer_name || 'U').split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+            const phone = patient.customer_phone || '';
             const email = patient.customer_email || '';
+            const contact = phone || email
+                ? `${phone ? escapeHtml(phone) : ''}${phone && email ? ' · ' : ''}${email ? escapeHtml(email) : ''}`
+                : 'No contact on file';
             const hasEhrData = patient.ehr_data && patient.ehr_data.encounters && patient.ehr_data.encounters.length > 0;
             const eligibility = patient.eligibility || null;
+            const pid = patient.fhir_id || patient.fhir_patient_id || patient.id || '';
+            const pidAttr = escapeHtml(pid);
+            const caseHref = pid ? `patient-case.html?patient_id=${encodeURIComponent(pid)}` : '';
 
-            // Clinic tenants: FHIR card with insurance, copay, deductible
-            let ehrSummary = '';
+            const chips = [patientCoverageChip(eligibility)];
+            const ctx = patientContextMap[pid] || null;
+            if (ctx?.journey && typeof window.ppJourneyStageChip === 'function') {
+                const actionChip = window.ppJourneyStageChip(ctx.journey);
+                if (actionChip?.label && actionChip?.href) {
+                    chips.unshift(
+                        `<a class="pp-chip pp-patient-chip pp-patient-chip--action pp-patient-chip--${escapeHtml(actionChip.tone || 'action')}" href="${escapeHtml(actionChip.href)}" data-action-chip="1">${escapeHtml(actionChip.label)}</a>`
+                    );
+                }
+            }
+            if (ctx?.pa_flag) {
+                chips.push(`<span class="pp-chip pp-patient-chip pp-patient-chip--pa">${escapeHtml(ctx.pa_label || 'PA required')}</span>`);
+            }
+            if (eligibility && eligibility.copay_amount != null) {
+                chips.push(`<span class="pp-chip pp-patient-chip">Copay $${Number(eligibility.copay_amount).toFixed(2)}</span>`);
+            }
+            if (eligibility && eligibility.deductible_remaining != null) {
+                chips.push(`<span class="pp-chip pp-patient-chip">Ded. $${Number(eligibility.deductible_remaining).toFixed(0)} left</span>`);
+            } else if (eligibility && eligibility.deductible_total != null) {
+                chips.push(`<span class="pp-chip pp-patient-chip">Ded. $${Number(eligibility.deductible_total).toFixed(0)}</span>`);
+            }
             if (hasEhrData) {
-                const encounters = patient.ehr_data.encounters;
-                // Collect all unique conditions (ICD-10 codes)
-                const allConditions = [];
-                const allProcedures = [];
-                encounters.forEach(enc => {
-                    if (enc.conditions) {
-                        enc.conditions.forEach(c => {
-                            if (!allConditions.find(ex => ex.code === c.icd10_code)) {
-                                allConditions.push({ code: c.icd10_code, description: c.description, is_primary: c.is_primary });
-                            }
-                        });
-                    }
-                    if (enc.procedures) {
-                        enc.procedures.forEach(p => {
-                            if (!allProcedures.find(ex => ex.code === p.cpt_code)) {
-                                allProcedures.push({ code: p.cpt_code, description: p.description });
-                            }
-                        });
-                    }
-                });
-
-                // Count observations
-                const allObservations = [];
-                encounters.forEach(enc => {
-                    if (enc.observations) {
-                        enc.observations.forEach(o => {
-                            allObservations.push(o);
-                        });
-                    }
-                });
-
-                ehrSummary = `
-                    <div class="customer-ehr-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 12px; font-weight: 600; color: #64748b;">EHR Data</span>
-                                <span class="badge badge-success" style="font-size: 10px;">${encounters.length} Encounter(s)</span>
-                                ${allObservations.length > 0 ? `<span class="badge" style="background: #fef3c7; color: #92400e; font-size: 10px;">${allObservations.length} Observation(s)</span>` : ''}
-                            </div>
-                        </div>
-                        
-                        ${allConditions.length > 0 ? `
-                            <div style="margin-bottom: 8px;">
-                                <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500;">Diagnoses (ICD-10):</div>
-                                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                                    ${allConditions.slice(0, 3).map(c => `
-                                        <span class="badge" style="background: #dbeafe; color: #16a637; font-size: 10px; padding: 2px 6px; border-radius: 4px;">
-                                            ${c.code}${c.is_primary ? ' ⭐' : ''}
-                                        </span>
-                                    `).join('')}
-                                    ${allConditions.length > 3 ? `<span style="font-size: 10px; color: #64748b;">+${allConditions.length - 3} more</span>` : ''}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${allProcedures.length > 0 ? `
-                            <div style="margin-bottom: 8px;">
-                                <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500;">Procedures (CPT):</div>
-                                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                                    ${allProcedures.slice(0, 3).map(p => `
-                                        <span class="badge" style="background: #dcfce7; color: #166534; font-size: 10px; padding: 2px 6px; border-radius: 4px;">
-                                            ${p.code}
-                                        </span>
-                                    `).join('')}
-                                    ${allProcedures.length > 3 ? `<span style="font-size: 10px; color: #64748b;">+${allProcedures.length - 3} more</span>` : ''}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${allObservations.length > 0 ? `
-                            <div style="margin-bottom: 8px;">
-                                <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500;">Observations (Vitals/Notes):</div>
-                                <div style="font-size: 10px; color: #64748b;">
-                                    ${allObservations.slice(0, 3).map(o => `${o.type || 'Unknown'}: ${o.value || 'N/A'}${o.unit ? ' ' + o.unit : ''}`).join(' · ')}
-                                    ${allObservations.length > 3 ? ` · +${allObservations.length - 3} more` : ''}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${!allConditions.length && !allProcedures.length && !allObservations.length ? `
-                            <div style="font-size: 11px; color: #94a3b8; font-style: italic;">
-                                No diagnosis, procedure codes, or observations found in Epic
-                            </div>
-                        ` : ''}
-                        
-                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
-                            <button class="btn btn-secondary btn-sm" onclick="viewPatientEhrDetails('${patient.fhir_id}')" style="width: 100%; font-size: 10px; padding: 4px 8px;">
-                                View Full EHR Details
-                            </button>
-                        </div>
-                    </div>
-                `;
+                const n = patient.ehr_data.encounters.length;
+                chips.push(`<span class="pp-chip pp-patient-chip pp-patient-chip--ehr">${n} encounter${n === 1 ? '' : 's'}</span>`);
             }
 
-
-            const pid = (patient.fhir_id || patient.fhir_patient_id || patient.id || '').replace(/"/g, '&quot;');
             return `
-                <div class="customer-card" data-patient-id="${pid}">
-                    <div class="customer-header">
-                        <div class="customer-avatar">${initials}</div>
-                        <div class="customer-info">
-                            <div class="customer-name">${patient.customer_name}</div>
-                            <div class="customer-contact">${phone}${email ? ' · ' + email : ''}</div>
+                <div class="pp-patient-card pp-patient-card--compact" data-patient-id="${pidAttr}" data-case-href="${escapeHtml(caseHref)}">
+                    <div class="pp-patient-card__row">
+                        <div class="pp-patient-avatar">${escapeHtml(initials)}</div>
+                        <div class="pp-patient-card__info">
+                            <div class="pp-patient-name">${escapeHtml(patient.customer_name)}</div>
+                            <div class="pp-patient-contact">${contact}</div>
                         </div>
-                        <div style="display: flex; gap: 4px; align-items: center;">
-                            ${hasEhrData ? '<span class="badge badge-success" style="font-size: 10px;">EHR Synced</span>' : ''}
-                            <span class="badge badge-info">FHIR</span>
-                        </div>
-                    </div>
-
-                    <div class="customer-stats">
-                        <div class="stat-item">
-                            <div class="stat-value">${eligibility ? (eligibility.eligible ? '✅ Yes' : '❌ No') : '—'}</div>
-                            <div class="stat-label">Coverage</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value">${eligibility && eligibility.copay_amount ? '$' + eligibility.copay_amount.toFixed(2) : '—'}</div>
-                            <div class="stat-label">Copay</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value">${eligibility && (eligibility.deductible_total != null || eligibility.deductible_remaining != null)
-                                ? (eligibility.deductible_total != null && eligibility.deductible_remaining != null
-                                    ? `$${Number(eligibility.deductible_total).toFixed(0)} / $${Number(eligibility.deductible_remaining).toFixed(0)}`
-                                    : eligibility.deductible_remaining != null
-                                        ? '$' + Number(eligibility.deductible_remaining).toFixed(0) + ' remain'
-                                        : '$' + Number(eligibility.deductible_total).toFixed(0) + ' total')
-                                : '—'}</div>
-                            <div class="stat-label">Deductible (total / remain)</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value">${eligibility && eligibility.coinsurance_percent !== null ? eligibility.coinsurance_percent + '%' : '—'}</div>
-                            <div class="stat-label">Coinsurance</div>
+                        <div class="pp-patient-badges">
+                            ${hasEhrData ? '<span class="pp-patient-badge pp-patient-badge--ehr">EHR</span>' : ''}
+                            ${pid ? '<span class="pp-patient-badge pp-patient-badge--fhir">FHIR</span>' : ''}
                         </div>
                     </div>
-                    
-                    ${eligibility && eligibility.plan_summary ? `
-                        <div style="margin-top: 12px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #16a637;">
-                            <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500;">Plan Summary</div>
-                            <div style="font-size: 12px; color: #1e293b;">${eligibility.plan_summary}</div>
-                            ${eligibility.payer_name || eligibility.payer_id ? `<div style="font-size: 10px; color: #64748b; margin-top: 4px;">Insurance: ${eligibility.payer_name || eligibility.payer_id} · Member: ${eligibility.member_id || 'N/A'}</div>` : ''}
-                        </div>
-                    ` : `
-                        <div style="margin-top: 12px; padding: 8px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444;">
-                            <div style="font-size: 11px; color: #991b1b;">No insurance coverage data available</div>
-                        </div>
-                    `}
-
-                    ${ehrSummary}
-
-                    <div class="customer-actions">
-                        <button class="btn btn-secondary btn-sm" onclick="viewPatientBilling('${patient.fhir_id}')">View Bill</button>
-                        ${patient.customer_phone ? `<button class="btn btn-primary btn-sm" onclick="contactCustomer('${patient.customer_phone.replace(/'/g, "\\'")}')">Contact</button>` : ''}
+                    <div class="pp-patient-card__chips">${chips.join('')}</div>
+                    <div class="pp-patient-card__foot">
+                        ${pid ? '<span class="pp-patient-card__cta">Open case</span>' : ''}
+                        ${patient.customer_phone ? `<button type="button" class="pp-btn pp-btn-ghost pp-btn-sm pp-patient-card__contact" data-action="contact" data-phone="${escapeHtml(patient.customer_phone)}">Contact</button>` : ''}
+                        ${hasEhrData ? '<button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" data-action="ehr">EHR</button>' : ''}
                     </div>
                 </div>
             `;
         }
 
         function searchCustomers() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-
-            if (!searchTerm) {
-                displayCustomers(allCustomers);
-                return;
-            }
-
-            const filtered = allCustomers.filter(customer =>
-                (customer.customer_name && customer.customer_name.toLowerCase().includes(searchTerm)) ||
-                (customer.customer_phone && customer.customer_phone.includes(searchTerm)) ||
-                (customer.customer_email && customer.customer_email.toLowerCase().includes(searchTerm))
-            );
-
-            displayCustomers(filtered);
+            applyPatientFilters();
         }
 
         function viewPatientBilling(fhirId) {
-            // Navigate to billing page for this patient
-            window.location.href = `billing.html?patient=${encodeURIComponent(fhirId)}`;
+            window.location.href = `patient-case.html?patient_id=${encodeURIComponent(fhirId)}`;
         }
 
         function viewPatientDetails(fhirId) {
@@ -1224,14 +943,13 @@
 
             // Create and show modal
             const modal = document.createElement('div');
-            modal.className = 'ehr-details-modal-overlay';
-            modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;';
+            modal.className = 'pp-ehr-modal-overlay';
             modal.innerHTML = `
-                <div class="ehr-details-modal-card" style="background: white; border-radius: 12px; padding: 24px; max-width: 90%; max-height: 90%; overflow-y: auto; position: relative;">
-                    <button data-ehr-close="1" style="position: absolute; top: 16px; right: 16px; background: #f1f5f9; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 18px;">×</button>
+                <div class="pp-ehr-modal-card">
+                    <button type="button" data-ehr-close="1" style="position:absolute;top:16px;right:16px;background:#f1f5f9;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:18px">×</button>
                     ${ehrDetailsHtml}
-                    <div style="margin-top: 16px; text-align: right;">
-                        <button data-ehr-close="1" class="btn btn-primary btn-sm">Close</button>
+                    <div style="margin-top:16px;text-align:right">
+                        <button type="button" data-ehr-close="1" class="pp-btn pp-btn-primary pp-btn-sm">Close</button>
                     </div>
                 </div>
             `;
@@ -1266,35 +984,49 @@
             window.location.href = '../login.html';
         }
 
-        // Inline insurance loader (if ?patientId= present on this page)
-        (function loadInlineInsurance() {
-            try {
-                const params = new URLSearchParams(window.location.search);
-                const pid = params.get('patientId');
-                if (!pid) return;
-                document.getElementById('insCoveragePanel').style.display = 'block';
-                Promise.all([
-                    fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/insurance`).then(r => r.json()),
-                    fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/eligibility`).then(r => r.json())
-                ]).then(([ins, elig]) => {
-                    if (ins.success && Array.isArray(ins.insurance) && ins.insurance.length) {
-                        const primary = ins.insurance.find(i => i.is_primary) || ins.insurance[0];
-                        document.getElementById('uiInsProvider').textContent = primary.payer_name || primary.payer_id || '—';
-                        document.getElementById('uiInsMember').textContent = primary.member_id || '—';
-                    }
-                    if (elig.success && Array.isArray(elig.eligibility) && elig.eligibility.length) {
-                        const latest = elig.eligibility[0];
-                        document.getElementById('uiInsEligible').textContent = latest.eligible ? 'Active' : 'Inactive';
-                        document.getElementById('uiInsCopay').textContent = (latest.copay_amount != null) ? `$${latest.copay_amount}` : '—';
-                        const dTot = (latest.deductible_total != null) ? `$${latest.deductible_total}` : '—';
-                        const dRem = (latest.deductible_remaining != null) ? `$${latest.deductible_remaining}` : '—';
-                        document.getElementById('uiInsDeductible').textContent = `${dTot} / ${dRem}`;
-                        document.getElementById('uiInsCoins').textContent = (latest.coinsurance_percent != null) ? `${latest.coinsurance_percent}%` : '—';
-                        document.getElementById('uiInsPlanSummary').textContent = latest.plan_summary || '—';
-                    }
-                }).catch(() => { });
-            } catch (_) { }
-        })();
+        function mountInsurancePanel(patientId) {
+            const mount = document.getElementById('insCoverageMount');
+            if (!mount || !patientId) return;
+            const pid = normalizeFhirPatientId(patientId);
+            mount.innerHTML = `
+              <div class="pp-ins-panel" id="insCoveragePanel">
+                <div class="pp-panel-title" style="margin-bottom:12px">Insurance and coverage</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;font-size:13px;">
+                  <div><div style="color:var(--muted);font-size:11px">Provider</div><div id="uiInsProvider" style="font-weight:700">—</div></div>
+                  <div><div style="color:var(--muted);font-size:11px">Member ID</div><div id="uiInsMember" style="font-weight:700">—</div></div>
+                  <div><div style="color:var(--muted);font-size:11px">Eligibility</div><div id="uiInsEligible" style="font-weight:700">—</div></div>
+                  <div><div style="color:var(--muted);font-size:11px">Copay</div><div id="uiInsCopay" style="font-weight:700">—</div></div>
+                  <div><div style="color:var(--muted);font-size:11px">Deductible</div><div id="uiInsDeductible" style="font-weight:700">—</div></div>
+                  <div><div style="color:var(--muted);font-size:11px">Coinsurance</div><div id="uiInsCoins" style="font-weight:700">—</div></div>
+                </div>
+                <div style="margin-top:12px;font-size:12px;color:var(--muted)">Plan summary</div>
+                <div id="uiInsPlanSummary" style="white-space:pre-wrap;font-size:13px">—</div>
+              </div>`;
+            Promise.all([
+                fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/insurance`, authFetchOpts()).then((r) => r.json()),
+                fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/eligibility`, authFetchOpts()).then((r) => r.json())
+            ]).then(([ins, elig]) => {
+                if (ins.success && Array.isArray(ins.insurance) && ins.insurance.length) {
+                    const primary = ins.insurance.find((i) => i.is_primary) || ins.insurance[0];
+                    document.getElementById('uiInsProvider').textContent = primary.payer_name || primary.payer_id || '—';
+                    document.getElementById('uiInsMember').textContent = primary.member_id || '—';
+                }
+                if (elig.success && Array.isArray(elig.eligibility) && elig.eligibility.length) {
+                    const latest = elig.eligibility[0];
+                    document.getElementById('uiInsEligible').textContent = latest.eligible ? 'Active' : 'Inactive';
+                    document.getElementById('uiInsCopay').textContent = (latest.copay_amount != null) ? `$${latest.copay_amount}` : '—';
+                    const dTot = (latest.deductible_total != null) ? `$${latest.deductible_total}` : '—';
+                    const dRem = (latest.deductible_remaining != null) ? `$${latest.deductible_remaining}` : '—';
+                    document.getElementById('uiInsDeductible').textContent = `${dTot} / ${dRem}`;
+                    document.getElementById('uiInsCoins').textContent = (latest.coinsurance_percent != null) ? `${latest.coinsurance_percent}%` : '—';
+                    document.getElementById('uiInsPlanSummary').textContent = latest.plan_summary || '—';
+                }
+            }).catch(() => {});
+        }
+
+        if (requestedPatientId) {
+            mountInsurancePanel(requestedPatientId);
+        }
     </script>
 </body>
 

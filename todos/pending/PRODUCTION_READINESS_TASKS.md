@@ -1,6 +1,8 @@
 # Production Readiness: Tasks & Azure Setup
 
-**Purpose:** Single checklist of tasks to make the DocLittle platform production-ready for real patients (book → pay → join telemedicine). Includes Azure setup and compliance.
+> **Superseded for API deploy:** Use GCP runbooks — [`docs/deployment/SOMO_CLOUD_RUN_DEPLOY.md`](../docs/deployment/SOMO_CLOUD_RUN_DEPLOY.md), [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md). Azure sections below are **historical** only.
+
+**Purpose:** Single checklist of tasks to make the Somo platform production-ready for real patients (book → pay → join telemedicine). Includes Azure setup and compliance.
 
 **Related:** [ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md](../docs/architecture/README.md#overview-architecture-overview-and-colab-rag), [MASTER_TODO_FULL.md](../docs/development/README.md#master-todo-full), [VIDEO_CONSULT.md](../docs/architecture/README.md#care-delivery-video-consult), [DEPLOYMENT_GUIDE.md](../docs/deployment/README.md#guides-deployment-guide).
 
@@ -30,9 +32,9 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 | # | Task | Status / Notes |
 |---|------|----------------|
 | A1 | Deploy app to Azure App Service | Use `./scripts/deploy-to-azure.sh`; app name `doclittle`, resource group `doclittle` |
-| A2 | Configure root domain | Run `./scripts/add-root-domain.sh` or add `doclittle.site` in Azure Portal |
-| A3 | DNS (IONOS or registrar) | A record for `doclittle.site` → Azure App Service outbound IP or ALIAS to `doclittle.azurewebsites.net` |
-| A4 | SSL for root domain | `az webapp config ssl create` then `ssl bind` for `doclittle.site` (see [QUICK_DEPLOYMENT_GUIDE.md](../docs/deployment/README.md#guides-basic-quick-deployment-guide)) |
+| A2 | Configure root domain | Run `./scripts/add-root-domain.sh` or add `api.callsomo.com` in Azure Portal |
+| A3 | DNS (IONOS or registrar) | A record for `api.callsomo.com` → Azure App Service outbound IP or ALIAS to `doclittle.azurewebsites.net` |
+| A4 | SSL for root domain | `az webapp config ssl create` then `ssl bind` for `api.callsomo.com` (see [QUICK_DEPLOYMENT_GUIDE.md](../docs/deployment/README.md#guides-basic-quick-deployment-guide)) |
 | A5 | Tenant subdomains SSL | Azure managed certs = root only. Use [TENANT_AND_DNS_SETUP.md](../docs/deployment/README.md#dns-tenant-and-dns-setup): Cloudflare (recommended) or wildcard cert |
 
 ### 1.2 Azure Domain Service (Tenant Subdomains)
@@ -41,15 +43,15 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 |---|------|----------------|
 | A6 | Azure CLI available in deploy/CI | `AzureDomainService.setupTenantDomain()` uses `az` for custom domain + SSL |
 | A7 | Env for domain setup | `AZURE_APP_NAME`, `AZURE_RESOURCE_GROUP`, `AZURE_ROOT_DOMAIN`; optional `AZURE_SKIP_SSL=true` in dev |
-| A8 | New tenant flow | On signup call `AzureDomainService.setupTenantDomain(tenantSubdomain)`; ensure DNS for `*.doclittle.site` (e.g. CNAME to app) |
+| A8 | New tenant flow | On signup call `AzureDomainService.setupTenantDomain(tenantSubdomain)`; ensure DNS for `*.api.callsomo.com` (e.g. CNAME to app) |
 
 ### 1.3 Azure Communication Services (Email)
 
 | # | Task | Status / Notes |
 |---|------|----------------|
 | A9 | Create Communication Services + Email Service | See [docs/azure/README.md#readme](../docs/azure/README.md#readme): `doclittle-communication`, `doclittle-email`, `doclittle-rg` |
-| A10 | Verify domain & sender | Add MX/TXT/CNAME in IONOS; verify `doclittle.site` and `DoNotReply@doclittle.site` |
-| A11 | App settings | `AZURE_COMMUNICATION_CONNECTION_STRING`, `AZURE_EMAIL_SENDER=DoNotReply@doclittle.site` |
+| A10 | Verify domain & sender | Add MX/TXT/CNAME in IONOS; verify `api.callsomo.com` and `DoNotReply@api.callsomo.com` |
+| A11 | App settings | `AZURE_COMMUNICATION_CONNECTION_STRING`, `AZURE_EMAIL_SENDER=DoNotReply@api.callsomo.com` |
 
 ### 1.4 Database (Production)
 
@@ -87,7 +89,7 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 | S8 | No secrets in repo | All keys in Azure App Settings / Key Vault (or env); no `.env` in deploy package; add `.env.example` (no secrets) for required var names |
 | S9 | Video consult agent auth | Set `VIDEO_CONSULT_AGENT_SECRET`; agents send `X-Video-Consult-Secret` or Bearer |
 | S10 | Twilio webhook validation | Validate `X-Twilio-Signature` on `POST /voice/incoming` (Twilio auth token) so only Twilio can trigger calls; not currently implemented |
-| S11 | CORS production allowlist | Restrict `corsOptions.origin` to exact production domains (e.g. `https://doclittle.site`, tenant subdomains); no `*` when credentials used |
+| S11 | CORS production allowlist | Restrict `corsOptions.origin` to exact production domains (e.g. `https://api.callsomo.com`, tenant subdomains); no `*` when credentials used |
 | S12 | Wire HIPAA log everywhere | Ensure every route that returns or modifies PHI (FHIR, patient, claims, eligibility) calls `db.logHipaaAccess()` with correct resource_type, resource_id, patient_id |
 
 ---
@@ -170,7 +172,7 @@ Set these in **Azure App Service → Configuration → Application settings** (o
 
 - `NODE_ENV=production`
 - `PORT=4000`
-- `API_BASE_URL` / `BASE_URL` = e.g. `https://doclittle.site`
+- `API_BASE_URL` / `BASE_URL` = e.g. `https://api.callsomo.com`
 - `RETELL_API_KEY`, `RETELL_AGENT_ID` (or per-clinic agent)
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
@@ -202,11 +204,11 @@ Set these in **Azure App Service → Configuration → Application settings** (o
 
 1. **Subscription & CLI:** `az login`; create/select resource group (e.g. `doclittle`).
 2. **App Service:** Deploy with `./scripts/deploy-to-azure.sh` (or GitHub Actions).
-3. **Domain:** Add hostname `doclittle.site`; configure DNS; create and bind SSL cert.
+3. **Domain:** Add hostname `api.callsomo.com`; configure DNS; create and bind SSL cert.
 4. **Email:** Create Communication Services + Email Service; verify domain and sender; set env vars (see [docs/azure/README.md#readme](../docs/azure/README.md#readme)).
 5. **Database:** Deploy Postgres (e.g. Bicep); set `POSTGRES_URL`.
 6. **App settings:** Set all required env vars (no secrets in code).
-7. **Tenant subdomains:** Configure `*.doclittle.site` (Cloudflare or wildcard); set Azure domain env vars for new tenants.
+7. **Tenant subdomains:** Configure `*.api.callsomo.com` (Cloudflare or wildcard); set Azure domain env vars for new tenants.
 8. **Monitoring:** Enable App Insights (optional); configure alerts.
 9. **Compliance:** Turn on HIPAA logging; set `BAA_ACKNOWLEDGED` when ready; run retention cleanup on schedule.
 

@@ -1,5 +1,5 @@
 /**
- * DocLittle — Clinical Pipeline Evaluation Script
+ * Somo — Clinical Pipeline Evaluation Script
  *
  * Usage (from middleware-platform/):
  *   node scripts/pipeline-eval.js
@@ -159,7 +159,7 @@ function section(phase, title, subtitle) {
 }
 
 console.log(`\n${c.bold}${c.cyan}╔══════════════════════════════════════════════════════════╗`);
-console.log(`║   DocLittle — Clinical Pipeline Evaluation               ║`);
+console.log(`║   Somo — Clinical Pipeline Evaluation               ║`);
 console.log(`╚══════════════════════════════════════════════════════════╝${c.reset}`);
 console.log(`${c.gray}  Root: ${ROOT}${c.reset}`);
 console.log(`${c.gray}  DB:  ${resolveDbPath()}${c.reset}`);

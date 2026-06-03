@@ -4,7 +4,7 @@
  * Ensures provider_profiles row exists, sets online status, and seeds availability blocks (9am-6pm Mon-Fri).
  *
  * Usage: node scripts/enable-demo-provider-availability.js [email]
- *   email: defaults to provider@doclittle.com
+ *   email: defaults to provider@callsomo.com
  */
 
 require('dotenv').config();
@@ -15,7 +15,7 @@ process.chdir(path.join(__dirname, '..'));
 const db = require('../database');
 const ProviderService = require('../services/provider-service');
 
-const EMAIL = process.argv[2] || 'provider@doclittle.com';
+const EMAIL = process.argv[2] || 'provider@callsomo.com';
 const TZ = process.env.GOOGLE_CALENDAR_TIMEZONE || 'America/New_York';
 
 function addAvailabilityBlocks(providerEmail, daysAhead = 60) {

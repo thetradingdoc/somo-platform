@@ -2,7 +2,7 @@
  * EHR Sync Service
  * 
  * Polls connected EHRs for completed encounters and syncs clinical data
- * (ICD-10, CPT codes, vitals, notes) to DocLittle database.
+ * (ICD-10, CPT codes, vitals, notes) to Somo database.
  */
 
 const ehrAggregator = require('./ehr-aggregator-service');
@@ -140,7 +140,7 @@ class EHRSyncService {
         `).get(patientId);
 
         if (!fhirPatient) {
-          console.warn(`⚠️  Patient ${patientId} not found in DocLittle`);
+          console.warn(`⚠️  Patient ${patientId} not found in Somo`);
           continue;
         }
 

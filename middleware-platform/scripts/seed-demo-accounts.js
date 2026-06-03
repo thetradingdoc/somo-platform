@@ -1,6 +1,6 @@
 /**
  * Seed demo accounts and patients for local development.
- * Creates provider@doclittle.com, patient@doclittle.com, insurer@doclittle.com
+ * Creates provider@callsomo.com, patient@callsomo.com, insurer@callsomo.com
  * with password: demo123
  *
  * Also creates FHIR patients (visible in provider portal) with eligibility data
@@ -28,22 +28,22 @@ const db = require('../database');
 const DEMO_PASSWORD = 'demo123';
 const RESET = process.argv.includes('--reset');
 const DEMO_ACCOUNTS = [
-  { email: 'provider@doclittle.com', name: 'Healthcare Provider', role: 'Provider', customer_type: 'saas' },
-  { email: 'patient@doclittle.com', name: 'Bala Jones', role: 'Patient', customer_type: 'saas' },
-  { email: 'insurer@doclittle.com', name: 'Insurer Admin', role: 'Insurer Admin', customer_type: 'saas' },
+  { email: 'provider@callsomo.com', name: 'Healthcare Provider', role: 'Provider', customer_type: 'saas' },
+  { email: 'patient@callsomo.com', name: 'Bala Jones', role: 'Patient', customer_type: 'saas' },
+  { email: 'insurer@callsomo.com', name: 'Insurer Admin', role: 'Insurer Admin', customer_type: 'saas' },
 ];
 
 // FHIR patients for provider portal + patient portal demo (copay, deductible from Stedi/simulation)
 const DEMO_FHIR_PATIENTS = [
   {
     patientName: 'Bala Jones',
-    email: 'patient@doclittle.com',
+    email: 'patient@callsomo.com',
     phone: '+15550001001',
     dateOfBirth: '1985-03-15',
     memberId: 'TEST999888',
     payerId: 'UHC',
-    // Links to patient@doclittle.com customer
-    customerEmail: 'patient@doclittle.com',
+    // Links to patient@callsomo.com customer
+    customerEmail: 'patient@callsomo.com',
   },
   {
     patientName: 'John Smith',
@@ -152,7 +152,7 @@ async function seedFhirPatientsAndEligibility() {
         console.log('   📝 Updated FHIR patient name to:', p.patientName);
       }
 
-      // Link customer to FHIR patient for patient@doclittle.com
+      // Link customer to FHIR patient for patient@callsomo.com
       if (p.customerEmail) {
         const cust = db.getCustomerByEmail(p.customerEmail);
         if (cust && db.updateCustomer) {
@@ -198,7 +198,7 @@ async function seedFhirPatientsAndEligibility() {
 }
 
 /**
- * Seed at least one upcoming Video Consultation appointment for Bala (patient@doclittle.com)
+ * Seed at least one upcoming Video Consultation appointment for Bala (patient@callsomo.com)
  * so she has a video visit to join from the patient portal / Expo app.
  */
 async function seedBalaVideoAppointment() {
@@ -251,7 +251,7 @@ async function seedBalaVideoAppointment() {
       customer_id: null,
       patient_name: 'Bala Jones',
       patient_phone: '+15550001001',
-      patient_email: 'patient@doclittle.com',
+      patient_email: 'patient@callsomo.com',
       patient_id: patientId,
       appointment_type: 'Video Consultation',
       date: dateStr,
@@ -259,9 +259,9 @@ async function seedBalaVideoAppointment() {
       start_time: start.toISOString(),
       end_time: end.toISOString(),
       duration_minutes: 30,
-      provider: 'DocLittle Mental Health Team',
+      provider: 'Somo Care Team',
       status: 'scheduled',
-      notes: 'Seeded demo video consultation for Bala (patient@doclittle.com)',
+      notes: 'Seeded demo video consultation for Bala (patient@callsomo.com)',
       calendar_event_id: null,
       calendar_link: null,
       video_room_name: `appt-${appointmentId}`,
@@ -277,7 +277,7 @@ async function seedBalaVideoAppointment() {
 
 /**
  * Set appointments.customer_id to the demo SaaS customer when the visit is for
- * provider@doclittle.com (by practitioner_id, display name, or provider email).
+ * provider@callsomo.com (by practitioner_id, display name, or provider email).
  * Without this, the calendar can show visits while customer-scoped endpoints
  * (dashboard stats, etc.) miss them because customer_id was null.
  */
@@ -386,7 +386,7 @@ async function main() {
           name: 'Default Clinic',
           slug: 'default',
           phone_number: process.env.DEFAULT_CLINIC_PHONE || '+15550000000',
-          email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@doclittle.com',
+          email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@callsomo.com',
           merchant_id: merchant.id,
         });
         console.log('Created clinic-default with merchant_id:', merchant.id);
@@ -429,7 +429,7 @@ async function main() {
   }
 
   // Enable demo provider for slot availability (provider_profile + is_online)
-  // So provider_availability_blocks for provider@doclittle.com are applied when getting slots
+  // So provider_availability_blocks for provider@callsomo.com are applied when getting slots
   const providerAcc = DEMO_ACCOUNTS.find((a) => a.role === 'Provider');
   if (providerAcc) {
     const pc = db.getCustomerByEmail(providerAcc.email);
@@ -472,7 +472,7 @@ async function main() {
   console.log('\n🏥 Seeding FHIR patients (provider portal) + eligibility (copay, deductible)...');
   ensureInsurancePayers();
   await seedFhirPatientsAndEligibility();
-  console.log('\n📅 Seeding demo Video Consultation appointment for Bala (patient@doclittle.com)...');
+  console.log('\n📅 Seeding demo Video Consultation appointment for Bala (patient@callsomo.com)...');
   await seedBalaVideoAppointment();
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

@@ -22,7 +22,7 @@
 
 | Tagline | **Somo — never answer business calls again.** |
 
-| Assistant copy (user-facing) | **Somo** (not Kelly, DocLittle, or DodgeCall in UI) |
+| Assistant copy (user-facing) | **Somo** (not Kelly, Somo, or Somo in UI) |
 
 | Legal / invoices | **Somo** in product UI; registered entity name may differ on contracts — confirm before filing |
 
@@ -115,7 +115,7 @@ Wordmark: gecko lockup PNG in nav; uppercase **S** + lowercase **omo** in vector
 | **Icon** | `somo-icon.png`, `somo-icon-lizard.png` | Favicon source, dark headers, app icon |
 | **Favicon** | `favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` | Browser / PWA |
 
-**Forbidden in product UI:** text-only `somo-logo-wordmark.svg`, CSS `<span>` brand marks, invented gecko SVGs for nav/favicon, DocLittle / Skin & Care lockups. `somo-gecko.svg` is decorative (marketing “how it works”) only.
+**Forbidden in product UI:** text-only `somo-logo-wordmark.svg`, CSS `<span>` brand marks, invented gecko SVGs for nav/favicon, Somo / Skin & Care lockups. `somo-gecko.svg` is decorative (marketing “how it works”) only.
 
 **Deprecated (do not use in UI):** `somo-logo-wordmark.svg`, `somo-wordmark-text.svg` — League Spartan text without the official gecko lockup.
 
@@ -127,7 +127,7 @@ Wordmark: gecko lockup PNG in nav; uppercase **S** + lowercase **omo** in vector
 
 - **Marketing:** Vite app at `/` (`unified-dashboard/somo-landing/`) — white page, Image 1 lizard CTAs (`#b5e930`), MSU headings, gecko in nav. Sections: hero, capabilities explorer, how-it-works, live demo + sphere, ROI, pricing, languages, FAQ. Docs: [SOMO_LANDING.md](../deployment/SOMO_LANDING.md), [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md), [SOMO_LANDING_HERO.md](../deployment/SOMO_LANDING_HERO.md). Legacy Kelly/LiveKit CRA: `_archive/littlelab-landing/`.
 
-- **Provider:** `business/*.html` + `provider-portal.css` — canonical green `#16a637`.
+- **Provider:** `business/*.html` + `provider-portal.css` — canonical green `#16a637`. Shell and page header contract: [PROVIDER_PORTAL_SHELL.md](../design/PROVIDER_PORTAL_SHELL.md).
 
 - **Patient / consumer:** `patients/*.html`, checkout — Somo green, no Skin & Care lockup.
 

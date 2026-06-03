@@ -1,11 +1,12 @@
 /**
- * FHIR Service - DocLittle Telehealth Platform
+ * FHIR Service - Somo Telehealth Platform
  *
  * Business logic layer for FHIR resource operations
  * Handles all FHIR resource creation, retrieval, updates, and searches
  */
 
 const db = require('../database');
+const fhirIds = require('../lib/fhir-brand-identifiers');
 const FHIRResources = require('../models/fhir-resources');
 const { v4: uuidv4 } = require('uuid');
 
@@ -1336,7 +1337,7 @@ class FHIRService {
         const text = p.contentString || '';
         if (!text.trim()) continue;
         const ext = p.extension || [];
-        const speakerExt = ext.find(e => e.url === 'https://doclittle.health/extension/speaker');
+        const speakerExt = ext.find(e => fhirIds.matchesExtensionUrl(e.url, 'speaker'));
         const speakerRaw = speakerExt?.valueString || 'unknown';
         const label = speakerRaw === 'agent' ? 'Doctor' : speakerRaw === 'patient' ? 'Patient' : speakerRaw;
         lines.push(`${label}: ${text.trim()}`);

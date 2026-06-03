@@ -1655,7 +1655,7 @@ router.post('/configure-sales-agent', requireAdminAuth, adminLimiter, async (req
     // Update the agent with sales prompt and functions
     const updateResult = await retellService.updateAgent(salesAgentId, {
       system_prompt: salesPrompt,
-      agent_name: 'DocLittle Sales Agent - Alex',
+      agent_name: 'Somo Sales Agent - Alex',
       functions: salesFunctions
     });
 

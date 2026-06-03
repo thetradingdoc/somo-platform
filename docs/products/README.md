@@ -1037,14 +1037,14 @@ Based on typical CBD dispensary inventory:
 
 ## 1. Endpoint your stack uses
 
-**Upstream (Product Opener, not DocLittle):** the public read contract is documented in the [Open Food Facts Server API](https://openfoodfacts.github.io/openfoodfacts-server/api/) (OBF uses the same shape on `world.openbeautyfacts.org`).
+**Upstream (Product Opener, not Somo):** the public read contract is documented in the [Open Food Facts Server API](https://openfoodfacts.github.io/openfoodfacts-server/api/) (OBF uses the same shape on `world.openbeautyfacts.org`).
 
 | Layer | URL / role |
 |--------|-----|
 | **Official read API** | `GET {host}/api/v2/product/{barcode}` with `Accept: application/json` |
 | **OBF host (default)** | `https://world.openbeautyfacts.org` (override with `OPEN_BEAUTY_FACTS_BASE_URL`) |
 
-**DocLittle integration (internal only — not part of the upstream API):**
+**Somo integration (internal only — not part of the upstream API):**
 
 | Piece | Role |
 |--------|------|
@@ -1106,7 +1106,7 @@ The **canonical ids** for automation are the **`categories_tags`** (and hierarch
 
 The **`product_type`** field **may** appear on some Product Opener documents. Official API documentation does **not** define a fixed, stable enum for cosmetics (or guarantee a particular string). Treat any value as **opaque**: verify behavior against **live payloads in your own environment** if you depend on it.
 
-DocLittle **passes through** **`product_type`** as a string when present, without interpreting it as a known enum.
+Somo **passes through** **`product_type`** as a string when present, without interpreting it as a known enum.
 
 Nutrition-related fields (e.g. `nutriments`, Nutri-Score) are often **empty** or **not applicable** for cosmetics; the API may still include `nutriscore_grade: "not-applicable"` etc.
 
@@ -1129,11 +1129,11 @@ From the shared [data-fields](https://static.openfoodfacts.org/data/data-fields.
 
 ---
 
-## 5. How DocLittle maps this (normalized subset)
+## 5. How Somo maps this (normalized subset)
 
 `middleware-platform/services/open-beauty-facts-service.js` builds a **normalized object** for `GET /api/public/beautyfacts/:barcode` and internal callers:
 
-| OBF / `product` source | DocLittle `normalized` field |
+| OBF / `product` source | Somo `normalized` field |
 |-------------------------|------------------------------|
 | `code` / `product.code` | `barcode` |
 | `status` | `found` (boolean: status === 1) |
@@ -1152,7 +1152,7 @@ From the shared [data-fields](https://static.openfoodfacts.org/data/data-fields.
 | `image_front_url` / `image_url` | `image_url` |
 | `url` | `product_url` |
 
-**Internal grading (not OBF):** `middleware-platform/services/product-grade-resolver.js` combines **labels**, **categories** (display), **`categories_tags`**, **`ingredients_analysis_tags`**, **`states_tags`**, **ingredient lines**, and **name** text into a **`grade_class`** (`MEDICAL_RX`, `OTC_DRUG`, `PROFESSIONAL`, `COSMECEUTICAL_MARKETING`, `GENERAL_COSMETIC`). That is **DocLittle logic**, not an OBF field.
+**Internal grading (not OBF):** `middleware-platform/services/product-grade-resolver.js` combines **labels**, **categories** (display), **`categories_tags`**, **`ingredients_analysis_tags`**, **`states_tags`**, **ingredient lines**, and **name** text into a **`grade_class`** (`MEDICAL_RX`, `OTC_DRUG`, `PROFESSIONAL`, `COSMECEUTICAL_MARKETING`, `GENERAL_COSMETIC`). That is **Somo logic**, not an OBF field.
 
 **Caching / load:** The client does not cache responses today. For production, **cache by barcode** (e.g. TTL 24h+) and deduplicate concurrent lookups to protect upstream and latency.
 
@@ -1170,7 +1170,7 @@ From the shared [data-fields](https://static.openfoodfacts.org/data/data-fields.
 
 1. **Categorisation** in OBF is stored as **raw `categories` text** plus **normalized `categories_tags`** and **`categories_hierarchy`**. **Use `categories_tags` for logic, filters, and analytics**; keep **`categories`** for display.
 2. The **remote** OBF index is a **large, growing** crowdsourced dataset; your SQLite mirror only stores products you have looked up or imported.
-3. **DocLittle** exposes taxonomy tags, analysis tags, state tags, and structured ingredients on the normalized product from the internal beautyfacts route; **`product_type`** is included only as an **opaque** pass-through when the upstream payload provides it.
+3. **Somo** exposes taxonomy tags, analysis tags, state tags, and structured ingredients on the normalized product from the internal beautyfacts route; **`product_type`** is included only as an **opaque** pass-through when the upstream payload provides it.
 
 
 ---
@@ -1256,7 +1256,7 @@ Reference documentation for product-related features.
 
 ## Contents
 
-- **[OPEN_BEAUTY_FACTS_DATA_MODEL.md](./README.md#open-beauty-facts-data-model)** — OBF global API: categories/tags/hierarchy, field mapping, and how DocLittle normalizes responses
+- **[OPEN_BEAUTY_FACTS_DATA_MODEL.md](./README.md#open-beauty-facts-data-model)** — OBF global API: categories/tags/hierarchy, field mapping, and how Somo normalizes responses
 - **cbd-medical-knowledge-summary.md** — CBD product types and medical uses for voice agent recommendations (sleep, pain, anxiety)
 - **cbd-product-analysis.md** — Product analysis
 - **PRODUCT_LIST.md** — Example product inventory (tenant-specific reference)

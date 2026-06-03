@@ -75,8 +75,8 @@ async function main() {
       ...(a.end_time ? { endTime: a.end_time } : {})
     });
     resource.extension = Array.isArray(resource.extension) ? resource.extension : [];
-    resource.extension.push({ url: 'https://doclittle.health/extension/appointment-status', valueString: a.status || 'unknown' });
-    if (a.payment_status) resource.extension.push({ url: 'https://doclittle.health/extension/payment-status', valueString: a.payment_status });
+    resource.extension.push({ url: require('../lib/fhir-brand-identifiers').extensionUrl('appointment-status'), valueString: a.status || 'unknown' });
+    if (a.payment_status) resource.extension.push({ url: require('../lib/fhir-brand-identifiers').extensionUrl('payment-status'), valueString: a.payment_status });
 
     if (!existing && db.createFHIREncounter) {
       db.createFHIREncounter(resource);

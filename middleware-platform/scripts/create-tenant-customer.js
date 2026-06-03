@@ -6,7 +6,7 @@
  *   NODE_ENV=production node middleware-platform/scripts/create-tenant-customer.js <subdomain> <email> [name]
  *
  * Example:
- *   NODE_ENV=production node middleware-platform/scripts/create-tenant-customer.js akin-dunbar drlittlekids@gmail.com "Dr Little Kids"
+ *   NODE_ENV=production node middleware-platform/scripts/create-tenant-customer.js akin-dunbar richard@callsomo.com "Somo Clinic"
  */
 
 require('dotenv').config();

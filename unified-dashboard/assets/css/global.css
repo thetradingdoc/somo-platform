@@ -1,8 +1,7 @@
 /* ============================================
-   GLOBAL STYLES - Doctor's Portal
+   GLOBAL STYLES - Somo (legacy pages + patient routes)
+   Provider shell uses provider-portal.css + somo-tokens.
    ============================================ */
-
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;700&display=swap');
 
 * {
     margin: 0;
@@ -11,9 +10,9 @@
 }
 
 :root {
-    /* Brand Colors - Fintech Blue */
+    /* Brand Colors - Somo green */
     --primary: #16a637;
-    --primary-dark: #1e3a8a;
+    --primary-dark: #128a2e;
     --primary-light: #16a637;
     --secondary: #128a2e;
     --accent: #60a5fa;

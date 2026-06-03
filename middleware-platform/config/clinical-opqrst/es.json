@@ -1,0 +1,15 @@
+{
+  "pack_version": "v1",
+  "locale": "es",
+  "status": "pending_translator_signoff",
+  "core_sequence": [
+    "opqrst_onset",
+    "opqrst_provocation",
+    "opqrst_quality",
+    "opqrst_radiation",
+    "opqrst_severity",
+    "opqrst_timing"
+  ],
+  "questions": {},
+  "specialty_notes": {}
+}

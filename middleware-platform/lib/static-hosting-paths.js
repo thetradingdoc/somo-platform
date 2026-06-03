@@ -22,8 +22,8 @@ function isSomoMarketingHostname(hostname) {
     h === 'www.callsomo.com' ||
     h === 'skinandcare.com' ||
     h === 'www.skinandcare.com' ||
-    h === 'dodgecall.app' ||
-    h === 'www.dodgecall.app'
+    h === 'callsomo.com' ||
+    h === 'www.callsomo.com'
   );
 }
 
@@ -46,15 +46,42 @@ function isUnifiedDashboardAssetPath(p) {
     p.startsWith('/assets/js') ||
     p.startsWith('/assets/css') ||
     p.startsWith('/assets/images') ||
-    p.startsWith('/assets/brand') ||
     p.startsWith('/assets/data') ||
     p.startsWith('/business/assets')
   );
 }
 
+const SOMO_LANDING_BUILD_INSTRUCTIONS_HTML =
+  '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
+  '<h1>Somo</h1><p>Landing build not found or out of date. Run:</p>' +
+  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd middleware-platform && npm run build:somo-landing</pre>' +
+  '<p>Or restart with <code>npm start</code> (runs prestart build check).</p>' +
+  '</body></html>';
+
+function parseLandingMainBundleSrc(html) {
+  const m = String(html).match(
+    /<script[^>]+type=["']module["'][^>]+src=["'](\/assets\/index-[^"']+\.js)["']/i
+  );
+  if (m) return m[1];
+  const m2 = String(html).match(/src=["'](\/assets\/index-[^"']+\.js)["']/i);
+  return m2 ? m2[1] : null;
+}
+
+/** True when build/index.html exists and its hashed JS bundle is on disk (not dev /src/main.jsx). */
+function isSomoLandingBuildReady(getSomoLandingBuildPath) {
+  const indexPath = getSomoLandingBuildPath('index.html');
+  if (!fs.existsSync(indexPath)) return false;
+  const html = fs.readFileSync(indexPath, 'utf8');
+  const src = parseLandingMainBundleSrc(html);
+  if (!src || src.includes('/src/')) return false;
+  const bundlePath = getSomoLandingBuildPath(src.replace(/^\//, ''));
+  return fs.existsSync(bundlePath) && fs.statSync(bundlePath).isFile();
+}
+
 function isSomoLandingApiPath(p) {
   return (
     p.startsWith('/api') ||
+    p.startsWith('/fhir') ||
     p.startsWith('/voice') ||
     p.startsWith('/webhooks') ||
     p.startsWith('/health') ||
@@ -90,18 +117,9 @@ function createStaticPathHelpers(rootDir) {
   }
 
   function trySendSomoLanding(res) {
-    const landingBuild = getSomoLandingBuildPath('index.html');
-    if (fs.existsSync(landingBuild)) {
-      return res.sendFile(path.resolve(landingBuild));
-    }
-    return false;
+    if (!isSomoLandingBuildReady(getSomoLandingBuildPath)) return false;
+    return res.sendFile(path.resolve(getSomoLandingBuildPath('index.html')));
   }
-
-  const SOMO_LANDING_BUILD_INSTRUCTIONS_HTML =
-    '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
-    '<h1>Somo</h1><p>Landing build not found. Run:</p>' +
-    '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/somo-landing && npm install && npm run build</pre>' +
-    '</body></html>';
 
   function sendSomoLandingOrInstructions(res) {
     if (trySendSomoLanding(res)) return;
@@ -124,4 +142,7 @@ module.exports = {
   shouldServeSomoLanding,
   isUnifiedDashboardAssetPath,
   isSomoLandingApiPath,
+  SOMO_LANDING_BUILD_INSTRUCTIONS_HTML,
+  parseLandingMainBundleSrc,
+  isSomoLandingBuildReady,
 };

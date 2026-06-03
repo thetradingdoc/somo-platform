@@ -8,7 +8,7 @@ const {
   getTrialMinutesAllocated,
   getTrialMinutesRemaining,
   getTrialMinutesConsumed,
-  isDodgecallSignup
+  isSomoDemoSignup
 } = require('./trial-lifecycle');
 const { getTrialDurationDays } = require('./plan-catalog');
 
@@ -174,5 +174,5 @@ module.exports = {
   maybeSendTrialLifecycleNudges,
   runScheduledTrialNudges,
   sendTrialNudge,
-  isDodgecallSignup
+  isSomoDemoSignup
 };

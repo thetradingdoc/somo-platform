@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "description": "Pure routeOrchestratorLane expectations — no LLM. V2 lane/step enums only.",
+  "cases": [
+    {
+      "id": "front_door_rash",
+      "bucket": "front_door",
+      "last_user_message": "I have a rash that won't go away",
+      "flags": { "routine_intake_active": false },
+      "expect": { "lane": "clinical", "step": "clinical_intake" }
+    },
+    {
+      "id": "front_door_book_derm",
+      "bucket": "front_door",
+      "last_user_message": "I need to book a dermatology appointment",
+      "flags": { "routine_intake_active": false },
+      "expect": { "lane": "clinical", "step": "clinical_intake" }
+    },
+    {
+      "id": "front_door_back_pain",
+      "bucket": "front_door",
+      "last_user_message": "My lower back has been hurting for three days",
+      "flags": { "routine_intake_active": false },
+      "expect": { "lane": "clinical", "step": "clinical_intake" }
+    },
+    {
+      "id": "safety_chest_pain",
+      "bucket": "safety",
+      "last_user_message": "I'm having chest pain",
+      "flags": {},
+      "expect": { "lane": "support", "step": "handoff", "safety_blocked": true }
+    },
+    {
+      "id": "payment_copay",
+      "bucket": "payment",
+      "last_user_message": "I need to pay my copay",
+      "flags": {},
+      "expect": { "lane": "payment", "step": "pay_invoice" }
+    },
+    {
+      "id": "payment_secure_link",
+      "bucket": "payment",
+      "last_user_message": "Can you send me a secure payment link",
+      "flags": {},
+      "expect": { "lane": "payment", "step": "pay_invoice" }
+    },
+    {
+      "id": "payment_faq_balance",
+      "bucket": "payment_faq",
+      "last_user_message": "What's my balance on my account",
+      "flags": {},
+      "expect": { "lane": "support", "step": "faq" }
+    },
+    {
+      "id": "payment_faq_receipt",
+      "bucket": "payment_faq",
+      "last_user_message": "I need a receipt for my last appointment",
+      "flags": {},
+      "expect": { "lane": "support", "step": "faq" }
+    },
+    {
+      "id": "post_visit_what_next",
+      "bucket": "post_payment",
+      "last_user_message": "What happens next after I book?",
+      "flags": {
+        "appointment_id": "appt-123",
+        "post_visit_confirmation_pending": true
+      },
+      "expect": { "lane": "post_payment", "step": "confirmation" }
+    },
+    {
+      "id": "post_visit_after_pay",
+      "bucket": "post_payment",
+      "last_user_message": "I just paid, what do I do now?",
+      "flags": {
+        "appointment_id": "appt-456",
+        "payment_complete": true
+      },
+      "expect": { "lane": "post_payment", "step": "confirmation" }
+    },
+    {
+      "id": "education_escape_routine_clinical",
+      "bucket": "education_escape",
+      "last_user_message": "I have an itchy rash and need a dermatology appointment",
+      "flags": { "routine_intake_active": true },
+      "expect": { "lane": "clinical", "step": "clinical_intake" }
+    },
+    {
+      "id": "education_routine_only",
+      "bucket": "education",
+      "last_user_message": "What moisturizer should I use for dry skin?",
+      "flags": { "routine_intake_active": true },
+      "expect": { "lane": "education", "step": "education" }
+    },
+    {
+      "id": "reschedule",
+      "bucket": "reschedule",
+      "last_user_message": "I need to reschedule my appointment please",
+      "flags": {},
+      "expect": { "lane": "reschedule", "step": "find_booking" }
+    },
+    {
+      "id": "records_account",
+      "bucket": "records",
+      "last_user_message": "What did my doctor say on my last visit",
+      "flags": {},
+      "expect": { "lane": "records", "step": "records_qa" }
+    }
+  ]
+}

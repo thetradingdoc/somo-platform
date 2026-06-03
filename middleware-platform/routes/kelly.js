@@ -5,6 +5,8 @@ const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
 const TwilioPhoneService = require('../services/twilio-phone-service');
 const { updateAgentLifecycleState } = require('../services/agent-lifecycle');
+const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
+const { listActivityForClinic } = require('../services/kelly-activity-feed-service');
 
 function normalizeLifecycle(customer) {
   const status = String(customer.kelly_status || customer.retell_agent_status || 'pending').toLowerCase();
@@ -50,6 +52,22 @@ router.get('/status', requireCustomerAuth, async (req, res) => {
   } catch (error) {
     console.error('❌ Kelly status error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load Kelly status', message: error.message });
+  }
+});
+
+router.get('/activity', requireCustomerAuth, async (req, res) => {
+  try {
+    const clinicId = resolveClinicIdFromRequest(req);
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
+    }
+    const limit = req.query.limit;
+    const since = req.query.since || null;
+    const activity = listActivityForClinic(clinicId, { limit, since });
+    return res.json({ success: true, activity, clinic_id: clinicId });
+  } catch (error) {
+    console.error('❌ Kelly activity error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load Kelly activity', message: error.message });
   }
 });
 

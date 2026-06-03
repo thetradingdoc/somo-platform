@@ -47,7 +47,7 @@ test.describe('Provider SIM trial signup (API)', () => {
         company_name: 'E2E Clinic',
         business_size: '1-10',
         api_features: ['voice_agent'],
-        attribution: { utm_source: 'dodgecall', utm_campaign: 'e2e' }
+        attribution: { utm_source: 'somo-demo', utm_campaign: 'e2e' }
       }
     });
     expect(signup.ok()).toBeTruthy();

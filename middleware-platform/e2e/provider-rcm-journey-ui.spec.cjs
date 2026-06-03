@@ -3,7 +3,7 @@
 const { test, expect } = require('@playwright/test');
 
 const API_BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
-const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@doclittle.com';
+const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PASS = process.env.PW_PROVIDER_PASS || 'demo123';
 const CLINIC_ID = process.env.RCM_E2E_CLINIC_ID || 'clinic-default';
 
@@ -33,7 +33,7 @@ async function providerLogin(page) {
       JSON.stringify({ name: c.name || 'Provider', role: c.role || 'Provider', ...c })
     );
   }, customer);
-  await page.goto(`${API_BASE}/business/rcm.html`, { waitUntil: 'networkidle' });
+  await page.goto(`${API_BASE}/business/revenue.html?tab=pipeline`, { waitUntil: 'networkidle' });
 }
 
 test.describe('Provider RCM command center UI', () => {

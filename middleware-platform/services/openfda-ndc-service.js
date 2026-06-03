@@ -22,7 +22,7 @@ async function searchNdcByName(term, limit = 5) {
     const search = encodeURIComponent(`${field}:"${esc}"`);
     const url = withKey(`${BASE}/ndc.json?search=${search}&limit=${Math.min(limit, 100)}`);
     try {
-      const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'doclittle-platform/1.0' } });
+      const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'somo-platform/1.0' } });
       if (!r.ok) continue;
       const data = await r.json();
       const results = Array.isArray(data.results) ? data.results : [];
@@ -43,7 +43,7 @@ async function searchNdcLoose(term, limit = 5) {
   const search = encodeURIComponent(`brand_name:${esc}*`);
   const url = withKey(`${BASE}/ndc.json?search=${search}&limit=${Math.min(limit, 100)}`);
   try {
-    const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'doclittle-platform/1.0' } });
+    const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'somo-platform/1.0' } });
     if (!r.ok) return { success: false, error: `http_${r.status}`, results: [] };
     const data = await r.json();
     const results = Array.isArray(data.results) ? data.results : [];
