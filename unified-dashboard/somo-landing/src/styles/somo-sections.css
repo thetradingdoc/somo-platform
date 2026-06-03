@@ -962,21 +962,42 @@
 
 .somo-footer-logo {
   display: inline-flex;
-  margin-bottom: 1.25rem;
+  margin: 0 auto 1.25rem;
 }
 
 .somo-footer-logo-img {
   display: block;
   height: 48px;
   width: auto;
+  max-width: min(220px, 78vw);
+  object-fit: contain;
+  object-position: center center;
 }
 
 .somo-footer-links {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1rem 1.75rem;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
   margin-bottom: 1rem;
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  .somo-footer {
+    padding-bottom: 5.5rem;
+  }
+
+  .somo-footer-links {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .somo-footer-links a {
+    display: inline-block;
+    padding: 0.15rem 0;
+  }
 }
 
 .somo-footer-links a {

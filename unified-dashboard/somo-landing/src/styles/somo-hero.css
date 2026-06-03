@@ -1,6 +1,8 @@
 /* Hero: nav, copy, phone visual, trust bar. See docs/deployment/SOMO_LANDING_HERO.md */
 
 .somo-hero {
+  --somo-hero-headline-size: clamp(3rem, 5.2vw, 4.75rem);
+  --somo-nav-logo-size: calc(var(--somo-hero-headline-size) * 2);
   background: #ffffff;
   color: var(--somo-text);
   min-height: auto;
@@ -16,26 +18,30 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 2rem;
-  padding: 2rem clamp(1.25rem, 3vw, 2.5rem) 0.75rem;
+  gap: 1rem;
+  padding: 0.75rem clamp(1.25rem, 3vw, 2.5rem) 0.5rem;
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
   flex-shrink: 0;
 }
 
-.somo-logo-link {
+/* Nav logo height tracks hero h1 (--somo-hero-headline-size) */
+.somo-logo-link,
+.somo-footer-logo {
   display: inline-flex;
   align-items: center;
-  flex-shrink: 1;
-  min-width: 0;
+  flex-shrink: 0;
+  line-height: 0;
 }
 
 .somo-logo-img {
   display: block;
-  height: 54px;
+  height: var(--somo-nav-logo-size);
   width: auto;
-  max-width: 100%;
+  max-width: min(64rem, 96vw);
+  object-fit: contain;
+  object-position: left center;
 }
 
 .somo-nav-actions {
@@ -84,7 +90,7 @@
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
-  padding: 2rem clamp(1.25rem, 3vw, 2.5rem) 1rem;
+  padding: 0.75rem clamp(1.25rem, 3vw, 2.5rem) 1rem;
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
   gap: 1rem 0.25rem;
@@ -122,7 +128,7 @@
 
 .somo-hero-copy h1 {
   font-family: var(--dc-serif);
-  font-size: clamp(3rem, 5.2vw, 4.75rem);
+  font-size: var(--somo-hero-headline-size);
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -0.03em;
@@ -321,21 +327,17 @@
   .somo-hero {
     min-height: 100vh;
     min-height: 100dvh;
-    max-height: 100dvh;
+    max-height: none;
     padding-bottom: 0;
     overflow-x: clip;
-    overflow-y: clip;
+    overflow-y: visible;
   }
 
   .somo-nav {
     max-width: min(1680px, calc(100vw - 2.5rem));
-    padding-top: clamp(2.75rem, 4vw, 3.75rem);
-    padding-bottom: 1rem;
+    padding-top: 1rem;
+    padding-bottom: 0.5rem;
     flex-shrink: 0;
-  }
-
-  .somo-logo-img {
-    height: 68px;
   }
 
   .somo-nav-cta {
@@ -416,6 +418,7 @@
 
 @media (max-width: 960px) {
   .somo-hero {
+    --somo-hero-headline-size: clamp(2.25rem, 8.5vw, 3.25rem);
     min-height: auto;
     max-height: none;
     overflow: visible;
@@ -425,7 +428,7 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto auto;
     text-align: left;
-    padding: 2rem 1.35rem 1rem;
+    padding: 0.5rem 1.35rem 1rem;
     gap: 1.75rem;
     align-content: start;
     align-items: start;
@@ -433,7 +436,7 @@
   }
 
   .somo-hero-copy {
-    padding-top: 0.5rem;
+    padding-top: 0;
   }
 
   .somo-hero-copy h1,
@@ -451,7 +454,6 @@
   }
 
   .somo-hero-copy h1 {
-    font-size: clamp(2.25rem, 8.5vw, 3.25rem);
     max-width: none;
     overflow-wrap: break-word;
   }
@@ -494,7 +496,9 @@
   }
 
   .somo-nav {
-    padding: 1.5rem 1.25rem 0.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem 0.625rem;
   }
 
   .somo-nav-actions {
@@ -508,10 +512,6 @@
   .somo-nav-cta {
     padding: 0.55rem 1rem;
     font-size: 0.88rem;
-  }
-
-  .somo-logo-img {
-    height: 44px;
   }
 
   .somo-hero-checks {

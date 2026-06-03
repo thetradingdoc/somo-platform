@@ -3,12 +3,18 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#16a637">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <title>Somo Provider - Invoice Detail</title>
-    <link rel="stylesheet" href="/assets/css/global.css">
+    <link rel="stylesheet" href="/assets/css/somo-tokens.css">
     <link rel="stylesheet" href="/assets/css/provider-portal.css">
     <script src="/assets/js/config.js"></script>
+    <script src="/assets/js/auth-utils.js"></script>
     <script src="/assets/js/provider-shell.js"></script>
+    <script src="/assets/js/provider-shell-chrome.js"></script>
     <script src="/assets/js/provider-layout.js"></script>
     <style>
         :root {
@@ -407,7 +413,7 @@
     </style>
 </head>
 
-<body class="provider-portal">
+<body class="provider-portal provider-portal--scroll">
     <div class="layout">
         <!-- Legacy sidebar removed at runtime by mountProviderPage() -->
         <aside class="sidebar" id="sidebar">
@@ -604,6 +610,8 @@
                     ` : ''}
                 </div>
 
+                <div id="rcmPaymentBlock" class="invoice-summary" style="margin-bottom:16px"></div>
+
                 <div class="invoice-summary">
                     <div class="summary-grid">
                         <div class="summary-item">
@@ -697,6 +705,35 @@
                     </div>
                 ` : ''}
             `;
+            loadRcmPaymentsForInvoice(invoice);
+        }
+
+        async function loadRcmPaymentsForInvoice(invoice) {
+            const block = document.getElementById('rcmPaymentBlock');
+            if (!block) return;
+            try {
+                const clinicId = typeof window.ppGetClinicId === 'function' ? window.ppGetClinicId() : 'clinic-default';
+                const url = new URL(`${API_BASE}/api/rcm/payments`);
+                url.searchParams.set('clinic_id', clinicId);
+                const res = await fetch(url.toString(), { credentials: 'include', headers: window.ppGetAuthHeaders?.() || {} });
+                const json = await res.json();
+                const rows = (json.payments || []).filter((p) => p.invoice_id === invoice.id || p.patient_id === invoice.patient_id);
+                if (!rows.length) {
+                    block.innerHTML = '<div class="pp-empty" style="padding:12px">No Somo Pay link for this invoice yet.</div>';
+                    return;
+                }
+                const latest = rows[0];
+                const paymentsDesk = `revenue.html?tab=payments`;
+                block.innerHTML = `
+                  <div class="pp-snap-row"><span class="pp-snap-label">Somo Pay status</span><span class="pp-snap-val">${latest.status || 'requested'}</span></div>
+                  <div class="pp-snap-row"><span class="pp-snap-label">Amount</span><span class="pp-snap-val">$${Number(latest.amount || 0).toFixed(2)}</span></div>
+                  ${latest.pay_url ? `<div class="pp-snap-row" style="flex-wrap:wrap;gap:6px;border-bottom:none">
+                    <a class="pp-btn pp-btn-primary pp-btn-sm" href="${latest.pay_url}" target="_blank" rel="noopener">Open pay link</a>
+                    <a class="pp-btn pp-btn-ghost pp-btn-sm" href="${paymentsDesk}">Patient payments desk</a>
+                  </div>` : `<div class="pp-snap-row" style="border-bottom:none"><a class="pp-btn pp-btn-ghost pp-btn-sm" href="${paymentsDesk}">Request payment</a></div>`}`;
+            } catch (e) {
+                block.innerHTML = '';
+            }
         }
 
         function showError(message) {

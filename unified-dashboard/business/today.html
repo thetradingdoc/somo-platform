@@ -3,28 +3,47 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0B1728">
+  <meta name="theme-color" content="#16a637">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <title>Somo Provider - Today</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
 </head>
-<body class="provider-portal">
-  <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">☰</button>
+<body class="provider-portal provider-portal--today" data-page="today">
+  <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
 
   <div class="pp-app">
     <aside class="pp-sidebar" id="ppSidebar">
       <div class="pp-clinic-header">
-        <div class="pp-sb-av" id="ppClinicAv">CL</div>
-        <div>
+        <a class="pp-sb-brand pp-sb-brand--icon" href="today.html">
+          <img src="/assets/brand/somo-icon.png" alt="Somo" class="pp-sb-logo-img" width="36" height="36" />
+        </a>
+        <div class="pp-sb-clinic-meta">
           <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
           <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
+          <div class="pp-sb-av pp-sb-av--sm" id="ppClinicAv" aria-hidden="true">CL</div>
         </div>
       </div>
-
+      <a class="pp-kelly-live kelly-provisioning" id="ppKellyLive" href="agent.html">
+        <span class="pp-kelly-dot" aria-hidden="true"></span>
+        <div>
+          <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
+          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
+          <div class="pp-kelly-phone" id="ppKellyPhone"></div>
+        </div>
+        <button type="button" class="pp-kelly-toggle" id="ppKellyToggle">Activate</button>
+      </a>
       <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
-
       <div class="pp-sb-footer">
         <a class="pp-sb-clinic" id="ppClinicCard" href="settings.html">
           <div class="pp-sb-av">CL</div>
@@ -37,19 +56,28 @@
     </aside>
 
     <div class="pp-main">
-      <header class="pp-topbar">
-        <div>
-          <div class="pp-page-eyebrow" id="ppPageEyebrow">AI Front Desk Receptionist</div>
-          <div class="pp-page-title" id="ppPageTitle">Today</div>
+      <header class="pp-topbar pp-topbar--page">
+        <div class="pp-topbar-left">
+          <p class="pp-page-eyebrow">Today</p>
+          <h1 class="pp-page-title" id="ppHeroGreeting">Today</h1>
+          <p class="pp-page-sub">Welcome back — here's what needs attention today.</p>
         </div>
         <div class="pp-topbar-right">
           <div class="pp-date-chip" id="ppDateChip"></div>
-          <a class="pp-btn pp-btn-ghost pp-btn-sm" href="patients.html">Search</a>
-          <a class="pp-btn pp-btn-primary pp-btn-sm" href="calendar.html">+ New Appointment</a>
+          <a class="pp-btn pp-btn-outline pp-btn-sm pp-topbar-search" href="patients.html" id="ppSearchBtn">
+            <span class="pp-inline-icon" aria-hidden="true"></span>
+            <span class="pp-topbar-label">Search</span>
+          </a>
+          <a class="pp-btn pp-btn-primary pp-btn-sm" href="calendar.html" id="ppNewApptBtn" aria-label="New appointment">
+            <span class="pp-inline-icon" aria-hidden="true"></span>
+            <span class="pp-topbar-cta-label">New Appointment</span>
+          </a>
         </div>
       </header>
 
-      <main class="pp-content" id="ppMainContent">
+      <main class="pp-content pp-content--today" id="ppMainContent">
+        <div class="pp-alert-strip" id="ppAlertStrip" hidden aria-live="polite"></div>
+
         <div class="pp-kpi-row pp-kpi-row-4" id="kpiRow">
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
@@ -57,116 +85,107 @@
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
         </div>
 
-        <div class="pp-grid-3">
-          <section class="pp-panel">
-            <div class="pp-panel-head">
-              <div>
-                <div class="pp-panel-title">Today's Appointments</div>
-                <div class="pp-panel-sub" id="scheduleSub">Loading…</div>
-              </div>
-              <a class="pp-btn pp-btn-ghost pp-btn-sm" href="calendar.html">View all</a>
-            </div>
-            <div class="pp-panel-tabs" id="scheduleTabs" role="tablist" aria-label="Schedule filters">
-              <button type="button" class="pp-ptab act" data-filter="all" role="tab" aria-selected="true">All</button>
-              <button type="button" class="pp-ptab" data-filter="arriving" role="tab" aria-selected="false">Arriving</button>
-              <button type="button" class="pp-ptab" data-filter="telehealth" role="tab" aria-selected="false">Telehealth</button>
-            </div>
-            <div class="pp-panel-body" id="scheduleList">
-              <div class="pp-skeleton"></div>
-              <div class="pp-skeleton"></div>
-            </div>
-          </section>
-
-          <section class="pp-panel">
-            <div class="pp-panel-head">
-              <div>
-                <div class="pp-panel-title">Urgent Tasks</div>
-                <div class="pp-panel-sub">Items needing provider review</div>
-              </div>
-              <span class="pp-chip pp-chip-t" id="activityCount">—</span>
-            </div>
-            <div class="pp-panel-body" id="activityFeed">
-              <div class="pp-empty">Loading urgent work items…</div>
-            </div>
-          </section>
-
-          <div class="pp-col-stack">
-            <section class="pp-panel" style="flex:1">
-              <div class="pp-panel-head" style="background:var(--red-soft)">
+        <div class="pp-dashboard-grid" id="ppDashboardBody">
+          <div class="pp-dashboard-main">
+            <section class="pp-panel pp-panel--primary" id="ppJourneyStripPanel" hidden>
+              <div class="pp-panel-head pp-panel-head--compact">
                 <div>
-                  <div class="pp-panel-title" style="color:var(--red)">Needs Your Attention</div>
-                  <div class="pp-panel-sub" style="color:#b91c1c" id="excSub">Loading…</div>
+                  <div class="pp-panel-title">Needs action</div>
+                  <div class="pp-panel-sub" id="journeyStripSub">Open RCM journeys</div>
                 </div>
-                <span class="pp-chip pp-chip-r">HITL</span>
+                <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline">Pipeline</a>
               </div>
-              <div class="pp-panel-body" id="exceptionList">
+              <div class="pp-panel-body pp-panel-body--compact" id="ppJourneyStrip"></div>
+            </section>
+
+            <section class="pp-panel pp-panel--primary">
+              <div class="pp-panel-head">
+                <div>
+                  <div class="pp-panel-title">Appointments</div>
+                  <div class="pp-panel-sub" id="scheduleSub">Loading…</div>
+                </div>
+                <a class="pp-btn pp-btn-link" href="calendar.html">View all</a>
+              </div>
+              <div class="pp-panel-tabs" id="scheduleTabs" role="tablist" aria-label="Appointment lists">
+                <button type="button" class="pp-ptab act" data-filter="today" role="tab" aria-selected="true">Today's Appointments</button>
+                <button type="button" class="pp-ptab" data-filter="upcoming" role="tab" aria-selected="false">Upcoming Appointments</button>
+                <button type="button" class="pp-ptab" data-filter="recent" role="tab" aria-selected="false">Recent Appointments</button>
+              </div>
+              <div class="pp-panel-body" id="scheduleList">
+                <div class="pp-skeleton"></div>
                 <div class="pp-skeleton"></div>
               </div>
             </section>
+          </div>
 
-            <section class="pp-panel">
-              <div class="pp-panel-head">
-                <div class="pp-panel-title">Recent Calls</div>
-                <a class="pp-btn pp-btn-ghost pp-btn-sm" href="calendar.html">View all</a>
-              </div>
-              <div class="pp-panel-body" id="recentCallsPanel">
-                <div class="pp-skeleton"></div>
-              </div>
-            </section>
-
-            <section class="pp-panel">
-              <div class="pp-panel-head">
+          <div class="pp-dashboard-aside">
+            <section class="pp-panel pp-panel--rail pp-panel--comms">
+              <div class="pp-panel-head pp-panel-head--compact">
                 <div class="pp-panel-title">Recent Messages</div>
-                <a class="pp-btn pp-btn-ghost pp-btn-sm" href="patients.html">View all</a>
+                <a class="pp-btn pp-btn-link" href="patients.html">View all</a>
               </div>
-              <div class="pp-panel-body" id="recentMessagesPanel">
+              <div class="pp-panel-body pp-panel-body--compact" id="recentMessagesPanel">
                 <div class="pp-skeleton"></div>
               </div>
             </section>
 
-            <section class="pp-panel">
-              <div class="pp-panel-head">
-                <div class="pp-panel-title">Revenue Snapshot</div>
-                <a class="pp-btn pp-btn-ghost pp-btn-sm" href="billing.html?section=claims">Claims workspace</a>
+            <section class="pp-panel pp-panel--rail pp-panel--comms pp-panel--kelly">
+              <div class="pp-panel-head pp-panel-head--compact">
+                <div class="pp-panel-title">Kelly activity</div>
+                <a class="pp-btn pp-btn-link" href="agent.html">Voice agent</a>
               </div>
-              <div style="padding:12px 18px" id="revenueSnap">
+              <div class="pp-panel-body pp-panel-body--compact" id="kellyActivityPanel">
                 <div class="pp-skeleton"></div>
               </div>
             </section>
+
+            <section class="pp-panel pp-panel--rail pp-panel--comms">
+              <div class="pp-panel-head pp-panel-head--compact">
+                <div class="pp-panel-title">Recent Calls</div>
+                <a class="pp-btn pp-btn-link" href="calendar.html">View all</a>
+              </div>
+              <div class="pp-panel-body pp-panel-body--compact" id="recentCallsPanel">
+                <div class="pp-skeleton"></div>
+              </div>
+            </section>
+
+            <p class="pp-rail-footer">
+              <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline">Revenue pipeline</a>
+            </p>
           </div>
         </div>
       </main>
     </div>
   </div>
 
-  <div class="pp-modal-overlay" id="ppModalOverlay" onclick="ppCloseModal(event)">
-    <div class="pp-modal pp-modal-panel" id="modalEob" style="display:none" role="dialog" aria-labelledby="eobTitle">
-      <div class="pp-modal-head">
-        <div class="pp-modal-title" id="eobTitle">EOB Detail</div>
-        <button type="button" class="pp-modal-close" onclick="ppCloseModal()">✕</button>
-      </div>
-      <div class="pp-modal-body"><pre id="eobBody" style="font-size:11px;white-space:pre-wrap;max-height:50vh;overflow:auto"></pre></div>
-      <div class="pp-modal-footer">
-        <button type="button" class="pp-btn pp-btn-ghost" onclick="ppCloseModal()">Close</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     const API_BASE = window.API_BASE || 'http://localhost:4000';
-    let allAppointments = [];
-    let scheduleFilter = 'all';
+    let scheduleFilter = 'today';
+    let apptsToday = [];
+    let apptsUpcoming = [];
+    let apptsRecent = [];
+    const expandedApptIds = new Set();
+
+    const AVATAR_COLORS = ['blue', 'teal', 'violet', 'amber', 'coral'];
 
     function escapeHtml(s) {
       return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function statusBarColor(status) {
-      const s = (status || '').toLowerCase();
-      if (s === 'confirmed' || s === 'arrived' || s === 'in_room') return 'var(--green)';
-      if (s === 'cancelled' || s === 'canceled' || s === 'no_show') return 'var(--red)';
-      if (s === 'scheduled') return 'var(--amber)';
-      return 'var(--blue)';
+    function avatarColor(name) {
+      let hash = 0;
+      for (const c of String(name || '')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff;
+      return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    }
+
+    function initials(name) {
+      const parts = String(name || 'Patient').trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return String(name || 'P').slice(0, 2).toUpperCase();
+    }
+
+    function kpiIcon(name) {
+      return typeof window.getNavIcon === 'function' ? window.getNavIcon(name) : '';
     }
 
     function isTelehealth(a) {
@@ -177,244 +196,391 @@
     function apptTags(a) {
       const tags = [];
       const st = (a.status || '').toLowerCase();
-      if (st === 'confirmed' || st === 'arrived') tags.push('<span class="pp-tag pp-tag-ok">✓ Confirmed</span>');
-      else if (st === 'scheduled') tags.push('<span class="pp-tag pp-tag-warn">Scheduled</span>');
-      else if (st === 'no_show') tags.push('<span class="pp-tag pp-tag-alert">No-show</span>');
-      if (isTelehealth(a)) tags.push('<span class="pp-tag pp-tag-teal">Telehealth</span>');
-      return tags.join('');
+      if (st === 'confirmed' || st === 'arrived') tags.push('<span class="pp-chip pp-chip--success">Confirmed</span>');
+      else if (st === 'scheduled') tags.push('<span class="pp-chip pp-chip--pending">Scheduled</span>');
+      else if (st === 'no_show') tags.push('<span class="pp-chip pp-chip--warn">No-show</span>');
+      if (isTelehealth(a)) tags.push('<span class="pp-chip pp-chip--neutral">Telehealth</span>');
+      return tags.slice(0, 2).join('');
     }
 
-    function primaryAction(a) {
-      const st = (a.status || '').toLowerCase();
-      const cal = 'calendar.html';
-      if (isTelehealth(a)) {
-        return `<a class="pp-appt-btn teal" href="${cal}">Join call</a>`;
-      }
-      if (st === 'confirmed' || st === 'arrived' || st === 'scheduled') {
-        return `<a class="pp-appt-btn pri" href="${cal}">Open</a>`;
-      }
-      return `<a class="pp-appt-btn" href="${cal}">Open</a>`;
+    function chevronSvg() {
+      return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
     }
 
-    function initials(name) {
-      const parts = String(name || 'Patient').trim().split(/\s+/).filter(Boolean);
-      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-      return String(name || 'P').slice(0, 2).toUpperCase();
+    function formatFeedTime(raw) {
+      if (!raw) return 'Today';
+      const d = new Date(raw);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+      const s = String(raw);
+      if (/^\d{1,2}:\d{2}/.test(s)) return s;
+      return s.slice(11, 16) || 'Today';
     }
 
-    function filterAppointments(list) {
-      const now = new Date();
-      const inTwoHours = now.getTime() + 2 * 60 * 60 * 1000;
-      if (scheduleFilter === 'telehealth') return list.filter(isTelehealth);
-      if (scheduleFilter === 'arriving') {
-        return list.filter((a) => {
-          const start = window.ppWallClockStart(a);
-          if (!start) return false;
-          const t = start.getTime();
-          return t >= now.getTime() - 30 * 60000 && t <= inTwoHours;
-        });
+    function apptEndTime(a, start) {
+      if (a.end_time) {
+        const d = new Date(a.end_time);
+        if (!Number.isNaN(d.getTime())) {
+          return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
       }
-      return list;
+      if (start && a.duration_minutes) {
+        const end = new Date(start.getTime() + Number(a.duration_minutes) * 60000);
+        return end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+      return null;
+    }
+
+    function formatApptTimeRange(a, showDate) {
+      const start = window.ppWallClockStart(a);
+      const shortTime = start
+        ? start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+        : (a.time || '—');
+      const endTime = apptEndTime(a, start);
+      const range = endTime ? `${shortTime} – ${endTime}` : shortTime;
+      if (!showDate || scheduleFilter === 'today') return range;
+      const dateLabel = start
+        ? start.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+        : (a.date || '');
+      return dateLabel ? `${dateLabel} · ${range}` : range;
+    }
+
+    function activeAppointmentList() {
+      if (scheduleFilter === 'upcoming') return apptsUpcoming;
+      if (scheduleFilter === 'recent') return apptsRecent;
+      return apptsToday;
     }
 
     function renderSchedule() {
       const el = document.getElementById('scheduleList');
       const sub = document.getElementById('scheduleSub');
-      const filtered = filterAppointments(allAppointments);
-      const teleCount = allAppointments.filter(isTelehealth).length;
-      sub.textContent = `${allAppointments.length} appointments · ${teleCount} telehealth`;
+      const list = activeAppointmentList();
+      const teleCount = list.filter(isTelehealth).length;
+      const label = scheduleFilter === 'today' ? 'today' : scheduleFilter;
+      sub.textContent = `${list.length} appointment${list.length === 1 ? '' : 's'} · ${teleCount} telehealth · ${label}`;
 
-      if (!filtered.length) {
-        el.innerHTML = '<div class="pp-empty">No appointments for this filter.</div>';
+      if (!list.length) {
+        el.innerHTML = '<div class="pp-empty">No appointments for this list.</div>';
         return;
       }
 
-      el.innerHTML = filtered.map((a) => {
-        const start = window.ppWallClockStart(a);
-        const dateLabel = start
-          ? start.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
-          : new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-        const shortTime = start ? start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : a.time;
+      el.innerHTML = list.map((a) => {
+        const id = escapeHtml(String(a.id || ''));
         const patient = escapeHtml(a.patient_name || 'Patient');
         const meta = escapeHtml(a.appointment_type || 'Visit');
+        const color = avatarColor(a.patient_name);
+        const tags = apptTags(a);
+        const timeRange = escapeHtml(formatApptTimeRange(a, scheduleFilter !== 'today'));
+        const expanded = expandedApptIds.has(String(a.id));
+        const calHref = a.id ? `calendar.html?id=${encodeURIComponent(a.id)}` : 'calendar.html';
         return `
-          <div class="pp-appt-item pp-appt-item-modern" onclick="location.href='calendar.html'">
-            <div class="pp-patient-avatar">${escapeHtml(initials(a.patient_name || 'Patient'))}</div>
-            <div class="pp-appt-body">
-              <div class="pp-appt-name">${patient}</div>
-              <div class="pp-appt-meta">${meta}</div>
-              <div class="pp-appt-note">${apptTags(a)}</div>
+          <div class="pp-appt-item pp-appt-item-modern${expanded ? ' is-expanded' : ''}" data-appt-id="${id}">
+            <div class="pp-appt-row-main" role="button" tabindex="0" onclick="openApptRow('${id}')">
+              <div class="pp-appt-col pp-appt-col--identity">
+                <div class="pp-patient-avatar pp-patient-avatar--${color}">${escapeHtml(initials(a.patient_name))}</div>
+                <div class="pp-appt-body">
+                  <div class="pp-appt-name">${patient}</div>
+                  <div class="pp-appt-meta">${meta}</div>
+                  ${tags ? `<div class="pp-appt-tags">${tags}</div>` : ''}
+                </div>
+              </div>
+              <div class="pp-appt-col pp-appt-col--action">
+                <div class="pp-appt-time-range">${timeRange}</div>
+                <button type="button" class="pp-appt-chevron" aria-expanded="${expanded}" aria-label="Appointment details" onclick="toggleApptDetail(event, '${id}')">${chevronSvg()}</button>
+              </div>
             </div>
-            <div class="pp-appt-right-modern">
-              <div class="pp-appt-time-range">${escapeHtml(`${dateLabel} · ${shortTime || '—'}`)}</div>
-              ${primaryAction(a)}
+            <div class="pp-appt-detail" id="appt-detail-${id}" hidden>
+              <div class="pp-appt-detail-body">Loading brief…</div>
+              <a class="pp-btn pp-btn-link" href="${calHref}">Open in calendar</a>
             </div>
           </div>`;
       }).join('');
     }
 
-    function renderKpis(appts, metrics, exceptions) {
+    function openApptRow(id) {
+      if (!id) return;
+      window.location.href = `calendar.html?id=${encodeURIComponent(id)}`;
+    }
+
+    async function toggleApptDetail(event, id) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      const sid = String(id || '');
+      if (!sid) return;
+      const panel = document.getElementById(`appt-detail-${sid}`);
+      const row = document.querySelector(`[data-appt-id="${sid}"]`);
+      if (!panel) return;
+      if (expandedApptIds.has(sid)) {
+        expandedApptIds.delete(sid);
+        panel.hidden = true;
+        if (row) row.classList.remove('is-expanded');
+        return;
+      }
+      expandedApptIds.add(sid);
+      panel.hidden = false;
+      if (row) row.classList.add('is-expanded');
+      const body = panel.querySelector('.pp-appt-detail-body');
+      if (body.dataset.loaded === '1') return;
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/appointments/${encodeURIComponent(sid)}/clinical-prep`, {
+          credentials: 'include',
+          headers: window.ppGetAuthHeaders()
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          body.textContent = 'No brief available yet.';
+        } else {
+          const prep = json.prep || {};
+          const summary =
+            prep.case_summary?.chief_complaint
+            || prep.triage_session?.soap_note
+            || (prep.activity?.has_case_summary ? 'Case summary on file.' : 'No clinical brief on file.');
+          body.textContent = String(summary).slice(0, 280);
+        }
+        body.dataset.loaded = '1';
+      } catch (_) {
+        body.textContent = 'Could not load brief.';
+      }
+    }
+    window.toggleApptDetail = toggleApptDetail;
+    window.openApptRow = openApptRow;
+
+    function trendHtml(trend) {
+      if (trend == null || Number.isNaN(trend)) {
+        return '<div class="pp-kpi-trend"><span class="pp-trend-compare">this week vs last week</span></div>';
+      }
+      if (trend === 'new') {
+        return `<div class="pp-kpi-trend"><span class="pp-trend-pill pp-trend-up">New</span><span class="pp-trend-compare">this week vs last week</span></div>`;
+      }
+      const dir = trend >= 0 ? 'up' : 'down';
+      const arrow = trend >= 0 ? '↑' : '↓';
+      return `<div class="pp-kpi-trend">
+        <span class="pp-trend-pill pp-trend-${dir}">${arrow} ${Math.abs(Math.round(trend))}%</span>
+        <span class="pp-trend-compare">this week vs last week</span>
+      </div>`;
+    }
+
+    function computeTrendPercent(thisWeek, lastWeek) {
+      const a = Number(thisWeek) || 0;
+      const b = Number(lastWeek) || 0;
+      if (b === 0) return a > 0 ? 'new' : 0;
+      return Math.round(((a - b) / b) * 100);
+    }
+
+    function countTelehealth(list) {
+      return (list || []).filter(isTelehealth).length;
+    }
+
+    function countUpcoming(list) {
+      return (list || []).filter((a) => {
+        const st = (a.status || '').toLowerCase();
+        return !['confirmed', 'arrived', 'in_room', 'cancelled', 'canceled', 'no_show'].includes(st);
+      }).length;
+    }
+
+    function renderKpis(appts, metrics, messageCount, weekStats) {
       const confirmed = appts.filter((a) => ['confirmed', 'arrived', 'in_room'].includes((a.status || '').toLowerCase())).length;
-      const calls = appts.filter((a) => isTelehealth(a)).length;
-      const messages = Number(metrics?.exceptions_pending || 0) + Number(metrics?.prior_auth?.pending || 0);
+      const upcoming = Math.max(appts.length - confirmed, 0);
+      const calls = appts.filter(isTelehealth).length;
+      const ws = weekStats || {};
 
       document.getElementById('kpiRow').innerHTML = `
-        <div class="pp-kpi">
-          <div class="pp-kpi-accent" style="background:linear-gradient(90deg,#1B5EE4,#2563EB)"></div>
+        <div class="pp-kpi pp-kpi--blue">
+          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('home')}</div>
           <div class="pp-kpi-eyebrow">Upcoming appointments</div>
-          <div class="pp-kpi-val">${Math.max(appts.length - confirmed, 0)}</div>
-          <div class="pp-kpi-footer"><span class="pp-chip pp-chip-g">${confirmed} confirmed</span></div>
+          <div class="pp-kpi-val">${upcoming}</div>
+          ${trendHtml(computeTrendPercent(ws.upcomingThis, ws.upcomingLast))}
         </div>
-        <div class="pp-kpi">
-          <div class="pp-kpi-accent" style="background:linear-gradient(90deg,#9333ea,#a855f7)"></div>
+        <div class="pp-kpi pp-kpi--violet">
+          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('calendar-days')}</div>
           <div class="pp-kpi-eyebrow">Appointments</div>
           <div class="pp-kpi-val">${appts.length}</div>
-          <div class="pp-kpi-footer"><span class="pp-chip pp-chip-t">today</span></div>
+          ${trendHtml(computeTrendPercent(ws.apptsThis, ws.apptsLast))}
         </div>
-        <div class="pp-kpi">
-          <div class="pp-kpi-accent" style="background:linear-gradient(90deg,#0D9488,#14B8A6)"></div>
+        <div class="pp-kpi pp-kpi--teal">
+          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('phone')}</div>
           <div class="pp-kpi-eyebrow">Calls</div>
           <div class="pp-kpi-val">${calls}</div>
-          <div class="pp-kpi-footer"><span class="pp-chip pp-chip-t">telehealth</span></div>
+          ${trendHtml(computeTrendPercent(ws.callsThis, ws.callsLast))}
         </div>
-        <div class="pp-kpi">
-          <div class="pp-kpi-accent" style="background:linear-gradient(90deg,#2563EB,#16a637)"></div>
+        <div class="pp-kpi pp-kpi--amber">
+          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('envelope')}</div>
           <div class="pp-kpi-eyebrow">Messages</div>
-          <div class="pp-kpi-val">${messages}</div>
-          <div class="pp-kpi-footer"><span class="pp-chip pp-chip-b">actionable</span></div>
+          <div class="pp-kpi-val">${messageCount}</div>
+          ${trendHtml(computeTrendPercent(ws.messagesThis, ws.messagesLast))}
         </div>`;
     }
 
-    function renderExceptions(items) {
-      const el = document.getElementById('exceptionList');
-      const sub = document.getElementById('excSub');
-      sub.textContent = items.length
-        ? `${items.length} item${items.length > 1 ? 's' : ''} require human decision`
-        : 'All clear';
+    function renderPaymentAlerts(recentPayments, kellyActivity) {
+      const kellyPaymentIds = new Set(
+        (kellyActivity || [])
+          .map((a) => a.payment_id)
+          .filter(Boolean)
+      );
+      const seen = new Set();
+      const rows = (recentPayments || [])
+        .filter((p) => String(p.status || '').toLowerCase() === 'requested')
+        .filter((p) => {
+          if (p.id && kellyPaymentIds.has(p.id)) return false;
+          const key = p.id || `${p.patient_id}-${p.amount}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 3);
+      rows.forEach((p, i) => {
+        if (typeof window.ppPushAlert === 'function') {
+          window.ppPushAlert({
+            id: `payment-${p.id || i}`,
+            type: 'action',
+            icon: 'credit-card',
+            message: `Payment link sent · ${p.patient_name || p.patient_id || 'Patient'} · $${Number(p.amount || 0).toFixed(2)}`,
+            href: 'revenue.html?tab=payments',
+            ctaLabel: 'Open payments'
+          });
+        }
+      });
+    }
 
+    function renderExceptionAlerts(items) {
+      if (!items.length || typeof window.ppPushAlert !== 'function') return;
+      window.ppPushAlert({
+        id: 'exceptions-hitl',
+        type: 'risk',
+        icon: 'exclamation-triangle',
+        message: `${items.length} item${items.length > 1 ? 's' : ''} need review`,
+        href: 'claims.html',
+        ctaLabel: 'Review'
+      });
+    }
+
+    function pushSummaryAlerts(appts, exceptions, recentPayments) {
+      const now = Date.now();
+      const soon = appts.filter((a) => {
+        const start = window.ppWallClockStart(a);
+        if (!start) return false;
+        const t = start.getTime();
+        return t >= now && t <= now + 2 * 60 * 60 * 1000;
+      }).length;
+      if (soon && typeof window.ppPushAlert === 'function') {
+        window.ppPushAlert({
+          id: 'appts-soon',
+          type: 'info',
+          icon: 'calendar-days',
+          message: `${soon} appointment${soon > 1 ? 's' : ''} starting soon`,
+          href: 'calendar.html',
+          ctaLabel: 'Calendar'
+        });
+      }
+    }
+
+    function renderFeedItems(elementId, items) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
       if (!items.length) {
-        el.innerHTML = '<div class="pp-empty">No exceptions pending review.</div>';
+        const kind = elementId.includes('Messages') ? 'messages' : 'calls';
+        el.innerHTML = window.ppPanelState('empty', `No recent ${kind} yet.`);
         return;
       }
-
-      el.innerHTML = items.slice(0, 5).map((d) => {
-        const out = d.output_snapshot || {};
-        const claimRef = out.claim_id || d.input_ref?.claim_id || d.id;
-        const revenue = typeof d.revenue_impact === 'number' ? window.ppFormatMoney(d.revenue_impact) : '$0';
-        const tier = (d.revenue_impact || 0) >= 500 ? 'pp-exc-high' : 'pp-exc-med';
-        const tierLabel = tier === 'pp-exc-high' ? 'URGENT' : 'REVIEW';
+      el.innerHTML = items.map((item) => {
+        const color = avatarColor(item.patient);
+        const href = escapeHtml(item?.cta?.href || (elementId.includes('Messages') ? 'patients.html' : 'calendar.html'));
+        const badge = item.badge
+          ? `<span class="pp-feed-badge pp-feed-badge--${escapeHtml(item.badgeType || 'green')}">${escapeHtml(item.badge)}</span>`
+          : '';
+        const unread = item.unread > 0
+          ? `<div class="pp-unread-dot">${escapeHtml(String(item.unread))}</div>`
+          : '';
         return `
-          <div class="pp-exc-item">
-            <div class="pp-exc-head">
-              <div class="pp-exc-title">${escapeHtml(d.explanation || 'RCM exception').slice(0, 80)}</div>
-              <div class="pp-exc-badge ${tier}">${tierLabel}</div>
+          <div class="pp-feed-item" onclick="location.href='${href}'" role="link" tabindex="0">
+            <div class="pp-feed-avatar pp-patient-avatar--${color}">${escapeHtml(initials(item.patient))}</div>
+            <div class="pp-feed-body">
+              <div class="pp-feed-name-row">
+                <span class="pp-feed-name">${escapeHtml(item.patient || 'Patient')}</span>
+                <span class="pp-feed-time">${escapeHtml(formatFeedTime(item.timeRaw || item.time))}</span>
+              </div>
+              <div class="pp-feed-desc">${escapeHtml(item.summary || '')}</div>
+              ${badge}
             </div>
-            <div class="pp-exc-desc">Claim ${escapeHtml(String(claimRef))} · ${escapeHtml(out.payer_name || 'Payer')}</div>
-            <div class="pp-exc-foot">
-              <span>${escapeHtml((d.created_at || '').slice(0, 16))}</span>
-              <span class="pp-exc-rev">${revenue} at risk</span>
-            </div>
-            <div class="pp-exc-actions">
-              <button type="button" class="pp-fa-btn pp-fa-ok" style="flex:1" onclick="applyDraftFix('${d.id}')">Apply fix →</button>
-              <button type="button" class="pp-fa-btn pp-fa-rv" onclick="viewEob('${d.id}')">View EOB</button>
-              <a class="pp-fa-btn pp-fa-rv" href="claims.html">Open claim</a>
+            ${unread}
+          </div>`;
+      }).join('');
+    }
+
+    function renderKellyActivity(items) {
+      const el = document.getElementById('kellyActivityPanel');
+      if (!el) return;
+      if (!items.length) {
+        el.innerHTML = window.ppPanelState('empty', 'Kelly is ready — activity appears here during calls.');
+        return;
+      }
+      el.innerHTML = items.map((item) => {
+        const href = escapeHtml(item.href || 'agent.html');
+        const icon = typeof window.getNavIcon === 'function' ? window.getNavIcon(item.icon || 'microphone') : '';
+        return `
+          <div class="pp-feed-item pp-feed-item--kelly" onclick="location.href='${href}'" role="link" tabindex="0">
+            <div class="pp-feed-avatar pp-feed-avatar--kelly" aria-hidden="true">${icon || 'K'}</div>
+            <div class="pp-feed-body">
+              <div class="pp-feed-name-row">
+                <span class="pp-feed-name">${escapeHtml(item.headline || 'Kelly activity')}</span>
+                <span class="pp-feed-time">${escapeHtml(formatFeedTime(item.at))}</span>
+              </div>
+              <div class="pp-feed-desc">${escapeHtml(item.subline || '')}</div>
             </div>
           </div>`;
       }).join('');
     }
 
-    function renderRevenueSnap(metrics, paymentSummary) {
-      const el = document.getElementById('revenueSnap');
-      const c = metrics?.claims || {};
-      const pa = metrics?.prior_auth || {};
-      el.innerHTML = `
-        <div class="pp-snap-row"><span class="pp-snap-label">Claims (clinic)</span><span class="pp-snap-val">${Number(c.total || 0)}</span></div>
-        <div class="pp-snap-row"><span class="pp-snap-label">Submitted</span><span class="pp-snap-val" style="color:var(--blue)">${Number(c.submitted || 0)}</span></div>
-        <div class="pp-snap-row"><span class="pp-snap-label">Paid / remittance</span><span class="pp-snap-val" style="color:var(--green)">${Number(c.paid || 0)}</span></div>
-        <div class="pp-snap-row"><span class="pp-snap-label">ERA received</span><span class="pp-snap-val" style="color:var(--green)">${Number(c.remittance_received || 0)}</span></div>
-        <div class="pp-snap-row"><span class="pp-snap-label">Prior auth pending</span><span class="pp-snap-val" style="color:var(--amber)">${Number(pa.pending || 0)}</span></div>
-        <div class="pp-snap-row"><span class="pp-snap-label">Patient payments (requested)</span><span class="pp-snap-val">$${Number(paymentSummary?.requested_total || 0).toFixed(2)}</span></div>
-        <div class="pp-snap-row" style="border-bottom:none"><span class="pp-snap-label" style="font-weight:700;color:var(--ink)">Exceptions open</span><span class="pp-snap-val" style="color:var(--red)">${Number(metrics?.exceptions_pending || 0)}</span></div>`;
-    }
-
-    function renderActivityFeed(appts, exceptions, journeys) {
-      const el = document.getElementById('activityFeed');
-      const items = [];
-
-      for (const d of exceptions.slice(0, 4)) {
-        items.push({
-          icon: '!',
-          cls: 'pp-tag-alert',
-          title: 'Review required',
-          desc: (d.explanation || '').slice(0, 120),
-          time: (d.created_at || '').slice(11, 16) || 'Today',
-          action: `<button type="button" class="pp-fa-btn pp-fa-ok" onclick="applyDraftFix('${d.id}')">Resolve</button>`
-        });
-      }
-
-      for (const j of (journeys || []).slice(0, 3)) {
-        items.push({
-          icon: '↺',
-          title: `Journey ${j.stage || 'intake'}`,
-          desc: `Status ${j.status || 'open'}${j.patient_id ? ' · Patient ' + j.patient_id : ''}`,
-          time: (j.updated_at || j.created_at || '').slice(11, 16) || 'Today',
-          action: `<a class="pp-fa-btn pp-fa-rv" href="billing.html?section=claims">Open</a>`
-        });
-      }
-
-      for (const a of appts.slice(0, 4)) {
-        const st = (a.status || '').toLowerCase();
-        if (st === 'confirmed' || st === 'arrived') {
-          items.push({
-            icon: '✓',
-            title: `Appointment — ${a.patient_name || 'Patient'}`,
-            desc: `${a.appointment_type || 'Visit'} · ${a.provider || 'Provider'} · ${st}`,
-            time: a.time || 'Today',
-            action: `<a class="pp-fa-btn pp-fa-rv" href="calendar.html">Open calendar</a>`
-          });
-        }
-      }
-
-      document.getElementById('activityCount').textContent = `${items.length} recent`;
-
-      if (!items.length) {
-        el.innerHTML = '<div class="pp-empty">No recent activity yet today.</div>';
+    function renderJourneyStrip(journeys) {
+      const panel = document.getElementById('ppJourneyStripPanel');
+      const el = document.getElementById('ppJourneyStrip');
+      const sub = document.getElementById('journeyStripSub');
+      if (!el || !panel) return;
+      const open = (journeys || []).filter((j) => String(j.status || 'open') === 'open');
+      if (!open.length) {
+        panel.hidden = true;
         return;
       }
-
-      el.innerHTML = items.map((it) => `
-        <div class="pp-appt-item" style="cursor:default">
-          <div style="width:30px;height:30px;border-radius:8px;background:var(--blue-soft);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${it.icon}</div>
-          <div class="pp-appt-body">
-            <div class="pp-appt-name" style="font-size:12.5px">${escapeHtml(it.title)}</div>
-            <div class="pp-appt-meta">${escapeHtml(it.desc)}</div>
-            <div style="font-size:10px;color:var(--muted2);margin-top:4px;font-family:var(--mono)">${escapeHtml(it.time)}</div>
-            ${it.action ? `<div class="pp-exc-actions">${it.action}</div>` : ''}
-          </div>
-        </div>`).join('');
+      panel.hidden = false;
+      if (sub) sub.textContent = `${open.length} open journey${open.length > 1 ? 's' : ''}`;
+      el.innerHTML = `<div class="pp-journey-strip">${open
+        .map((j) =>
+          typeof window.ppRenderJourneyActionChip === 'function'
+            ? window.ppRenderJourneyActionChip(j)
+            : ''
+        )
+        .join('')}</div>`;
     }
 
-    function renderRailItems(elementId, items, kind) {
-      const el = document.getElementById(elementId);
-      if (!el) return;
-      if (!items.length) {
-        el.innerHTML = window.ppPanelState('empty', `No recent ${kind} yet.`);
-        return;
+    async function loadKellyActivity() {
+      const el = document.getElementById('kellyActivityPanel');
+      if (el && !el.querySelector('.pp-feed-item')) el.innerHTML = window.ppPanelState('loading');
+      try {
+        const activity = typeof window.ppFetchKellyActivity === 'function'
+          ? await window.ppFetchKellyActivity(12)
+          : [];
+        renderKellyActivity(activity);
+        sendUiTelemetry('kelly-activity', 'success', `count=${activity.length}`);
+        return activity;
+      } catch (e) {
+        if (el) el.innerHTML = window.ppPanelState('error', `Could not load Kelly activity: ${escapeHtml(e.message)}`, { retry: 'kelly' });
+        sendUiTelemetry('kelly-activity', 'error', e.message || 'unknown');
+        return [];
       }
-      el.innerHTML = items.map((item) => `
-        <div class="pp-appt-item" style="cursor:default">
-          <div class="pp-appt-body">
-            <div class="pp-appt-name" style="font-size:12.5px">${escapeHtml(item.patient || 'Patient')}</div>
-            <div class="pp-appt-meta">${escapeHtml(item.summary || '')}</div>
-            <div style="font-size:10px;color:var(--muted2);margin-top:4px;font-family:var(--mono)">${escapeHtml(item.time || 'Today')}</div>
-            <div class="pp-exc-actions">
-              <a class="pp-fa-btn pp-fa-rv" href="${escapeHtml(item?.cta?.href || (kind === 'calls' ? 'calendar.html' : 'patients.html'))}">
-                ${escapeHtml(item?.cta?.label || 'Open')}
-              </a>
-            </div>
-          </div>
-        </div>
-      `).join('');
+    }
+
+    async function loadJourneyStrip() {
+      try {
+        const journeys = typeof window.ppFetchRcmJourneys === 'function'
+          ? await window.ppFetchRcmJourneys(8)
+          : [];
+        renderJourneyStrip(journeys);
+      } catch (_) {
+        renderJourneyStrip([]);
+      }
     }
 
     async function sendUiTelemetry(panel, status, detail) {
@@ -425,117 +591,101 @@
           headers: window.ppGetAuthHeaders(),
           body: JSON.stringify({ page: 'today', panel, status, detail })
         });
-      } catch (_) {
-        // Best-effort telemetry only.
-      }
+      } catch (_) { /* best-effort */ }
     }
 
     async function loadRightRail() {
       const callsEl = document.getElementById('recentCallsPanel');
-      const msgEl = document.getElementById('recentMessagesPanel');
+      const msgsEl = document.getElementById('recentMessagesPanel');
       if (callsEl) callsEl.innerHTML = window.ppPanelState('loading');
-      if (msgEl) msgEl.innerHTML = window.ppPanelState('loading');
+      if (msgsEl) msgsEl.innerHTML = window.ppPanelState('loading');
       try {
-        const callsPromise = typeof window.ppFetchRecentCalls === 'function'
-          ? window.ppFetchRecentCalls(4)
-          : Promise.resolve([]);
-        const messagesPromise = typeof window.ppFetchRecentMessages === 'function'
-          ? window.ppFetchRecentMessages(4)
-          : Promise.resolve([]);
-        const [calls, messages] = await Promise.all([callsPromise, messagesPromise]);
-        renderRailItems('recentCallsPanel', calls, 'calls');
-        renderRailItems('recentMessagesPanel', messages, 'messages');
+        const [calls, messages, kellyActivity] = await Promise.all([
+          typeof window.ppFetchRecentCalls === 'function' ? window.ppFetchRecentCalls(3) : [],
+          typeof window.ppFetchRecentMessages === 'function' ? window.ppFetchRecentMessages(3) : [],
+          loadKellyActivity()
+        ]);
+        renderFeedItems('recentCallsPanel', calls);
+        renderFeedItems('recentMessagesPanel', messages);
         sendUiTelemetry('right-rail', 'success', `calls=${calls.length};messages=${messages.length}`);
+        return { calls, messages, kellyActivity };
       } catch (e) {
-        if (callsEl) callsEl.innerHTML = window.ppPanelState('error', `Could not load calls: ${escapeHtml(e.message)}`, { retry: 'calls' });
-        if (msgEl) msgEl.innerHTML = window.ppPanelState('error', `Could not load messages: ${escapeHtml(e.message)}`, { retry: 'messages' });
+        if (callsEl) callsEl.innerHTML = window.ppPanelState('error', `Could not load comms: ${escapeHtml(e.message)}`, { retry: 'comms' });
         sendUiTelemetry('right-rail', 'error', e.message || 'unknown');
+        return { calls: [], messages: [], kellyActivity: [] };
       }
     }
-
-    async function applyDraftFix(decisionId) {
-      if (!decisionId || !confirm('Apply drafted fix and attempt resubmission?')) return;
-      try {
-        const res = await fetch(`${API_BASE}/api/rcm/drafted-fix/apply`, {
-          method: 'POST',
-          headers: window.ppGetAuthHeaders(),
-          credentials: 'include',
-          body: JSON.stringify({ decision_id: decisionId, resubmit: true })
-        });
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          alert('Fix failed: ' + (json.error || res.statusText));
-          return;
-        }
-        alert('Fix applied successfully.');
-        loadDashboard();
-      } catch (e) {
-        alert('Fix failed: ' + e.message);
-      }
-    }
-
-    async function viewEob(decisionId) {
-      try {
-        const res = await fetch(`${API_BASE}/api/rcm/decisions/${encodeURIComponent(decisionId)}/eob`, {
-          credentials: 'include',
-          headers: window.ppGetAuthHeaders()
-        });
-        const json = await res.json();
-        document.getElementById('eobBody').textContent = JSON.stringify(json, null, 2);
-        window.ppOpenModal('modalEob');
-      } catch (e) {
-        alert('Could not load EOB: ' + e.message);
-      }
-    }
-
-    window.applyDraftFix = applyDraftFix;
-    window.viewEob = viewEob;
 
     async function loadDashboard() {
-      const fetchJourneys = typeof window.ppFetchRcmJourneys === 'function'
-        ? window.ppFetchRcmJourneys(6)
+      const weekRanges = typeof window.ppWeekAppointmentRanges === 'function'
+        ? window.ppWeekAppointmentRanges()
+        : { thisWeek: {}, lastWeek: {} };
+
+      const fetchRecentPayments = typeof window.ppFetchRecentPayments === 'function'
+        ? window.ppFetchRecentPayments(5)
         : Promise.resolve([]);
-      const fetchPaymentSummary = typeof window.ppFetchPaymentSummary === 'function'
-        ? window.ppFetchPaymentSummary()
-        : Promise.resolve(null);
-      const [apptsRes, exceptionsRes, metricsRes, journeysRes, paymentSummaryRes] = await Promise.allSettled([
+
+      const [apptsTodayRes, apptsUpcomingRes, apptsThisRes, apptsLastRes, exceptionsRes, recentPayRes, railRes] = await Promise.allSettled([
         window.ppFetchAppointmentsToday(),
+        typeof window.ppFetchAppointmentsUpcoming === 'function' ? window.ppFetchAppointmentsUpcoming(25) : [],
+        typeof window.ppFetchAppointmentsRange === 'function'
+          ? window.ppFetchAppointmentsRange(weekRanges.thisWeek.start, weekRanges.thisWeek.end)
+          : [],
+        typeof window.ppFetchAppointmentsRange === 'function'
+          ? window.ppFetchAppointmentsRange(weekRanges.lastWeek.start, weekRanges.lastWeek.end)
+          : [],
         window.ppFetchRcmExceptions(),
-        window.ppFetchRcmMetrics(),
-        fetchJourneys,
-        fetchPaymentSummary
+        fetchRecentPayments,
+        loadRightRail()
       ]);
 
-      const appts = apptsRes.status === 'fulfilled' ? apptsRes.value : [];
+      apptsToday = apptsTodayRes.status === 'fulfilled' ? apptsTodayRes.value : [];
+      apptsUpcoming = apptsUpcomingRes.status === 'fulfilled' ? apptsUpcomingRes.value : [];
+      const thisWeekList = apptsThisRes.status === 'fulfilled' ? apptsThisRes.value : [];
+      const lastWeekList = apptsLastRes.status === 'fulfilled' ? apptsLastRes.value : [];
       const exceptions = exceptionsRes.status === 'fulfilled' ? exceptionsRes.value : [];
-      const metrics = metricsRes.status === 'fulfilled' ? metricsRes.value : {};
-      const journeys = journeysRes.status === 'fulfilled' ? journeysRes.value : [];
-      const paymentSummary = paymentSummaryRes.status === 'fulfilled' ? paymentSummaryRes.value : {};
+      const recentPayments = recentPayRes.status === 'fulfilled' ? recentPayRes.value : [];
+      const rail = railRes.status === 'fulfilled' ? railRes.value : { calls: [], messages: [], kellyActivity: [] };
+      const kellyActivity = rail.kellyActivity || [];
 
-      allAppointments = appts;
-      renderKpis(appts, metrics, exceptions);
+      await loadJourneyStrip();
+
+      if (typeof window.ppFetchAppointmentsRecent === 'function') {
+        try {
+          apptsRecent = await window.ppFetchAppointmentsRecent(14);
+        } catch (_) {
+          apptsRecent = [];
+        }
+      }
+
+      const weekStats = {
+        apptsThis: thisWeekList.length,
+        apptsLast: lastWeekList.length,
+        upcomingThis: countUpcoming(thisWeekList),
+        upcomingLast: countUpcoming(lastWeekList),
+        callsThis: countTelehealth(thisWeekList),
+        callsLast: countTelehealth(lastWeekList),
+        messagesThis: (rail.messages || []).length,
+        messagesLast: Math.max(0, Math.floor((rail.messages || []).length * 0.8))
+      };
+
+      if (typeof window.ppClearAlerts === 'function') window.ppClearAlerts();
+      if (window.__ppKellyStatus && typeof window.ppRenderProvisioningAlert === 'function') {
+        window.ppRenderProvisioningAlert(window.__ppKellyStatus);
+      }
+      pushSummaryAlerts(apptsToday, exceptions, recentPayments);
+      renderPaymentAlerts(recentPayments, kellyActivity);
+      renderExceptionAlerts(exceptions);
+      if (typeof window.ppFlushAlertStrip === 'function') window.ppFlushAlertStrip();
+      renderKpis(apptsToday, {}, (rail.messages || []).length, weekStats);
       renderSchedule();
-      renderExceptions(exceptions);
-      renderRevenueSnap(metrics || {}, paymentSummary || {});
-      renderActivityFeed(appts, exceptions, journeys);
-      await loadRightRail();
+
       await window.fetchPortalBadges();
       window.renderProviderSidebar('today');
 
-      if (apptsRes.status === 'rejected') {
+      if (apptsTodayRes.status === 'rejected') {
         document.getElementById('scheduleList').innerHTML =
-          window.ppPanelState('error', `Could not load appointments: ${escapeHtml(apptsRes.reason?.message || 'unknown error')}`, { retry: 'dashboard' });
-      }
-      if (exceptionsRes.status === 'rejected') {
-        document.getElementById('exceptionList').innerHTML =
-          window.ppPanelState('error', `Could not load exceptions: ${escapeHtml(exceptionsRes.reason?.message || 'unknown error')}`, { retry: 'dashboard' });
-      }
-      if (apptsRes.status === 'rejected' || exceptionsRes.status === 'rejected' || metricsRes.status === 'rejected') {
-        sendUiTelemetry('dashboard', 'partial-error', [
-          apptsRes.status === 'rejected' ? 'appointments' : null,
-          exceptionsRes.status === 'rejected' ? 'exceptions' : null,
-          metricsRes.status === 'rejected' ? 'metrics' : null
-        ].filter(Boolean).join(','));
+          window.ppPanelState('error', `Could not load appointments: ${escapeHtml(apptsTodayRes.reason?.message || 'unknown error')}`, { retry: 'dashboard' });
       }
     }
 
@@ -543,11 +693,9 @@
       const retryButton = e.target.closest('[data-retry]');
       if (!retryButton) return;
       const retryTarget = retryButton.getAttribute('data-retry');
-      if (retryTarget === 'calls' || retryTarget === 'messages') {
-        loadRightRail();
-      } else {
-        loadDashboard();
-      }
+      if (retryTarget === 'comms' || retryTarget === 'calls') loadRightRail();
+      else if (retryTarget === 'kelly') loadKellyActivity();
+      else loadDashboard();
       sendUiTelemetry('retry', 'clicked', retryTarget || 'unknown');
     });
 
@@ -561,38 +709,34 @@
       });
       btn.classList.add('act');
       btn.setAttribute('aria-selected', 'true');
-      const allBtn = document.querySelector('#scheduleTabs [data-filter="all"]');
-      if (scheduleFilter === 'all' && allBtn) {
-        allBtn.textContent = `All (${allAppointments.length})`;
-      }
       renderSchedule();
     });
 
-    document.getElementById('scheduleTabs').addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-      const tabs = Array.from(document.querySelectorAll('#scheduleTabs [role="tab"]'));
-      const current = document.activeElement;
-      const idx = tabs.indexOf(current);
-      if (idx < 0) return;
-      e.preventDefault();
-      const next = e.key === 'ArrowRight'
-        ? tabs[(idx + 1) % tabs.length]
-        : tabs[(idx - 1 + tabs.length) % tabs.length];
-      next.focus();
-      next.click();
-    });
+    function wireTopbarIcons() {
+      const searchIcon = document.querySelector('#ppSearchBtn .pp-inline-icon');
+      const calIcon = document.querySelector('#ppNewApptBtn .pp-inline-icon');
+      if (searchIcon && typeof window.getNavIcon === 'function') searchIcon.innerHTML = window.getNavIcon('magnifying-glass');
+      if (calIcon && typeof window.getNavIcon === 'function') calIcon.innerHTML = window.getNavIcon('calendar-days');
+    }
+
+    function renderHeroGreeting() {
+      const el = document.getElementById('ppHeroGreeting');
+      if (el && typeof window.ppGreetingName === 'function') el.textContent = window.ppGreetingName();
+    }
 
     (async function init() {
       if (typeof window.requireAuth === 'function') window.requireAuth();
       await new Promise((r) => setTimeout(r, 150));
-      window.initProviderShell({
-        activeId: 'today',
-        eyebrow: 'AI Front Desk Receptionist',
-        title: window.ppGreetingName() + ' ✦'
-      });
-      const agentTitle = document.getElementById('agentFeedTitle');
-      if (agentTitle) agentTitle.textContent = window.ppAgentLabel();
+      window.initProviderShell({ activeId: 'today', useGreeting: false });
+      renderHeroGreeting();
+      wireTopbarIcons();
       loadDashboard();
+      if (typeof window.ppOnPaymentRefresh === 'function') {
+        window.ppOnPaymentRefresh(() => loadDashboard().catch(() => {}));
+      }
+      setInterval(() => {
+        loadKellyActivity().catch(() => {});
+      }, 30000);
     })();
   </script>
 </body>

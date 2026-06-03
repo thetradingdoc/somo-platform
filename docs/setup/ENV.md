@@ -23,7 +23,9 @@ Quick reference. Full narrative: [`docs/setup/README.md`](./README.md). Copy fro
 |-------|------|---------|
 | Database | `DB_PATH`, `SKIP_STARTUP_MIGRATIONS` | SQLite file; skip migrations for scripts/eval |
 | Kelly LLM | `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `KELLY_*` | Voice/chat turn loop, models, retries |
-| Retell | `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_VOICE_ID` | Phone agent config |
+| Kelly Phase C | `KELLY_LANG_MIN_CONFIDENCE`, `KELLY_ASR_MIN_CONFIDENCE`, `KELLY_ASR_DEBUG`, `KELLY_RAILS_ES_ENABLED`, `KELLY_OPQRST_ES_PACK` | Language handoff, ASR gate (debug logs metadata keys when `KELLY_ASR_DEBUG=1`), Spanish rails, OPQRST pack — [`KELLY_RAILS_PHASE_C_EXECUTION.md`](../../todos/pending/KELLY_RAILS_PHASE_C_EXECUTION.md) |
+| Voice SLO | `VOICE_SLO_MAX_AVG_WORDS`, `VOICE_SLO_MAX_MULTI_QUESTION_RATE`, `VOICE_SLO_MAX_REPHRASE_RATE`, `VOICE_SLO_MAX_INTERRUPTION_RATE`, `VOICE_SLO_MAX_TTFHR_MS` | Per-session voice quality thresholds |
+| Retell | `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_VOICE_ID`, `RETELL_VOICE_ID_ES`, `RETELL_AGENT_ID_ES` | Phone agent config |
 | Voice triage | `REQUIRE_TRIAGE_FOR_VOICE` | Enforce triage before booking tools |
 | Medical coding | `SEMANTIC_SEARCH_ENABLED`, `RAG_API_URL`, `PINECONE_*`, `REMOTE_RAG_TIMEOUT_MS`, `EVAL_USE_SEMANTIC` | Code retrieval; prod: `RAG_API_URL=disabled` |
 | Stedi / claims | `STEDI_*`, `STEDI_WEBHOOK_SECRET`, `STEDI_CLAIM_SUBMISSION_MODE` | 837P professional claims + webhook |

@@ -47,6 +47,37 @@ function _kellyToolDebug() {
   return process.env.KELLY_DEBUG === '1' || process.env.KELLY_DEBUG === 'true';
 }
 
+function _emitKellyActivityEvent({ sessionId, clinicId, patientId, eventType, payload = {} }) {
+  try {
+    db.insertKellyCallEvent?.({
+      session_id: sessionId || null,
+      event_type: eventType,
+      clinic_id: clinicId || null,
+      payload_json: {
+        clinic_id: clinicId || null,
+        patient_id: patientId || null,
+        ...payload,
+      },
+    });
+  } catch (_) {}
+}
+
+function _emitAppointmentBooked(ctx, appointment, extra = {}) {
+  if (!appointment?.id) return;
+  _emitKellyActivityEvent({
+    sessionId: ctx.sessionId,
+    clinicId: ctx.clinicId,
+    patientId: ctx.patientId || appointment.patient_id || null,
+    eventType: 'appointment_booked',
+    payload: {
+      appointment_id: appointment.id,
+      appointment_type: appointment.appointment_type || appointment.specialty || extra.appointment_type,
+      patient_name: appointment.patient_name || extra.patient_name,
+      ...extra,
+    },
+  });
+}
+
 const CHECKOUT_STAGES = Object.freeze({
   COLLECTING_DETAILS: 'collecting_details',
   CODE_SENT: 'code_sent',
@@ -638,6 +669,11 @@ class KellyToolExecutor {
               session_id: sessionId
             });
             if (scheduleResultRoutine?.success && scheduleResultRoutine?.appointment?.id) {
+              _emitAppointmentBooked(
+                { sessionId, clinicId, patientId },
+                scheduleResultRoutine.appointment,
+                { patient_name: normalizedArgsRoutine.patient_name }
+              );
               try {
                 const { persistCaseSummaryForAppointment } = require('./case-summary-service');
                 persistCaseSummaryForAppointment({
@@ -866,6 +902,11 @@ class KellyToolExecutor {
           // Auto-chain schedule -> checkout through shared helper so all entry points
           // use one deduped checkout path (A2).
           if (scheduleResult?.success && scheduleResult?.appointment?.id) {
+            _emitAppointmentBooked(
+              { sessionId, clinicId, patientId },
+              scheduleResult.appointment,
+              { patient_name: normalizedArgs.patient_name }
+            );
             try {
               const { persistCaseSummaryForAppointment } = require('./case-summary-service');
               persistCaseSummaryForAppointment({
@@ -1090,6 +1131,19 @@ class KellyToolExecutor {
             KellyToolExecutor._setSessionMeta(sessionId, 'rcm_pay_token', result.pay_token);
             KellyToolExecutor._setSessionMeta(sessionId, 'rcm_payment_id', result.payment_id);
           }
+
+          _emitKellyActivityEvent({
+            sessionId,
+            clinicId,
+            patientId: resolvedPatientId,
+            eventType: 'payment_link_sent',
+            payload: {
+              payment_id: result.payment_id,
+              pay_token: result.pay_token,
+              amount: result.amount,
+              patient_name: args.patient_name || null,
+            },
+          });
 
           const journeyId = args.journey_id || null;
           if (result.success && journeyId && clinicId) {
@@ -2236,6 +2290,32 @@ class KellyToolExecutor {
       return { success: false, error: 'clinic_id is required' };
     }
 
+    if (String(process.env.RCM_E2E_DIRECT_TOOLS || '').trim() === '1') {
+      const BookingService = require('./booking-service');
+      const resultRaw = await BookingService.getAvailableSlots(
+        date,
+        null,
+        appointmentType,
+        timezone,
+        clinicId,
+        null
+      );
+      const direct = KellyToolExecutor._ensureSlotBundles(resultRaw, date);
+      if (direct?.success) {
+        const bundles = direct.slot_bundles || [];
+        const availableSlots = bundles.map((s) =>
+          s.time === 'ASYNC' ? `Async review — ${s.practitioner_name || 'provider'}` : s.time
+        );
+        KellyToolExecutor._setSessionMeta(sessionId, 'kelly_script_hint', '');
+        return {
+          success: true,
+          available_slots: availableSlots,
+          slot_bundles: bundles,
+          appointment_type: appointmentType
+        };
+      }
+    }
+
     // W3-S5.5: Multi-specialty when primary + secondary differ
     const secondarySpecialties = triageResult.secondary_specialties || [];
     const allSpecialties = [appointmentType, ...secondarySpecialties].filter((s, i, a) => a.indexOf(s) === i);
@@ -2356,7 +2436,79 @@ class KellyToolExecutor {
     return tok ? { 'x-internal-job-token': tok } : {};
   }
 
+  static _ensureSlotBundles(result, date, practitionerId = null) {
+    if (!result || !result.success) return result;
+    if (Array.isArray(result.slot_bundles) && result.slot_bundles.length) return result;
+
+    const fromDisplay = Array.isArray(result.slots_with_display) ? result.slots_with_display : [];
+    const fromSlots = Array.isArray(result.available_slots)
+      ? result.available_slots
+      : Array.isArray(result.slots)
+        ? result.slots
+        : [];
+    const base = fromDisplay.length
+      ? fromDisplay.map((s) => ({
+          time: s.time,
+          date: date || null,
+          display: s.slot_display || s.time,
+          slot_start_iso: s.slot_start_iso || null,
+          practitioner_id: practitionerId || null,
+          lane: 'sync',
+          is_async: false
+        }))
+      : fromSlots.map((t) => ({
+          time: t,
+          date: date || null,
+          display: String(t),
+          slot_start_iso: null,
+          practitioner_id: practitionerId || null,
+          lane: 'sync',
+          is_async: false
+        }));
+
+    return { ...result, slot_bundles: base };
+  }
+
+  static async _postDirect(path, body = {}) {
+    const BookingService = require('./booking-service');
+    const p = String(path || '');
+    if (p.includes('available-slots')) {
+      const resultRaw = await BookingService.getAvailableSlots(
+        body.date,
+        body.provider || null,
+        body.appointment_type,
+        body.timezone || 'America/New_York',
+        body.clinic_id,
+        body.practitioner_id || null
+      );
+      return KellyToolExecutor._ensureSlotBundles(resultRaw, body.date, body.practitioner_id || null);
+    }
+    if (p.includes('/schedule')) {
+      return BookingService.scheduleAppointment({
+        patient_name: body.patient_name,
+        patient_phone: body.patient_phone,
+        patient_email: body.patient_email,
+        patient_id: body.patient_id,
+        appointment_type: body.appointment_type || 'Dermatology',
+        date: body.date || body.appointment_date,
+        time: body.time,
+        duration_minutes: body.duration_minutes || 50,
+        provider: body.provider,
+        practitioner_id: body.practitioner_id || body.slot_id || null,
+        notes: body.notes,
+        timezone: body.timezone || 'America/New_York',
+        clinic_id: body.clinic_id,
+        primary_icd10: body.primary_icd10 || null,
+        primary_cpt: body.primary_cpt || null
+      });
+    }
+    throw new Error(`RCM_E2E_DIRECT_TOOLS: unsupported path ${path}`);
+  }
+
   static async _post(path, body) {
+    if (String(process.env.RCM_E2E_DIRECT_TOOLS || '').trim() === '1') {
+      return KellyToolExecutor._postDirect(path, body);
+    }
     const response = await axios.post(`${BASE_URL}${path}`, body, {
       timeout: KellyToolExecutor._httpTimeoutMs(),
       headers: KellyToolExecutor._internalJobHeaders()

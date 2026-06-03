@@ -16698,6 +16698,13 @@ module.exports = {
       'twilio_call_sid',
       'error_message',
       'template_id',
+      'language',
+      'country',
+      'city',
+      'use_case',
+      'practice_specialty',
+      'practice_size',
+      'questions_asked',
       'conversation_stage',
       'interest_level',
       'cta_offered_at',
@@ -16803,6 +16810,7 @@ module.exports = {
         call_id TEXT,
         event_type TEXT NOT NULL,
         payload_json TEXT,
+        clinic_id TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_kelly_call_events_session_created
@@ -16810,19 +16818,90 @@ module.exports = {
       CREATE INDEX IF NOT EXISTS idx_kelly_call_events_type_created
         ON kelly_call_events(event_type, created_at);
     `);
+    try {
+      const cols = db.prepare('PRAGMA table_info(kelly_call_events)').all();
+      if (!cols.some((c) => c.name === 'clinic_id')) {
+        db.exec('ALTER TABLE kelly_call_events ADD COLUMN clinic_id TEXT');
+      }
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_kelly_call_events_clinic_created ON kelly_call_events(clinic_id, created_at DESC)'
+      );
+    } catch (_) {}
+
+    const payload = event.payload_json || {};
+    const clinicId =
+      event.clinic_id ||
+      payload.clinic_id ||
+      null;
+
     const id = event.id || `kce_${require('crypto').randomBytes(12).toString('hex')}`;
     db.prepare(`
-      INSERT INTO kelly_call_events (id, session_id, call_id, event_type, payload_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO kelly_call_events (id, session_id, call_id, event_type, payload_json, clinic_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       event.session_id || null,
       event.call_id || null,
       event.event_type,
-      safeStringify(event.payload_json || {}),
+      safeStringify(payload),
+      clinicId,
       event.created_at || new Date().toISOString()
     );
     return id;
+  },
+
+  listKellyCallEventsForClinic(clinicId, { limit = 60, since = null } = {}) {
+    if (!clinicId) return [];
+    const cap = Math.max(1, Math.min(500, Number(limit) || 60));
+    const cid = String(clinicId);
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS kelly_call_events (
+          id TEXT PRIMARY KEY,
+          session_id TEXT,
+          call_id TEXT,
+          event_type TEXT NOT NULL,
+          payload_json TEXT,
+          clinic_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      const cols = db.prepare('PRAGMA table_info(kelly_call_events)').all();
+      if (!cols.some((c) => c.name === 'clinic_id')) {
+        db.exec('ALTER TABLE kelly_call_events ADD COLUMN clinic_id TEXT');
+      }
+    } catch (_) {}
+
+    const params = [cid, cid, cid];
+    let sinceClause = '';
+    if (since) {
+      sinceClause = ' AND e.created_at >= ?';
+      params.push(String(since));
+    }
+    params.push(cap);
+
+    try {
+      return db.prepare(`
+        SELECT DISTINCT e.*
+        FROM kelly_call_events e
+        LEFT JOIN voice_call_log v ON v.call_id = e.session_id OR v.call_id = e.call_id
+        WHERE (
+          e.clinic_id = ?
+          OR v.clinic_id = ?
+          OR json_extract(e.payload_json, '$.clinic_id') = ?
+        )
+        ${sinceClause}
+        ORDER BY e.created_at DESC
+        LIMIT ?
+      `).all(...params);
+    } catch (_) {
+      return db.prepare(`
+        SELECT * FROM kelly_call_events
+        WHERE json_extract(payload_json, '$.clinic_id') = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(cid, cap);
+    }
   },
 
   listKellyCallEvents({ session_id, limit = 100 } = {}) {

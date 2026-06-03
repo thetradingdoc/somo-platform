@@ -41,6 +41,39 @@ async function main() {
   }
   console.log('consent validation ok');
 
+  const optionalPhone = `+1500555${String(Date.now() % 10000).padStart(4, '0')}`;
+  const optional = await fetch(`${base}/api/public/somo-demo/request-call`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Smoke Optional',
+      phone: optionalPhone,
+      consent: true,
+      questions_asked: 'qualification smoke — omitted use_case'
+    })
+  });
+  const optionalBody = await optional.json();
+  if (!optional.ok) {
+    if (optionalBody.error_code === 'INVALID_USE_CASE') {
+      console.error(
+        'Optional use_case failed: deploy or restart middleware (expected default medical_clinic)',
+        optionalBody
+      );
+      process.exit(1);
+    }
+    if (optional.status === 429 || optionalBody.error_code === 'DUPLICATE_PHONE_WINDOW') {
+      console.log('optional use_case gate ok (rate limit / duplicate phone)');
+    } else {
+      console.error('Optional use_case unexpected failure:', optional.status, optionalBody);
+      process.exit(1);
+    }
+  } else {
+    console.log('optional use_case + questions_asked ok', {
+      demo_request_id: optionalBody.demo_request_id,
+      success: optionalBody.success
+    });
+  }
+
   const prevEnabled = process.env.SOMO_DEMO_ENABLED;
   process.env.SOMO_DEMO_ENABLED = '0';
   const disabled = await fetch(`${base}/api/public/somo-demo/request-call`, {

@@ -9,8 +9,6 @@ export default function Footer() {
             src="/assets/brand/somo-logo.png"
             alt="Somo"
             className="somo-footer-logo-img"
-            width={199}
-            height={68}
           />
         </a>
         <div className="somo-footer-links">

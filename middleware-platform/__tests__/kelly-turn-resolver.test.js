@@ -12,7 +12,6 @@ jest.mock('../services/kelly-conversation-bridge', () => ({
   runKellyConversationTurn: jest.fn(async () => ({ reply: 'hybrid', toolsUsed: [] }))
 }));
 
-const mockShouldUseV2 = jest.fn(() => true);
 const mockHandleTurn = jest.fn(async () => ({
   reply: 'v2',
   toolsUsed: [],
@@ -20,7 +19,6 @@ const mockHandleTurn = jest.fn(async () => ({
 }));
 
 jest.mock('../services/kelly-rails/orchestrator', () => ({
-  shouldUseKellyRailsV2: (...args) => mockShouldUseV2(...args),
   handleTurn: (...args) => mockHandleTurn(...args)
 }));
 
@@ -59,7 +57,8 @@ describe('kelly-turn-resolver runtime selection', () => {
   });
 
   test('uses hybrid when v2 off and KELLY_ALLOW_HYBRID_GRAPH=1', async () => {
-    mockShouldUseV2.mockReturnValueOnce(false);
+    delete process.env.KELLY_RAILS_V2;
+    process.env.NODE_ENV = 'test';
     process.env.KELLY_ALLOW_HYBRID_GRAPH = '1';
 
     const out = await runKellyTurn({

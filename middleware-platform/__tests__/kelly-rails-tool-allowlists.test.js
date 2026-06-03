@@ -65,4 +65,15 @@ describe('kelly-rails tool allowlists — negative contract', () => {
   test('support handoff is read-only triage session', () => {
     expect(getAllowedToolNames('support', 'handoff')).toEqual(['get_triage_session']);
   });
+
+  test('records lane exposes query_patient_records only', () => {
+    const allowed = getAllowedToolNames('records', 'records_qa');
+    expect(allowed).toContain('query_patient_records');
+    expect(allowed).not.toContain('schedule_appointment');
+  });
+
+  test('healthcare education omits skincare routine tools', () => {
+    const allowed = getAllowedToolNames('education', 'education', { routine_intake_active: false });
+    expect(allowed).not.toContain('evaluate_skincare_routine');
+  });
 });

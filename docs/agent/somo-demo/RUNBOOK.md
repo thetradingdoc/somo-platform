@@ -21,7 +21,9 @@ Legacy `DODGECALL_*` names are still accepted via [somo-demo-env.js](../../../mi
 | `SOMO_DEMO_VOICE_ID` | optional | Falls back to `RETELL_VOICE_ID` for configure script |
 | `SOMO_DEMO_SMS_FROM_NUMBER` | optional | Defaults to demo Twilio FROM |
 | `SOMO_DEMO_SIGNUP_URL` | optional | Default `/signup?utm_source=somo-demo` |
-| `SOMO_DEMO_MAX_DURATION_SEC` | optional | Default `240` |
+| `SOMO_DEMO_MAX_DURATION_SEC` | optional | Template default `180` (3 min qualification) |
+| `SOMO_SHEETS_SPREADSHEET_ID` | optional | Google Sheets pipeline |
+| `SOMO_SHEETS_SERVICE_ACCOUNT_JSON` or `SOMO_SHEETS_SERVICE_ACCOUNT_PATH` | optional | Sheets writer credentials |
 | `SOMO_DEMO_MAX_CONCURRENT` | optional | Default `3` |
 | `SOMO_DEMO_DAILY_CAP` | optional | Default `100` |
 | `API_BASE_URL` | yes for telephony | Must be reachable by Twilio |
@@ -34,7 +36,15 @@ cd middleware-platform
 npm run configure:somo-demo
 ```
 
-Sets custom LLM WebSocket, voice, minimal tools (`end_call`, `record_interest`, `send_signup_link`).
+Sets custom LLM WebSocket, voice, minimal tools (`end_call`, `record_interest`, `send_signup_link`). Prompt stub: [prompts/demo-voice-prompt.md](./prompts/demo-voice-prompt.md) (Kelly qualification; live logic in `somo-demo-orchestrator.js`).
+
+## Qualification demo (landing)
+
+- **Persona:** Kelly qualifies the practice (~2 min) — not Sam sales pitch, not Kelly Rails clinical intake.
+- **Script SSOT:** [QUALIFICATION_CALL_SCRIPT_V1.md](./QUALIFICATION_CALL_SCRIPT_V1.md)
+- **Stack:** `somo-demo-handler.js` + `somo-demo-orchestrator.js` + Twilio outbound (`call_type=somo_demo`).
+- **Kelly patches:** first-turn language (`language.js`), emergency block (`isEmergencyUtterance`), mid-call Sheets events (`qualification_captured`, `cta_sent`, `call_ended`).
+- **Form:** practice type optional (dental / medical / specialty); language detected on call.
 
 ## Public API
 

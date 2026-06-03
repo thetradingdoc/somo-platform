@@ -6,675 +6,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#16a637">
   <title>Somo Provider - Schedule</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <!-- FullCalendar (reliable grid) -->
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 
-  <link rel="stylesheet" href="/assets/css/global.css">
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
+  <link rel="stylesheet" href="/assets/css/provider-calendar.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
-  <style>
-    /* Shared app layout (copied from patients/dashboard for left sidebar) */
-    :root {
-      --primary: #16a637;
-      --primary-dark: #1e3a8a;
-      --primary-light: #16a637;
-    }
-
-    .layout {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    .sidebar {
-      width: 260px;
-      background: #fff;
-      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
-      position: fixed;
-      height: 100vh;
-      overflow-y: auto;
-    }
-
-    .sidebar-header {
-      padding: 24px;
-      border-bottom: 1px solid var(--gray-200);
-    }
-
-    .sidebar-logo {
-      font-size: 32px;
-      line-height: 1;
-      letter-spacing: -2px;
-      color: #2d3748;
-      margin-bottom: 4px;
-      font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-weight: 700;
-    }
-
-    .sidebar-subtitle {
-      font-size: 12px;
-      color: var(--gray-500);
-      margin-top: 4px;
-    }
-
-    .sidebar-nav {
-      padding: 16px;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      color: var(--gray-700);
-      font-weight: 500;
-      cursor: pointer;
-      transition: all .2s;
-      margin-bottom: 4px;
-      text-decoration: none;
-    }
-
-    .nav-item:hover {
-      background: var(--gray-50);
-      color: var(--primary);
-    }
-
-    .nav-item.active {
-      background: var(--primary);
-      color: #fff;
-    }
-
-    .nav-icon {
-      font-size: 20px;
-    }
-
-    .sidebar-footer {
-      padding: 16px;
-      border-top: 1px solid var(--gray-200);
-      position: absolute;
-      bottom: 0;
-      width: 260px;
-      background: #fff;
-    }
-
-    .user-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px;
-      border-radius: 8px;
-      background: var(--gray-50);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .user-info:hover {
-      background: var(--gray-100);
-      transform: translateY(-1px);
-    }
-
-    .user-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: var(--primary);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-    }
-
-    .user-details {
-      flex: 1;
-    }
-
-    .user-name {
-      font-weight: 600;
-      font-size: 14px;
-      color: var(--gray-900);
-    }
-
-    .logout-btn {
-      background: none;
-      border: none;
-      color: var(--gray-500);
-      cursor: pointer;
-      padding: 8px;
-      border-radius: 4px;
-      transition: all .2s;
-    }
-
-    .logout-btn:hover {
-      background: var(--danger-light);
-      color: var(--danger);
-    }
-
-    .main-content {
-      margin-left: 260px;
-      flex: 1;
-      padding: 32px;
-      background: var(--gray-50);
-    }
-
-    /* Mobile-first: collapsible sidebar */
-    .sidebar-toggle {
-      display: none;
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      z-index: 1001;
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: #fff;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      cursor: pointer;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-    }
-    .sidebar-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.4);
-      z-index: 999;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-    .sidebar-overlay.visible { opacity: 1; }
-    @media (max-width: 768px) {
-      .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.25s ease;
-        z-index: 1000;
-      }
-      .sidebar.open {
-        transform: translateX(0);
-      }
-      .sidebar-toggle { display: flex; }
-      .main-content { margin-left: 0; padding: 16px; padding-top: 72px; }
-      .topbar { flex-wrap: wrap; padding: 12px 16px; gap: 12px; }
-      .brand { flex-wrap: wrap; }
-      .filters { flex-wrap: wrap; }
-      .topbar .btn, .topbar .input, .topbar .select { min-height: 44px; min-width: 44px; }
-      .page-header { padding: 16px; }
-      .page-title { font-size: 22px; }
-      #calendarWrap { margin: 8px 0; }
-      #calendar { min-height: 400px; padding: 8px; }
-      .legend { flex-wrap: wrap; gap: 8px; }
-
-      /* FullCalendar mobile toolbar/list layout */
-      .fc .fc-header-toolbar {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-      .fc .fc-toolbar-chunk {
-        display: flex;
-        justify-content: center;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .fc .fc-toolbar-title {
-        font-size: 18px;
-        line-height: 1.2;
-        text-align: center;
-        word-break: break-word;
-      }
-      .fc .fc-button {
-        min-height: 40px;
-        font-size: 15px;
-        padding: 8px 10px;
-      }
-      .fc .fc-button-group {
-        display: inline-flex;
-        flex-wrap: nowrap;
-      }
-      .fc .fc-list-day-cushion {
-        padding: 10px 8px;
-      }
-      .fc .fc-list-event-time {
-        width: 90px;
-        white-space: normal;
-      }
-      .fc .fc-list-event-title a {
-        white-space: normal;
-        word-break: break-word;
-      }
-    }
-    @media (max-width: 480px) {
-      .main-content { padding: 12px; padding-top: 68px; }
-      .filters { flex-direction: column; width: 100%; }
-      .filters .input, .filters .select { width: 100%; }
-      .fc .fc-button { min-height: 36px; font-size: 14px; padding: 6px 8px; }
-      .fc .fc-toolbar-title { font-size: 16px; }
-      .fc .fc-list-event-time { width: 78px; font-size: 12px; }
-    }
-
-    .page-header {
-      background: #fff;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 16px;
-      box-shadow: var(--shadow-md);
-    }
-
-    .page-title {
-      font-size: 28px;
-      margin-bottom: 8px;
-    }
-
-    .page-subtitle {
-      color: var(--gray-600);
-      font-size: 14px;
-    }
-
-    :root {
-      --primary: #16a637;
-      --primary-dark: #1e3a8a;
-      --primary-light: #16a637;
-      --bg: #f3f4f6;
-      --muted: #6b7280;
-      --card: #ffffff;
-      --border: #e5e7eb;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-    }
-
-    body {
-      background: linear-gradient(180deg, #f8fafc, #eef2f7 40%, #e6f7fb 100%);
-    }
-
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 24px;
-      background: var(--card);
-      border-bottom: 1px solid var(--border);
-      box-shadow: 0 6px 20px rgba(14, 116, 144, 0.06);
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .logo {
-      font-size: 24px;
-      letter-spacing: -2px;
-      color: #1f2937;
-    }
-
-    .logo .doc {
-      font-family: 'Times New Roman', Times, serif;
-      font-style: italic;
-    }
-
-    .logo .little {
-      font-family: 'Verdana', Geneva, sans-serif;
-      font-weight: 700;
-    }
-
-    .title {
-      font-weight: 800;
-      color: var(--primary-dark);
-      margin-left: 8px;
-    }
-
-    .filters {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .input,
-    .select,
-    .btn {
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: #fff;
-      color: #111827;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: #fff;
-      border-color: transparent;
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-dark);
-    }
-
-    .link {
-      color: var(--primary-dark);
-      text-decoration: none;
-      font-weight: 600;
-    }
-
-    /* Pinned today's appointments (above calendar; stays visible while scrolling) */
-    #todayPinnedWrap {
-      max-width: 1200px;
-      margin: 16px auto 0;
-      position: sticky;
-      top: 0;
-      z-index: 25;
-      background: linear-gradient(180deg, #f8fafc 0%, #f8fafc 85%, transparent 100%);
-      padding-bottom: 12px;
-    }
-    #todayPinnedInner {
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      box-shadow: 0 6px 24px rgba(8, 145, 178, 0.1);
-      overflow: hidden;
-    }
-    #todayPinnedHeader {
-      margin: 0;
-      padding: 10px 12px 10px 16px;
-      font-size: 14px;
-      font-weight: 800;
-      color: #0e7490;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      border-bottom: 1px solid var(--border);
-      background: #ecfeff;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    #todayPinnedHeadingText { margin: 0; }
-    #todayPinnedToggle {
-      border: 1px solid #bae6fd;
-      background: #fff;
-      color: #0e7490;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-      text-transform: none;
-      padding: 6px 10px;
-      cursor: pointer;
-    }
-    #todayPinnedWrap.is-collapsed #todayPinnedList { display: none; }
-    #todayPinnedList {
-      display: flex;
-      flex-direction: column;
-      max-height: 320px;
-      overflow-y: auto;
-    }
-    .today-pinned-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      width: 100%;
-      text-align: left;
-      padding: 12px 16px;
-      border: none;
-      border-bottom: 1px solid #f3f4f6;
-      background: #fff;
-      cursor: pointer;
-      font: inherit;
-      color: #111827;
-      transition: background 0.15s;
-    }
-    .today-pinned-row:last-child { border-bottom: none; }
-    .today-pinned-row:hover { background: #f9fafb; }
-    .today-pinned-time {
-      flex: 0 0 130px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #374151;
-    }
-    .today-pinned-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      flex-shrink: 0;
-    }
-    .today-pinned-title {
-      flex: 1;
-      font-size: 14px;
-      font-weight: 600;
-    }
-    #todayPinnedEmpty {
-      padding: 14px 16px;
-      font-size: 13px;
-      color: #6b7280;
-    }
-
-    #calendarWrap {
-      max-width: 1200px;
-      margin: 16px auto;
-    }
-
-    #calendar {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 14px;
-      box-shadow: 0 10px 30px rgba(8, 145, 178, 0.08);
-      min-height: 760px;
-    }
-
-    .legend {
-      display: flex;
-      gap: 16px;
-      padding: 8px 16px;
-      align-items: center;
-    }
-
-    .legend .item {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      font-size: 12px;
-      color: #4b5563;
-      background: #fff;
-      border: 1px solid var(--border);
-      padding: 6px 10px;
-      border-radius: 9999px;
-    }
-    .legend-filter {
-      cursor: pointer;
-      user-select: none;
-      transition: all 0.15s;
-    }
-    .legend-filter:hover {
-      border-color: #9ca3af;
-      transform: translateY(-1px);
-    }
-    .legend-filter.is-off {
-      opacity: 0.45;
-      background: #f9fafb;
-      text-decoration: line-through;
-    }
-
-    .dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 9999px;
-      display: inline-block;
-    }
-
-    .fc .fc-toolbar-title {
-      font-weight: 800;
-      color: #111827;
-    }
-
-    .fc-theme-standard td,
-    .fc-theme-standard th {
-      border-color: var(--border);
-    }
-
-    .fc-event {
-      cursor: pointer;
-      border-radius: 8px;
-    }
-
-    .badge {
-      padding: 4px 10px;
-      border-radius: 9999px;
-      font-size: 12px;
-      font-weight: 700;
-      display: inline-block;
-    }
-
-    .badge-scheduled {
-      background: #e0f7fb;
-      color: #036a7e;
-    }
-
-    .badge-confirmed {
-      background: #dcfce7;
-      color: #065f46;
-    }
-
-    .badge-cancelled {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-
-    .section {
-      display: flex;
-      gap: 24px;
-      align-items: center;
-      padding: 12px 16px;
-      background: #f9fafb;
-      border: 1px dashed var(--border);
-      border-radius: 12px;
-      margin: 8px 16px;
-    }
-
-    .section h4 {
-      margin: 0;
-      color: #374151;
-    }
-
-    /* Online/Offline toggle */
-    .online-offline-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0;
-    }
-    .toggle-track {
-      display: block;
-      width: 44px;
-      height: 24px;
-      border-radius: 999px;
-      background: #e5e7eb;
-      position: relative;
-      transition: background 0.2s;
-    }
-    .online-offline-btn.online .toggle-track {
-      background: #10b981;
-    }
-    .toggle-thumb {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-      transition: transform 0.2s;
-    }
-    .online-offline-btn.online .toggle-thumb {
-      transform: translateX(20px);
-    }
-
-    /* Side drawer for appointment details (replaces full-screen overlay) */
-    .details-panel {
-      position: fixed;
-      top: 0;
-      right: 0;
-      width: 420px;
-      max-width: 90vw;
-      height: 100vh;
-      background: #ffffff;
-      box-shadow: -16px 0 40px rgba(15, 23, 42, 0.18);
-      border-left: 1px solid var(--border);
-      z-index: 30;
-      display: none;
-      overflow-y: auto;
-    }
-
-    .details-panel-inner {
-      padding: 20px;
-    }
-
-    #detailsModalSubtitle {
-      font-size: 15px;
-      font-weight: 700;
-      color: #0e7490;
-      margin: 0 0 12px 0;
-      line-height: 1.4;
-    }
-    #detailsModalSubtitle .details-sub-muted {
-      color: #64748b;
-      font-weight: 600;
-    }
-    #detailsModalSubtitle .details-sub-when {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      color: #475569;
-      margin-top: 4px;
-    }
-  </style>
 </head>
 
-<body class="provider-portal provider-portal--scroll" style="background:var(--bg,#f4f7fa);">
-  <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Open menu">☰</button>
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
-  <div class="layout">
-    <!-- Sidebar (same as other pages) -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-subtitle">Somo Provider</div>
-      </div>
-
-      <nav class="sidebar-nav" id="sidebarNav"></nav>
-
-      <div class="sidebar-footer">
-        <div class="user-info" onclick="typeof window.navigateToBusinessPage==='function'?window.navigateToBusinessPage('settings.html'):window.location.href='settings.html'" title="Open Settings">
-          <div class="user-avatar" id="userAvatar">HP</div>
-          <div class="user-details">
-            <div class="user-name" id="userName">Healthcare Provider</div>
-            <div class="user-role" id="userRole">Provider</div>
-          </div>
-          <button class="logout-btn" onclick="event.stopPropagation(); (window.logout||function(){sessionStorage.removeItem('authenticated');window.location.href='../login.html';})();" title="Logout">🚪</button>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="main-content">
-      <div class="page-header">
-        <h1 class="page-title">Appointments Calendar</h1>
-        <p class="page-subtitle">View and manage all bookings from the AI Voice Agent</p>
-      </div>
-
-      <!-- Toolbar -->
-      <div class="topbar" style="border-radius:12px;">
-        <div class="brand">
-          <div class="title">Filters</div>
+<body class="provider-portal provider-portal--scroll provider-portal--calendar" data-page="calendar">
+  <main class="main-content pp-content pp-content--calendar" id="ppMainContent">
+      <div class="pp-toolbar">
+        <div class="pp-toolbar-brand">
+          <span class="pp-toolbar-label">Filters</span>
           <div id="onlineOfflineWrap" style="margin-left:20px;display:flex;align-items:center;gap:8px;">
             <span id="onlineStatusText" class="muted" style="font-size:13px;">Offline</span>
             <button type="button" id="onlineOfflineBtn" class="online-offline-btn offline" title="Toggle Online/Offline">
@@ -682,7 +36,7 @@
             </button>
           </div>
         </div>
-        <div class="filters">
+        <div class="pp-toolbar-filters">
           <input type="date" id="dateFilter" class="input" />
           <select id="statusFilter" class="select">
             <option value="">All Statuses</option>
@@ -691,19 +45,19 @@
             <option value="cancelled">Cancelled</option>
           </select>
           <input id="providerFilter" placeholder="Provider" class="input" />
-          <button id="createApptBtn" class="btn btn-primary" style="background:#10b981;">+ Create Appointment</button>
-          <button id="setAvailabilityBtn" class="btn" style="background:#16a637;color:#fff;border:none;">Set Availability</button>
-          <button id="outOfOfficeBtn" class="btn" style="background:#6b7280;color:#fff;border:none;">Out of Office</button>
-          <button id="refreshBtn" class="btn btn-primary">Refresh</button>
+          <button type="button" id="createApptBtn" class="pp-btn pp-btn-primary pp-btn-sm">+ Create Appointment</button>
+          <button type="button" id="setAvailabilityBtn" class="pp-btn pp-btn-outline pp-btn-sm">Set Availability</button>
+          <button type="button" id="outOfOfficeBtn" class="pp-btn pp-btn-ghost pp-btn-sm">Out of Office</button>
+          <button type="button" id="refreshBtn" class="pp-btn pp-btn-outline pp-btn-sm">Refresh</button>
         </div>
       </div>
 
-      <div class="legend" style="margin-top:8px;">
-        <button type="button" class="item legend-filter" data-status-key="scheduled"><span class="dot" style="background:#06b6d4"></span> Scheduled</button>
-        <button type="button" class="item legend-filter" data-status-key="confirmed"><span class="dot" style="background:#10b981"></span> Confirmed</button>
-        <button type="button" class="item legend-filter" data-status-key="cancelled"><span class="dot" style="background:#ef4444"></span> Cancelled</button>
-        <button type="button" class="item legend-filter" data-status-key="available"><span class="dot" style="background:#16a637"></span> Available</button>
-        <button type="button" class="item legend-filter" data-status-key="out_of_office"><span class="dot" style="background:#6b7280"></span> Out of Office</button>
+      <div class="pp-calendar-legend legend">
+        <button type="button" class="item legend-filter" data-status-key="scheduled"><span class="dot dot--scheduled"></span> Scheduled</button>
+        <button type="button" class="item legend-filter" data-status-key="confirmed"><span class="dot dot--confirmed"></span> Confirmed</button>
+        <button type="button" class="item legend-filter" data-status-key="cancelled"><span class="dot dot--cancelled"></span> Cancelled</button>
+        <button type="button" class="item legend-filter" data-status-key="available"><span class="dot dot--available"></span> Available</button>
+        <button type="button" class="item legend-filter" data-status-key="out_of_office"><span class="dot dot--ooo"></span> Out of Office</button>
       </div>
 
       <div id="todayPinnedWrap" style="display:none;">
@@ -719,8 +73,7 @@
       <div id="calendarWrap">
         <div id="calendar"></div>
       </div>
-    </main>
-  </div>
+  </main>
 
   <!-- Create Appointment Modal -->
   <div id="createApptModal" class="details-panel" style="display:none;">
@@ -823,10 +176,10 @@
       </div>
       <div id="detailsModalSubtitle" style="display:none;" aria-live="polite"></div>
       <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; justify-content:space-between;">
-        <div style="display:flex; gap:8px;">
-        <button id="tabOverview" class="btn btn-primary" style="padding:6px 10px;">Overview</button>
-        <button id="tabClinical" class="btn" style="padding:6px 10px;">Clinical prep</button>
-        <button id="tabEHR" class="btn" style="padding:6px 10px;">EHR</button>
+        <div style="display:flex; gap:8px;" role="tablist" aria-label="Appointment details">
+        <button id="tabOverview" type="button" role="tab" aria-selected="true" aria-controls="modalContent" class="btn btn-primary" style="padding:6px 10px;">Overview</button>
+        <button id="tabClinical" type="button" role="tab" aria-selected="false" aria-controls="modalContent" class="btn" style="padding:6px 10px;">Clinical prep</button>
+        <button id="tabEHR" type="button" role="tab" aria-selected="false" aria-controls="modalContent" class="btn" style="padding:6px 10px;">EHR</button>
         </div>
         <button id="btnSyncEhrNow" class="btn" style="padding:6px 10px; background:#0ea5e9; color:#fff; border:none;">Sync EHR Now</button>
       </div>
@@ -875,8 +228,6 @@
       const base = (API_BASE || '').replace(/\/$/, '');
       return base ? `${base}${path.startsWith('/') ? path : '/' + path}` : path;
     };
-
-    requireAuth('../login.html');
 
     // Online/Offline status (session-based, cookie auth)
     async function loadAvailabilityStatus() {
@@ -935,40 +286,6 @@
       loadAvailabilityStatus();
     })();
 
-    function initMobileSidebar() {
-      const toggle = document.getElementById('sidebarToggle');
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebarOverlay');
-      if (!toggle || !sidebar || !overlay) return;
-      function open() {
-        sidebar.classList.add('open');
-        overlay.style.display = 'block';
-        overlay.classList.add('visible');
-        toggle.textContent = '✕';
-        toggle.setAttribute('aria-label', 'Close menu');
-      }
-      function close() {
-        sidebar.classList.remove('open');
-        overlay.classList.remove('visible');
-        setTimeout(() => { overlay.style.display = 'none'; }, 200);
-        toggle.textContent = '☰';
-        toggle.setAttribute('aria-label', 'Open menu');
-      }
-      toggle.addEventListener('click', () => sidebar.classList.contains('open') ? close() : open());
-      overlay.addEventListener('click', close);
-      if (window.matchMedia('(min-width: 769px)').matches) {
-        overlay.style.display = 'none';
-        sidebar.classList.remove('open');
-      }
-      window.addEventListener('resize', () => {
-        if (window.innerWidth >= 769) { overlay.style.display = 'none'; sidebar.classList.remove('open'); toggle.textContent = '☰'; }
-      });
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initMobileSidebar);
-    } else {
-      initMobileSidebar();
-    }
 
     // Availability blocks
     let availabilityBlockType = 'available';
@@ -1717,9 +1034,17 @@
       const tabOverview = document.getElementById('tabOverview');
       const tabClinical = document.getElementById('tabClinical');
       const tabEhr = document.getElementById('tabEHR');
-      if (tabOverview) tabOverview.className = activeDetailsTab === 'overview' ? 'btn btn-primary' : 'btn';
-      if (tabClinical) tabClinical.className = activeDetailsTab === 'clinical' ? 'btn btn-primary' : 'btn';
-      if (tabEhr) tabEhr.className = activeDetailsTab === 'ehr' ? 'btn btn-primary' : 'btn';
+      const tabs = [
+        { el: tabOverview, id: 'overview' },
+        { el: tabClinical, id: 'clinical' },
+        { el: tabEhr, id: 'ehr' }
+      ];
+      tabs.forEach(({ el, id }) => {
+        if (!el) return;
+        const on = activeDetailsTab === id;
+        el.className = on ? 'btn btn-primary' : 'btn';
+        el.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
       if (activeDetailsTab === 'ehr') renderEhrDetails();
       else if (activeDetailsTab === 'clinical') renderClinicalPrep();
       else if (currentDetailsProps) renderDetails(currentDetailsProps);
@@ -1786,9 +1111,23 @@
       const tabEhr = document.getElementById('tabEHR');
       const btnSyncEhrNow = document.getElementById('btnSyncEhrNow');
       const ehrSyncStatus = document.getElementById('ehrSyncStatus');
-      if (tabOverview) tabOverview.onclick = () => setDetailsTab('overview');
-      if (tabClinical) tabClinical.onclick = () => setDetailsTab('clinical');
-      if (tabEhr) tabEhr.onclick = () => setDetailsTab('ehr');
+      const bindDrawerTab = (el, name) => {
+        if (!el) return;
+        el.onclick = () => setDetailsTab(name);
+        el.onkeydown = (e) => {
+          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+          const list = [tabOverview, tabClinical, tabEhr].filter(Boolean);
+          const idx = list.indexOf(el);
+          if (idx < 0) return;
+          e.preventDefault();
+          const next = e.key === 'ArrowRight' ? list[(idx + 1) % list.length] : list[(idx - 1 + list.length) % list.length];
+          next.focus();
+          setDetailsTab(next.id === 'tabOverview' ? 'overview' : next.id === 'tabClinical' ? 'clinical' : 'ehr');
+        };
+      };
+      bindDrawerTab(tabOverview, 'overview');
+      bindDrawerTab(tabClinical, 'clinical');
+      bindDrawerTab(tabEhr, 'ehr');
       if (btnSyncEhrNow) btnSyncEhrNow.onclick = () => syncEhrNow(apptId, extProps?.patient_id || null);
       if (ehrSyncStatus) {
         ehrSyncStatus.style.display = 'none';
@@ -1884,12 +1223,19 @@
     }
 
     async function initCalendar() {
+      if (typeof mountProviderPage !== 'function') {
+        console.error('Provider shell scripts failed to load');
+        return;
+      }
       mountProviderPage({
         activeId: 'calendar',
         eyebrow: 'Schedule',
-        title: 'Appointments',
-        topbarActions: '<a class="pp-btn pp-btn-primary pp-btn-sm" href="#" onclick="document.getElementById(\'createApptModal\').style.display=\'flex\';return false;">+ New Appointment</a>'
+        title: 'Appointments calendar',
+        subtitle: 'View and manage bookings from the AI front desk',
+        topbarActions: '<button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="ppTopCreateAppt">+ New appointment</button>'
       });
+      const topCreate = document.getElementById('ppTopCreateAppt');
+      if (topCreate) topCreate.addEventListener('click', openCreateModal);
       // Default date filter empty = show ALL appointments (past + future); user can filter by date if needed
       const dateInput = document.getElementById('dateFilter');
       dateInput.placeholder = 'All dates';

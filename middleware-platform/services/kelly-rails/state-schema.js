@@ -9,6 +9,7 @@ const KELLY_LANE = {
   POST_PAYMENT: 'post_payment',
   RESCHEDULE: 'reschedule',
   ACCOUNT: 'account',
+  RECORDS: 'records',
   EDUCATION: 'education',
   SUPPORT: 'support'
 };
@@ -21,6 +22,7 @@ const LANE_FIRST_STEP = {
   [KELLY_LANE.POST_PAYMENT]: 'finish',
   [KELLY_LANE.RESCHEDULE]: 'find_booking',
   [KELLY_LANE.ACCOUNT]: 'billing',
+  [KELLY_LANE.RECORDS]: 'records_qa',
   [KELLY_LANE.EDUCATION]: 'education',
   [KELLY_LANE.SUPPORT]: 'faq'
 };
@@ -58,7 +60,15 @@ const EMERGENCY_SIGNALS = [
   'kill myself',
   'can\'t breathe',
   'difficulty breathing',
-  'severe bleeding'
+  'severe bleeding',
+  'me duele el pecho',
+  'dolor en el pecho',
+  'dolor de pecho',
+  'no puedo respirar',
+  'no puedo respirar bien',
+  'dificultad para respirar',
+  'pensamientos suicidas',
+  'quiero matarme'
 ];
 
 const POST_VISIT_SIGNALS = [
@@ -101,7 +111,28 @@ const CLINICAL_SIGNALS = [
   'period',
   'dermatolog',
   'skin concern',
-  'not an emergency'
+  'not an emergency',
+  'erupcion',
+  'erupción',
+  'pierna',
+  'cuello',
+  'brazo',
+  'dolor',
+  'duele',
+  'me duele',
+  'síntoma',
+  'sintoma',
+  'fiebre',
+  'cita',
+  'doctor',
+  'dermatolog',
+  'visita',
+  'clínica',
+  'clinica',
+  'picor',
+  'comezón',
+  'comezon',
+  'no es una emergencia'
 ];
 
 const EDUCATION_SIGNALS = [
@@ -141,6 +172,11 @@ function isPostVisitUtterance(msg) {
   return POST_VISIT_SIGNALS.some((s) => String(msg || '').toLowerCase().includes(s));
 }
 
+function resolveLocale(input = {}) {
+  const raw = input.locale || input.preferredLanguage || input.preferred_language || 'en';
+  return String(raw).slice(0, 2) || 'en';
+}
+
 function normalizeState(input = {}) {
   const flags = { ...defaultFlags(), ...(input.flags || {}) };
   return {
@@ -148,6 +184,7 @@ function normalizeState(input = {}) {
     clinic_id: input.clinic_id || input.clinicId || null,
     patient_id: input.patient_id || input.patientId || null,
     channel: input.channel || 'chat',
+    locale: resolveLocale(input),
     active_lane: input.active_lane || KELLY_LANE.ROUTER,
     step: input.step || 'await_intent',
     flags,
@@ -184,6 +221,12 @@ function routeOrchestratorLane(state = {}) {
   }
 
   if (PAYMENT_SIGNALS.some((s) => msg.includes(s))) {
+    if (paymentGateOpen(flags)) {
+      return { lane: KELLY_LANE.PAYMENT, step: LANE_FIRST_STEP[KELLY_LANE.PAYMENT] };
+    }
+    if (flags.has_rag || flags.triage_complete) {
+      return { lane: KELLY_LANE.BOOKING, step: 'schedule_visit' };
+    }
     return { lane: KELLY_LANE.PAYMENT, step: LANE_FIRST_STEP[KELLY_LANE.PAYMENT] };
   }
 
@@ -192,7 +235,7 @@ function routeOrchestratorLane(state = {}) {
   }
 
   if (RECORDS_SIGNALS.some((s) => msg.includes(s))) {
-    return { lane: KELLY_LANE.ACCOUNT, step: LANE_FIRST_STEP[KELLY_LANE.ACCOUNT] };
+    return { lane: KELLY_LANE.RECORDS, step: LANE_FIRST_STEP[KELLY_LANE.RECORDS] };
   }
 
   try {
@@ -244,8 +287,15 @@ function routeOrchestratorLane(state = {}) {
     return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
   }
 
-  if (educationHit) {
+  if (educationHit && flags.routine_intake_active) {
     return { lane: KELLY_LANE.EDUCATION, step: LANE_FIRST_STEP[KELLY_LANE.EDUCATION] };
+  }
+
+  if (educationHit && !flags.routine_intake_active) {
+    if (clinicalHit) {
+      return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+    }
+    return { lane: KELLY_LANE.SUPPORT, step: LANE_FIRST_STEP[KELLY_LANE.SUPPORT] };
   }
 
   if (clinicalHit) {
@@ -269,6 +319,7 @@ module.exports = {
   PAYMENT_SIGNALS,
   EMERGENCY_SIGNALS,
   POST_VISIT_SIGNALS,
+  RECORDS_SIGNALS,
   isEmergencyUtterance,
   isPostVisitUtterance
 };

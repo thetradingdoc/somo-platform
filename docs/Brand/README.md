@@ -240,6 +240,7 @@ Run after brand changes; production host may still be **callsomo.com**.
 |---------|-------------------|--------|
 | Marketing landing | `/` | Somo gecko wordmark; hero on white; lizard CTA `#b5e930` (not legacy `#93d33b`); MSU `#164437` on headings/pills; capability panels without gray taglines under tab labels; muted free pricing card + single lizard primary on Practice |
 | Provider login | `/login` or `/business/login.html` | Somo branding, product green `#16a637` CTAs |
+| Provider Today | `/business/today.html` | Greeting in topbar; alerts → KPIs → appointments (main) + calls/messages (aside); no Urgent/HITL panels; `somo-icon.png`; primary CTAs `#16a637` |
 | RCM | `/business/rcm.html` | Provider shell “Somo”, green accents |
 | Patient wallet | `/patients/wallet.html` | Somo colors, no Skin & Care |
 | Signup terms | `/public/signup/terms.html` | Party name Somo, green header |

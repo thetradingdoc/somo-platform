@@ -72,9 +72,11 @@ function setMeta(sessionId, key, value) {
  */
 function seedE2eBookableProvider(clinicId, opts = {}) {
   const specialty = opts.specialty || opts.targetSpecialty || 'Dermatology';
-  const email = (opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com')
-    .trim()
-    .toLowerCase();
+  const defaultEmail =
+    specialty === 'Dermatology'
+      ? 'maria.santos@doclittle.example'
+      : process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com';
+  const email = (opts.providerEmail || defaultEmail).trim().toLowerCase();
   const ProviderService = require(path.join(__dirname, '..', '..', 'services', 'provider-service'));
   const { dbModule } = loadDb();
   const customer = dbModule.getCustomerByEmail?.(email);
@@ -88,24 +90,32 @@ function seedE2eBookableProvider(clinicId, opts = {}) {
     try {
       dbModule.db
         .prepare(
-          `UPDATE provider_profiles SET specialty = ?, is_active = 1, updated_at = datetime('now') WHERE id = ?`
+          `UPDATE provider_profiles
+           SET clinic_id = ?, specialty = ?, is_active = 1, updated_at = datetime('now')
+           WHERE id = ?`
         )
-        .run(JSON.stringify([specialty]), profile.id);
+        .run(clinicId, JSON.stringify([specialty]), profile.id);
+      dbModule.db
+        .prepare(
+          `INSERT INTO provider_status (provider_id, email, is_online, last_seen_at, heartbeat_expires_at, updated_at)
+           VALUES (?, ?, 1, datetime('now'), datetime('now', '+24 hours'), datetime('now'))
+           ON CONFLICT(email) DO UPDATE SET
+             provider_id = excluded.provider_id,
+             is_online = 1,
+             heartbeat_expires_at = datetime('now', '+24 hours'),
+             last_seen_at = datetime('now'),
+             updated_at = datetime('now')`
+        )
+        .run(profile.id, email);
     } catch (_) {}
   }
   ProviderService.setProviderOnline(email, true);
-  try {
-    dbModule.db
-      .prepare(
-        `UPDATE provider_status
-         SET is_online = 1,
-             heartbeat_expires_at = datetime('now', '+24 hours'),
-             last_seen_at = datetime('now'),
-             updated_at = datetime('now')
-         WHERE lower(email) = lower(?)`
-      )
-      .run(email);
-  } catch (_) {}
+  const online = ProviderService.getOnlineProvidersForClinic(clinicId);
+  if (!online.length) {
+    throw new Error(
+      `seedE2eBookableProvider: no online providers for ${clinicId} (email=${email}). Check provider_profiles + provider_status.`
+    );
+  }
   let inserted = 0;
   const now = new Date();
   for (let d = 0; d < 60; d++) {
@@ -574,6 +584,111 @@ function tomorrowAtNoonLocal() {
     startDatetime: `${y}-${m}-${day}T12:00:00`,
     endDatetime: `${y}-${m}-${day}T12:30:00`,
     label: 'tomorrow at 12:00 PM',
+    time: '12:00',
+  };
+}
+
+/** Local today at 2:00 PM — for provider today.html (same calendar day as ppFetchAppointmentsToday). */
+function todayAtAfternoonLocal(opts = {}) {
+  const d = new Date();
+  const hour = opts.hour ?? 14;
+  const minute = opts.minute ?? d.getMinutes() % 30;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hh = String(hour).padStart(2, '0');
+  const mm = String(minute).padStart(2, '0');
+  const dateStr = `${y}-${m}-${day}`;
+  const labelHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  return {
+    dateStr,
+    startDatetime: `${dateStr}T${hh}:${mm}:00`,
+    endDatetime: `${dateStr}T${hh}:${String((Number(minute) + 30) % 60).padStart(2, '0')}:00`,
+    label: `today at ${labelHour}:${mm} ${ampm}`,
+    time: `${hh}:${mm}`,
+  };
+}
+
+function seedKellyRailsV2TurnResolved(sessionId, opts = {}) {
+  const { dbModule } = loadDb();
+  const tools = opts.toolsUsed || [
+    'store_triage_opqrst',
+    'run_triage_rag',
+    'get_available_slots',
+    'schedule_appointment',
+    'request_patient_payment',
+  ];
+  dbModule.insertKellyCallEvent({
+    session_id: sessionId,
+    event_type: 'turn_resolved',
+    payload_json: {
+      runtime: 'kelly_rails_v2',
+      tools_used: tools,
+      lane: opts.lane || 'booking',
+      ...opts.payload,
+    },
+  });
+}
+
+/**
+ * Seed Tom Harris + v2 triage/RAG/journey + today's confirmed appointment (provider portal screenshot).
+ */
+async function seedV2ProviderDashboardToday(opts = {}) {
+  const clinicId = opts.clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
+  const providerEmail =
+    opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+  const sessionId = opts.sessionId || newE2eSessionId('e2e_v6_3');
+  const patient = seedTomHarrisPatient(opts);
+  const todaySlot = todayAtAfternoonLocal(opts);
+
+  seedE2eBookableProvider(clinicId, {
+    targetSpecialty: 'Dermatology',
+    providerEmail,
+  });
+  seedBookingReady(sessionId, patient.patientId, clinicId, {
+    region: 'leg and neck',
+    quality: 'itchy rash on leg and neck',
+    symptomText: 'itchy rash on leg and neck for one week',
+    targetSpecialty: 'Dermatology',
+    patientName: 'Tom Harris',
+    patientEmail: patient.email,
+    patientPhone: patient.phone,
+  });
+  seedOpenJourney(clinicId, patient.patientId, { stage: 'intake', source: 'kelly_rails_v2_e2e' });
+  seedKellyRailsV2TurnResolved(sessionId, opts);
+
+  const { dbModule: dbMod } = loadDb();
+  try {
+    dbMod.db
+      .prepare(
+        `DELETE FROM appointments WHERE clinic_id = ? AND date = ? AND patient_id = ?`
+      )
+      .run(clinicId, todaySlot.dateStr, patient.patientId);
+  } catch (_) {}
+
+  const appointmentId = await seedTomHarrisAppointment(sessionId, patient.patientId, clinicId, {
+    noon: todaySlot,
+    providerEmail,
+    patientName: 'Tom Harris',
+    email: patient.email,
+    phone: patient.phone,
+    appointmentId: opts.appointmentId,
+  });
+
+  const { dbModule } = loadDb();
+  dbModule.db
+    .prepare(`UPDATE appointments SET status = 'confirmed' WHERE id = ?`)
+    .run(appointmentId);
+
+  return {
+    clinicId,
+    sessionId,
+    appointmentId,
+    patientId: patient.patientId,
+    patientEmail: patient.email,
+    todaySlot,
+    providerEmail,
   };
 }
 
@@ -613,7 +728,7 @@ async function seedTomHarrisAppointment(sessionId, patientId, clinicId, opts = {
     patient_phone: opts.phone || TOM_HARRIS_PHONE,
     appointment_type: 'Dermatology',
     date: noon.dateStr,
-    time: '12:00',
+    time: noon.time || '12:00',
     start_time: noon.startDatetime,
     end_time: noon.endDatetime,
     duration_minutes: 30,
@@ -824,7 +939,7 @@ function caseSummarySession(prep) {
  * Ensure OPQRST + RAG rows exist for cold-start F2 (DB seed — no LLM call).
  */
 function seedTriageWithRag(sessionId, patientId, clinicId, opts = {}) {
-  const { completeTriageRagForSession } = require('../services/triage-rag-fast-complete');
+  const { completeTriageRagForSession } = require('../../services/triage-rag-fast-complete');
   completeTriageRagForSession(sessionId, patientId, {
     targetSpecialty: opts.targetSpecialty || 'Dermatology',
     region: opts.region || 'leg and neck',
@@ -1075,6 +1190,9 @@ module.exports = {
   seedTomHarrisPatient,
   seedTomHarrisAppointment,
   tomorrowAtNoonLocal,
+  todayAtAfternoonLocal,
+  seedKellyRailsV2TurnResolved,
+  seedV2ProviderDashboardToday,
   seedE2eSlotTomorrowNoon,
   assertEmailSentTo,
   clearRcmE2eEmailOutbox,

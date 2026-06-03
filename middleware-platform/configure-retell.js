@@ -16,6 +16,9 @@ const AGENT_ID =
 // Retell TTS voice (openai-*, 11labs-*). Same env as RetellService.createAgent — set RETELL_VOICE_ID in .env to unify quality across agents.
 const RETELL_VOICE_ID =
     (process.env.RETELL_VOICE_ID && String(process.env.RETELL_VOICE_ID).trim()) || 'retell-Cimo';
+const RETELL_VOICE_ID_ES =
+    (process.env.RETELL_VOICE_ID_ES && String(process.env.RETELL_VOICE_ID_ES).trim()) || RETELL_VOICE_ID;
+const RETELL_CONFIGURE_LOCALE = String(process.env.RETELL_CONFIGURE_LOCALE || 'en').toLowerCase();
 
 // Determine API base URL
 // Priority: API_BASE_URL > BASE_URL > Railway URL > localhost
@@ -281,10 +284,11 @@ Keep responses short and natural for voice conversation.`;
         }
 
         // Retell API: custom LLM is response_engine.type "custom-llm" + llm_websocket_url inside it (not top-level).
+        const useEsProfile = RETELL_CONFIGURE_LOCALE === 'es';
         const updateData = {
             agent_name: 'Kelly - Somo Medical Voice Assistant',
-            voice_id: RETELL_VOICE_ID,
-            language: 'en-US',
+            voice_id: useEsProfile ? RETELL_VOICE_ID_ES : RETELL_VOICE_ID,
+            language: useEsProfile ? 'es-US' : 'en-US',
             webhook_url: TARGET_AGENT_WEBHOOK_URL,
             response_engine: {
                 type: 'custom-llm',
@@ -319,6 +323,10 @@ Keep responses short and natural for voice conversation.`;
         console.log('   LLM WebSocket:', TARGET_LLM_WS_URL);
         console.log('   Agent webhook:', TARGET_AGENT_WEBHOOK_URL);
         console.log('   Voice (RETELL_VOICE_ID):', updateData.voice_id);
+        console.log('   Locale (RETELL_CONFIGURE_LOCALE):', RETELL_CONFIGURE_LOCALE);
+        if (process.env.RETELL_VOICE_ID_ES) {
+            console.log('   Spanish voice (RETELL_VOICE_ID_ES):', RETELL_VOICE_ID_ES);
+        }
 
         console.log('\n' + '━'.repeat(60));
         console.log('✅ CONFIGURATION COMPLETE!');

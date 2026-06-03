@@ -11,6 +11,8 @@
 
 | File | Focus |
 |------|--------|
+| [`PROVIDER_UI_RCM_IMPROVEMENT_TODOS.md`](PROVIDER_UI_RCM_IMPROVEMENT_TODOS.md) | Provider visibility — Kelly feed, roster chips, nav, collection resend (**completed**) |
+| [`REVENUE_HUB_REDESIGN_TODOS.md`](REVENUE_HUB_REDESIGN_TODOS.md) | Revenue hub — 4-tab shell, UI audit fixes, legacy redirects (**completed**) |
 | [`KELLY_CONVERSATION_RAILS_TODOS.md`](KELLY_CONVERSATION_RAILS_TODOS.md) | Short backlog — **SSOT:** [`docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`](../../docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md) |
 | [`KELLY_RCM_PIPELINE_TODOS.md`](KELLY_RCM_PIPELINE_TODOS.md) | Kelly identity + RCM backbone + financial rails (TODO-01–24) |
 | [`AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Open checkout debt (#2, #4–#7, #9–#10, #12) |

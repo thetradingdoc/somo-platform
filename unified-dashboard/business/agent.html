@@ -3,17 +3,21 @@
 <head>
     <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Somo Provider - Voice Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>Somo Provider - Voice Agent</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <link rel="stylesheet" href="/assets/css/voice-agent.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
   <script src="/assets/js/provider-session.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
   <script src="/assets/js/voice-hours-picker.js"></script>
   <script src="/assets/js/voice-agent-page.js"></script>
 </head>
-<body class="provider-portal">
+<body class="provider-portal provider-portal--scroll" data-page="agent">
   <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">☰</button>
 
   <div class="pp-app">
@@ -38,14 +42,18 @@
         </aside>
 
     <div class="pp-main">
-      <header class="pp-topbar">
-        <div>
-          <div class="pp-page-eyebrow">Voice</div>
-          <div class="pp-page-title">AI front desk</div>
-            </div>
+      <header class="pp-topbar pp-topbar--page">
+        <div class="pp-topbar-left">
+          <p class="pp-page-eyebrow">Voice</p>
+          <h1 class="pp-page-title">AI front desk</h1>
+          <p class="pp-page-sub">Greeting, hours, and Kelly behavior for live calls.</p>
+        </div>
+        <div class="pp-topbar-right">
+          <div class="pp-date-chip" id="ppDateChip"></div>
+        </div>
       </header>
 
-      <main class="pp-content">
+      <main class="pp-content pp-content--agent" id="ppMainContent">
         <div class="va-toast error hidden" id="vaToast" role="alert"></div>
         <!-- Zone 1: Line card -->
         <section class="va-zone" id="zoneLine">
@@ -114,6 +122,15 @@
             <p style="color:var(--gray-500);font-size:0.9rem">No calls yet. Call your line to test your greeting.</p>
                 </div>
         </section>
+
+        <!-- Zone 4: Payment follow-up (stage 9→10) -->
+        <section class="va-zone" id="zonePaymentFollowup">
+          <h3 style="margin:0 0 12px;font-size:1rem">Payment follow-up</h3>
+          <p style="color:var(--muted);font-size:0.875rem;margin:0 0 12px">Open balances after calls — send a pay link without leaving the agent workspace.</p>
+          <div id="vaPaymentQueue" class="va-call-list">
+            <p style="color:var(--gray-500);font-size:0.9rem">Loading collection queue…</p>
+          </div>
+        </section>
       </main>
                     </div>
     </div>
@@ -174,7 +191,19 @@
 
       async function init() {
         if (typeof mountProviderPage === 'function') {
-          mountProviderPage({ activeId: 'agent', eyebrow: 'Voice', title: 'AI front desk' });
+          mountProviderPage({
+            activeId: 'agent',
+            eyebrow: 'Voice',
+            title: 'AI front desk',
+            subtitle: 'Greeting, hours, and Kelly behavior for live calls.'
+          });
+        } else if (typeof initProviderShell === 'function') {
+          initProviderShell({
+            activeId: 'agent',
+            eyebrow: 'Voice',
+            title: 'AI front desk',
+            subtitle: 'Greeting, hours, and Kelly behavior for live calls.'
+          });
         }
 
         let customer = null;
@@ -217,7 +246,8 @@
           refreshLineCard(),
           refreshSettings(),
           refreshStats(),
-          refreshPrompt()
+          refreshPrompt(),
+          loadPaymentQueue()
         ]);
       }
 
@@ -318,6 +348,73 @@
             .join('');
         } catch (e) {
           console.warn('Stats:', e.message);
+        }
+      }
+
+      async function loadPaymentQueue() {
+        const el = document.getElementById('vaPaymentQueue');
+        if (!el) return;
+        try {
+          const clinicId = typeof window.ppGetClinicId === 'function' ? window.ppGetClinicId() : 'clinic-default';
+          const url = new URL(`${API_BASE}/api/rcm/collection-queue`);
+          url.searchParams.set('clinic_id', clinicId);
+          const res = await fetch(url.toString(), {
+            credentials: 'include',
+            headers: window.ppGetAuthHeaders?.() || {}
+          });
+          const data = await res.json();
+          const rows = data.success ? (data.collection_queue || []) : [];
+          if (!rows.length) {
+            el.innerHTML = '<p style="color:var(--gray-500);font-size:0.9rem">No open collection balances. Kelly will queue pay links after balance-due calls.</p>';
+            return;
+          }
+          el.innerHTML = rows.slice(0, 8).map((j) => {
+            const pid = j.patient_id || '';
+            const amt = Number(j.amount_due || 0).toFixed(2);
+            return `<div class="va-call-row" style="flex-wrap:wrap;gap:6px">
+              <span style="flex:1;font-weight:500">${pid || 'Patient'} · $${amt}</span>
+              <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" data-send-pay data-patient="${pid}" data-journey="${j.id || ''}" data-amount="${j.amount_due || ''}">Resend via Kelly</button>
+            </div>`;
+          }).join('');
+          el.querySelectorAll('[data-send-pay]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const patientId = btn.getAttribute('data-patient');
+              const journeyId = btn.getAttribute('data-journey');
+              const amount = Number(btn.getAttribute('data-amount') || 0);
+              if (!patientId || amount <= 0) {
+                showVaToast('Missing patient or amount', 'error');
+                return;
+              }
+              btn.disabled = true;
+              try {
+                if (typeof window.ppResendViaKelly === 'function' && journeyId) {
+                  await window.ppResendViaKelly({
+                    journeyId,
+                    patientId,
+                    amount,
+                  });
+                } else {
+                  const res = await fetch(`${API_BASE}/api/rcm/payments/request?clinic_id=${encodeURIComponent(clinicId)}`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', ...(window.ppGetAuthHeaders?.() || {}) },
+                    body: JSON.stringify({ clinic_id: clinicId, patient_id: patientId, amount, journey_id: journeyId || undefined })
+                  });
+                  const json = await res.json();
+                  if (!json.success) throw new Error(json.error || 'Request failed');
+                }
+                showVaToast('Payment link sent via Kelly', 'success');
+                if (typeof window.ppToast === 'function') window.ppToast('Payment link sent via Kelly', 'success');
+                await loadPaymentQueue();
+              } catch (e) {
+                showVaToast(e.message, 'error');
+              } finally {
+                btn.disabled = false;
+              }
+            });
+          });
+        } catch (e) {
+          el.innerHTML = `<p style="color:var(--gray-500);font-size:0.9rem">${e.message}</p>`;
         }
       }
 

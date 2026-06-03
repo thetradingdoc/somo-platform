@@ -731,6 +731,61 @@ class RetellWebSocketHandler {
             try {
                 const callerPhone = connection?.customerPhone || connection?.callMetadata?.from_number || null;
                 const resolvedPatientId = connection?.patientId || null;
+                const { evaluateAsr } = require('../services/kelly-asr-gate');
+                const { emitLanguageMismatch } = require('../services/kelly-language-telemetry');
+                const dbLang =
+                    this.db?.getKellySessionLanguage?.(callId) ||
+                    connection?.preferred_language ||
+                    'en';
+                if (process.env.KELLY_ASR_DEBUG === '1' && message && typeof message === 'object') {
+                    const meta = message;
+                    const keys = Object.keys(meta).filter((k) => k !== 'transcript' && k !== 'content');
+                    const conf =
+                        meta.confidence ??
+                        meta.asr_confidence ??
+                        meta.transcript_confidence ??
+                        meta.stt_confidence ??
+                        null;
+                    console.log(
+                        `[Kelly ASR debug] call=${callId} keys=${keys.join(',')} confidence=${conf}`
+                    );
+                }
+                const asrEval = evaluateAsr(userSaid, message, { locale: dbLang });
+                if (!asrEval.allow) {
+                    connection._asrLowStreak = (connection._asrLowStreak || 0) + 1;
+                    emitLanguageMismatch(this.db, {
+                        session_id: callId,
+                        call_id: callId,
+                        detected_language: dbLang,
+                        session_language: dbLang,
+                        asr_language: asrEval.asrLanguage,
+                        asr_confidence: asrEval.confidence,
+                        mismatch_type:
+                            connection._asrLowStreak >= 2
+                                ? 'asr_low_confidence_mid_call'
+                                : 'asr_low_confidence',
+                        action_taken: connection._asrLowStreak >= 2 ? 'handoff' : 'clarify',
+                        channel: 'voice'
+                    });
+                    if (connection._asrLowStreak >= 2) {
+                        const { handleTurn } = require('../services/kelly-rails/orchestrator');
+                        const handoff = await handleTurn({
+                            sessionId: callId,
+                            message: userSaid,
+                            channel: 'voice',
+                            forceLanguageHandoff: true,
+                            preferredLanguage: dbLang
+                        });
+                        agentReply = handoff?.reply;
+                        kellyResult = handoff;
+                    } else {
+                        agentReply = asrEval.clarifyReply;
+                    }
+                } else {
+                    connection._asrLowStreak = 0;
+                }
+
+                if (!agentReply) {
                 // Coding graph handles billing codes; Kelly Rails V2 owns patient conversation (see kelly-rails/).
                 const { runKellyTurn } = require('../services/kelly-turn-resolver');
                 const turnOpts = {
@@ -742,9 +797,36 @@ class RetellWebSocketHandler {
                     patientId: resolvedPatientId,
                     callerPhone,
                     patientName: connection?.customerName || connection?.initialName || null,
-                    providerInstructions: connection?.voiceRuntime?.customPrompt || null
+                    providerInstructions: connection?.voiceRuntime?.customPrompt || null,
+                    turnReceivedAt: Date.now(),
+                    callId
                 };
-                const result = await runKellyTurn(turnOpts);
+                const fillerMs = parseInt(process.env.KELLY_VOICE_FILLER_MS || '1200', 10) || 1200;
+                const voiceLocaleForFiller =
+                    this.db?.getKellySessionLanguage?.(callId) ||
+                    connection?.preferred_language ||
+                    'en';
+                const fillerText =
+                    String(voiceLocaleForFiller).slice(0, 2) === 'es'
+                        ? 'Un momento, por favor.'
+                        : 'One moment please.';
+                let fillerSent = false;
+                let fillerTimer = null;
+                const turnPromise = runKellyTurn(turnOpts);
+                if (fillerMs > 0) {
+                    fillerTimer = setTimeout(() => {
+                        if (fillerSent) return;
+                        if (mySequence !== (connection._transcriptSequence || 0)) return;
+                        fillerSent = true;
+                        this.sendRetellInterim(connection.ws, fillerText, message.response_id);
+                    }, fillerMs);
+                }
+                let result;
+                try {
+                    result = await turnPromise;
+                } finally {
+                    if (fillerTimer) clearTimeout(fillerTimer);
+                }
                 kellyResult = result;
                 agentReply = result?.reply;
                 const agentTransfer = VoiceAgentRuntime.detectTransferHint(null, agentReply);
@@ -756,9 +838,17 @@ class RetellWebSocketHandler {
                 }
                 if (result?.endCall) {
                     if (agentReply) {
+                        const { formatVoiceReply } = require('../services/voice-reply-formatter');
+                        agentReply = formatVoiceReply(agentReply, {
+                            locale: result?.language || dbLang,
+                            channel: 'voice',
+                            active_lane: result?.kelly_rails?.active_lane,
+                            step: result?.kelly_rails?.step
+                        });
                         this.sendRetellResponse(connection.ws, agentReply, message.response_id);
                     }
                     return;
+                }
                 }
             } catch (e) {
                 kellyResult = { usedFallback: true };
@@ -791,6 +881,28 @@ class RetellWebSocketHandler {
                 return;
             }
 
+            try {
+                const { formatVoiceReply } = require('../services/voice-reply-formatter');
+                const { recordVoiceAssistantTurn } = require('../services/voice-slo-metrics');
+                const voiceLocale =
+                    this.db?.getKellySessionLanguage?.(callId) ||
+                    kellyResult?.language ||
+                    'en';
+                agentReply = formatVoiceReply(agentReply, {
+                    locale: voiceLocale,
+                    channel: 'voice',
+                    active_lane: kellyResult?.kelly_rails?.active_lane,
+                    step: kellyResult?.kelly_rails?.step
+                });
+                recordVoiceAssistantTurn({
+                    sessionId: callId,
+                    replyText: agentReply,
+                    conversationHistory: connection.conversationHistory
+                });
+            } catch (fmtErr) {
+                console.warn('⚠️  voice reply format/metrics:', fmtErr.message);
+            }
+
             connection.conversationHistory.push({
                 role: 'assistant',
                 content: agentReply,
@@ -804,12 +916,18 @@ class RetellWebSocketHandler {
                 // increase the chance of additional LLM/tool retries (bad UX).
                 if (this.db?.upsertOrchestrateSession) {
                     const row = this.db.getOrchestrateSessionBySessionId?.(callId);
-                    let preferredLang = row?.preferred_language || 'en';
+                    let preferredLang =
+                        this.db?.getKellySessionLanguage?.(callId) ||
+                        row?.preferred_language ||
+                        kellyResult?.language ||
+                        'en';
                     try {
-                        const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('../services/patient-orchestrator-service');
+                        const { detectLanguagePreferenceRequest } = require('../services/kelly-rails/language');
                         const langReq = detectLanguagePreferenceRequest(userSaid);
-                        if (langReq?.isLanguageRequest && langReq?.code) preferredLang = langReq.code;
-                        else if ((row?.turn_count ?? 0) < 2) preferredLang = detectLanguageFromText(userSaid).code || preferredLang;
+                        if (langReq?.isLanguageRequest && langReq?.code) {
+                            preferredLang = langReq.code;
+                            this.db?.upsertKellySessionLanguage?.(callId, langReq.code);
+                        }
                     } catch (_) {}
                     this.db.upsertOrchestrateSession({
                         session_id: callId,
@@ -2386,12 +2504,24 @@ class RetellWebSocketHandler {
             response_type: 'response',
             response_id: safeResponseId,
             content,
-            content_complete: true
+            content_complete: options.contentComplete !== false
         };
         if (options.endCall) {
             payload.end_call = true;
         }
         this.sendToRetell(ws, payload);
+    }
+
+    /** Partial reply while turn is still processing (perceived latency). */
+    sendRetellInterim(ws, content, responseId) {
+        if (!content) return;
+        const safeResponseId = (responseId === undefined || responseId === null) ? 0 : responseId;
+        this.sendToRetell(ws, {
+            response_type: 'response',
+            response_id: safeResponseId,
+            content,
+            content_complete: false
+        });
     }
 
     // Helper: build and send one-time initial greeting

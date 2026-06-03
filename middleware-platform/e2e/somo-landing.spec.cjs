@@ -6,7 +6,9 @@ const API_BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replac
 
 test.describe('Somo demo landing', () => {
   test('hero and demo form submit (mocked API)', async ({ page }) => {
+    let capturedBody = null;
     await page.route('**/api/public/somo-demo/request-call', async (route) => {
+      capturedBody = route.request().postDataJSON();
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -16,6 +18,10 @@ test.describe('Somo demo landing', () => {
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
+    await expect(page.locator('.somo-logo-img')).toBeVisible();
+    expect(await page.locator('.somo-logo-img').evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
+    await expect(page.locator('.somo-hero-phone')).toBeVisible();
+    expect(await page.locator('.somo-hero-phone').evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
     await expect(page.getByRole('heading', { name: /never answer business calls again/i })).toBeVisible();
     await expect(page.locator('.somo-nav').getByRole('link', { name: /Try for \$0/i })).toBeVisible();
     await expect(page.locator('.somo-nav').getByRole('link', { name: /Try for \$0/i })).toHaveAttribute('href', /\/login\?/);
@@ -91,16 +97,32 @@ test.describe('Somo demo landing', () => {
     await expect(pricing.locator('.somo-btn-primary')).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'Sign Up', exact: true })).toBeVisible();
     await expect(page.getByText(/AI Front Desk \| 24\/7 Calls & Scheduling/i)).toBeVisible();
+    await expect(
+      page.getByText(/handles billing for dental and medical practices/i)
+    ).toBeVisible();
 
-    await page.locator('select').selectOption('medical_clinic');
-    await page.getByPlaceholder('Your Name').fill('Test User');
-    await page.getByPlaceholder('+15551234567').fill('+15555550123');
+    await expect(page.getByText(/Somo.*AI front desk/i).first()).toBeVisible();
+    await expect(page.locator('#demo select')).toHaveCount(0);
+    await expect(page.locator('#demo textarea')).toHaveCount(0);
+    await page.getByLabel('Your name').fill('Test User');
+    await page.getByLabel('Mobile number').fill('+15555550123');
+    await page
+      .getByLabel('What do you need help with ?')
+      .fill('Need after-hours coverage for a small clinic');
     await expect(page.getByText(/signup link at this same number/i)).toBeVisible();
     await page.getByRole('checkbox').check();
-    await page.getByRole('button', { name: /Get a call/i }).click();
+    await page.getByRole('button', { name: /Get my demo call/i }).click();
 
     await expect(page.getByText(/Calling you now/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/few quick questions/i)).toBeVisible();
     await expect(page.getByRole('link', { name: /Sign up for Somo/i })).toBeVisible();
+    expect(capturedBody).toMatchObject({
+      name: 'Test User',
+      phone: '+15555550123',
+      consent: true,
+      questions_asked: 'Need after-hours coverage for a small clinic'
+    });
+    expect(capturedBody.use_case).toBeUndefined();
   });
 
   test('capability cards mobile horizontal accordion', async ({ page }) => {
@@ -135,6 +157,40 @@ test.describe('Somo demo landing', () => {
     await expect(page.locator('.somo-scroll-cue')).toBeHidden();
   });
 
+  test('mobile header and footer layout', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    await expect(page.locator('.somo-logo-img')).toBeVisible();
+    expect(await page.locator('.somo-logo-img').evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
+
+    const nav = page.locator('.somo-nav');
+    const navBox = await nav.boundingBox();
+    expect(navBox).not.toBeNull();
+    expect(navBox.height).toBeLessThan(320);
+
+    await expect(nav.locator('.somo-nav-cta')).toBeVisible();
+    const ctaBox = await nav.locator('.somo-nav-cta').boundingBox();
+    expect(ctaBox).not.toBeNull();
+    expect(ctaBox.x + ctaBox.width).toBeLessThanOrEqual(390 + 2);
+
+    const footer = page.locator('.somo-footer');
+    await footer.scrollIntoViewIfNeeded();
+    await expect(footer.locator('.somo-footer-logo-img')).toBeVisible();
+    expect(await footer.locator('.somo-footer-logo-img').evaluate((img) => img.naturalWidth)).toBeGreaterThan(
+      0
+    );
+    await expect(footer.getByRole('link', { name: 'Terms of Service' })).toBeVisible();
+    await expect(footer.getByRole('link', { name: 'Sign up' })).toBeVisible();
+
+    const linksOverflow = await page.locator('.somo-footer-links').evaluate((el) => {
+      return el.scrollWidth > el.clientWidth + 2;
+    });
+    expect(linksOverflow).toBe(false);
+
+    await expect(page.locator('.dc-floating-demo')).toHaveCount(0);
+  });
+
   test('pricing cards mobile horizontal slider', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/');
@@ -155,7 +211,9 @@ test.describe('Somo demo landing', () => {
 
   test('request-call API validates consent', async ({ request }) => {
     try {
-      const health = await request.get(`${API_BASE}/api/public/somo-demo/health`);
+      const health = await request.get(`${API_BASE}/api/public/somo-demo/health`, {
+        timeout: 5000
+      });
       if (!health.ok()) test.skip(true, 'Middleware not running');
     } catch {
       test.skip(true, 'Middleware not reachable');

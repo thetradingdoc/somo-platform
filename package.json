@@ -4,6 +4,7 @@
   "scripts": {
     "check:brand": "node scripts/check-brand-strings.cjs",
     "brand:favicons": "node scripts/generate-brand-favicons.cjs",
+    "brand:trim-logo": "node scripts/trim-somo-logo.cjs",
     "brand:sync": "node scripts/generate-brand-favicons.cjs && node scripts/sync-brand-assets.cjs",
     "check:legacy-hosts": "node scripts/check-legacy-hosts.cjs",
     "check:docs-stale-strings": "node scripts/check-docs-stale-strings.cjs",
@@ -56,6 +57,7 @@
     "deploy:landing-hosting": "node scripts/build-staging-hosting.cjs && cd unified-dashboard && npx firebase-tools deploy --only hosting",
     "deploy:staging-hosting": "node scripts/build-staging-hosting.cjs && cd unified-dashboard && npx firebase-tools deploy --only hosting",
     "build:staging-hosting": "node scripts/build-staging-hosting.cjs",
+    "verify:hosting-dist-landing": "node scripts/verify-hosting-dist-landing.cjs",
     "smoke:staging": "node scripts/smoke-staging.cjs",
     "smoke:callsomo": "UI_BASE_URL=https://callsomo.com MIDDLEWARE_API_BASE=https://api.callsomo.com npm run smoke:staging",
     "callsomo:check": "bash scripts/callsomo-terminal-cutover.sh check",

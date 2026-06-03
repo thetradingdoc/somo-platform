@@ -955,7 +955,7 @@ Check off in PRs; archive completed phases under `todos/archive/KELLY_AGENTIC_RA
 - [x] **V2-1** `kelly-rails/` orchestrator + main graph + lane steps + tool allow-lists
 - [x] **V2-2** `kelly-turn-resolver` + wired chat/voice/funnel/checkout/E2E
 - [x] **V2-3** Docs [`kelly_rails_v2_as_built.md`](./kelly_rails_v2_as_built.md) + archive
-- [ ] **V2-4** Remove legacy `processTurn` default (after production validation)
+- [x] **V2-4** Legacy `processTurn` hard-disabled in production (`runtime-guard.js` + resolver); dev/staging opt-in via `KELLY_ALLOW_LEGACY_PROCESS_TURN=1`
 
 ### Phase 7 — Proof and rollout
 

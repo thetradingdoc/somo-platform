@@ -3,20 +3,27 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Somo Provider - Billing</title>
-    <link rel="stylesheet" href="/assets/css/global.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#16a637">
+    <title>Somo Provider — Billing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/somo-tokens.css">
     <link rel="stylesheet" href="/assets/css/provider-portal.css">
     <script src="/assets/js/config.js"></script>
     <script src="/assets/js/auth-utils.js"></script>
     <script src="/assets/js/provider-shell.js"></script>
+    <script src="/assets/js/provider-shell-chrome.js"></script>
+    <script src="/assets/js/legacy-provider-redirect.js"></script>
     <script src="/assets/js/provider-layout.js"></script>
     <style>
         :root {
-            --primary: #16a637;
-            --primary-dark: #1e3a8a;
-            --primary-light: #16a637;
+            --primary: var(--somo-green, #16a637);
+            --primary-dark: var(--somo-green-hover, #128a2e);
+            --primary-light: var(--somo-green, #16a637);
         }
+        #billingSectionTabs { margin-bottom: 16px; }
 
         .layout {
             display: flex;
@@ -580,6 +587,16 @@
                 <p class="page-subtitle" id="pageSubtitle">Manage all billing activities in one place</p>
             </div>
 
+            <div class="pp-panel-tabs" id="billingSectionTabs" role="tablist" aria-label="Billing sections">
+                <button type="button" class="pp-ptab" data-section="overview" role="tab">Overview</button>
+                <button type="button" class="pp-ptab" data-section="scan" role="tab">Scan PDF</button>
+                <button type="button" class="pp-ptab" data-section="claims" role="tab">Claims & EOB</button>
+                <button type="button" class="pp-ptab" data-section="remittance" role="tab">Remittance</button>
+                <button type="button" class="pp-ptab" data-section="prior-auth" role="tab">Prior auth</button>
+                <button type="button" class="pp-ptab" data-section="invoices" role="tab">Invoices</button>
+                <a class="pp-ptab" href="patient-payments.html" role="tab" style="text-decoration:none">Patient payments</a>
+            </div>
+
             <!-- Credits Banner (Voice Agent page only; hidden on billing) -->
             <div class="credits-banner" id="creditsBanner" style="display:none">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -703,6 +720,17 @@
                 </div>
             </div>
 
+            <!-- Remittance Section -->
+            <div class="content-section" id="remittanceSection">
+                <div class="section-header">
+                    <h2 class="section-title">Remittance</h2>
+                    <a class="pp-btn pp-btn-ghost pp-btn-sm" href="claims.html">Denials &amp; CDI</a>
+                </div>
+                <div id="remittanceContent">
+                    <div class="pp-empty">Loading remittance summary…</div>
+                </div>
+            </div>
+
             <!-- Invoices Section -->
             <div class="content-section" id="invoicesSection">
                 <div class="section-header">
@@ -711,17 +739,6 @@
                 </div>
                 <div id="invoicesContent">
                     <!-- Invoices content populated by JavaScript -->
-                </div>
-            </div>
-
-            <!-- Payments Section (hidden — use Invoices for payment history) -->
-            <div class="content-section" id="paymentsSection" style="display:none">
-                <div class="section-header">
-                    <h2 class="section-title">Payments</h2>
-                    <button class="back-to-cards-btn" onclick="showSection('overview')">← Back to Revenue</button>
-                </div>
-                <div id="paymentsContent">
-                    <!-- Payments content populated by JavaScript -->
                 </div>
             </div>
 
@@ -756,10 +773,9 @@
                 scan: 'claims',
                 invoices: 'billing',
                 claims: 'claims',
+                remittance: 'remittance',
                 'prior-auth': 'prior-auth',
-                overview: 'claims',
-                payments: 'billing',
-                commerce: 'claims'
+                overview: 'claims'
             };
             const activeId = sectionToNavId[section] || 'claims';
             const titles = {
@@ -836,11 +852,19 @@
             tenantType = (window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type) || 'clinic';
 
             renderNavCards();
-            document.getElementById('navCards').style.display = 'none';
 
-            // Check URL for section parameter - always show section, never card menu
             const urlParams = new URLSearchParams(window.location.search);
             let section = urlParams.get('section') || 'overview';
+            if (section === 'overview') {
+                window.location.replace('revenue.html?tab=pipeline');
+                return;
+            }
+            const legacyTabs = urlParams.get('legacy_tabs') === '1';
+            if (section && !legacyTabs) {
+                document.body.classList.add('billing--sidebar-nav');
+                const tabBar = document.getElementById('billingSectionTabs');
+                if (tabBar) tabBar.hidden = true;
+            }
             const appointmentId = urlParams.get('appointment_id');
             const suggestedCodesParam = urlParams.get('suggested_codes');
             if (suggestedCodesParam) {
@@ -853,30 +877,12 @@
         function renderNavCards() {
             const cardsContainer = document.getElementById('navCards');
             const cards = [
-                {
-                    id: 'overview',
-                    icon: '📊',
-                    title: 'Overview',
-                    desc: 'Billing summary and quick stats'
-                },
-                {
-                    id: 'scan',
-                    icon: '📄',
-                    title: 'Scan PDF',
-                    desc: 'Upload and extract medical codes'
-                },
-                {
-                    id: 'claims',
-                    icon: '📋',
-                    title: 'Claims',
-                    desc: 'View EOB and insurance claims'
-                },
-                {
-                    id: 'invoices',
-                    icon: '🧾',
-                    title: 'Invoices',
-                    desc: 'Manage patient invoices'
-                }
+                { id: 'overview', icon: '', title: 'Overview', desc: 'Billing summary and quick stats' },
+                { id: 'scan', icon: '', title: 'Scan PDF', desc: 'Upload and extract medical codes' },
+                { id: 'claims', icon: '', title: 'Claims & EOB', desc: 'View EOB and insurance claims' },
+                { id: 'remittance', icon: '', title: 'Remittance', desc: 'ERA posting and reconciliation' },
+                { id: 'prior-auth', icon: '', title: 'Prior auth', desc: 'Authorization requests' },
+                { id: 'invoices', icon: '', title: 'Invoices', desc: 'Manage patient invoices' }
             ];
 
             cardsContainer.innerHTML = cards.map(card => `
@@ -899,9 +905,22 @@
         }
 
         // Show specific section (appointmentId optional - for video visit -> create claim flow; suggestedCodesParam for video consult codes)
+        function syncBillingTabs(sectionId) {
+            document.querySelectorAll('#billingSectionTabs .pp-ptab[data-section]').forEach((tab) => {
+                const on = tab.getAttribute('data-section') === sectionId;
+                tab.classList.toggle('act', on);
+                tab.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+        }
+
         function showSection(sectionId, appointmentIdFromUrl, suggestedCodesParam) {
-            // Hide nav cards
-            document.getElementById('navCards').style.display = 'none';
+            if (sectionId === 'payments' || sectionId === 'commerce') {
+                window.location.href = 'patient-payments.html';
+                return;
+            }
+
+            document.getElementById('navCards').style.display = sectionId === 'overview' ? 'grid' : 'none';
+            syncBillingTabs(sectionId);
 
             // Hide all sections
             document.querySelectorAll('.content-section').forEach(section => {
@@ -915,10 +934,9 @@
                 'overview': 'overviewSection',
                 'scan': 'scanSection',
                 'claims': 'claimsSection',
+                'remittance': 'remittanceSection',
                 'prior-auth': 'priorAuthSection',
-                'invoices': 'invoicesSection',
-                'payments': 'paymentsSection',
-                'commerce': 'commerceSection'
+                'invoices': 'invoicesSection'
             };
 
             const sectionEl = document.getElementById(sectionMap[sectionId]);
@@ -943,11 +961,10 @@
             const navForSection = {
                 overview: 'claims',
                 scan: 'claims',
-                claims: 'prior-auth',
+                claims: 'claims',
+                remittance: 'remittance',
                 'prior-auth': 'prior-auth',
-                invoices: 'billing',
-                payments: 'billing',
-                commerce: 'claims'
+                invoices: 'billing'
             };
             if (typeof window.renderProviderSidebar === 'function') {
                 window.renderProviderSidebar(navForSection[sectionId] || 'claims');
@@ -972,8 +989,56 @@
                 case 'invoices':
                     await loadInvoices();
                     break;
+                case 'remittance':
+                    await loadRemittance();
+                    break;
             }
         }
+
+        async function loadRemittance() {
+            const el = document.getElementById('remittanceContent');
+            try {
+                const clinicId = typeof window.ppGetClinicId === 'function' ? window.ppGetClinicId() : 'clinic-default';
+                const headers = window.ppGetAuthHeaders?.() || {};
+                const [ccRes, remRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/rcm/command-center?clinic_id=${encodeURIComponent(clinicId)}`, { credentials: 'include', headers }),
+                    fetch(`${API_BASE}/api/rcm/remittances?clinic_id=${encodeURIComponent(clinicId)}`, { credentials: 'include', headers })
+                ]);
+                const data = await ccRes.json();
+                const remJson = await remRes.json();
+                if (!data.success) throw new Error(data.error || 'Failed');
+                const s = data.summary || {};
+                const rows = remJson.success && Array.isArray(remJson.remittances) ? remJson.remittances : [];
+                const table = rows.length
+                    ? `<table class="pp-payments-table"><thead><tr><th>Posted</th><th>Payer</th><th>Amount</th><th>Journey</th></tr></thead><tbody>
+                        ${rows.slice(0, 40).map((r) => `<tr>
+                          <td>${r.posted_at ? new Date(r.posted_at).toLocaleString() : '—'}</td>
+                          <td>${r.payer_name || '—'}</td>
+                          <td>$${Number(r.amount || 0).toFixed(2)}</td>
+                          <td>${r.journey_id ? `<a href="rcm-journey.html?journey_id=${encodeURIComponent(r.journey_id)}">View</a>` : '—'}</td>
+                        </tr>`).join('')}
+                      </tbody></table>`
+                    : '<div class="pp-empty">No ERA postings yet. Post remittance from a paid claim or use Kelly after payer response.</div>';
+                el.innerHTML = `
+                  <div class="pp-snap-row"><span class="pp-snap-label">Remittance total</span><span class="pp-snap-val">$${Number(s.remittance_total || 0).toFixed(2)}</span></div>
+                  <div class="pp-snap-row"><span class="pp-snap-label">Open journeys</span><span class="pp-snap-val">${Number(s.journeys_open || 0)}</span></div>
+                  <div style="margin:16px 0 8px;font-weight:600;font-size:14px">ERA postings</div>
+                  ${table}
+                  <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                    <a class="pp-btn pp-btn-primary pp-btn-sm" href="claims.html">Review denials &amp; CDI</a>
+                    <a class="pp-btn pp-btn-ghost pp-btn-sm" href="patient-payments.html">Patient payments</a>
+                  </div>`;
+            } catch (e) {
+                el.innerHTML = `<div class="pp-empty">${e.message}</div>`;
+            }
+        }
+
+        document.getElementById('billingSectionTabs')?.addEventListener('click', (e) => {
+            const tab = e.target.closest('[data-section]');
+            if (!tab) return;
+            e.preventDefault();
+            showSection(tab.getAttribute('data-section'));
+        });
 
         // Load overview content
         async function loadOverview() {
@@ -1828,59 +1893,6 @@
         // View invoice
         function viewInvoice(invoiceId) {
             window.location.href = `invoice-detail.html?id=${invoiceId}`;
-        }
-
-        // Load payments section
-        async function loadPayments() {
-            const content = document.getElementById('paymentsContent');
-            content.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading payments…</p></div>';
-            try {
-                const clinicId = (typeof window.ppGetClinicId === 'function') ? window.ppGetClinicId() : 'clinic-default';
-                const [summaryRes, listRes] = await Promise.all([
-                    fetch(`${API_BASE}/api/rcm/payments/summary?clinic_id=${encodeURIComponent(clinicId)}`, {
-                        credentials: 'include',
-                        headers: window.ppGetAuthHeaders ? window.ppGetAuthHeaders() : { 'Content-Type': 'application/json' }
-                    }),
-                    fetch(`${API_BASE}/api/rcm/payments?clinic_id=${encodeURIComponent(clinicId)}`, {
-                        credentials: 'include',
-                        headers: window.ppGetAuthHeaders ? window.ppGetAuthHeaders() : { 'Content-Type': 'application/json' }
-                    })
-                ]);
-                const summaryJson = await summaryRes.json();
-                const listJson = await listRes.json();
-                if (!summaryJson.success || !listJson.success) {
-                    throw new Error(summaryJson.error || listJson.error || 'Failed to load payments');
-                }
-                const s = summaryJson.summary || {};
-                const rows = Array.isArray(listJson.payments) ? listJson.payments : [];
-                content.innerHTML = `
-                    <div class="kpi-grid" style="margin-bottom:16px;">
-                        <div class="kpi-card"><div class="kpi-value">$${Number(s.requested_total || 0).toFixed(2)}</div><div class="kpi-label">Requested</div></div>
-                        <div class="kpi-card"><div class="kpi-value">$${Number(s.paid_total || 0).toFixed(2)}</div><div class="kpi-label">Paid</div></div>
-                        <div class="kpi-card"><div class="kpi-value">$${Number(s.remittance_total || 0).toFixed(2)}</div><div class="kpi-label">Remittance</div></div>
-                        <div class="kpi-card"><div class="kpi-value">${Number(s.payment_count || 0)}</div><div class="kpi-label">Requests</div></div>
-                    </div>
-                    ${rows.length ? `
-                        <table class="claims-table">
-                            <thead>
-                                <tr>
-                                    <th>Date</th><th>Status</th><th>Method</th><th>Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rows.slice(0, 30).map((p) => `
-                                  <tr>
-                                    <td>${new Date(p.requested_at).toLocaleString()}</td>
-                                    <td><span class="status-badge status-${String(p.status || 'requested').toLowerCase()}">${String(p.status || 'requested')}</span></td>
-                                    <td>${p.method || 'manual'}</td>
-                                    <td>$${Number(p.amount || 0).toFixed(2)}</td>
-                                  </tr>`).join('')}
-                            </tbody>
-                        </table>` : '<div class="empty-state"><p>No payment requests yet.</p></div>'}
-                `;
-            } catch (error) {
-                content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">!</div><p>Error: ${error.message}</p></div>`;
-            }
         }
 
         // Filter functions (simplified)

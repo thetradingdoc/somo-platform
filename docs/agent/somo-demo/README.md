@@ -17,7 +17,7 @@
 
 ## Goal
 
-Outbound demo calls from the Somo demo landing page should **convert prospects to signup**, not run Kelly medical intake or LangGraph coding.
+Outbound demo calls from the Somo landing page run a **Kelly qualification** call (~2 min, signup CTA) — not Kelly Rails clinical intake or LangGraph coding. See [QUALIFICATION_CALL_SCRIPT_V1.md](./QUALIFICATION_CALL_SCRIPT_V1.md) and [RUNBOOK.md](./RUNBOOK.md#qualification-demo-landing).
 
 ## Data flow
 

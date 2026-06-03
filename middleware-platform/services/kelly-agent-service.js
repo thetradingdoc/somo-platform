@@ -2280,6 +2280,15 @@ Antworten Sie durchgehend auf Deutsch.`,
    */
   /** @deprecated Use kelly-turn-resolver with KELLY_RAILS_V2=1. Legacy monolith turn host. */
   static async processTurn(params) {
+    const { isLegacyProcessTurnAllowed, isProductionKellyEnforced } = require('./kelly-rails/runtime-guard');
+    if (isProductionKellyEnforced() && !isLegacyProcessTurnAllowed()) {
+      const err = new Error(
+        'KellyAgentService.processTurn is disabled in production. Enable KELLY_RAILS_V2=1.'
+      );
+      err.code = 'KELLY_LEGACY_DISABLED';
+      throw err;
+    }
+
     let message = String(params.message || '');
     const {
       sessionId,

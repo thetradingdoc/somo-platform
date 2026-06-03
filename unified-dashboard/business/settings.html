@@ -2,504 +2,25 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Somo Provider - Settings</title>
-    <link rel="stylesheet" href="/assets/css/global.css">
-    <link rel="stylesheet" href="/assets/css/provider-portal.css">
-    <script src="/assets/js/config.js"></script>
-    <script src="/assets/js/auth-utils.js"></script>
-    <script src="/assets/js/provider-shell.js"></script>
-    <script src="/assets/js/provider-layout.js"></script>
-    <script src="/assets/js/voice-hours-picker.js"></script>
-    <style>
-        :root {
-            --primary: #16a637;
-            --primary-dark: #1e3a8a;
-            --primary-light: #16a637;
-        }
-
-
-        .layout {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        .sidebar {
-            width: 260px;
-            background: white;
-            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-        }
-
-        .sidebar-header {
-            padding: 24px;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-    .sidebar-logo {
-      font-size: 32px;
-      line-height: 1;
-      letter-spacing: -2px;
-      color: #2d3748;
-      margin-bottom: 4px;
-      font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-weight: 700;
-    }
-
-        .sidebar-subtitle {
-            font-size: 12px;
-            color: var(--gray-500);
-            margin-top: 4px;
-        }
-
-        .sidebar-nav {
-            padding: 16px;
-        }
-
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: var(--gray-700);
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-bottom: 4px;
-        }
-
-        .nav-item:hover {
-            background: var(--gray-50);
-            color: var(--primary);
-        }
-
-        .nav-item.active {
-            background: var(--primary);
-            color: white;
-        }
-
-        .nav-icon {
-            font-size: 20px;
-        }
-
-        .sidebar-footer {
-            padding: 16px;
-            border-top: 1px solid var(--gray-200);
-            position: absolute;
-            bottom: 0;
-            width: 260px;
-            background: white;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            border-radius: 8px;
-            background: var(--gray-50);
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--primary);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-        }
-
-        .user-details {
-            flex: 1;
-        }
-
-        .user-name {
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--gray-900);
-        }
-
-        .user-role {
-            font-size: 12px;
-            color: var(--gray-500);
-        }
-
-        .logout-btn {
-            background: none;
-            border: none;
-            color: var(--gray-500);
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .logout-btn:hover {
-            background: var(--danger-light);
-            color: var(--danger);
-        }
-
-        .main-content {
-            margin-left: 260px;
-            flex: 1;
-            padding: 32px;
-        }
-
-        .page-header {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 32px;
-            box-shadow: var(--shadow-md);
-        }
-
-        .page-title {
-            font-size: 28px;
-            margin-bottom: 8px;
-        }
-
-        .page-subtitle {
-            color: var(--gray-600);
-            font-size: 14px;
-        }
-
-        .settings-tabs {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-
-        .settings-tab-btn {
-            border: 1px solid var(--gray-200);
-            background: #fff;
-            color: var(--gray-700);
-            padding: 8px 12px;
-            border-radius: 999px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 13px;
-        }
-
-        .settings-tab-btn.active {
-            background: var(--primary);
-            color: #fff;
-            border-color: var(--primary);
-        }
-
-        .settings-panel[hidden] {
-            display: none !important;
-        }
-
-        /* Settings Sections */
-        .settings-section {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 24px;
-            box-shadow: var(--shadow-md);
-        }
-
-        .settings-section h3 {
-            font-size: 20px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .setting-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 0;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .setting-row:last-child {
-            border-bottom: none;
-        }
-
-        .setting-info h4 {
-            font-size: 16px;
-            margin-bottom: 4px;
-        }
-
-        .setting-description {
-            font-size: 14px;
-            color: var(--gray-600);
-        }
-
-        .setting-action {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        /* Connected Services */
-        .service-card {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 20px;
-            background: var(--gray-50);
-            border-radius: 8px;
-            margin-bottom: 16px;
-        }
-
-        .readiness-stack {
-            display: grid;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .readiness-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            background: #fff;
-            border: 1px solid var(--gray-200);
-            border-radius: 10px;
-            padding: 10px 12px;
-            font-size: 13px;
-        }
-
-        .readiness-badge {
-            font-size: 12px;
-            padding: 3px 8px;
-            border-radius: 999px;
-            font-weight: 600;
-        }
-
-        .readiness-badge.live {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .readiness-badge.blocks {
-            background: #dbeafe;
-            color: #16a637;
-        }
-
-        .readiness-badge.unavailable {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .readiness-note {
-            color: #92400e;
-            background: #fffbeb;
-            border: 1px solid #fde68a;
-            border-radius: 8px;
-            padding: 8px 10px;
-            font-size: 12px;
-            margin-top: 8px;
-        }
-
-        .service-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-        }
-
-        .service-icon.stripe {
-            background: #635bff;
-        }
-
-        .service-icon.twilio {
-            background: #f22f46;
-        }
-
-        .service-icon.shopify {
-            background: #96bf48;
-        }
-
-        .service-icon.google {
-            background: #4285f4;
-        }
-
-        .service-info {
-            flex: 1;
-        }
-
-        .service-info h4 {
-            font-size: 16px;
-            margin-bottom: 4px;
-        }
-
-        .service-status {
-            font-size: 13px;
-            color: var(--gray-600);
-        }
-
-        .service-status.connected {
-            color: var(--success);
-            font-weight: 600;
-        }
-
-        .danger-zone {
-            background: var(--danger-light);
-            border: 2px solid var(--danger);
-            border-radius: 12px;
-            padding: 24px;
-            margin-top: 24px;
-        }
-
-        .danger-zone h3 {
-            color: var(--danger);
-            margin-bottom: 16px;
-        }
-
-        /* Mobile Menu Toggle */
-        .mobile-menu-toggle {
-            display: none;
-            position: fixed;
-            top: 16px;
-            left: 16px;
-            z-index: 1001;
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 12px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            transition: all 0.3s ease;
-        }
-
-        .mobile-menu-toggle:hover {
-            background: var(--primary-dark);
-            transform: scale(1.05);
-        }
-
-        /* Sidebar Overlay for Mobile */
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 999;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .sidebar-overlay.active {
-            display: block;
-            opacity: 1;
-        }
-
-        @media (max-width: 768px) {
-            .mobile-menu-toggle {
-                display: block;
-            }
-
-            .sidebar {
-                position: fixed;
-                left: 0;
-                top: 0;
-                height: 100vh;
-                width: 280px;
-                max-width: 85vw;
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
-                z-index: 1000;
-                box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
-            }
-
-            .sidebar.open {
-                transform: translateX(0);
-            }
-
-            .main-content {
-                margin-left: 0;
-                padding: 16px;
-                padding-top: 70px;
-            }
-
-            .page-header {
-                padding: 16px;
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
-            }
-
-            .page-title {
-                font-size: 24px;
-            }
-
-            .setting-row {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
-            }
-
-            /* Touch-friendly buttons */
-            .btn {
-                min-height: 44px;
-                padding: 12px 20px;
-            }
-
-            .nav-item {
-                min-height: 48px;
-                padding: 14px 16px;
-            }
-
-            .settings-tabs {
-                position: sticky;
-                top: 8px;
-                z-index: 5;
-                background: #f8fafc;
-                padding: 6px 0;
-                overflow-x: auto;
-                flex-wrap: nowrap;
-                scrollbar-width: thin;
-            }
-            .settings-tab-btn { white-space: nowrap; }
-        }
-
-        @media (max-width: 480px) {
-            .main-content {
-                padding: 12px;
-                padding-top: 70px;
-            }
-
-            .page-title {
-                font-size: 20px;
-            }
-
-            .mobile-menu-toggle {
-                top: 12px;
-                left: 12px;
-                padding: 10px 14px;
-                font-size: 18px;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#16a637">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Somo Provider - Settings</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/provider-portal.css">
+  <link rel="stylesheet" href="/assets/css/provider-settings.css?v=1">
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
+  <script src="/assets/js/voice-hours-picker.js"></script>
 </head>
 
-<body class="provider-portal provider-portal--scroll">
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
-    
-    <!-- Sidebar Overlay -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    
+<body class="provider-portal provider-portal--settings" data-page="settings">
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -526,18 +47,13 @@
         </aside>
 
         <!-- Main Content -->
-        <main class="main-content">
-            <div class="page-header">
-                <h1 class="page-title">Settings</h1>
-                <p class="page-subtitle">Manage your AI voice receptionist platform settings</p>
-            </div>
-
-            <div class="settings-tabs">
-                <button class="settings-tab-btn active" data-settings-tab="profile">Profile</button>
-                <button class="settings-tab-btn" data-settings-tab="integrations">Integrations</button>
-                <button class="settings-tab-btn" data-settings-tab="voice">Voice Agent</button>
-                <button class="settings-tab-btn" data-settings-tab="billing">Billing</button>
-                <button class="settings-tab-btn" data-settings-tab="advanced">Advanced</button>
+        <main class="main-content pp-content pp-content--settings" id="ppMainContent">
+            <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+                <button type="button" class="pp-ptab act settings-tab-btn" role="tab" aria-selected="true" aria-controls="settings-panel-profile" id="settings-tab-profile" data-settings-tab="profile">Profile</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-integrations" id="settings-tab-integrations" data-settings-tab="integrations">Integrations</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-voice" id="settings-tab-voice" data-settings-tab="voice">Voice Agent</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-billing" id="settings-tab-billing" data-settings-tab="billing">Billing</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-advanced" id="settings-tab-advanced" data-settings-tab="advanced">Advanced</button>
             </div>
 
             <!-- Business Information -->
@@ -602,7 +118,7 @@
                         <h4>Usage & Invoices</h4>
                         <p class="service-status">View your Somo usage, credits, and invoices</p>
                     </div>
-                    <a href="billing.html?section=invoices" class="btn btn-secondary btn-sm" style="text-decoration: none;">View</a>
+                    <a href="revenue.html?tab=payments" class="btn btn-secondary btn-sm" style="text-decoration: none;">View</a>
                 </div>
             </div>
 
@@ -704,17 +220,17 @@
 
             <!-- Voice Agent (managed on agent.html) -->
             <div class="settings-section settings-panel" data-settings-panel="voice">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div class="voice-agent-intro">
                     <div>
-                        <h3>Voice Agent</h3>
-                        <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 0;">
+                        <h3>🎤 Voice Agent</h3>
+                        <p>
                             Greeting, hours, on/off, and Kelly customization live on the Voice Agent page. Changes apply on your next call.
                         </p>
                     </div>
                     <a class="btn btn-primary btn-sm" href="agent.html">Open Voice Agent</a>
                 </div>
 
-                <div class="setting-row" style="margin-top:16px;">
+                <div class="setting-row">
                     <div class="setting-info">
                         <h4>Status</h4>
                         <p class="setting-description" id="vaSettingsStatusSummary">Loading…</p>
@@ -751,7 +267,7 @@
                     </div>
                 </div>
 
-                <p style="font-size:13px;color:var(--gray-500);margin-top:12px;">
+                <p class="voice-agent-footnote">
                     First-time setup: <a href="voice-setup.html">Run the 3-step voice setup wizard</a>
                 </p>
             </div>
@@ -912,7 +428,7 @@
 
             <!-- API & Developer -->
             <div class="settings-section settings-panel" data-settings-panel="advanced">
-                <h3>👨‍💻 API & Developer Settings</h3>
+                <h3>⚙ API & Developer Settings</h3>
 
                 <div class="setting-row">
                     <div class="setting-info">
@@ -1003,8 +519,8 @@
             </div>
 
             <!-- Danger Zone -->
-            <div class="danger-zone">
-                <h3>⚠️ Danger Zone</h3>
+            <div class="danger-zone settings-panel" data-settings-panel="advanced">
+                <h3>⚠ Danger Zone</h3>
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>Export All Data</h4>
@@ -1091,7 +607,8 @@
             mountProviderPage({
                 activeId: 'profile',
                 eyebrow: 'Clinic',
-                title: 'Settings'
+                title: 'Settings',
+                subtitle: 'Manage your AI voice receptionist platform settings'
             });
             setupSettingsTabs();
             const tabParam = new URLSearchParams(window.location.search).get('tab');
@@ -1134,7 +651,10 @@
         function setSettingsTab(tabName) {
             activeSettingsTab = tabName || 'profile';
             document.querySelectorAll('[data-settings-tab]').forEach((btn) => {
-                btn.classList.toggle('active', btn.dataset.settingsTab === activeSettingsTab);
+                const on = btn.dataset.settingsTab === activeSettingsTab;
+                btn.classList.toggle('act', on);
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-selected', on ? 'true' : 'false');
             });
             document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
                 panel.hidden = panel.dataset.settingsPanel !== activeSettingsTab;

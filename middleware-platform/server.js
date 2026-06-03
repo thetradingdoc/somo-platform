@@ -69,6 +69,8 @@ const {
   getHostname,
   isSomoMarketingHostname,
   isLocalDevRootHost,
+  SOMO_LANDING_BUILD_INSTRUCTIONS_HTML,
+  isSomoLandingBuildReady: landingBuildReady,
 } = require('./lib/static-hosting-paths');
 const { registerEarlySomoLandingStatic } = require('./bootstrap/static-hosting');
 // Node 18+ has global fetch; fallback to axios where needed
@@ -2113,20 +2115,10 @@ function getSomoLandingBuildPath(...subPaths) {
 }
 
 function trySendSomoLanding(res) {
-  const fs = require('fs');
-  const landingBuild = path.resolve(getSomoLandingBuildPath('index.html'));
-  if (fs.existsSync(landingBuild)) {
-    res.sendFile(landingBuild);
-    return true;
-  }
-  return false;
+  if (!landingBuildReady(getSomoLandingBuildPath)) return false;
+  res.sendFile(path.resolve(getSomoLandingBuildPath('index.html')));
+  return true;
 }
-
-const SOMO_LANDING_BUILD_INSTRUCTIONS_HTML =
-  '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
-  '<h1>Somo</h1><p>Landing build not found. Run:</p>' +
-  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/somo-landing && npm install && npm run build</pre>' +
-  '</body></html>';
 
 function sendSomoLandingOrInstructions(res) {
   if (trySendSomoLanding(res)) return;
@@ -4864,6 +4856,9 @@ app.use('/api/admin/impact', impactAdminRoutes);
 const paymentOpsRoutes = require('./routes/payment-ops');
 app.use('/api/admin/payment-ops', paymentOpsRoutes);
 
+const adminKellyCallsRoutes = require('./routes/admin-kelly-calls');
+app.use('/api/admin/kelly', adminKellyCallsRoutes);
+
 // Visit pricing admin (Task 16)
 
 
@@ -7292,14 +7287,7 @@ function _maskPhone(phone) {
   return `(***) ***-${digits.slice(-4)}`;
 }
 
-function _canViewClinicalPhi(req) {
-  // Staff-only gate for clinical prep PHI.
-  const scope = String(req?.user?.scope || '').toLowerCase();
-  const role = String(req?.user?.role || '').toLowerCase();
-  const isStaffScope = scope === 'clinician' || scope === 'staff' || scope === 'admin';
-  const isStaffRole = role.includes('admin') || role.includes('clinician') || role.includes('staff');
-  return !!(req?.providerId || req?.headers?.['x-provider-id'] || isStaffScope || isStaffRole);
-}
+// Clinical prep PHI gate: middleware-platform/lib/clinical-phi-access.js (admin-platform route)
 
 // Dashboard: merged clinical prep payload for provider drawer
 
@@ -10154,8 +10142,19 @@ function onServerListening() {
           console.warn('⚠️  Financial close generation failed:', e.message);
         }
       };
-      runReconciliation();
-      runDailyClose();
+      const kickoffFinancialJobs = () => {
+        runReconciliation();
+        runDailyClose();
+      };
+      const isProdEnv = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+      const devLightStart = process.env.DEV_LIGHT_START === '1';
+      if (isProdEnv) {
+        kickoffFinancialJobs();
+      } else if (!devLightStart) {
+        setImmediate(kickoffFinancialJobs);
+      } else {
+        console.log('ℹ️  DEV_LIGHT_START=1 — skipping financial integrity kickoff on startup');
+      }
       setInterval(runReconciliation, reconMs);
       setInterval(runDailyClose, closeMs);
       console.log(

@@ -110,83 +110,15 @@ function getLocalizedPrompt(key, langCode) {
   return map[langCode] || map.en;
 }
 
-/** Language name -> code map for explicit requests (e.g. "speak Swahili") */
-const LANGUAGE_NAME_TO_CODE = {
-  swahili: 'sw', kiswahili: 'sw', spanish: 'es', español: 'es', english: 'en', russian: 'ru', french: 'fr',
-  français: 'fr', chinese: 'zh', mandarin: 'zh', german: 'de', deutsch: 'de', arabic: 'ar', portuguese: 'pt',
-  vietnamese: 'vi', hindi: 'hi', tagalog: 'tl', korean: 'ko', japanese: 'ja'
-};
+const KellyLanguage = require('./kelly-rails/language');
 
-/**
- * Detect explicit language preference requests (Kelly prompt: "Can we speak [language]?")
- * Returns { isLanguageRequest: boolean, code?: string, name?: string }
- * Supports English patterns and common non-English phrases (e.g. Swahili "Tunaweza ongea swahili").
- */
 function detectLanguagePreferenceRequest(message) {
-  const m = (message || '').toString().trim();
-  const lower = m.toLowerCase();
-
-  // Swahili phrases: "Tunaweza ongea swahili" (Can we speak Swahili), "ongea Kiswahili"
-  const swahiliLangPatterns = [
-    { re: /(?:tunaweza|naweza|weza)\s+ongea\s+(?:ki)?swahili/i, code: 'sw', name: 'Swahili' },
-    { re: /ongea\s+(?:ki)?swahili/i, code: 'sw', name: 'Swahili' }
-  ];
-  for (const { re, code, name } of swahiliLangPatterns) {
-    if (re.test(lower)) return { isLanguageRequest: true, code, name };
-  }
-
-  const russianLangPatterns = [
-    { re: /(?:можем|можно)\s+(?:говорить|общаться)\s+(?:по-русски|на\s+русском)/i, code: 'ru', name: 'Russian' },
-    { re: /\b(?:говорить|говорите)\s+по-русски\b/i, code: 'ru', name: 'Russian' },
-    { re: /\bпереключ(?:итесь|ись)\s+на\s+русский\b/i, code: 'ru', name: 'Russian' }
-  ];
-  for (const { re, code, name } of russianLangPatterns) {
-    if (re.test(m)) return { isLanguageRequest: true, code, name };
-  }
-
-  // Blocklist: common words that match "in X" but are NOT languages (e.g. "rash in my eyelid")
-  const NOT_LANGUAGE = new Set(['my', 'your', 'their', 'his', 'her', 'the', 'a', 'an', 'this', 'that', 'order', 'way', 'mind', 'detail', 'general', 'particular']);
-  const patterns = [
-    /\b(?:can you|could you|can we|could we)\s+speak\s+(?:in\s+)?(\w+)/i,
-    /\b(?:can you|could you|can we|could we)\s+talk\s+(?:in\s+)?(\w+)/i,
-    /\b(?:can you|could you|can we|could we)\s+(?:speak|talk)\s+(?:in\s+)?(russian|spanish|french|english|swahili|german|chinese|arabic|portuguese)\b/i,
-    /\bswitch\s+(?:the\s+)?(?:language\s+)?to\s+(russian|spanish|french|english|swahili|german|chinese)\b/i,
-    /\b(?:use|prefer)\s+(russian|spanish|french|english|swahili)\b/i,
-    /\bspeak\s+(?:in\s+)?(\w+)\s*(?:please)?/i,
-    /\b(?:respond|reply|answer|write)\s+(?:in\s+)?(\w+)/i,
-    /\bI\s+(?:don'?t\s+)?speak\s+(\w+)/i,
-    /\b(?:please\s+)?(english|spanish|french|german|russian|chinese|swahili)\s+please\b/i,
-    /\b(?:language|lang)\s*[:\s]?\s*(\w+)/i
-  ];
-  for (const re of patterns) {
-    const match = lower.match(re);
-    if (match && match[1]) {
-      const lang = match[1].toLowerCase();
-      if (NOT_LANGUAGE.has(lang)) continue;
-      const code = LANGUAGE_NAME_TO_CODE[lang] || (lang.length >= 2 ? lang.substring(0, 2) : null);
-      if (code) return { isLanguageRequest: true, code, name: lang };
-    }
-  }
-  return { isLanguageRequest: false };
+  return KellyLanguage.detectLanguagePreferenceRequest(message);
 }
 
-/**
- * Detect language from text (heuristic for MVP; can be replaced with LLM/translation API).
- * Returns { code, name } e.g. { code: 'es', name: 'Spanish' }
- */
 function detectLanguageFromText(text) {
-  const t = (text || '').toString().trim();
-  if (!t) return { code: 'en', name: 'English' };
-
-  const lower = t.toLowerCase();
-  if (/\p{Script=Cyrillic}/u.test(t)) return { code: 'ru', name: 'Russian' };
-  if (/\p{Script=Han}/u.test(t) || /[\u4e00-\u9fff]/.test(t)) return { code: 'zh', name: 'Chinese' };
-  if (/^(hola|buenos|gracias|por favor|quiero|necesito|dolor|sí|no)\b/i.test(lower) || /español|español/i.test(lower)) return { code: 'es', name: 'Spanish' };
-  if (/^(bonjour|merci|je veux|j'ai|oui|non)\b/i.test(lower) || /français|français/i.test(lower)) return { code: 'fr', name: 'French' };
-  if (/^(guten|danke|ich|hallo|ja|nein)\b/i.test(lower) || /deutsch|german/i.test(lower)) return { code: 'de', name: 'German' };
-  if (/\bswahili|kiswahili\b/i.test(lower)) return { code: 'sw', name: 'Swahili' };
-
-  return { code: 'en', name: 'English' };
+  const r = KellyLanguage.detectLanguageFromText(text);
+  return { code: r.language, name: r.name };
 }
 
 /**

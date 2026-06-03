@@ -12,6 +12,9 @@
 process.env.KELLY_RAILS_V2 = process.env.KELLY_RAILS_V2 || '1';
 process.env.KELLY_ALLOW_HYBRID_GRAPH = process.env.KELLY_ALLOW_HYBRID_GRAPH || '0';
 process.env.KELLY_RAILS_ROLLOUT_PCT = process.env.KELLY_RAILS_ROLLOUT_PCT || '1';
+if (process.env.KELLY_GOLDEN_LOCALE === 'es') {
+  process.env.KELLY_RAILS_ES_ENABLED = '1';
+}
 
 /** Stub payment tool in harness so copay conv does not depend on Stripe/network. */
 function installGoldenPaymentStub() {
@@ -33,7 +36,10 @@ function installGoldenPaymentStub() {
 }
 installGoldenPaymentStub();
 
-const golden = require('../tests/fixtures/kelly-rails-golden-conversations.json');
+const golden =
+  process.env.KELLY_GOLDEN_LOCALE === 'es'
+    ? require('../tests/fixtures/kelly-rails-golden-conversations-es.json')
+    : require('../tests/fixtures/kelly-rails-golden-conversations.json');
 const { routeOrchestratorLane, KELLY_LANE } = require('../services/kelly-rails/state-schema');
 const { executeTurn } = require('../services/kelly-rails/execute-turn');
 const { getAllowedToolNames } = require('../services/kelly-rails/tool-allowlists');
@@ -163,7 +169,8 @@ async function runConversation(conv) {
     flags: conv.flags || {},
     v2_hydrated: true,
     clinicId: conv.clinicId || 'clinic-golden-e2e',
-    patientId: conv.patientId || 'patient-golden-e2e'
+    patientId: conv.patientId || 'patient-golden-e2e',
+    locale: conv.locale || (process.env.KELLY_GOLDEN_LOCALE === 'es' ? 'es' : 'en')
   };
   if (conv.active_lane) input.active_lane = conv.active_lane;
   if (conv.step) input.step = conv.step;
@@ -225,10 +232,19 @@ function runLlmGateNote() {
 }
 
 async function main() {
-  console.log('Kelly Rails — 10 golden conversations (2 per rail)');
+  const isEs = process.env.KELLY_GOLDEN_LOCALE === 'es';
   const convs = golden.conversations || [];
-  if (convs.length !== 10) {
+  console.log(
+    isEs
+      ? `Kelly Rails — ES golden conversations (${convs.length})`
+      : 'Kelly Rails — 10 golden conversations (2 per rail)'
+  );
+  if (!isEs && convs.length !== 10) {
     console.error(`Expected 10 conversations, got ${convs.length}`);
+    process.exit(1);
+  }
+  if (isEs && convs.length < 1) {
+    console.error('ES golden fixture has no conversations');
     process.exit(1);
   }
 
@@ -237,12 +253,16 @@ async function main() {
     await runConversation(conv);
   }
 
-  printRailSummary();
+  if (!isEs) printRailSummary();
   runLlmGateNote();
 
   console.log(`\nSummary: ${passed} assertions passed, ${failed} failures`);
   if (failed > 0) process.exit(1);
-  console.log('Gate OK: 10 golden conversations (2 per rail), guardrails verified.');
+  console.log(
+    isEs
+      ? `Gate OK: ${convs.length} ES golden conversation(s), guardrails verified.`
+      : 'Gate OK: 10 golden conversations (2 per rail), guardrails verified.'
+  );
 }
 
 main().catch((e) => {

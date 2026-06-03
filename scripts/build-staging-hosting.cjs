@@ -86,6 +86,13 @@ function main() {
   console.log('  landing vite assets (merge)');
   copyDir(path.join(LANDING, 'build', 'assets'), path.join(OUT, 'assets'), { merge: true });
 
+  const landingBrand = path.join(LANDING, 'build', 'assets', 'brand');
+  const outBrand = path.join(OUT, 'assets', 'brand');
+  if (fs.existsSync(landingBrand)) {
+    console.log('  landing brand assets (overwrite portal copies)');
+    copyDir(landingBrand, outBrand);
+  }
+
   console.log('  business portal HTML');
   copyDir(path.join(UD, 'business'), path.join(OUT, 'business'));
 

@@ -100,17 +100,28 @@ module.exports = defineConfig({
     {
       name: 'provider-portal',
       testDir: './e2e',
-      testMatch: '**/provider-today-portal.spec.cjs',
+      testMatch: [
+        '**/provider-today-portal.spec.cjs',
+        '**/v6-3-provider-today-screenshot.spec.cjs',
+        '**/provider-portal-shell.spec.cjs',
+        '**/provider-portal-screenshots.spec.cjs',
+      ],
       timeout: 60_000,
       use: {
         browserName: 'chromium',
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+        serviceWorkers: 'block',
       },
     },
     {
       name: 'provider-rcm',
       testDir: './e2e',
-      testMatch: ['**/*rcm*.spec.cjs', '**/patient-wallet-bills.spec.cjs'],
+      testMatch: [
+        '**/*rcm*.spec.cjs',
+        '**/patient-wallet-bills.spec.cjs',
+        '**/provider-rcm-payments-ui.spec.cjs',
+        '**/provider-rcm-journey-ui.spec.cjs',
+      ],
       testIgnore: '**/kelly-rcm-golden-path.spec.cjs',
       timeout: 120_000,
       use: {

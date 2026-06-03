@@ -33,9 +33,11 @@ module.exports = defineConfig({
       name: 'prod-mobile',
       testDir: './e2e',
       testMatch: '**/somo-landing.spec.cjs',
+      grep: /mobile header|scroll cue hidden|pricing cards mobile|capability cards mobile/,
       use: {
         browserName: 'chromium',
-        viewport: { width: 390, height: 844 }
+        viewport: { width: 390, height: 844 },
+        serviceWorkers: 'block'
       }
     }
   ],

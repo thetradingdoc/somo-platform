@@ -1,11 +1,11 @@
 {
   "templates": {
     "medical": {
-      "persona_name": "Sam",
+      "persona_name": "Kelly",
       "retell_agent_id_env": "SOMO_DEMO_RETELL_AGENT_ID",
       "twilio_from_env": "SOMO_DEMO_TWILIO_FROM_NUMBER",
       "voice_id_env": "SOMO_DEMO_VOICE_ID",
-      "max_duration_sec": 240
+      "max_duration_sec": 180
     }
   },
   "use_case_map": {

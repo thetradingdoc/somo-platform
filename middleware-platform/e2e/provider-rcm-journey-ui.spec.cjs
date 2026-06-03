@@ -33,7 +33,7 @@ async function providerLogin(page) {
       JSON.stringify({ name: c.name || 'Provider', role: c.role || 'Provider', ...c })
     );
   }, customer);
-  await page.goto(`${API_BASE}/business/rcm.html`, { waitUntil: 'networkidle' });
+  await page.goto(`${API_BASE}/business/revenue.html?tab=pipeline`, { waitUntil: 'networkidle' });
 }
 
 test.describe('Provider RCM command center UI', () => {

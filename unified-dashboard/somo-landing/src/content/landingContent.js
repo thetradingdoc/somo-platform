@@ -355,7 +355,7 @@ export const FAQ_ITEMS = [
   {
     question: 'What happens on the live demo call?',
     answer:
-      'Enter your phone number and Somo will call you within seconds. You\'ll experience a real AI front desk conversation tailored to your selected practice type — dental, medical, specialty, and more.'
+      'Enter your name and mobile number—we call you within seconds. Somo\'s AI front desk asks a few quick questions about your practice (~2 minutes) and shows one relevant capability. Language is detected from your voice (English or Spanish).'
   },
   {
     question: 'Can I cancel anytime?',

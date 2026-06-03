@@ -50,6 +50,26 @@ Kelly must actively manage and track stages 1-4.
 
 Stages 5-12 are integration-driven (claims, remittance, collections), with Kelly providing timeline visibility and follow-up actions.
 
+### Provider visibility contract (2026-06)
+
+Doctors see Kelly work and next actions without digging into logs:
+
+| Surface | Data source | Behavior |
+|---------|-------------|----------|
+| Today — Kelly activity | `GET /api/kelly/activity` ← `kelly_call_events` | Live feed (30s poll): bookings, payment links, language, guardrails |
+| Today — Needs action | `GET /api/rcm/journeys?status=open` | Stage chips link via `ppJourneyStageHref` |
+| Patients roster | `GET /api/rcm/patient-context` | Action chip + PA badge per card |
+| Collection | `POST /api/rcm/collection-queue/:id/resend` | Resend via Kelly + `recordAgentAction` |
+| **Revenue hub** | `revenue.html?tab=` | Single sidebar entry; tabs: pipeline, claims, payments, work |
+
+**Revenue hub URL contract:** `revenue.html?tab=pipeline|claims|payments|work`. Legacy pages (`rcm.html`, `billing.html?section=*`, `patient-payments.html`, `claims.html`) redirect to matching tabs. `STAGE_CTA_HREF` in `provider-shell.js` targets these URLs.
+
+Badge counts: `GET /api/rcm/metrics/health` → `metrics.revenue_badges` (sidebar aggregate + per-tab).
+
+Shared helpers in `provider-shell.js`: `ppJourneyStageHref`, `ppJourneyStageChip`, `ppFetchKellyActivity`, `ppResendViaKelly`.
+
+Voice latency: `KELLY_VOICE_FILLER_MS` interim reply + `KELLY_RAILS_FAST_RAG=1` on booking paths. Probe: `scripts/kelly-voice-latency-probe.cjs`.
+
 ## Current architecture (implemented baseline)
 
 - Signup flow creates provider account and verifies email.

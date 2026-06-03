@@ -2,14 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#16a637">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <title>Somo Provider - Video Call</title>
-  <link rel="stylesheet" href="/assets/css/global.css">
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
-    <script src="/assets/js/provider-layout.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
   <style>
   :root { --primary: #16a637; --primary-dark: #1e3a8a; --primary-light: #16a637; }
   .layout { display: flex; min-height: 100vh; }
@@ -409,7 +414,7 @@
     padding: 8px 14px;
     border-radius: 6px;
     border: none;
-    background: #6366f1;
+    background: var(--somo-green, #16a637);
     color: white;
     font-size: 12px;
     cursor: pointer;
@@ -523,7 +528,7 @@
   }
   </style>
 </head>
-<body class="provider-portal">
+<body class="provider-portal provider-portal--scroll">
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-header">

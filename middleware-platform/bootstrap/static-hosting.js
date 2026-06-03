@@ -9,6 +9,8 @@ const {
   shouldServeSomoLanding,
   isSomoLandingApiPath,
   isUnifiedDashboardAssetPath,
+  isSomoLandingBuildReady,
+  SOMO_LANDING_BUILD_INSTRUCTIONS_HTML,
 } = require('../lib/static-hosting-paths');
 
 /** Legacy littlelab SPA paths — redirect to / in server.js route handlers. */
@@ -76,14 +78,27 @@ function registerStaticHosting(app, { express, rootDir }) {
 function registerEarlySomoLandingStatic(app, { express, rootDir }) {
   const { getSomoLandingBuildPath, getUnifiedDashboardPath } = createStaticPathHelpers(rootDir);
 
+  const STATIC_EXT = /\.(js|mjs|css|json|woff2?|png|jpe?g|gif|svg|ico|webp)$/i;
+
+  function trySendBuildFile(res, filePath) {
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
+    res.sendFile(path.resolve(filePath));
+    return true;
+  }
+
+  function trySendLandingBuildAsset(req, res) {
+    if (!req.path.startsWith('/assets/')) return false;
+    const rel = req.path.replace(/^\//, '');
+    if (!rel || rel.includes('..')) return false;
+    return trySendBuildFile(res, getSomoLandingBuildPath(rel));
+  }
+
   /** Signup/portal files under /assets that are not in the landing Vite build. */
   function trySendUnifiedDashboardAsset(req, res) {
     if (!req.path.startsWith('/assets/')) return false;
     const rel = req.path.replace(/^\/assets\//, '');
     if (!rel || rel.includes('..')) return false;
-    const filePath = getUnifiedDashboardPath('assets', rel);
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
-    return res.sendFile(path.resolve(filePath));
+    return trySendBuildFile(res, getUnifiedDashboardPath('assets', rel));
   }
 
   app.use((req, res, next) => {
@@ -91,23 +106,29 @@ function registerEarlySomoLandingStatic(app, { express, rootDir }) {
     if (!shouldServeSomoLanding(getHostname(req))) return next();
     if (isSomoLandingApiPath(req.path)) return next();
 
+    // Landing build wins for shared /assets/* paths (e.g. hero-phone-v2.jpg lives only in somo-landing/build).
+    if (trySendLandingBuildAsset(req, res)) return;
     if (trySendUnifiedDashboardAsset(req, res)) return;
 
     // Portal asset URLs must not fall through to landing SPA index.html.
     if (isUnifiedDashboardAssetPath(req.path)) return next();
 
-    return express.static(getSomoLandingBuildPath(), { index: false, maxAge: '5m' })(req, res, () => {
-      if ((req.method === 'GET' || req.method === 'HEAD') && !res.headersSent) {
-        if (/\.(js|mjs|css|json|woff2?|png|jpe?g|gif|svg|ico|webp)$/i.test(req.path)) {
-          return next();
-        }
-        const indexPath = getSomoLandingBuildPath('index.html');
-        if (require('fs').existsSync(indexPath)) {
-          return res.sendFile(indexPath);
-        }
+    // Hashed Vite assets (/assets/index-*.css|js) — never SPA-fallback to index.html.
+    if (req.path.startsWith('/assets/')) {
+      if (STATIC_EXT.test(req.path) && !res.headersSent) {
+        res.status(404).end();
       }
-      return next();
-    });
+      return;
+    }
+
+    // SPA document routes (/, /about, etc.)
+    if (isSomoLandingBuildReady(getSomoLandingBuildPath)) {
+      res.sendFile(path.resolve(getSomoLandingBuildPath('index.html')));
+      return;
+    }
+    if (!STATIC_EXT.test(req.path) && !res.headersSent) {
+      res.status(503).type('html').send(SOMO_LANDING_BUILD_INSTRUCTIONS_HTML);
+    }
   });
 }
 

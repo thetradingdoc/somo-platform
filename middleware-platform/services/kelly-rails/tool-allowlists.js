@@ -2,6 +2,21 @@
 
 /** Tool names allowed per lane step (tool-first rails). */
 
+const SKINCARE_ROUTINE_TOOLS = new Set([
+  'evaluate_skincare_routine',
+  'resolve_product_ingredients',
+  'lookup_ingredient_functions',
+  'retrieve_ingredient_monographs'
+]);
+
+const PAYMENT_AND_SCHEDULE_TOOLS = new Set([
+  'schedule_appointment',
+  'get_available_slots',
+  'create_appointment_checkout',
+  'request_patient_payment',
+  'collect_insurance'
+]);
+
 const ALLOWLISTS = {
   basic_intake: {
     identity: ['get_triage_session'],
@@ -37,6 +52,10 @@ const ALLOWLISTS = {
     billing: ['get_patient_claims', 'request_patient_payment'],
     insurance: ['collect_insurance', 'get_patient_claims']
   },
+  records: {
+    records_qa: ['query_patient_records', 'get_triage_session'],
+    fhir_read: ['query_patient_records', 'get_triage_session']
+  },
   education: {
     education: [
       'evaluate_skincare_routine',
@@ -53,10 +72,25 @@ const ALLOWLISTS = {
   }
 };
 
-function getAllowedToolNames(lane, step) {
+function getAllowedToolNames(lane, step, flags = {}) {
   const laneMap = ALLOWLISTS[lane];
   if (!laneMap) return ['get_triage_session'];
-  return laneMap[step] || laneMap[Object.keys(laneMap)[0]] || ['get_triage_session'];
+  let names = [...(laneMap[step] || laneMap[Object.keys(laneMap)[0]] || ['get_triage_session'])];
+
+  if (lane === 'records') {
+    names = names.filter((n) => !PAYMENT_AND_SCHEDULE_TOOLS.has(n));
+  }
+
+  if (lane === 'education' && !flags.routine_intake_active) {
+    names = names.filter((n) => !SKINCARE_ROUTINE_TOOLS.has(n));
+  }
+
+  return names;
 }
 
-module.exports = { ALLOWLISTS, getAllowedToolNames };
+module.exports = {
+  ALLOWLISTS,
+  SKINCARE_ROUTINE_TOOLS,
+  PAYMENT_AND_SCHEDULE_TOOLS,
+  getAllowedToolNames
+};

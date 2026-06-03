@@ -10,11 +10,16 @@ const DEMO_TOOLS = [
     type: 'function',
     function: {
       name: 'record_interest',
-      description: 'Record prospect interest level',
+      description: 'Log qualification fields after QUALIFY',
       parameters: {
         type: 'object',
         properties: {
           level: { type: 'string', enum: ['hot', 'warm', 'cold'] },
+          practice_type: { type: 'string' },
+          practice_specialty: { type: 'string' },
+          primary_problem: { type: 'string' },
+          practice_size: { type: 'string' },
+          language_detected: { type: 'string' },
           notes: { type: 'string' }
         },
         required: ['level']
@@ -25,7 +30,7 @@ const DEMO_TOOLS = [
     type: 'function',
     function: {
       name: 'send_signup_link',
-      description: 'Text the prospect a Somo demo signup link',
+      description: 'Text the prospect a Somo signup or booking link',
       parameters: { type: 'object', properties: {} }
     }
   },
@@ -48,6 +53,11 @@ function getGroq() {
   return _groq;
 }
 
+function isSpanishContext(context) {
+  const lang = context?.detected_language || context?.language;
+  return lang === 'es';
+}
+
 function initialStage() {
   return 'OPEN';
 }
@@ -57,26 +67,46 @@ function advanceStage(current, userText) {
   const idx = STAGES.indexOf(current);
   if (idx < 0) return 'OPEN';
   if (/\b(no|not interested|stop|goodbye|bye)\b/.test(t) && idx >= 2) return 'CLOSE';
-  if (/\b(sign up|signup|link|text me|send link)\b/.test(t)) return 'CTA';
-  if (/\b(expensive|already have|not sure|think about)\b/.test(t)) return 'OBJECTION';
+  if (/\b(sign up|signup|link|text me|send link|envía|envíame|mándame)\b/.test(t)) return 'CTA';
+  if (/\b(expensive|already have|not sure|think about|caro|pensarlo)\b/.test(t)) return 'OBJECTION';
   if (idx < STAGES.length - 1) return STAGES[idx + 1];
   return current;
 }
 
 function ruleBasedReply(stage, context) {
   const name = (context.prospect_name || 'there').split(' ')[0];
-  const persona = context.persona_name || 'Sam';
+  const persona = context.persona_name || 'Kelly';
+  const es = isSpanishContext(context);
+
+  if (es) {
+    switch (stage) {
+      case 'OPEN':
+        return `Hola ${name}, soy ${persona} de Somo. Pediste una llamada rápida — ¿ahora te viene bien?`;
+      case 'QUALIFY':
+        return 'Perfecto. ¿Qué tipo de consultorio tienes — dental, médico o especialidad?';
+      case 'VALUE':
+        return 'Somo contesta llamadas 24/7 y agenda citas con un solo panel. Puedo mostrarte cómo encaja con tu equipo.';
+      case 'OBJECTION':
+        return 'Entiendo. Muchos equipos lo usan fuera de horario para no saturar recepción. ¿Te envío un enlace por mensaje?';
+      case 'CTA':
+        return '¿Te envío un enlace para agendar una demo de 15 minutos o empezar el registro?';
+      case 'CLOSE':
+      default:
+        return `Gracias por tu tiempo, ${name}. ¡Que tengas buen día!`;
+    }
+  }
+
   switch (stage) {
     case 'OPEN':
-      return `Hi ${name}, this is ${persona} from Somo demo. You asked for a quick live demo — is now still a good time?`;
+      return `Hi ${name}, this is ${persona} from Somo. You asked for a quick call — is now still a good time?`;
     case 'QUALIFY':
-      return `Great. What kind of business are you running — clinic, med spa, or something else?`;
+      return 'Great. What kind of practice do you run — dental, medical, or specialty?';
     case 'VALUE':
-      return `Somo demo answers calls 24/7, books appointments, and gives you one dashboard to control scripts. Your ${context.use_case_label || 'team'} would sound like this on every call.`;
+      return `Somo answers calls 24/7 and books appointments from one dashboard — relevant for your ${context.use_case_label || 'practice'}.`;
     case 'OBJECTION':
-      return `Totally fair. Most teams use this for overflow and after-hours so staff stay focused on in-room care. Want me to text you a signup link?`;
+      return 'Totally fair. Many teams use this for overflow and after-hours. Want me to text you a link?';
     case 'CTA':
-      return `I can text you a link to create your Somo demo account — takes about two minutes. Should I send it?`;
+      return 'I can text you a link to book a short walkthrough or get started — should I send it?';
     case 'CLOSE':
     default:
       return `Thanks for your time, ${name}. Have a great day!`;
@@ -97,9 +127,12 @@ async function processTurn({
   }
 
   if (elapsedSec >= maxDurationSec) {
+    const wrap = isSpanishContext(context)
+      ? `Quiero respetar tu tiempo — te envío un mensaje con más detalles. Gracias, ${(context.prospect_name || 'there').split(' ')[0]}.`
+      : `I want to be respectful of your time — I'll text you a quick summary. Thanks, ${(context.prospect_name || 'there').split(' ')[0]}.`;
     return {
       stage: 'CLOSE',
-      reply: ruleBasedReply('CLOSE', context),
+      reply: wrap,
       endCall: true,
       toolCalls: [{ name: 'end_call', arguments: {} }]
     };
@@ -160,5 +193,6 @@ module.exports = {
   initialStage,
   advanceStage,
   processTurn,
-  ruleBasedReply
+  ruleBasedReply,
+  isSpanishContext
 };

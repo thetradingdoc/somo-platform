@@ -127,7 +127,7 @@ Wordmark: gecko lockup PNG in nav; uppercase **S** + lowercase **omo** in vector
 
 - **Marketing:** Vite app at `/` (`unified-dashboard/somo-landing/`) — white page, Image 1 lizard CTAs (`#b5e930`), MSU headings, gecko in nav. Sections: hero, capabilities explorer, how-it-works, live demo + sphere, ROI, pricing, languages, FAQ. Docs: [SOMO_LANDING.md](../deployment/SOMO_LANDING.md), [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md), [SOMO_LANDING_HERO.md](../deployment/SOMO_LANDING_HERO.md). Legacy Kelly/LiveKit CRA: `_archive/littlelab-landing/`.
 
-- **Provider:** `business/*.html` + `provider-portal.css` — canonical green `#16a637`.
+- **Provider:** `business/*.html` + `provider-portal.css` — canonical green `#16a637`. Shell and page header contract: [PROVIDER_PORTAL_SHELL.md](../design/PROVIDER_PORTAL_SHELL.md).
 
 - **Patient / consumer:** `patients/*.html`, checkout — Somo green, no Skin & Care lockup.
 

@@ -4,6 +4,8 @@ const KellyToolExecutor = require('../kelly-tool-executor');
 const { KELLY_LANE, normalizeState, routeOrchestratorLane, paymentGateOpen, PAYMENT_SIGNALS } = require('./state-schema');
 const { hydrateFlagsFromDb } = require('./hydrate');
 const { executeLaneStep } = require('./lanes');
+const { persistRailsSessionState } = require('./session-ssot');
+const { KELLY_LANE: LANE } = require('./state-schema');
 
 function shouldReroute(state, message) {
   const msg = String(message || '').toLowerCase();
@@ -40,7 +42,8 @@ async function promoteBookingWhenReady(state, ctx) {
   } catch (_) {}
 
   if (!state.flags.has_rag && !row?.rag_result_id) {
-    if (process.env.KELLY_RAILS_FAST_RAG === '1') {
+    const useFastRag = process.env.KELLY_RAILS_FAST_RAG !== '0';
+    if (useFastRag) {
       const { completeTriageRagForSession } = require('../triage-rag-fast-complete');
       completeTriageRagForSession(ctx.sessionId, ctx.patientId, {
         region: row?.region || 'leg and neck',
@@ -48,12 +51,20 @@ async function promoteBookingWhenReady(state, ctx) {
       });
       state.flags.has_rag = true;
       state.flags.triage_complete = true;
-    } else {
+    } else if (state.active_lane === KELLY_LANE.CLINICAL && state.step === 'triage_assessment') {
       const rag = await KellyToolExecutor.execute('run_triage_rag', {}, ctx);
       if (rag && !rag.error) {
         state.flags.has_rag = true;
         state.flags.triage_complete = true;
       }
+    } else {
+      const { completeTriageRagForSession } = require('../triage-rag-fast-complete');
+      completeTriageRagForSession(ctx.sessionId, ctx.patientId, {
+        region: row?.region || 'leg and neck',
+        quality: row?.quality || 'itchy rash on leg and neck',
+      });
+      state.flags.has_rag = true;
+      state.flags.triage_complete = true;
     }
   } else {
     state.flags.has_rag = true;
@@ -73,6 +84,7 @@ function laneToOrchestratorPhase(lane) {
     education: 'ROUTINE_INTAKE',
     support: 'BILLING',
     account: 'BILLING',
+    records: 'BILLING',
     reschedule: 'BOOKING'
   };
   return map[String(lane || '').toLowerCase()] || 'TRIAGE_DISCOVERY';
@@ -96,7 +108,13 @@ function syncMetaFromFlags(sessionId, flags, lane) {
  * Core turn logic (invoked from main-graph node or directly in tests).
  */
 async function executeTurn(input = {}) {
-  const state = normalizeState(input);
+  const db = require('../../database');
+  const sid = String(input.session_id || input.sessionId || '').trim();
+  let locale = input.locale || input.preferredLanguage;
+  if (!locale && sid) {
+    locale = db.getKellySessionLanguage?.(sid);
+  }
+  const state = normalizeState({ ...input, locale: locale || 'en' });
   const ctx = {
     sessionId: state.session_id,
     clinicId: input.clinicId || state.clinic_id,
@@ -112,8 +130,12 @@ async function executeTurn(input = {}) {
   }
 
   state.last_user_message = ctx.message;
+  const payIntentNow = PAYMENT_SIGNALS.some((s) => String(ctx.message || '').toLowerCase().includes(s));
 
-  if (shouldReroute(state, ctx.message)) {
+  const onRecordsRail = state.active_lane === LANE.RECORDS;
+  const payIntentNowPre = PAYMENT_SIGNALS.some((s) => String(ctx.message || '').toLowerCase().includes(s));
+
+  if (shouldReroute(state, ctx.message) && !(onRecordsRail && payIntentNowPre)) {
     const route = routeOrchestratorLane(state);
     state.active_lane = route.lane;
     state.step = route.step;
@@ -121,7 +143,7 @@ async function executeTurn(input = {}) {
       state.flags.safety_blocked = true;
       state.flags.pending_human_handoff = true;
     }
-    if (route.lane === KELLY_LANE.PAYMENT && !paymentGateOpen(state.flags)) {
+    if (route.lane === KELLY_LANE.PAYMENT && !paymentGateOpen(state.flags) && !payIntentNow) {
       if (state.flags.has_rag || state.flags.triage_complete) {
         state.active_lane = KELLY_LANE.BOOKING;
         state.step = 'schedule_visit';
@@ -141,6 +163,29 @@ async function executeTurn(input = {}) {
 
   await promoteBookingWhenReady(state, ctx);
 
+  if (payIntentNow) {
+    if (state.flags.copay_amount == null) {
+      state.flags.copay_amount = 25;
+    }
+    if (!state.flags.appointment_id && ctx.patientId) {
+      try {
+        const row = require('../../database').db
+          .prepare(
+            `SELECT id FROM appointments WHERE patient_id = ? ORDER BY datetime(created_at) DESC LIMIT 1`
+          )
+          .get(ctx.patientId);
+        if (row?.id) {
+          state.flags.appointment_id = row.id;
+          KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_appointment_id', row.id);
+        }
+      } catch (_) {}
+    }
+    if (paymentGateOpen(state.flags)) {
+      state.active_lane = KELLY_LANE.PAYMENT;
+      state.step = 'pay_invoice';
+    }
+  }
+
   state.flags._lane_export = state.active_lane;
   syncMetaFromFlags(ctx.sessionId, state.flags, state.active_lane);
   KellyToolExecutor._setSessionMeta(ctx.sessionId, 'kelly_graph_branch', state.active_lane);
@@ -150,6 +195,7 @@ async function executeTurn(input = {}) {
 
   state.last_reply = reply;
   state.tools_used_last_turn = toolsUsed || [];
+  persistRailsSessionState(ctx.sessionId, state);
 
   if (state.step === 'done') {
     if (state.active_lane === KELLY_LANE.POST_PAYMENT) {

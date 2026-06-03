@@ -42,7 +42,7 @@ describe('somo-demo-template-registry', () => {
     expect(t.template_id).toBe('medical');
     expect(t.agentId).toBe('agent_demo_test');
     expect(t.fromNumber).toBe('+15555550100');
-    expect(t.personaName).toBe('Sam');
+    expect(t.personaName).toBe('Kelly');
     expect(t.maxDurationSec).toBeGreaterThan(0);
   });
 

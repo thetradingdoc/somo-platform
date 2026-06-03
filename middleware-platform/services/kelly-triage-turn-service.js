@@ -369,8 +369,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const detectPreferredLanguage = () => {
     if (preferredLanguageFromBody) return preferredLanguageFromBody;
     try {
-      const { detectLanguageFromText } = require('./patient-orchestrator-service');
-      const detected = detectLanguageFromText(trimmedMessage)?.code || '';
+      const { detectLanguageFromText } = require('./kelly-rails/language');
+      const detected = detectLanguageFromText(trimmedMessage)?.language || '';
       return String(detected || '').trim().toLowerCase() || '';
     } catch (_) {
       return '';
@@ -605,12 +605,12 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     }
     // orch-4: Persist preferred_language from first 1–2 turns or explicit language request
     try {
-      const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./patient-orchestrator-service');
+      const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./kelly-rails/language');
       const langReq = detectLanguagePreferenceRequest(trimmedMessage);
       if (langReq?.isLanguageRequest && langReq?.code) {
         preferredLanguage = langReq.code;
       } else if (preferredLanguageFromBody !== 'en' && newTurnCount <= 2) {
-        preferredLanguage = detectLanguageFromText(trimmedMessage).code || preferredLanguage;
+        preferredLanguage = detectLanguageFromText(trimmedMessage).language || preferredLanguage;
       }
     } catch (_) {}
     try {

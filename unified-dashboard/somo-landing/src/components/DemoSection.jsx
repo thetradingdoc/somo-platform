@@ -5,6 +5,8 @@ import ParticleSphere from './ParticleSphere';
 
 export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
   const [useCase, setUseCase] = useState(selectedUseCase);
+  const [practiceSpecialty, setPracticeSpecialty] = useState('');
+  const [questionsAsked, setQuestionsAsked] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [consent, setConsent] = useState(false);
@@ -14,6 +16,7 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
 
   useEffect(() => {
     if (!selectedUseCase) return;
+    if (!USE_CASES.some((uc) => uc.id === selectedUseCase)) return;
     setUseCase(selectedUseCase);
     const idx = USE_CASES.findIndex((uc) => uc.id === selectedUseCase);
     if (idx >= 0) setActiveIndex(idx);
@@ -23,15 +26,12 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
     setUseCase(id);
     setActiveIndex(index);
     onUseCaseChange?.(id);
+    if (id !== 'specialty_practice') setPracticeSpecialty('');
   };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!useCase) {
-      setError('Please select a practice type.');
-      return;
-    }
     if (!consent) {
       setError('Please agree to receive a one-time demo call.');
       return;
@@ -41,13 +41,17 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
       await requestDemoCall({
         name: name.trim(),
         phone: phone.trim(),
-        use_case: useCase,
+        use_case: useCase || undefined,
+        practice_specialty:
+          useCase === 'specialty_practice' ? practiceSpecialty.trim() || undefined : undefined,
+        questions_asked: questionsAsked.trim() || undefined,
         consent: true
       });
       saveSignupPrefill({
         name: name.trim(),
         phone: phone.trim(),
-        use_case: useCase
+        use_case: useCase,
+        practice_specialty: practiceSpecialty.trim()
       });
       setStatus('success');
     } catch (err) {
@@ -76,6 +80,7 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
       <div className="dc-demo-grid">
         <div className="dc-demo-card dc-demo-card-visual">
           <ParticleSphere impulseToken={activeIndex} agentState={sphereState} />
+          <p className="dc-pill-group-label">Practice type</p>
           <div className="dc-persona-pills">
             {USE_CASES.map((uc, i) => (
               <button
@@ -91,52 +96,53 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
               </button>
             ))}
           </div>
+          <p className="dc-pill-group-helper">
+            Choose your practice type to tailor the call—or skip and we&apos;ll ask live.
+          </p>
+          {useCase === 'specialty_practice' && (
+            <label className="dc-field dc-field-underline dc-field-visual">
+              <span className="dc-label">Specialty</span>
+              <input
+                type="text"
+                maxLength={120}
+                placeholder="e.g. Dermatology"
+                value={practiceSpecialty}
+                onChange={(e) => setPracticeSpecialty(e.target.value)}
+                disabled={status === 'loading'}
+              />
+            </label>
+          )}
         </div>
 
         <div className="dc-demo-card dc-demo-card-form">
           <p className="dc-demo-lead">
-            Receive a live call from our AI front desk — tailored to dental, medical, specialty, and billing workflows.
+            Get a <strong>2-minute live call</strong> from Somo&apos;s AI front desk. We&apos;ll learn how your
+            practice runs—no sales pitch.
           </p>
 
           {status === 'success' ? (
             <div className="dc-alert dc-alert-success">
               <strong>Calling you now!</strong>
-              <p>Answer your phone — you should hear our AI demo agent shortly.</p>
-              <a href={signupUrl()} className="dc-btn dc-btn-navy">
+              <p>
+                Answer your phone—Somo&apos;s front desk will ask a few quick questions (~2 minutes).
+              </p>
+              <a href={signupUrl()} className="dc-btn dc-btn-primary">
                 Sign up for Somo
               </a>
             </div>
           ) : (
             <form onSubmit={onSubmit} className="dc-form">
               <label className="dc-field dc-field-underline">
-                <span className="dc-label">Practice type</span>
-                <select
-                  value={useCase}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const idx = USE_CASES.findIndex((uc) => uc.id === id);
-                    selectUseCase(id, idx);
-                  }}
-                  disabled={status === 'loading'}
-                  required
-                >
-                  <option value="">Select your practice type</option>
-                  {USE_CASES.map((uc) => (
-                    <option key={uc.id} value={uc.id}>
-                      {uc.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="dc-field dc-field-underline">
-                <span className="dc-label">Name</span>
+                <span className="dc-label" id="demo-name-label">
+                  Your name
+                </span>
                 <input
                   type="text"
                   required
                   minLength={2}
                   maxLength={80}
-                  placeholder="Your Name"
+                  autoComplete="name"
+                  aria-labelledby="demo-name-label"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={status === 'loading'}
@@ -144,16 +150,42 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
               </label>
 
               <label className="dc-field dc-field-underline">
-                <span className="dc-label">Phone Number</span>
+                <span className="dc-label" id="demo-phone-label">
+                  Mobile number
+                </span>
                 <input
                   type="tel"
                   required
-                  placeholder="+15551234567"
+                  autoComplete="tel"
+                  aria-labelledby="demo-phone-label"
+                  aria-describedby="demo-phone-helper"
+                  placeholder="+1 555 123 4567"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   disabled={status === 'loading'}
-                  autoComplete="tel"
                 />
+                <span className="dc-field-helper" id="demo-phone-helper">
+                  Include country code, e.g. +1 555 123 4567
+                </span>
+              </label>
+
+              <label className="dc-field dc-field-underline">
+                <span className="dc-label" id="demo-note-label">
+                  What do you need help with ?
+                </span>
+                <input
+                  type="text"
+                  maxLength={500}
+                  aria-labelledby="demo-note-label"
+                  aria-describedby="demo-note-helper"
+                  placeholder="After-hours coverage, bilingual patients…"
+                  value={questionsAsked}
+                  onChange={(e) => setQuestionsAsked(e.target.value)}
+                  disabled={status === 'loading'}
+                />
+                <span className="dc-field-helper" id="demo-note-helper">
+                  One sentence is enough—we&apos;ll ask more on the call.
+                </span>
               </label>
 
               <label className="dc-consent">
@@ -175,8 +207,8 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
                 </p>
               )}
 
-              <button type="submit" className="dc-btn dc-btn-navy" disabled={status === 'loading'}>
-                {status === 'loading' ? 'Calling you now…' : 'Get a call'}
+              <button type="submit" className="dc-btn dc-btn-primary" disabled={status === 'loading'}>
+                {status === 'loading' ? 'Calling you now…' : 'Get my demo call'}
               </button>
             </form>
           )}

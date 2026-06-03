@@ -1,0 +1,362 @@
+/**
+ * Patients roster page — compact cards grid (shell from provider-portal.css).
+ */
+.pp-content--patients {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-section-gap, 20px);
+}
+
+.pp-patients-build {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.pp-patients-filter-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.pp-patients-debug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  word-break: break-word;
+}
+
+.pp-panel-body--patients {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.pp-ins-panel[hidden] {
+  display: none !important;
+}
+
+.pp-patients-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.pp-patients-search .pp-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px 0 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--surface);
+}
+
+.pp-patients-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.pp-patients-search-wrap .pp-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+  font-size: 14px;
+}
+
+.pp-patients-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  min-height: 80px;
+  width: 100%;
+}
+
+.pp-patient-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: var(--shadow);
+}
+
+.pp-patient-card--compact {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pp-patient-card:hover {
+  border-color: var(--somo-green, #16a637);
+  box-shadow: var(--shadow-md);
+}
+
+.pp-patient-card.pp-patient-card--focus {
+  outline: 2px solid var(--somo-green, #16a637);
+  outline-offset: 2px;
+}
+
+.pp-patient-card__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pp-patient-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pp-patient-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--green-soft, #dcfce7);
+  color: var(--green, #16a637);
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pp-patient-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pp-patient-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 2px;
+  line-height: 1.3;
+}
+
+.pp-patient-contact {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.pp-patient-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.pp-patient-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pp-patient-badge--ehr {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.pp-patient-badge--fhir {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.pp-patient-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pp-patient-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+}
+
+.pp-patient-chip--ok {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.pp-patient-chip--warn {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.pp-patient-chip--muted {
+  background: #f1f5f9;
+  color: var(--muted);
+}
+
+.pp-patient-chip--ehr {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+a.pp-patient-chip--action,
+.pp-patient-chip--action {
+  font-weight: 600;
+  text-decoration: none;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.pp-patient-chip--pa {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.pp-patient-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.pp-patient-card__cta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--somo-green, #16a637);
+}
+
+.pp-patient-card__contact {
+  margin-left: auto;
+}
+
+.pp-patient-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pp-patient-metric {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.pp-patient-metric-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.pp-patient-metric-label {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.pp-patient-plan {
+  font-size: 12px;
+  color: var(--ink);
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 3px solid var(--somo-green, #16a637);
+  margin-bottom: 12px;
+}
+
+.pp-patient-plan--none {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 11px;
+}
+
+.pp-patient-ehr {
+  margin-bottom: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.pp-patient-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pp-patients-grid > .pp-patients-empty,
+.pp-patients-roster > .pp-patients-empty,
+.pp-patients-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--muted);
+}
+
+.pp-patients-empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.pp-ins-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.pp-ehr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.pp-ehr-modal-card {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 90%;
+  max-height: 90%;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 768px) {
+  .pp-patients-grid {
+    grid-template-columns: 1fr;
+  }
+}

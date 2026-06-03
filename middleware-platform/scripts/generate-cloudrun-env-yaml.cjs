@@ -132,6 +132,8 @@ if (!isStaging) {
   merged.KELLY_RAILS_V2 = parsed.KELLY_RAILS_V2 || '1';
   merged.KELLY_RAILS_ROLLOUT_PCT = parsed.KELLY_RAILS_ROLLOUT_PCT ?? '1';
   merged.KELLY_ALLOW_HYBRID_GRAPH = parsed.KELLY_ALLOW_HYBRID_GRAPH ?? '0';
+  merged.KELLY_RAILS_FAST_RAG = parsed.KELLY_RAILS_FAST_RAG ?? '1';
+  merged.KELLY_VOICE_FILLER_MS = parsed.KELLY_VOICE_FILLER_MS ?? '1200';
 }
 
 if (isStaging) {

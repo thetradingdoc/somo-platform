@@ -18,6 +18,25 @@ describe('somo-demo-service', () => {
     expect(ctx.use_case_opener).toMatch(/receptionist/i);
   });
 
+  test('requestDemoCall defaults empty use_case to medical_clinic', async () => {
+    process.env.SOMO_DEMO_ENABLED = '1';
+    process.env.SOMO_DEMO_RELAX_LIMITS = '1';
+    process.env.NODE_ENV = 'test';
+
+    const phone = `+1416${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
+    const result = await requestDemoCall({
+      name: 'Default Case',
+      phone,
+      consent: true,
+      clientIp: '127.0.0.2',
+      attribution: {}
+    });
+    expect(result.success).toBe(true);
+    const db = require('../database');
+    const row = db.getSomoDemoRequest(result.demo_request_id);
+    expect(row.use_case).toBe('medical_clinic');
+  });
+
   test('duplicate phone within 24h is blocked with deterministic error code', async () => {
     process.env.SOMO_DEMO_ENABLED = '1';
     process.env.SOMO_DEMO_RELAX_LIMITS = '0';

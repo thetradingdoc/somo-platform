@@ -25,6 +25,16 @@ async function handleTurn(opts = {}) {
         event_type: 'language_confidence_handoff',
         payload_json: { preferred_language: language, confidence: opts.languageConfidence || 0 }
       });
+      const { emitLanguageMismatch } = require('../kelly-language-telemetry');
+      emitLanguageMismatch(db, {
+        session_id: opts.sessionId,
+        detected_language: language,
+        session_language: language,
+        mismatch_type: 'language_confidence_handoff',
+        action_taken: 'handoff',
+        channel: opts.channel || 'chat',
+        runtime: 'kelly_rails_v2'
+      });
     } catch (_) {}
     return {
       reply,

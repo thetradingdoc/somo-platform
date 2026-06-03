@@ -43,6 +43,17 @@ module.exports = defineConfig({
       testDir: './e2e',
       testMatch: '**/staging-voice-agent.spec.cjs',
       use: { browserName: 'chromium' }
+    },
+    {
+      name: 'staging-landing-mobile',
+      testDir: './e2e',
+      testMatch: '**/somo-landing.spec.cjs',
+      grep: /mobile header|scroll cue hidden|pricing cards mobile|capability cards mobile/,
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 390, height: 844 },
+        serviceWorkers: 'block'
+      }
     }
   ]
 });

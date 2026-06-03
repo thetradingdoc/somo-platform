@@ -52,7 +52,7 @@ test.describe('Provider patient payments UI', () => {
         JSON.stringify({ name: c.name || 'Provider', role: c.role || 'Provider', ...c })
       );
     }, customer);
-    await page.goto(`${API_BASE}/business/patient-payments.html`, { waitUntil: 'networkidle' });
+    await page.goto(`${API_BASE}/business/revenue.html?tab=payments`, { waitUntil: 'networkidle' });
 
     await expect(page.locator('#paymentsList')).toContainText('paid');
     await expect(page.locator('#paymentsList')).toContainText('12.50');

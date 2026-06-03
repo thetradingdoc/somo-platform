@@ -1,6 +1,6 @@
 // Minimal service worker for installability and basic offline shell.
 
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v12';
 const CACHE_NAME = `Somo-shell-${CACHE_VERSION}`;
 const SHELL_URLS = [
   '/unified-dashboard/business/today.html',

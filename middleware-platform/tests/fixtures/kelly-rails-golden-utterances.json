@@ -101,10 +101,10 @@
     },
     {
       "id": "records_account",
-      "bucket": "account",
+      "bucket": "records",
       "last_user_message": "What did my doctor say on my last visit",
       "flags": {},
-      "expect": { "lane": "account", "step": "billing" }
+      "expect": { "lane": "records", "step": "records_qa" }
     }
   ]
 }

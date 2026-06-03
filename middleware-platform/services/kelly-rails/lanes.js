@@ -8,7 +8,7 @@ const { PAYMENT_SIGNALS } = require('./state-schema');
 const { getAllowedToolNames } = require('./tool-allowlists');
 
 function assertDeterministicToolAllowed(lane, step, toolName) {
-  const allowed = getAllowedToolNames(lane, step);
+  const allowed = getAllowedToolNames(lane, step, {});
   if (!allowed.includes(toolName)) {
     const msg = `[kelly-rails] deterministic tool ${toolName} not allowed for ${lane}/${step}`;
     if (process.env.NODE_ENV === 'test' || process.env.KELLY_RAILS_STRICT_TOOLS === '1') {
@@ -37,6 +37,7 @@ const NEXT_STEP = {
   post_payment: { finish: 'scheduled', scheduled: 'confirmation', confirmation: 'done' },
   reschedule: { find_booking: 'move_or_cancel', move_or_cancel: 'done' },
   account: { billing: 'insurance', insurance: 'done' },
+  records: { records_qa: 'fhir_read', fhir_read: 'done' },
   education: { education: 'clinical_advice', clinical_advice: 'done' },
   support: { faq: 'handoff', handoff: 'done' }
 };
@@ -237,6 +238,13 @@ async function runDeterministicSchedule(state, ctx) {
     if (sched && !sched.error && (sched.appointment_id || sched.id)) {
       const apptId = sched.appointment_id || sched.id;
       KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_appointment_id', apptId);
+      if (state.flags.copay_amount == null) {
+        state.flags.copay_amount = 25;
+        try {
+          KellyToolExecutor._setSessionMeta(ctx.sessionId, 'copay_amount', '25');
+        } catch (_) {}
+      }
+      state.flags.appointment_id = apptId;
       toolsUsed.push('schedule_appointment');
       try {
         const { persistCaseSummaryForAppointment } = require('../case-summary-service');
@@ -325,9 +333,12 @@ function advanceAfterStep(state, toolsUsed) {
           appointmentId: apptId,
           sessionId: state.session_id
         });
+        const { linkSessionToAppointment, persistRailsSessionState } = require('./session-ssot');
+        linkSessionToAppointment(state.session_id, apptId);
         state.flags.appointment_id = apptId;
         state.flags.post_visit_confirmation_pending = true;
         KellyToolExecutor._setSessionMeta(state.session_id, 'post_visit_confirmation_pending', '1');
+        persistRailsSessionState(state.session_id, state);
       }
     } catch (_) {}
     state.step = 'done';

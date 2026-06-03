@@ -163,7 +163,8 @@ async function requestDemoCall({
 
 
 
-  const useCase = String(use_case || '').trim().toLowerCase();
+  let useCase = String(use_case || '').trim().toLowerCase();
+  if (!useCase) useCase = 'medical_clinic';
 
   if (!USE_CASES.has(useCase)) {
 
