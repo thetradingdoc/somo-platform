@@ -21,7 +21,7 @@ const { parse } = require('csv-parse');
 
 const DEFAULT_GCS_OBF =
   process.env.OBF_GCS_BASELINE_URI ||
-  'gs://skinandcare-media-staging/obf/raw/full/en.openbeautyfacts.org.products.csv.gz';
+  'gs://somo-catalog-somo-callsomo/obf/raw/full/en.openbeautyfacts.org.products.csv.gz';
 
 function findDbPath(argv) {
   const args = argv.slice(2).filter((a) => !a.startsWith('--'));

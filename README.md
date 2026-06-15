@@ -186,7 +186,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email
 SMTP_PASSWORD=your_password
-SMTP_FROM=info@myskinandcare.com
+SMTP_FROM=info@callsomo.com
 
 # Twilio (SMS)
 TWILIO_ACCOUNT_SID=your_twilio_sid
@@ -235,7 +235,7 @@ JOB_SEARCH_ENGINE=jsearch
 # JOB_SEARCH_ENGINE=google_jobs
 
 # Medical receptionist automation (daily Azure job)
-ADMIN_PORTAL_BASE_URL=https://doclittle.site       # optional override
+ADMIN_PORTAL_BASE_URL=https://callsomo.com       # optional override
 MEDICAL_RECEPTIONIST_LOCATION=US,NY               # defaults to US,NY
 MEDICAL_RECEPTIONIST_DAYS=1                       # defaults to 1 (today)
 MEDICAL_RECEPTIONIST_MAX_LEADS=3                  # how many leads to save per run

@@ -17,14 +17,7 @@ function getHostname(req) {
 
 function isSomoMarketingHostname(hostname) {
   const h = String(hostname || '').toLowerCase();
-  return (
-    h === 'callsomo.com' ||
-    h === 'www.callsomo.com' ||
-    h === 'skinandcare.com' ||
-    h === 'www.skinandcare.com' ||
-    h === 'callsomo.com' ||
-    h === 'www.callsomo.com'
-  );
+  return h === 'callsomo.com' || h === 'www.callsomo.com';
 }
 
 function isLocalDevRootHost(hostname) {

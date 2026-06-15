@@ -172,7 +172,8 @@ async function checkSIPDomain() {
   
   try {
     const domains = await client.sip.domains.list();
-    const targetDomain = domains.find(d => d.domainName.includes('doclittle'));
+    const sipHint = process.env.TWILIO_SIP_DOMAIN_HINT || 'callsomo';
+    const targetDomain = domains.find(d => d.domainName.includes(sipHint));
     
     if (targetDomain) {
       logSuccess('SIP Domain found!');
@@ -206,7 +207,7 @@ async function checkSIPDomain() {
       
       return targetDomain;
     } else {
-      logWarning('SIP Domain not found (doclittle.pstn.twilio.com)');
+      logWarning(`SIP Domain not found (hint: ${process.env.TWILIO_SIP_DOMAIN_HINT || 'callsomo'}.pstn.twilio.com)`);
       logInfo('Available domains:');
       domains.forEach(d => {
         logDetail(`  - ${d.domainName}`);
@@ -330,7 +331,7 @@ async function generateDiagnosis() {
   logDetail('1. Trunk should have phone number attached');
   logDetail('2. Trunk should have credential list attached');
   logDetail('3. Trunk should have IP ACLs attached');
-  logDetail('4. SIP Domain should exist (doclittle.pstn.twilio.com)');
+  logDetail('4. SIP Domain should exist (e.g. callsomo.pstn.twilio.com)');
   logDetail('5. Retell should have termination URI configured');
   logDetail('6. Retell should have SIP credentials configured');
   console.log('');

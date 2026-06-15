@@ -1,10 +1,10 @@
 # deployment — consolidated documentation
 
-> **Historical:** Most sections below reference **api.callsomo.com**, Azure App Service, or **callsomo.com**. **Do not follow them for production.**
+> **Production (front-desk):** Start with **[`FRONT_DESK_PRODUCTION.md`](./FRONT_DESK_PRODUCTION.md)** — Firebase UI + Cloud Run API deploy, DNS order, smoke.
 >
-> **Read first:** [`CALLSOMO_GCP_CUTOVER.md`](../runbooks/CALLSOMO_GCP_CUTOVER.md) · [`GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md) · [`INFRA_BRAND_DEFERRAL.md`](../Brand/INFRA_BRAND_DEFERRAL.md)
+> **Historical:** Sections below may reference Azure App Service or legacy `myskin-middleware` paths. **Do not follow them for current production.**
 
-**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-06-02
+**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-06-14
 
 <a id="voice-current-architecture"></a>
 

@@ -1,7 +1,11 @@
 # Somo Platform Documentation
-> Last reviewed: 2026-06-02
+> Last reviewed: 2026-06-14
 
-**Last Updated:** 2026-06-02
+**Last Updated:** 2026-06-14
+
+### Front-desk production (callsomo.com)
+
+- **Deploy + smoke:** **[deployment/FRONT_DESK_PRODUCTION.md](./deployment/FRONT_DESK_PRODUCTION.md)** — Cloud Run API, Firebase UI, Retell/Twilio, DNS order.
 
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  

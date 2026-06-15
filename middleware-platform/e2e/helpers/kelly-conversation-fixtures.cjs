@@ -637,7 +637,7 @@ function seedKellyRailsV2TurnResolved(sessionId, opts = {}) {
 async function seedV2ProviderDashboardToday(opts = {}) {
   const clinicId = opts.clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
   const providerEmail =
-    opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@doclittle.com';
+    opts.providerEmail || process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com';
   const sessionId = opts.sessionId || newE2eSessionId('e2e_v6_3');
   const patient = seedTomHarrisPatient(opts);
   const todaySlot = todayAtAfternoonLocal(opts);

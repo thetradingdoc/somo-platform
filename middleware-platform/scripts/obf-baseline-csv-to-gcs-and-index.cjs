@@ -15,7 +15,7 @@ const DEFAULT_SOURCE_URL = 'https://static.openbeautyfacts.org/data/en.openbeaut
 function parseArgs(argv) {
   const out = {
     sourceUrl: process.env.OBF_BASELINE_URL || DEFAULT_SOURCE_URL,
-    gcsPrefix: process.env.OBF_GCS_PREFIX || 'gs://skinandcare-media-staging/obf'
+    gcsPrefix: process.env.OBF_GCS_PREFIX || 'gs://somo-catalog-somo-callsomo/obf'
   };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--source-url') out.sourceUrl = String(argv[++i] || out.sourceUrl);

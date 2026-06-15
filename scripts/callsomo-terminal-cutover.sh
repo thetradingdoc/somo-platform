@@ -22,13 +22,34 @@ run_url() {
   gcloud run services describe "$CLOUDRUN_SERVICE" --region="$GCP_REGION" --project="$GCP_PROJECT" --format='value(status.url)'
 }
 
+ensure_api_domain_mapping() {
+  echo "==> Cloud Run domain mapping (api.callsomo.com)"
+  gcloud beta run domain-mappings create \
+    --service="$CLOUDRUN_SERVICE" \
+    --domain=api.callsomo.com \
+    --region="$GCP_REGION" \
+    --project="$GCP_PROJECT" 2>/dev/null || true
+  gcloud beta run domain-mappings describe \
+    --domain=api.callsomo.com \
+    --region="$GCP_REGION" \
+    --project="$GCP_PROJECT" \
+    --format='yaml(status.resourceRecords,status.conditions)' || true
+}
+
 cmd="${1:-check}"
 
 case "$cmd" in
   check)
     echo "==> DNS"
     dig +short callsomo.com A | head -3 || true
-    dig +short api.callsomo.com CNAME || echo "(api.callsomo.com missing — add CNAME api -> ghs.googlehosted.com)"
+    dig +short api.callsomo.com CNAME || echo "(api.callsomo.com CNAME not visible yet)"
+    echo ""
+    echo "==> Cloud Run domain mapping"
+    gcloud beta run domain-mappings describe \
+      --domain=api.callsomo.com \
+      --region="$GCP_REGION" \
+      --project="$GCP_PROJECT" \
+      --format='value(status.conditions.status)' 2>/dev/null || echo "(no mapping — run: $0 fix-api-domain)"
     echo ""
     echo "==> HTTP"
     curl -sS -o /dev/null -w "callsomo.com: %{http_code}\n" "$UI_BASE_URL/" || true
@@ -38,18 +59,29 @@ case "$cmd" in
     curl -sS -o /dev/null -w "cloud_run (auth): %{http_code}\n" -H "Authorization: Bearer $TOKEN" "$RUN/health/live"
     curl -sS -o /dev/null -w "cloud_run (public): %{http_code}\n" "$RUN/health/live"
     echo ""
-    echo "==> Manual (not terminal-only):"
-    echo "  1. Registrar: point callsomo.com to Firebase (currently may be Squarespace)"
-    echo "  2. Registrar: api CNAME -> ghs.googlehosted.com"
-    echo "  3. Firebase Console: link $GCP_PROJECT, add custom domain callsomo.com"
-    echo "  4. If api 403: ./scripts/ensure-cloudrun-public-invoker.sh"
+    echo "==> Operator checklist (order matters for API):"
+    echo "  1. Deploy API: $0 deploy-api  (or GitHub Actions deploy-callsomo workflow)"
+    echo "  2. Cloud Run domain mapping: $0 fix-api-domain"
+    echo "  3. Registrar DNS: CNAME api.callsomo.com -> ghs.googlehosted.com (after step 2)"
+    echo "  4. Public invoker if 403: $0 fix-api-public"
+    echo "  5. Firebase UI: $0 deploy-ui (callsomo.com A records -> Firebase)"
+    echo "  6. Retell: cd middleware-platform && API_BASE_URL=$MIDDLEWARE_API_BASE node configure-retell.js"
+    ;;
+  fix-api-domain)
+    ensure_api_domain_mapping
     ;;
   fix-api-public)
     "$ROOT/scripts/ensure-cloudrun-public-invoker.sh"
     ;;
   deploy-api)
-    export USE_GCP_SECRETS=1 CLOUDRUN_PROFILE=staging CLOUDRUN_BASE_URL="$MIDDLEWARE_API_BASE"
-    "$ROOT/scripts/deploy-to-gcp.sh"
+    export USE_GCP_SECRETS=1
+    export CLOUDRUN_PROFILE=production
+    export DEPLOY_INTENT=production
+    export CLOUDRUN_BASE_URL="$MIDDLEWARE_API_BASE"
+    export CLOUDRUN_PRESERVE_ENV="${CLOUDRUN_PRESERVE_ENV:-0}"
+    "$ROOT/scripts/deploy-to-gcp-production.sh"
+    ensure_api_domain_mapping
+    "$ROOT/scripts/ensure-cloudrun-public-invoker.sh"
     ;;
   deploy-ui)
     VITE_API_BASE="$MIDDLEWARE_API_BASE" npm run build:staging-hosting --prefix "$ROOT"
@@ -69,7 +101,7 @@ case "$cmd" in
     npm run test:e2e:callsomo --prefix "$ROOT/middleware-platform"
     ;;
   *)
-    echo "Usage: $0 {check|deploy-api|deploy-ui|smoke|e2e-smoke|e2e-full}"
+    echo "Usage: $0 {check|fix-api-domain|fix-api-public|deploy-api|deploy-ui|smoke|e2e-smoke|e2e-full}"
     exit 1
     ;;
 esac

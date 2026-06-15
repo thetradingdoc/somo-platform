@@ -58,7 +58,7 @@ const VERBOSE = process.env.VERBOSE === '1';
 const PATIENT = {
   name: process.env.TEST_PATIENT_NAME || 'E2E Test Patient',
   phone: process.env.TEST_PATIENT_PHONE || '+15550001234',
-  email: process.env.TEST_PATIENT_EMAIL || 'e2e-test@doctorlittle.dev',
+  email: process.env.TEST_PATIENT_EMAIL || 'e2e-test@callsomo.test',
 };
 
 const RAG_CONFIDENCE_THRESHOLD = parseFloat(process.env.RAG_CONFIDENCE_THRESHOLD || '0.7');

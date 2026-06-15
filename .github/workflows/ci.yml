@@ -39,6 +39,9 @@ jobs:
       - name: Check Somo brand strings (UI)
         run: node scripts/check-brand-strings.cjs
 
+      - name: Check legacy hostnames
+        run: npm run check:legacy-hosts
+
       - name: Install dependencies
         working-directory: ./middleware-platform
         run: npm ci

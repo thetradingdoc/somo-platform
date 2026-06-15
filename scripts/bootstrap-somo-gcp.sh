@@ -30,11 +30,11 @@ GCP_PROJECT="$GCP_PROJECT" "$ROOT/scripts/provision-staging-secrets.sh"
 echo "==> GCS bucket"
 gsutil mb -p "$GCP_PROJECT" -l "$GCP_REGION" "gs://${GCS_DB_BUCKET}" 2>/dev/null || true
 
-echo "==> Deploy API"
-export USE_GCP_SECRETS=1 CLOUDRUN_BASE_URL=https://api.callsomo.com CLOUDRUN_PROFILE=staging
-"$ROOT/scripts/deploy-to-gcp.sh"
+echo "==> Deploy API (production profile)"
+export USE_GCP_SECRETS=1 CLOUDRUN_BASE_URL=https://api.callsomo.com CLOUDRUN_PROFILE=production DEPLOY_INTENT=production
+"$ROOT/scripts/deploy-to-gcp-production.sh"
 
-echo "==> Domain mapping (add DNS: api CNAME ghs.googlehosted.com)"
+echo "==> Domain mapping (create mapping first, then registrar: api CNAME -> ghs.googlehosted.com)"
 gcloud beta run domain-mappings create --service=somo-middleware \
   --domain=api.callsomo.com --region="$GCP_REGION" --project="$GCP_PROJECT" 2>/dev/null || true
 

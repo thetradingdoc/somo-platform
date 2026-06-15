@@ -80,7 +80,7 @@ Set via `generate-cloudrun-env-yaml.cjs` when `CLOUDRUN_PROFILE=production`:
 
 Remap `api.callsomo.com` to **`somo-middleware`** (Somo API on Cloud Run).
 
-**Status (2026-06-02):** Cutover complete. Domain maps to `somo-middleware`. Legacy service `myskin-middleware` decommissioned.
+**Status (2026-06-14):** Verified checklist — run [`FRONT_DESK_PRODUCTION.md`](./FRONT_DESK_PRODUCTION.md) smoke before treating cutover as complete. Primary deploy: GitHub Actions `deploy-callsomo.yml` (not clone-from-`myskin-middleware`).
 
 ## Preconditions
 

@@ -21,7 +21,7 @@ function parseGcsPrefix(prefix) {
 
 function parseArgs(argv) {
   const out = {
-    gcsPrefix: process.env.OBF_GCS_PREFIX || 'gs://skinandcare-media-staging/obf',
+    gcsPrefix: process.env.OBF_GCS_PREFIX || 'gs://somo-catalog-somo-callsomo/obf',
     limit: Number(process.env.OBF_DELTA_LIMIT || 0) || 0
   };
   for (let i = 2; i < argv.length; i++) {

@@ -13,7 +13,7 @@
 
 # callsomo.com GCP cutover (project `somo-callsomo`)
 
-**Status (2026-06-02):** Cloud Run API (`somo-middleware` target; see domain mapping) is deployed. `api.callsomo.com` and Firebase Hosting (`somo-4ddf6`, `callsomo.com`) are live. Finish registrar/DNS edge cases and vendor webhooks as needed.
+**Status (2026-06-14):** Use the verification checklist below — do not assume `api.callsomo.com` is live until smoke passes. Primary deploy path: GitHub Actions [`deploy-callsomo.yml`](../../.github/workflows/deploy-callsomo.yml) or [`FRONT_DESK_PRODUCTION.md`](../deployment/FRONT_DESK_PRODUCTION.md).
 
 | Project | ID | Role |
 |---------|-----|------|
@@ -63,13 +63,26 @@ gcloud auth list   # should show only richard@callsomo.com
 
 ## 1. DNS for API
 
+**Order:** create the Cloud Run domain mapping **first**, then add DNS.
+
+1. Deploy `somo-middleware` (production profile).
+2. Create mapping:
+   ```bash
+   gcloud beta run domain-mappings create --service=somo-middleware \
+     --domain=api.callsomo.com --region=us-central1 --project=somo-callsomo
+   ```
+3. At the registrar, add:
+
 | Name | Type | Value |
 |------|------|--------|
 | `api` | CNAME | `ghs.googlehosted.com` |
 
+Verify mapping before or after DNS propagates:
+
 ```bash
 gcloud beta run domain-mappings describe --domain=api.callsomo.com \
   --region=us-central1 --project=somo-callsomo
+curl -sS -o /dev/null -w '%{http_code}\n' https://api.callsomo.com/health/live
 ```
 
 ## 2. Firebase Hosting (UI)
@@ -802,26 +815,26 @@ Update `.env.example` with placeholder names only (no secrets).
 
 *Merged from `docs/runbooks/LEGACY_DOMAIN_RETIREMENT.md` on 2026-06-02.*
 
-# Legacy domain retirement (callsomo.com)
+# Legacy domain retirement (myskinandcare.com → callsomo.com)
 
-After **callsomo.com** is stable for 24–48 hours:
+After **callsomo.com** is stable for 24–48 hours, retire the old consumer brand domain.
 
 ## DNS redirects (registrar)
 
-Configure at **Squarespace** (DNS for callsomo.com) or your myskin registrar:
+Configure at **Squarespace** (or the myskinandcare.com registrar):
 
 | From | To |
 |------|-----|
-| `https://callsomo.com/*` | `https://callsomo.com` (301 permanent) |
-| `https://www.callsomo.com/*` | `https://www.callsomo.com` (301) |
-| `https://api.callsomo.com/*` | `https://api.callsomo.com/$1` (301) optional |
+| `https://myskinandcare.com/*` | `https://callsomo.com/$1` (301 permanent) |
+| `https://www.myskinandcare.com/*` | `https://callsomo.com/$1` (301) |
+| `https://api.myskinandcare.com/*` | `https://api.callsomo.com/$1` (301) optional |
 
 Squarespace: **Settings → Domains → callsomo.com → Domain Forwarding** (or URL redirect), not only A-record changes.
 
 Verify after 301:
 
 ```bash
-curl -sI https://callsomo.com/ | grep -i '^location:'
+curl -sI https://myskinandcare.com/ | grep -i '^location:'
 curl -sI https://callsomo.com/login | grep -i '^HTTP'
 ```
 

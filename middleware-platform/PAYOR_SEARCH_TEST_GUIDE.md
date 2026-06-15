@@ -170,7 +170,7 @@ These checks are implemented in:
 - CORS:
   - `OPTIONS` preflight on key public routes succeeds.
   - Required CORS headers exist for plans/geo endpoints.
-  - Browser cross-origin fetch from `myskinandcare.com` to `api.myskinandcare.com` succeeds.
+  - Browser cross-origin fetch from `callsomo.com` to `api.callsomo.com` succeeds.
 - Mobile regression:
   - Filter drawer open/close via backdrop and `X`.
   - Bottom CTA visibility/clickability (no overlap regression).

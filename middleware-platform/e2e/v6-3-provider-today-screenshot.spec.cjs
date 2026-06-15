@@ -7,7 +7,7 @@
  *
  * Requires middleware on :4000 using the same DB_PATH (default middleware-dev.db).
  *
- *   PW_PROVIDER_EMAIL=provider@doclittle.com PW_PROVIDER_PASS=demo123 \\
+ *   PW_PROVIDER_EMAIL=provider@callsomo.com PW_PROVIDER_PASS=demo123 \\
  *   npx playwright test e2e/v6-3-provider-today-screenshot.spec.cjs --project provider-portal
  */
 
@@ -20,7 +20,7 @@ const { test, expect } = require('@playwright/test');
 const fixtures = require('./helpers/kelly-conversation-fixtures.cjs');
 
 const API_BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
-const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@doclittle.com';
+const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@callsomo.com';
 const PASS = process.env.PW_PROVIDER_PASS || process.env.PW_PROVIDER_PASSWORD || 'demo123';
 const ARTIFACT_DIR = path.join(__dirname, '..', 'e2e-artifacts');
 const TODAY_SHOT = path.join(ARTIFACT_DIR, 'v6-3-today-after-v2.png');

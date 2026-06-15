@@ -1,0 +1,126 @@
+name: Deploy callsomo.com (front-desk)
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_smoke:
+        description: Skip post-deploy smoke (manual runs only)
+        required: false
+        default: false
+        type: boolean
+      preserve_env:
+        description: Preserve existing Cloud Run env vars (image-only deploy)
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - 'middleware-platform/**'
+      - 'unified-dashboard/**'
+      - 'scripts/**'
+      - '.github/workflows/deploy-callsomo.yml'
+
+concurrency:
+  group: deploy-callsomo
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT: somo-callsomo
+  GCP_REGION: us-central1
+  CLOUDRUN_SERVICE: somo-middleware
+  FIREBASE_HOSTING_PROJECT: somo-4ddf6
+  UI_BASE_URL: https://callsomo.com
+  MIDDLEWARE_API_BASE: https://api.callsomo.com
+  CLOUDRUN_BASE_URL: https://api.callsomo.com
+
+jobs:
+  deploy:
+    name: Cloud Run + Firebase + smoke
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: |
+            middleware-platform/package-lock.json
+            unified-dashboard/somo-landing/package-lock.json
+
+      - name: Install root + middleware deps
+        run: |
+          npm ci --prefix middleware-platform
+          npm ci --prefix unified-dashboard/somo-landing
+
+      - name: Build hosting bundle
+        run: |
+          node scripts/build-staging-hosting.cjs
+          node scripts/verify-staging-hosting.cjs
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Run (production profile)
+        env:
+          DEPLOY_INTENT: production
+          CLOUDRUN_PROFILE: production
+          USE_GCP_SECRETS: '1'
+          CLOUDRUN_BASE_URL: https://api.callsomo.com
+          CLOUDRUN_PRESERVE_ENV: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.preserve_env == 'true' && '1' || '0' }}
+          CLOUDSQL_CONNECTION_NAME: ${{ vars.CLOUDSQL_CONNECTION_NAME }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          chmod +x scripts/deploy-to-gcp-production.sh scripts/deploy-to-gcp.sh
+          ARTIFACT_IMAGE="gcr.io/${GCP_PROJECT}/${CLOUDRUN_SERVICE}:${GIT_SHA}" ./scripts/deploy-to-gcp-production.sh
+
+      - name: Ensure API domain mapping
+        run: |
+          gcloud beta run domain-mappings create \
+            --service="${CLOUDRUN_SERVICE}" \
+            --domain=api.callsomo.com \
+            --region="${GCP_REGION}" \
+            --project="${GCP_PROJECT}" 2>/dev/null || true
+          gcloud beta run domain-mappings describe \
+            --domain=api.callsomo.com \
+            --region="${GCP_REGION}" \
+            --project="${GCP_PROJECT}"
+
+      - name: Ensure public Cloud Run invoker
+        run: |
+          chmod +x scripts/ensure-cloudrun-public-invoker.sh
+          ./scripts/ensure-cloudrun-public-invoker.sh
+
+      - name: Configure Retell agent (production WSS)
+        env:
+          RETELL_API_KEY: ${{ secrets.RETELL_API_KEY }}
+          RETELL_AGENT_ID: ${{ secrets.RETELL_AGENT_ID }}
+          API_BASE_URL: https://api.callsomo.com
+        run: |
+          if [ -z "${RETELL_API_KEY:-}" ]; then
+            echo "WARN: RETELL_API_KEY not set — skip configure-retell.js"
+            exit 0
+          fi
+          cd middleware-platform && node configure-retell.js
+
+      - name: Deploy Firebase Hosting
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          npm ci
+          cd unified-dashboard && npx firebase-tools deploy --only hosting --project "${FIREBASE_HOSTING_PROJECT}" --token "$FIREBASE_TOKEN"
+
+      - name: Post-deploy smoke
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skip_smoke != true }}
+        run: npm run smoke:callsomo
