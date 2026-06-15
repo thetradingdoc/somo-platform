@@ -7,6 +7,8 @@
 
 > **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
+> **Trading agent (separate repo):** [richiejeremiah/trading-agent](https://github.com/richiejeremiah/trading-agent) — biotech paper trading; not maintained in this repository. See [`docs/meta/TRADING_AGENT_REPO.md`](docs/meta/TRADING_AGENT_REPO.md).
+
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
 
 > **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.

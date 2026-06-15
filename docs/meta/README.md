@@ -98,6 +98,7 @@ Use this when two folders both mention Kelly, checkout, or triage. **Start with 
 
 | File | Purpose |
 |------|---------|
+| [`meta/TRADING_AGENT_REPO.md`](./meta/TRADING_AGENT_REPO.md) | Trading agent moved to separate GitHub repo (2026-06-14) |
 | [`meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md`](./meta/README.md#documentation-audit-and-consolidation-plan) | Past audit: overlaps identified, many marked **DONE** — keep for history; do not re-merge without a new ticket. |
 | [`meta/DOC_CLEANUP_MARCH_2026.md`](./meta/README.md#doc-cleanup-march-2026) | Short log of link fixes and archive moves (March 2026). |
 

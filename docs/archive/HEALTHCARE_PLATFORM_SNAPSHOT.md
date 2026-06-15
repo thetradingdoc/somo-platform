@@ -27,6 +27,11 @@ git checkout healthcare-v3.1.0
 
 Deploy from this branch/tag using the runbooks in `docs/deployment/OPERATIONS.md` on the snapshot.
 
-## Pivot note
+## Repo split (2026-06-14)
 
-`main` after this archive was stripped to an agentic **trading** shell. See `docs/trading/CLEANUP_CHANGELOG.md` on `main` for what was removed.
+`main` is the **healthcare front-desk platform** (this snapshot). The agentic **trading** experiment was moved to a separate repository:
+
+- **Trading agent:** [richiejeremiah/trading-agent](https://github.com/richiejeremiah/trading-agent)
+- **Pointer doc:** [`docs/meta/TRADING_AGENT_REPO.md`](../meta/TRADING_AGENT_REPO.md)
+
+The `archive/healthcare-v3.1` branch and tag `healthcare-v3.1.0` remain historical labels for v3.1; `main` now tracks the same codebase after the split.
