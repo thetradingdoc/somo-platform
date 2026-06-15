@@ -31,6 +31,12 @@ function isPublicCommercePath(req) {
   return p.startsWith('/api/public/commerce') || p.startsWith('/public/commerce');
 }
 
+/** Signup wizard routes use dedicated signupFlowLimiter / signupSessionReadLimiter buckets. */
+function isSignupApiPath(req) {
+  const path = (req.originalUrl || req.url || req.path || '').split('?')[0];
+  return /\/api\/signup(\/|$)/.test(path) || path === '/signup' || path.startsWith('/signup/');
+}
+
 // Custom key generator that handles IP addresses with ports and trust proxy
 const keyGenerator = (req) => {
   // Extract IP from req.ip, removing port if present
@@ -69,7 +75,10 @@ const apiLimiter = rateLimit({
     ip: false // Disable IP validation to handle IPs with ports
   },
   skip: (req) =>
-    shouldSkipInternalJob(req) || isPublicCatalogRead(req) || isPublicCommercePath(req)
+    shouldSkipInternalJob(req) ||
+    isPublicCatalogRead(req) ||
+    isPublicCommercePath(req) ||
+    isSignupApiPath(req)
 });
 
 const publicCatalogReadMax = parseInt(
@@ -157,6 +166,42 @@ const authLimiter = rateLimit({
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
   },
+  skip: shouldSkipInternalJob
+});
+
+// Multi-step provider signup (POST signup, verify-email, assign-line, accept-terms, etc.)
+const signupFlowMax = parseInt(process.env.SIGNUP_FLOW_RATE_MAX || (isDev ? '200' : '40'), 10);
+const signupFlowLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number.isFinite(signupFlowMax) && signupFlowMax > 0 ? signupFlowMax : 40,
+  message: {
+    error: 'Too many signup attempts from this IP. Please wait a few minutes and try again.',
+    retryAfter: '15 minutes'
+  },
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: { trustProxy: false, ip: false },
+  skip: shouldSkipInternalJob
+});
+
+// GET /api/signup/session — anonymous 401 is normal; do not share the strict auth bucket
+const signupSessionReadMax = parseInt(
+  process.env.SIGNUP_SESSION_READ_RATE_MAX || (isDev ? '2000' : '120'),
+  10
+);
+const signupSessionReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number.isFinite(signupSessionReadMax) && signupSessionReadMax > 0 ? signupSessionReadMax : 120,
+  message: {
+    error: 'Too many signup session checks. Please wait a moment and refresh.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: { trustProxy: false, ip: false },
   skip: shouldSkipInternalJob
 });
 
@@ -273,8 +318,11 @@ module.exports = {
   publicCommerceLimiter,
   isPublicCatalogRead,
   isPublicCommercePath,
+  isSignupApiPath,
   strictLimiter,
   authLimiter,
+  signupFlowLimiter,
+  signupSessionReadLimiter,
   lenientAuthLimiter,
   adminLimiter,
   paymentLimiter,

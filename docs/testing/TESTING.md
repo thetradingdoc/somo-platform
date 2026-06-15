@@ -148,7 +148,7 @@ npm run test:e2e:staging-signup-api --prefix middleware-platform
 |---------|----------------|
 | S1 | Persona step + Somo branding |
 | S2–S7 | Full wizard → trial activation → DB assert |
-| S8 | Duplicate phone → 409 on `verify-phone/send` |
+| S8 | Duplicate phone → 409 on `assign-line` |
 
 ### Signup failure matrix
 

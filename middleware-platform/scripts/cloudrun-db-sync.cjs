@@ -15,6 +15,32 @@ const DB_PATH = process.env.DB_PATH || '/var/data/middleware-staging.db';
 const BUCKET = (process.env.GCS_DB_BUCKET || '').trim();
 const OBJECT = process.env.GCS_DB_OBJECT || 'middleware-staging.db';
 
+function shouldBlockUpload() {
+  if (process.env.GCS_DB_UPLOAD_FORCE === '1') return null;
+  const operatorId =
+    process.env.CALLSOMO_OPERATOR_CUSTOMER_ID || process.env.CALLSOMO_VOICE_CUSTOMER_ID;
+  if (!operatorId || !fs.existsSync(DB_PATH)) return null;
+  try {
+    const Database = require('better-sqlite3');
+    const sqlite = new Database(DB_PATH, { readonly: true });
+    try {
+      const row = sqlite.prepare('SELECT id FROM customers WHERE id = ?').get(operatorId);
+      if (!row) {
+        return `refusing upload: operator ${operatorId} missing from ${DB_PATH}`;
+      }
+      const count = sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n;
+      if (count === 0) {
+        return `refusing upload: customers table empty in ${DB_PATH}`;
+      }
+    } finally {
+      sqlite.close();
+    }
+  } catch (err) {
+    return `refusing upload: preflight failed (${err.message})`;
+  }
+  return null;
+}
+
 async function download() {
   if (!BUCKET) {
     console.log('[cloudrun-db-sync] GCS_DB_BUCKET unset — ephemeral FS');
@@ -35,6 +61,11 @@ async function download() {
 
 async function upload() {
   if (!BUCKET || !fs.existsSync(DB_PATH)) return;
+  const blockReason = shouldBlockUpload();
+  if (blockReason) {
+    console.error('[cloudrun-db-sync]', blockReason);
+    return;
+  }
   const storage = new Storage();
   await storage.bucket(BUCKET).upload(DB_PATH, { destination: OBJECT, resumable: false });
   console.log('[cloudrun-db-sync] Uploaded %s -> gs://%s/%s', DB_PATH, BUCKET, OBJECT);

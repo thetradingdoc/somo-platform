@@ -131,9 +131,7 @@ Wordmark: gecko lockup PNG in nav; uppercase **S** + lowercase **omo** in vector
 
 - **Patient / consumer:** `patients/*.html`, checkout — Somo green, no Skin & Care lockup.
 
-
-
-## Related
+- **Admin ops:** `unified-dashboard/admin/*.html` — light marketing palette (MSU + lizard + grass), League Spartan, shared [`admin-portal.css`](../../unified-dashboard/assets/css/admin-portal.css). Login reuses `auth-somo.css` / `signup-somo.css`. Official `somo-logo.png` on sign-in; `somo-icon-lizard.png` in sidebar. **Do not** use legacy purple (`#7c5dfa`, `#38bdf8`) or Inter as primary font.
 
 - [LOGO_AND_ICON_SSOT.md](./LOGO_AND_ICON_SSOT.md) — mandatory logo vs icon vs favicon paths
 - [INFRA_BRAND_DEFERRAL.md](./INFRA_BRAND_DEFERRAL.md) — hostnames and internal names unchanged until somopay.ai

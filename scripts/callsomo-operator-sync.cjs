@@ -97,7 +97,7 @@ async function syncTwilio(customerId) {
     return false;
   }
   if (!customerId) {
-    fail('CALLSOMO_VOICE_CUSTOMER_ID required (or existing Twilio URL must include customer_id)');
+    fail('CALLSOMO_OPERATOR_CUSTOMER_ID or CALLSOMO_VOICE_CUSTOMER_ID required (or existing Twilio URL must include customer_id)');
     return false;
   }
 
@@ -113,18 +113,72 @@ async function syncTwilio(customerId) {
   }
 
   const voiceUrl = `${API_BASE}/voice/incoming?customer_id=${encodeURIComponent(customerId)}`;
+  const statusCallback = `${API_BASE}/voice/status-callback`;
   const current = target.voiceUrl || '';
-  if (current === voiceUrl) {
-    ok(`Twilio ${target.phoneNumber} voice URL already correct`);
+  const currentStatus = (target.statusCallback || '').replace(/\/+$/, '');
+  const voiceOk = current === voiceUrl;
+  const statusOk = currentStatus === statusCallback;
+
+  if (voiceOk && statusOk) {
+    ok(`Twilio ${target.phoneNumber} voice URL + statusCallback already correct`);
     return true;
   }
 
-  const updated = await twilio.incomingPhoneNumbers(target.sid).update({
-    voiceUrl,
-    voiceMethod: 'POST',
-  });
-  ok(`Twilio ${updated.phoneNumber} → ${updated.voiceUrl}`);
+  const patch = { voiceMethod: 'POST' };
+  if (!voiceOk) {
+    patch.voiceUrl = voiceUrl;
+  }
+  if (!statusOk) {
+    patch.statusCallback = statusCallback;
+    patch.statusCallbackMethod = 'POST';
+  }
+
+  const updated = await twilio.incomingPhoneNumbers(target.sid).update(patch);
+  ok(`Twilio ${updated.phoneNumber} voice URL → ${updated.voiceUrl}`);
+  if (!statusOk) {
+    ok(`Twilio ${updated.phoneNumber} statusCallback → ${updated.statusCallback}`);
+  }
+  if (updated.recordingStatusCallback) {
+    warn(`recordingStatusCallback=${updated.recordingStatusCallback} (not auto-updated)`);
+  }
   return true;
+}
+
+async function verifyRetellAgent(agentId) {
+  if (!process.env.RETELL_API_KEY) {
+    warn('RETELL_API_KEY missing — skip Retell agent verify');
+    return false;
+  }
+  if (!agentId) {
+    fail('No Retell agent ID (RETELL_AGENT_ID or operator row)');
+    return false;
+  }
+  const RetellService = require(path.join(MP, 'services', 'retell-service'));
+  const svc = new RetellService();
+  const result = await svc.getAgent(agentId);
+  if (result.success) {
+    ok(`Retell agent ${agentId} exists`);
+    return true;
+  }
+  fail(`Retell agent ${agentId}: ${result.error}`);
+  return false;
+}
+
+function isLocalCallback(url) {
+  return url && /ngrok|localhost|127\.0\.0\.1/i.test(String(url));
+}
+
+async function auditTwilioCallbacks(target) {
+  for (const [label, url] of [
+    ['voiceUrl', target.voiceUrl],
+    ['statusCallback', target.statusCallback],
+    ['voiceFallbackUrl', target.voiceFallbackUrl],
+    ['recordingStatusCallback', target.recordingStatusCallback]
+  ]) {
+    if (isLocalCallback(url)) {
+      fail(`${label} points to local/ngrok: ${url}`);
+    }
+  }
 }
 
 function syncRetell() {
@@ -204,7 +258,9 @@ async function main() {
   console.log(`  WSS: ${LLM_WS}`);
   console.log(`  Agent: ${AGENT_ID}\n`);
 
-  let customerId = process.env.CALLSOMO_VOICE_CUSTOMER_ID || process.env.STAGING_OWNER_CUSTOMER_ID;
+  let customerId = process.env.CALLSOMO_OPERATOR_CUSTOMER_ID ||
+    process.env.CALLSOMO_VOICE_CUSTOMER_ID ||
+    process.env.STAGING_OWNER_CUSTOMER_ID;
 
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
@@ -220,9 +276,16 @@ async function main() {
 
   console.log('\n==> Twilio');
   await syncTwilio(customerId);
+  if (sid && token && TWILIO_SID) {
+    const twilio = require(path.join(MP, 'node_modules', 'twilio'))(sid, token);
+    const n = await twilio.incomingPhoneNumbers(TWILIO_SID).fetch();
+    await auditTwilioCallbacks(n);
+  }
 
   console.log('\n==> Retell');
   syncRetell();
+  const agentId = process.env.RETELL_AGENT_ID || process.env.RETELL_SALES_AGENT_ID || AGENT_ID;
+  await verifyRetellAgent(agentId);
 
   if (shouldDeployUi) {
     runDeployUi();

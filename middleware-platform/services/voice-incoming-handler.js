@@ -1,6 +1,15 @@
 'use strict';
 
 const axios = require('axios');
+const {
+  isOutboundRequest,
+  normalizeCallType,
+  resolveVoiceAccount,
+  resolveOutboundRetellAgent,
+  resolveMerchantForVoice,
+  buildAccountResolutionFailureTwiml,
+  requiresCustomerId
+} = require('./voice-account-resolution');
 
 function createVoiceIncomingHandler(deps) {
   const { db, normalizePhoneNumber, clinicRateLimitCheck } = deps;
@@ -26,34 +35,36 @@ function createVoiceIncomingHandler(deps) {
       ? decodeURIComponent(String(req.query.prospect_name))
       : null;
 
-    const isOutboundSales =
-      !isSomoDemoDemo && (req.query.call_type === 'sales_outbound' || req.query.lead_id);
+    const isOutboundSales = isOutboundRequest(req, isSomoDemoDemo);
     const leadId = req.query.lead_id;
     const clinicName = req.query.clinic_name ? decodeURIComponent(req.query.clinic_name) : null;
+    const resolvedCallType = normalizeCallType(req, {
+      isOutbound: isOutboundSales,
+      isSomoDemoDemo,
+      leadId
+    });
 
     // Look up SaaS customer by dedicated Twilio phone number first
     const toNumberRaw = req.body.To;
     const normalizedToNumber = normalizePhoneNumber(toNumberRaw);
-    let clinicId = null;
-    let customerId = req.query.customer_id ? String(req.query.customer_id).trim() : null;
-    let matchedCustomer = null;
+    const defaultAgentId = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a';
 
-    // For outbound sales / Somo demo demo, use dedicated agents; otherwise use default
+    const account = resolveVoiceAccount(db, req, {
+      normalizedToNumber,
+      isSomoDemoDemo,
+      isOutbound: isOutboundSales,
+      leadId
+    });
+    let clinicId = account.clinicId || null;
+    let customerId = account.customerId;
+    let matchedCustomer = account.matchedCustomer;
+
     let retellAgentId = isOutboundSales
-        ? (process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a')
-        : (process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a');
+      ? resolveOutboundRetellAgent(req, matchedCustomer, defaultAgentId)
+      : defaultAgentId;
 
-    if (customerId && !isOutboundSales && !isSomoDemoDemo) {
-      matchedCustomer = db.getCustomer(customerId);
-      if (matchedCustomer) {
-        console.log(`✅ Matched customer from query customer_id: ${customerId}`);
-        if (matchedCustomer.retell_agent_id) {
-          retellAgentId = matchedCustomer.retell_agent_id;
-        }
-      } else {
-        console.warn(`⚠️  customer_id query param not found: ${customerId}`);
-        customerId = null;
-      }
+    if (customerId && !isOutboundSales && !isSomoDemoDemo && matchedCustomer?.retell_agent_id) {
+      retellAgentId = matchedCustomer.retell_agent_id;
     }
 
     if (isSomoDemoDemo) {
@@ -89,78 +100,22 @@ function createVoiceIncomingHandler(deps) {
       console.log(`   Clinic: ${clinicName}`);
       console.log(`   Using Sales Agent: ${retellAgentId}`);
 
-      // For outbound calls, the "To" number is the target (clinic), not our number
-      // We don't need to look up customer by number - we have lead_id
       if (leadId) {
         const lead = db.getLead(leadId);
         if (lead) {
-          console.log(`✅ Found lead: ${lead.clinic_name}`);
-          // Use lead data for context
-          clinicId = leadId; // Use lead ID as identifier
-        }
-      }
-    } else if (!customerId) {
-      const customerByNumber = db.getCustomerByTwilioNumber(normalizedToNumber);
-      if (customerByNumber) {
-        matchedCustomer = customerByNumber;
-        customerId = customerByNumber.id;
-        if (customerByNumber.retell_agent_id) {
-          retellAgentId = customerByNumber.retell_agent_id;
-        }
-        console.log(`✅ Matched customer ${customerByNumber.name || customerByNumber.company_name || customerByNumber.id} via Twilio number ${normalizedToNumber}`);
-
-        // CRITICAL: Get merchant_id from customer for voice functions
-        if (customerByNumber.merchant_id) {
-          console.log(`✅ Customer has merchant_id: ${customerByNumber.merchant_id}`);
-        } else {
-          console.warn(`⚠️  Customer ${customerId} has no merchant_id. Voice product/order functions may not work.`);
-        }
-
-      } else {
-        // Look up legacy clinic mapping
-        const clinicPhone = db.getClinicPhoneNumber(normalizedToNumber);
-        if (clinicPhone && clinicPhone.clinic_id) {
-          clinicId = clinicPhone.clinic_id;
-          customerId = clinicId; // Legacy: clinic_id used as customer_id
-          const clinic = await db.getClinicById(clinicId);
-          if (clinic && clinic.retell_agent_id) {
-            retellAgentId = clinic.retell_agent_id;
-            console.log(`✅ Found clinic: ${clinic.name} (${clinicId})`);
-            console.log(`   Using Retell agent: ${retellAgentId}`);
-          }
-        } else {
-          // Try to find customer by agent_id if provided in query params or headers
-          const agentIdFromRequest = req.query.agent_id || req.headers['x-retell-agent-id'];
-          if (agentIdFromRequest) {
-            const customer = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(agentIdFromRequest);
-            if (customer) {
-              matchedCustomer = customer;
-              customerId = customer.id;
-              retellAgentId = agentIdFromRequest;
-              console.log(`✅ Found customer by agent_id: ${customer.name} (${customerId})`);
-              console.log(`   Using Retell agent: ${retellAgentId}`);
-
-              // CRITICAL: Get merchant_id from customer for voice functions
-              if (customer.merchant_id) {
-                console.log(`✅ Customer has merchant_id: ${customer.merchant_id}`);
-              } else {
-                console.warn(`⚠️  Customer ${customerId} has no merchant_id. Voice product/order functions may not work.`);
-              }
-
-            } else {
-              console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
-              console.warn(`   Using default Retell agent: ${retellAgentId}`);
-            }
-          } else {
-            console.warn(`⚠️  No clinic or customer found for phone number: ${normalizedToNumber}`);
-            console.warn(`   Using default Retell agent: ${retellAgentId}`);
-          }
+          console.log(`✅ Found lead: ${lead.clinic_name} (lead_id in metadata only)`);
         }
       }
     }
 
-    if (!matchedCustomer && customerId) {
-      matchedCustomer = db.getCustomer(customerId);
+    if (isOutboundSales && req.query.agent_id) {
+      retellAgentId = String(req.query.agent_id).trim();
+      console.log(`✅ Outbound honoring agent_id query: ${retellAgentId}`);
+    }
+
+    if (requiresCustomerId(isSomoDemoDemo) && !customerId) {
+      console.error('❌ Account resolution failed: customer_id required before register-phone-call');
+      return res.type('text/xml').send(buildAccountResolutionFailureTwiml());
     }
 
     const {
@@ -172,6 +127,7 @@ function createVoiceIncomingHandler(deps) {
       customerId,
       isSomoDemoDemo,
       isOutboundSales,
+      callType: resolvedCallType,
       currentRetellAgentId: retellAgentId,
       defaultAgentId: process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a'
     });
@@ -182,6 +138,15 @@ function createVoiceIncomingHandler(deps) {
       return res.type('text/xml').send(buildMissingRetellTwiml());
     }
     retellAgentId = retellResolution.retellAgentId;
+
+    if (customerId && isOutboundSales && !isSomoDemoDemo) {
+      const { canInitiateOutboundCall, buildBlockedTwiml } = require('./billing-access');
+      const access = canInitiateOutboundCall(db, customerId);
+      if (!access.allowed) {
+        console.warn(`⚠️  Outbound blocked for customer ${customerId}: ${access.reason}`);
+        return res.type('text/xml').send(buildBlockedTwiml(access.message));
+      }
+    }
 
     if (customerId && !isOutboundSales && !isSomoDemoDemo) {
       const { canAcceptInboundCall, buildBlockedTwiml } = require('./billing-access');
@@ -249,14 +214,30 @@ function createVoiceIncomingHandler(deps) {
     // Add lead metadata for outbound sales calls
     if (isSomoDemoDemo) {
       metadata.call_type = 'somo_demo';
+      metadata.direction = 'inbound';
+      const { getOperatorCustomerId } = require('./voice-account-resolution');
+      const operatorId = getOperatorCustomerId();
+      if (operatorId && db.getCustomer(operatorId)) {
+        metadata.customer_id = operatorId;
+        if (!customerId) {
+          customerId = operatorId;
+          matchedCustomer = db.getCustomer(operatorId);
+        }
+      }
       if (demoRequestId) metadata.demo_request_id = demoRequestId;
       if (somoDemoUseCase) metadata.use_case = somoDemoUseCase;
       if (somoDemoProspectName) metadata.prospect_name = somoDemoProspectName;
     }
-    if (isOutboundSales && leadId) {
-      metadata.lead_id = leadId;
-      metadata.call_type = 'sales_outbound';
-      metadata.clinic_name = clinicName;
+    if (isOutboundSales) {
+      metadata.call_type = resolvedCallType;
+      metadata.direction = 'outbound';
+      if (leadId) {
+        metadata.lead_id = leadId;
+        metadata.clinic_name = clinicName;
+      }
+    } else if (!isSomoDemoDemo) {
+      metadata.call_type = 'inbound';
+      metadata.direction = 'inbound';
     }
     if (clinicId) {
       metadata.clinic_id = clinicId;
@@ -282,105 +263,16 @@ function createVoiceIncomingHandler(deps) {
       }
     }
 
-    // Use merchant_id from metadata if available, otherwise try to resolve from clinic
-    let merchantResolutionReason = 'none';
-    let merchantId = metadata.merchant_id;
-    if (merchantId) merchantResolutionReason = 'metadata';
-    if (!merchantId && customerId) {
-      // Try to get merchant from customer's clinic
-      const customer = db.getCustomer(customerId);
-      if (customer && customer.merchant_id) {
-        merchantId = customer.merchant_id;
-        merchantResolutionReason = 'customer_record';
-      }
-    }
-    if (!merchantId && clinicId) {
-      // Try to get merchant from clinic
-      const clinic = await db.getClinicById(clinicId);
-      if (clinic && clinic.merchant_id) {
-        merchantId = clinic.merchant_id;
-        merchantResolutionReason = 'clinic_record';
-      }
-    }
-
-    // If still no merchant_id, resolve from Retell agent_id (PRIMARY METHOD - agent should be associated with tenant)
-    if (!merchantId && retellAgentId) {
-      // CRITICAL: Explicit mapping for known agents to ensure correct tenant resolution
-      // This ensures the agent ALWAYS connects to the correct tenant
-      const agentToSubdomainMap = {
-        'agent_9151f738c705a56f4a0d8df63a': 'akin-dunbar' // Explicit mapping for akin-dunbar agent
-      };
-      
-      // Check explicit mapping first (highest priority)
-      if (agentToSubdomainMap[retellAgentId]) {
-        const mappedSubdomain = agentToSubdomainMap[retellAgentId];
-        const mappedMerchant = db.getMerchantBySubdomain(mappedSubdomain);
-        if (mappedMerchant) {
-          merchantId = mappedMerchant.id;
-          merchantResolutionReason = 'agent_subdomain_map';
-          console.log(`✅ Resolved merchant_id from explicit agent mapping: ${merchantId} (${mappedMerchant.name || 'unknown'}) for subdomain ${mappedSubdomain}`);
-        }
-      }
-      
-      // Method 1: Find merchant directly by agent_id (if merchants table has retell_agent_id column)
-      if (!merchantId) {
-        try {
-          const merchantByAgent = db.db.prepare('SELECT id FROM merchants WHERE retell_agent_id = ? LIMIT 1').get(retellAgentId);
-          if (merchantByAgent && merchantByAgent.id) {
-            merchantId = merchantByAgent.id;
-            merchantResolutionReason = 'merchant_retell_agent_id';
-            const merchant = db.getMerchant(merchantId);
-            console.log(`✅ Resolved merchant_id directly from merchant agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
-          }
-        } catch (e) {
-          // Column might not exist, continue to other methods
-        }
-      }
-      
-      // Method 2: Find customer by agent_id (SaaS customers have agent_id)
-      if (!merchantId) {
-        const customerByAgent = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(retellAgentId);
-        if (customerByAgent && customerByAgent.merchant_id) {
-          merchantId = customerByAgent.merchant_id;
-          merchantResolutionReason = 'customer_retell_agent_id';
-          const merchant = db.getMerchant(merchantId);
-          console.log(`✅ Resolved merchant_id from customer agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
-        }
-      }
-      
-      // Method 3: Find clinic by agent_id (legacy clinics have agent_id)
-      if (!merchantId) {
-        const clinicWithAgent = db.db.prepare('SELECT merchant_id FROM clinics WHERE retell_agent_id = ? AND merchant_id IS NOT NULL LIMIT 1').get(retellAgentId);
-        if (clinicWithAgent && clinicWithAgent.merchant_id) {
-          merchantId = clinicWithAgent.merchant_id;
-          merchantResolutionReason = 'clinic_retell_agent_id';
-          const merchant = db.getMerchant(merchantId);
-          console.log(`✅ Resolved merchant_id from clinic agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
-        }
-      }
-      
-      // Last resort: default tenant only when inbound tenant is unknown (not explicit customer_id)
-      if (!merchantId && !customerId) {
-        const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
-        const defaultMerchant = db.getMerchantBySubdomain(defaultSubdomain);
-        if (defaultMerchant) {
-          merchantId = defaultMerchant.id;
-          merchantResolutionReason = 'default_tenant_subdomain';
-          console.log(`✅ Resolved merchant_id from default tenant (${defaultSubdomain}): ${merchantId} (${defaultMerchant.name || 'unknown'})`);
-        } else {
-          console.error(`❌ CRITICAL: Default tenant (${defaultSubdomain}) not found in database!`);
-          // Final fallback: use first available merchant to keep voice flow alive in dev/misconfigured envs.
-          try {
-            const anyMerchant = (db.getAllMerchants && db.getAllMerchants()[0]) || null;
-            if (anyMerchant?.id) {
-              merchantId = anyMerchant.id;
-              merchantResolutionReason = 'first_available_merchant_fallback';
-              console.warn(`⚠️  Falling back to first available merchant: ${merchantId} (${anyMerchant.name || 'unknown'})`);
-            }
-          } catch (_) {}
-        }
-      }
-    }
+    const merchantFromQuery = req.query.merchant_id ? String(req.query.merchant_id).trim() : null;
+    const merchantResolution = resolveMerchantForVoice(db, {
+      customerId,
+      matchedCustomer,
+      merchantIdFromQuery: merchantFromQuery || metadata.merchant_id || null,
+      retellAgentId,
+      clinicId
+    });
+    let merchantId = merchantResolution.merchantId;
+    let merchantResolutionReason = merchantResolution.reason;
 
     if (!merchantId) {
       console.warn(`⚠️  No merchant_id found for customer ${customerId || 'unknown'} / clinic ${clinicId || 'unknown'}. Voice product/order functions may not work.`);
@@ -565,6 +457,12 @@ function createVoiceIncomingHandler(deps) {
               }
             }
 
+            const callDirection = isOutboundSales
+              ? 'outbound'
+              : isSomoDemoDemo
+                ? 'inbound'
+                : 'inbound';
+
             await db.logVoiceCall({
               id: `call-${callId}`,
               customer_id: resolvedCustomerId,
@@ -573,7 +471,8 @@ function createVoiceIncomingHandler(deps) {
               twilio_call_sid: req.body.CallSid, // Store Twilio CallSid for cost tracking
               call_duration_seconds: null, // Will update when call ends
               function_calls_count: 0,
-              status: 'active'
+              status: 'active',
+              direction: metadata.direction || callDirection
             });
             if (typeof db.upsertCallState === 'function') {
               db.upsertCallState(callId, {

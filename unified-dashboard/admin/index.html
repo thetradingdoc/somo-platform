@@ -4,993 +4,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Somo Admin</title>
-  <link rel="stylesheet" href="../assets/css/global.css">
-  <link rel="stylesheet" href="assets/css/admin-ai-assistant.css">
+  <meta name="color-scheme" content="light" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="../assets/css/signup-somo.css" />
+  <link rel="stylesheet" href="../assets/css/auth-somo.css" />
+  <link rel="stylesheet" href="../assets/css/admin-portal.css" />
+  <link rel="stylesheet" href="assets/css/admin-ai-assistant.css" />
   <script src="../assets/js/config.js"></script>
-  <style>
-    :root {
-      --bg: #05060a;
-      --panel: #101422;
-      --panel-2: #0b0f19;
-      --text: #f8fafc;
-      --muted: #8b94a7;
-      --border: #21283a;
-      --accent: #7c5dfa;
-      --accent-green: #22c55e;
-      --accent-blue: #38bdf8;
-      --accent-orange: #fb923c;
-    }
-
-    :root.light {
-      --bg: #f5f7fb;
-      --panel: #ffffff;
-      --panel-2: #eef1f8;
-      --text: #101528;
-      --muted: #54607a;
-      --border: #e2e8f0;
-      --accent: #5c43d0;
-      --accent-green: #16a34a;
-      --accent-blue: #128a2e;
-      --accent-orange: #ea580c;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-
-    .shell {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    aside {
-      width: 72px;
-      background: var(--panel-2);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px 0;
-      gap: 16px;
-    }
-
-    .logo {
-      width: 48px;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      border-radius: 12px;
-      color: white;
-      margin-bottom: 8px;
-    }
-
-    .nav-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--muted);
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 18px;
-    }
-
-    .nav-icon.active {
-      background: linear-gradient(135deg, var(--accent), var(--accent-blue));
-      color: white;
-    }
-
-    .nav-icon:hover:not(.active) {
-      background: var(--panel);
-      color: var(--text);
-    }
-
-    main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .top-bar {
-      padding: 24px 32px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--panel);
-    }
-
-    .tabs {
-      display: flex;
-      gap: 8px;
-      padding: 0 32px;
-      background: var(--panel);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .tab {
-      padding: 12px 20px;
-      background: none;
-      border: none;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
-    }
-
-    .tab.active {
-      color: var(--accent-blue);
-      border-bottom-color: var(--accent-blue);
-    }
-
-    .tab:hover:not(.active) {
-      color: var(--text);
-    }
-
-    .content {
-      flex: 1;
-      padding: 32px;
-      overflow-y: auto;
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      margin-bottom: 24px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
-
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-top: 16px;
-    }
-
-    .stat-card {
-      background: linear-gradient(135deg, var(--panel-2), var(--panel));
-      border: 2px solid var(--border);
-      border-radius: 16px;
-      padding: 28px;
-      text-align: left;
-      transition: all 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: linear-gradient(90deg, var(--accent-blue), var(--accent));
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .stat-card:hover {
-      border-color: var(--accent-blue);
-      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
-      transform: translateY(-2px);
-    }
-
-    .stat-card:hover::before {
-      opacity: 1;
-    }
-
-    .stat-label {
-      font-size: 12px;
-      color: var(--muted);
-      margin-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .stat-value {
-      font-size: 36px;
-      font-weight: 800;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 8px;
-      line-height: 1;
-    }
-
-    .stat-sub {
-      font-size: 13px;
-      color: var(--muted);
-      font-weight: 500;
-    }
-
-    .lead-card {
-      background: var(--panel-2);
-      border: 2px solid var(--border);
-      border-radius: 16px;
-      padding: 20px 24px;
-      margin-bottom: 16px;
-      cursor: pointer;
-      transition: all 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .lead-card::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 4px;
-      background: var(--border);
-      transition: all 0.2s;
-    }
-
-    .lead-card:hover {
-      border-color: var(--accent-blue);
-      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
-      transform: translateY(-2px);
-    }
-
-    .lead-card:hover::before {
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-    }
-
-    .lead-name {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 16px;
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .lead-name::before {
-      content: '🏥';
-      font-size: 24px;
-    }
-
-    .lead-meta {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-      font-size: 14px;
-    }
-
-    .lead-meta span {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      background: var(--panel);
-      border-radius: 10px;
-      font-weight: 500;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      opacity: 0.9;
-    }
-
-    /* Single Line Search Form */
-    .search-form-single-line {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .search-input-group {
-      display: flex;
-      align-items: center;
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .search-input-inline {
-      padding: 12px 16px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 14px;
-      transition: all 0.2s;
-      font-family: inherit;
-      width: 100%;
-    }
-
-    .search-input-inline:focus {
-      outline: none;
-      border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
-    }
-
-    .search-input-inline::placeholder {
-      color: var(--muted);
-    }
-
-    .location-group {
-      flex: 1.5;
-      min-width: 250px;
-    }
-
-    .location-selector-container {
-      position: relative;
-      width: 100%;
-    }
-
-    .location-selector-single {
-      padding: 12px 16px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 14px;
-      height: 44px;
-      width: 100%;
-      transition: all 0.2s;
-      cursor: pointer;
-    }
-
-    .location-selector-single:focus {
-      outline: none;
-      border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
-    }
-
-    .selected-states-below {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-      min-height: 24px;
-    }
-
-    .state-tag-inline {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 8px;
-      background: var(--accent-blue);
-      color: white;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    .state-tag-inline button {
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      padding: 0;
-      margin-left: 4px;
-      display: flex;
-      align-items: center;
-      opacity: 0.8;
-      font-size: 14px;
-      line-height: 1;
-    }
-
-    .state-tag-inline button:hover {
-      opacity: 1;
-    }
-
-    .search-actions {
-      display: flex;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
-    .btn-search-primary-inline {
-      padding: 12px 20px;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-    }
-
-    .btn-search-primary-inline:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
-    }
-
-    .btn-search-secondary-inline {
-      padding: 12px 20px;
-      background: var(--accent-green);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-    }
-
-    .btn-search-secondary-inline:hover {
-      background: #22c55e;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
-    }
-
-    .quick-filter-btn {
-      padding: 8px 16px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-
-    .quick-filter-btn:hover {
-      background: var(--panel-2);
-      border-color: var(--accent-blue);
-    }
-
-    .quick-filter-btn.active {
-      background: var(--accent-blue);
-      color: white;
-      border-color: var(--accent-blue);
-    }
-
-    .result-filter-btn.active {
-      opacity: 1;
-      transform: scale(1.05);
-    }
-
-    .result-filter-btn.active[style*="var(--accent-blue)"] {
-      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.5) !important;
-    }
-
-    .result-filter-btn.active[style*="var(--accent-green)"] {
-      box-shadow: 0 4px 16px rgba(34, 197, 94, 0.5) !important;
-    }
-
-    .btn-search-primary {
-      padding: 14px 28px;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: center;
-      flex: 1;
-      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
-    }
-
-    .btn-search-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(56, 189, 248, 0.4);
-    }
-
-    .btn-search-secondary {
-      padding: 14px 28px;
-      background: var(--accent-green);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: center;
-      flex: 1;
-    }
-
-    .btn-search-secondary:hover {
-      background: #22c55e;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
-    }
-
-    .btn-search-clear {
-      padding: 14px 20px;
-      background: var(--panel);
-      color: var(--text);
-      border: 2px solid var(--border);
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: center;
-    }
-
-    .btn-search-clear:hover {
-      background: var(--panel-2);
-      border-color: var(--accent-orange);
-      color: var(--accent-orange);
-    }
-
-    @media (max-width: 1024px) {
-      .search-form-single-line {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 16px;
-      }
-
-      .search-input-group {
-        min-width: 100%;
-      }
-
-      .location-group {
-        min-width: 100%;
-      }
-
-      .search-actions {
-        width: 100%;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .btn-search-primary-inline,
-      .btn-search-secondary-inline {
-        width: 100%;
-        padding: 14px 20px;
-      }
-
-      .location-selector-multi {
-        min-height: 120px;
-        font-size: 16px;
-        /* Prevents zoom on iOS */
-      }
-
-      .selected-states-inline {
-        position: static;
-        margin-top: 8px;
-        max-height: none;
-        overflow: visible;
-      }
-
-      .state-tag-inline {
-        font-size: 12px;
-        padding: 6px 10px;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .search-form-single-line {
-        gap: 20px;
-      }
-
-      .search-input-inline {
-        padding: 14px 16px;
-        font-size: 16px;
-        /* Prevents zoom on iOS */
-      }
-
-      .location-selector-multi {
-        min-height: 150px;
-        padding: 14px 16px;
-      }
-
-      .btn-search-primary-inline,
-      .btn-search-secondary-inline {
-        padding: 16px 20px;
-        font-size: 16px;
-      }
-
-      /* Header improvements for mobile */
-      .panel[style*="padding:32px"] {
-        padding: 20px 16px !important;
-      }
-
-      div[style*="padding:24px 32px"] {
-        padding: 20px 16px !important;
-      }
-
-      div[style*="padding:32px 32px 24px"] {
-        padding: 20px 16px !important;
-      }
-
-      /* Quick filter buttons on mobile */
-      .quick-filter-btn {
-        padding: 10px 14px;
-        font-size: 12px;
-      }
-
-      /* Better spacing for mobile */
-      .leads-subtabs {
-        padding: 0 16px !important;
-        margin-bottom: 16px !important;
-      }
-
-      .leads-subtab {
-        padding: 10px 14px !important;
-        font-size: 13px !important;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .search-input-inline {
-        padding: 16px;
-      }
-
-      .location-selector-multi {
-        min-height: 180px;
-        padding: 16px;
-      }
-
-      .btn-search-primary-inline,
-      .btn-search-secondary-inline {
-        padding: 18px 20px;
-      }
-
-      .state-tag-inline {
-        font-size: 11px;
-        padding: 5px 8px;
-      }
-
-      /* Stack quick filters on very small screens */
-      div[style*="display:flex;gap:8px;flex-wrap:wrap"] {
-        flex-direction: column;
-        width: 100%;
-      }
-
-      .quick-filter-btn {
-        width: 100%;
-        text-align: center;
-      }
-    }
-
-    .login-panel {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #ffffff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .login-panel.hidden {
-      display: none;
-    }
-
-    .login-card {
-      width: 100%;
-      max-width: 440px;
-      background: #ffffff;
-      border-radius: 24px;
-      padding: 48px 40px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
-      border: 1px solid #e2e8f0;
-    }
-
-    .login-logo {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 32px;
-    }
-
-    .login-logo svg {
-      width: 64px;
-      height: 64px;
-    }
-
-    .login-card h2 {
-      font-size: 32px;
-      font-weight: 700;
-      color: #1e293b;
-      text-align: center;
-      margin: 0 0 8px 0;
-    }
-
-    .login-card p {
-      color: #64748b;
-      font-size: 15px;
-      text-align: center;
-      margin: 0 0 32px 0;
-    }
-
-    .login-form {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .login-form input {
-      padding: 16px 20px;
-      border: 2px solid #e2e8f0;
-      border-radius: 12px;
-      background: #ffffff;
-      color: #1e293b;
-      font-size: 15px;
-      transition: all 0.2s;
-      font-family: inherit;
-    }
-
-    .login-form input:focus {
-      outline: none;
-      border-color: #7c5dfa;
-      box-shadow: 0 0 0 4px rgba(124, 93, 250, 0.1);
-    }
-
-    .login-form input::placeholder {
-      color: #94a3b8;
-    }
-
-    .login-form button {
-      padding: 16px 24px;
-      background: linear-gradient(135deg, #7c5dfa, #38bdf8);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-top: 8px;
-    }
-
-    .login-form button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(124, 93, 250, 0.3);
-    }
-
-    .login-form button:active {
-      transform: translateY(0);
-    }
-
-    #loginError {
-      margin-top: 16px;
-      padding: 12px 16px;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: 10px;
-      color: #dc2626;
-      font-size: 14px;
-      text-align: center;
-    }
-
-    #loginError.hidden {
-      display: none;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    .empty {
-      text-align: center;
-      color: var(--muted);
-      padding: 40px;
-    }
-
-    .leads-subtabs {
-      display: flex;
-      gap: 8px;
-      padding: 0 32px;
-      margin-bottom: 24px;
-      border-bottom: 2px solid var(--border);
-    }
-
-    .leads-subtab {
-      padding: 12px 24px;
-      background: none;
-      border: none;
-      border-bottom: 3px solid transparent;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 600;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      margin-bottom: -2px;
-    }
-
-    .leads-subtab.active {
-      color: var(--accent-blue);
-      border-bottom-color: var(--accent-blue);
-    }
-
-    .leads-subtab:hover:not(.active) {
-      color: var(--text);
-    }
-
-    .leads-subtab-content {
-      display: none;
-    }
-
-    .leads-subtab-content.active {
-      display: block;
-    }
-
-    @media (max-width: 768px) {
-      .search-form {
-        grid-template-columns: 1fr;
-      }
-
-      .stat-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .tabs {
-        overflow-x: auto;
-      }
-
-      /* Mobile header improvements */
-      .search-header-mobile {
-        padding: 20px 16px !important;
-      }
-
-      .search-header-content h2 {
-        font-size: 24px !important;
-      }
-
-      .search-header-content p {
-        font-size: 13px !important;
-      }
-
-      .quick-filters-mobile {
-        width: 100%;
-        margin-top: 12px;
-      }
-
-      .quick-filters-mobile .quick-filter-btn {
-        flex: 1;
-        min-width: 0;
-      }
-
-      /* Better mobile spacing */
-      .panel {
-        padding: 16px !important;
-      }
-
-      .lead-card {
-        padding: 16px !important;
-      }
-
-      .lead-name {
-        font-size: 18px !important;
-      }
-
-      .lead-meta {
-        flex-wrap: wrap;
-        gap: 8px !important;
-      }
-
-      .lead-meta span {
-        font-size: 12px !important;
-        padding: 6px 10px !important;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .search-header-content h2 {
-        font-size: 22px !important;
-      }
-
-      .quick-filters-mobile {
-        flex-direction: column;
-      }
-
-      .quick-filters-mobile .quick-filter-btn {
-        width: 100%;
-      }
-
-      /* Compact mobile cards */
-      .lead-card {
-        padding: 12px !important;
-        margin-bottom: 12px !important;
-      }
-
-      .lead-name {
-        font-size: 16px !important;
-        margin-bottom: 8px !important;
-      }
-
-      .lead-meta {
-        gap: 6px !important;
-      }
-
-      .lead-meta span {
-        font-size: 11px !important;
-        padding: 4px 8px !important;
-      }
-    }
-  </style>
+  <title>Somo Admin</title>
 </head>
 
-<body>
+<body class="admin-portal-body signup-wizard-body">
   <div class="shell">
     <aside>
-      <div class="logo">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="url(#paint0_linear_sidebar)" />
-          <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="white" stroke-width="1.5" stroke-linecap="round"
-            stroke-linejoin="round" />
-          <path d="M2 7L12 12L22 7" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <path d="M12 2V22" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <defs>
-            <linearGradient id="paint0_linear_sidebar" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#7C5DFA" />
-              <stop offset="1" stop-color="#38BDF8" />
-            </linearGradient>
-          </defs>
-        </svg>
+      <div class="logo admin-sidebar-logo">
+        <img src="/assets/brand/somo-icon-lizard.png" alt="Somo" width="36" height="36" />
       </div>
       <div class="nav-icon" title="Dashboard" onclick="window.location.href='index.html'">📊</div>
       <div class="nav-icon" title="Tenants" onclick="window.location.href='index.html?tab=tenants'">🏥</div>
@@ -1002,18 +33,11 @@
     <main>
       <div class="top-bar">
         <div>
-          <p style="margin:0;color:var(--muted);font-size:13px;font-weight:500;">Somo • Admin</p>
-          <h1
-            style="margin:8px 0 0;font-size:28px;font-weight:700;background:linear-gradient(135deg, var(--accent-blue), var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
-            Command Center</h1>
+          <p class="admin-eyebrow">Somo • Admin</p>
+          <h1 class="admin-page-title">Command Center</h1>
         </div>
         <div style="display:flex;gap:12px;align-items:center;">
-          <button class="btn" id="themeToggle"
-            style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);padding:10px 16px;border-radius:10px;font-weight:500;transition:all 0.2s;">
-            <span id="themeIcon">🌙</span> <span id="themeText">Dark</span>
-          </button>
-          <button class="btn" id="logoutBtn"
-            style="display:none;background:var(--panel-2);color:var(--text);border:1px solid var(--border);padding:10px 16px;border-radius:10px;font-weight:500;transition:all 0.2s;">
+          <button class="btn admin-toolbar-btn" id="logoutBtn" style="display:none;">
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
               style="display:inline-block;margin-right:6px;vertical-align:middle;">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1025,34 +49,29 @@
       </div>
 
       <div class="login-panel" id="loginPanel">
-        <div class="login-card">
-          <div class="login-logo">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="url(#paint0_linear_login)" />
-              <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="url(#paint1_linear_login)" stroke-width="1.5"
-                stroke-linecap="round" stroke-linejoin="round" />
-              <path d="M2 7L12 12L22 7" stroke="white" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" />
-              <path d="M12 2V22" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              <defs>
-                <linearGradient id="paint0_linear_login" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#7C5DFA" />
-                  <stop offset="1" stop-color="#38BDF8" />
-                </linearGradient>
-                <linearGradient id="paint1_linear_login" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#7C5DFA" />
-                  <stop offset="1" stop-color="#38BDF8" />
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
-          <h2>Welcome Back</h2>
-          <p>Enter your admin secret to access the command center</p>
+        <div class="login-card login-main" style="max-width:440px;margin:0 auto;">
+          <a href="/" class="signup-logo-link" aria-label="Somo home">
+            <img class="signup-logo-img" src="/assets/brand/somo-logo.png" alt="Somo" width="199" height="68" />
+          </a>
+          <p class="signup-eyebrow">Operator access</p>
+          <h1 class="signup-title" style="font-size:1.75rem;text-align:center;">Welcome back</h1>
+          <p class="signup-sub" id="loginStepHint" style="text-align:center;">Sign in with your operator account. A verification code will be emailed for security.</p>
+          <div class="signup-toast error hidden" id="loginError" role="alert"></div>
           <form class="login-form" id="loginForm">
-            <input type="password" id="adminSecret" placeholder="Enter admin secret" required autofocus />
-            <button type="submit">Sign In</button>
+            <label class="signup-field">
+              <span>Email</span>
+              <input type="email" id="adminEmail" autocomplete="username" required autofocus />
+            </label>
+            <label class="signup-field">
+              <span>Password</span>
+              <input type="password" id="adminPassword" autocomplete="current-password" required />
+            </label>
+            <label class="signup-field hidden" id="adminCodeField">
+              <span>Verification code</span>
+              <input type="text" id="adminCode" placeholder="6-digit code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" />
+            </label>
+            <button type="submit" class="signup-btn-primary admin-login-btn" id="loginSubmitBtn">Continue</button>
           </form>
-          <div id="loginError" class="hidden"></div>
         </div>
       </div>
 
@@ -1487,24 +506,10 @@
   </div>
 
   <script>
-    const API_BASE = window.location.hostname === 'localhost'
+    const API_BASE = window.API_BASE || (window.location.hostname === 'localhost'
       ? 'http://localhost:4000'
-      : window.location.origin;
+      : 'https://api.callsomo.com');
 
-    // Theme toggle
-    const themeToggle = document.getElementById('themeToggle');
-    const themeIcon = document.getElementById('themeIcon');
-    const themeText = document.getElementById('themeText');
-    const isLight = localStorage.getItem('theme') === 'light';
-    if (isLight) document.documentElement.classList.add('light');
-
-    themeToggle.addEventListener('click', () => {
-      document.documentElement.classList.toggle('light');
-      const isLightNow = document.documentElement.classList.contains('light');
-      localStorage.setItem('theme', isLightNow ? 'light' : 'dark');
-      themeIcon.textContent = isLightNow ? '☀️' : '🌙';
-      themeText.textContent = isLightNow ? 'Light' : 'Dark';
-    });
     if (isLight) {
       themeIcon.textContent = '☀️';
       themeText.textContent = 'Light';
@@ -1551,6 +556,12 @@
     const loginForm = document.getElementById('loginForm');
     const loginError = document.getElementById('loginError');
     const logoutBtn = document.getElementById('logoutBtn');
+    const adminEmailInput = document.getElementById('adminEmail');
+    const adminPasswordInput = document.getElementById('adminPassword');
+    const adminCodeInput = document.getElementById('adminCode');
+    const loginSubmitBtn = document.getElementById('loginSubmitBtn');
+    const loginStepHint = document.getElementById('loginStepHint');
+    let loginAwaitingCode = false;
 
     async function checkSession() {
       try {
@@ -1590,25 +601,43 @@
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       loginError.classList.add('hidden');
-      const secret = document.getElementById('adminSecret').value.trim();
+      const email = adminEmailInput.value.trim();
+      const password = adminPasswordInput.value;
+      const code = adminCodeInput.value.trim();
       try {
+        const body = loginAwaitingCode
+          ? { email, password, code }
+          : { email, password };
         const res = await fetch(`${API_BASE}/api/admin/session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ secret })
+          body: JSON.stringify(body)
         });
         const data = await res.json();
+        if (data.success && data.step === 'verify_code') {
+          loginAwaitingCode = true;
+          document.getElementById('adminCodeField').classList.remove('hidden');
+          adminCodeInput.required = true;
+          adminCodeInput.focus();
+          loginSubmitBtn.textContent = 'Verify & Sign In';
+          loginStepHint.textContent = `Enter the 6-digit code sent to ${data.email || email}.`;
+          return;
+        }
         if (data.success) {
+          loginAwaitingCode = false;
+          document.getElementById('adminCodeField').classList.add('hidden');
+          adminCodeInput.required = false;
+          adminCodeInput.value = '';
+          loginSubmitBtn.textContent = 'Continue';
           loginPanel.classList.add('hidden');
           dashboardShell.classList.remove('hidden');
-          // Initialize email composer only after successful authentication
           if (!window.LeadEmailComposer) {
             window.LeadEmailComposer = new LeadEmailComposer();
           }
           loadDashboard();
         } else {
-          loginError.textContent = data.error || 'Invalid credentials';
+          loginError.textContent = data.message || data.error || 'Invalid credentials';
           loginError.classList.remove('hidden');
         }
       } catch (error) {

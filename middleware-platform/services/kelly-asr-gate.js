@@ -30,6 +30,35 @@ function extractAsrLanguage(metadata = {}) {
   return lang ? String(lang).slice(0, 8) : null;
 }
 
+function pickFiniteNumber(...values) {
+  for (const v of values) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return null;
+}
+
+/**
+ * Extract end-of-turn latency and audio duration from Retell WS metadata.
+ */
+function extractAsrTiming(metadata = {}, opts = {}) {
+  const latencyMs = pickFiniteNumber(
+    metadata.latency_ms,
+    metadata.transcript_latency_ms,
+    metadata.stt_latency_ms,
+    metadata.end_of_turn_latency_ms,
+    opts.fallbackLatencyMs
+  );
+  const audioDurationMs = pickFiniteNumber(
+    metadata.audio_duration_ms,
+    metadata.duration_ms,
+    metadata.utterance_duration_ms,
+    metadata.speech_duration_ms,
+    opts.fallbackAudioDurationMs
+  );
+  return { latencyMs, audioDurationMs };
+}
+
 function clarifyReply(locale) {
   const code = String(locale || 'en').slice(0, 2);
   if (code === 'es') {
@@ -49,6 +78,17 @@ function evaluateAsr(transcript, metadata = {}, opts = {}) {
   const confidence = extractAsrConfidence(metadata);
   const asrLanguage = extractAsrLanguage(metadata);
   const locale = opts.locale || 'en';
+
+  try {
+    const { recordSttTurn } = require('./voice-speech-metrics');
+    recordSttTurn({
+      callId: opts.callId,
+      confidence,
+      transcript,
+      latencyMs: opts.latencyMs,
+      audioDurationMs: opts.audioDurationMs
+    });
+  } catch (_) { /* non-fatal */ }
 
   if (threshold == null || confidence == null) {
     return { allow: true, confidence, clarifyReply: null, asrLanguage };
@@ -71,6 +111,7 @@ module.exports = {
   evaluateAsr,
   extractAsrConfidence,
   extractAsrLanguage,
+  extractAsrTiming,
   clarifyReply,
   displayName
 };

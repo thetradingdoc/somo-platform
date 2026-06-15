@@ -68,7 +68,7 @@
     pendingEmail: '',
     pendingCustomerId: null,
     phoneE164: '',
-    phoneSmsSent: false,
+    assignInProgress: false,
     dedicatedLine: null,
     revealShown: false,
     submitting: false
@@ -159,6 +159,14 @@
     if (el) el.classList.add('hidden');
   }
 
+  function rateLimitMessage(res, data) {
+    if (res.status !== 429) return null;
+    const retryAfter = res.headers?.get?.('Retry-After');
+    const base =
+      data?.error || data?.message || 'Too many attempts. Please wait a few minutes and try again.';
+    return retryAfter ? `${base} (retry in about ${retryAfter}s)` : base;
+  }
+
   function showStep(stepId) {
     state.step = stepId;
     document.querySelectorAll('[data-signup-step]').forEach((panel) => {
@@ -182,7 +190,9 @@
     hideToast('signupError');
 
     if (stepId === STEPS.phone && !state.revealShown) {
-      enterPhoneStep();
+      assignDedicatedLine();
+    } else if (stepId === STEPS.phone && state.revealShown && state.dedicatedLine) {
+      showLineReveal(state.dedicatedLine);
     }
 
     const btn = $('signupContinueBtn');
@@ -194,10 +204,15 @@
         [STEPS.location]: showCredentialsStep() ? 'Continue' : 'Create account',
         [STEPS.credentials]: 'Create account',
         [STEPS.email]: 'Verify email',
-        [STEPS.phone]: state.revealShown ? 'Continue to terms' : 'Verify and get my number',
+        [STEPS.phone]: state.revealShown ? 'Continue to terms' : 'Assigning…',
         [STEPS.terms]: 'Start my free trial'
       };
       btn.textContent = labels[stepId] || 'Continue';
+      if (stepId === STEPS.phone && !state.revealShown) {
+        btn.disabled = state.assignInProgress;
+      } else {
+        btn.disabled = false;
+      }
     }
   }
 
@@ -337,6 +352,16 @@
         body: JSON.stringify(buildSignupPayload())
       });
       const data = await res.json();
+      const rateLimited = rateLimitMessage(res, data);
+      if (rateLimited) {
+        showToast('signupError', rateLimited);
+        return;
+      }
+      if (res.status === 409) {
+        const msg = data.message || 'This email is already registered.';
+        showToast('signupError', `${msg} <a href="/login" style="color:inherit;text-decoration:underline">Sign in</a>`);
+        return;
+      }
       if (!data.success) throw new Error(data.message || data.error || 'Signup failed');
 
       state.pendingEmail = data.email || draft.email;
@@ -393,7 +418,6 @@
 
       state.trialSimFlow = data.trial_sim_flow === true;
       if (state.trialSimFlow) {
-        state.phoneSmsSent = false;
         state.revealShown = false;
         showStep(STEPS.phone);
       } else {
@@ -406,61 +430,72 @@
     }
   }
 
-  async function sendPhoneSms() {
-    const phone = state.phoneE164 || buildE164();
-    const res = await fetch(`${API_BASE}/api/signup/verify-phone/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ phone_number: phone })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Failed to send SMS code');
-    state.phoneSmsSent = true;
-    const hint = $('phoneSmsHint');
-    if (hint) {
-      hint.textContent = 'Code sent. Check your messages.';
-      hint.classList.remove('hidden');
+  function formatPhoneDisplay(e164) {
+    if (!e164) return '';
+    const digits = String(e164).replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('1')) {
+      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 10) {
+      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+    return String(e164).startsWith('+') ? e164 : `+${digits}`;
+  }
+
+  function showLineReveal(line) {
+    state.dedicatedLine = line;
+    state.revealShown = true;
+    const loading = $('signupAssignLoading');
+    const revealPanel = $('signupReveal');
+    const phoneStep = $('signupPhoneStep');
+    if (loading) loading.classList.add('hidden');
+    if (phoneStep) phoneStep.classList.add('signup-step-phone--revealed');
+    if (line && revealPanel) {
+      const numEl = $('signupRevealNumber');
+      if (numEl) numEl.textContent = formatPhoneDisplay(line);
+      revealPanel.classList.remove('hidden');
+      const callBtn = $('signupCallLine');
+      if (callBtn) callBtn.href = `tel:${line.replace(/\s/g, '')}`;
+    }
+    const btn = $('signupContinueBtn');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Continue to terms';
     }
   }
 
-  async function enterPhoneStep() {
-    const input = $('signupPhoneDisplay');
-    if (input) input.value = state.phoneE164 || buildE164();
-    if (!state.phoneSmsSent && !state.revealShown) {
-      try {
-        await sendPhoneSms();
-      } catch (err) {
-        showToast('signupError', err.message);
-      }
-    }
-  }
-
-  async function verifyPhoneAndReveal() {
+  async function assignDedicatedLine() {
+    if (state.revealShown || state.assignInProgress) return;
+    state.assignInProgress = true;
     hideToast('signupError');
-    const code = ($('signupPhoneCode')?.value || '').replace(/\D/g, '');
-    if (code.length < 4) {
-      showToast('signupError', 'Enter the SMS code.');
-      return;
+    const loading = $('signupAssignLoading');
+    const phoneStep = $('signupPhoneStep');
+    const btn = $('signupContinueBtn');
+    if (phoneStep) phoneStep.classList.remove('signup-step-phone--revealed');
+    if (loading) loading.classList.remove('hidden');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Assigning…';
     }
-
-    const btn = $('signupVerifyPhoneBtn');
-    if (btn) btn.disabled = true;
 
     try {
-      const res = await fetch(`${API_BASE}/api/signup/verify-phone/check`, {
+      const res = await fetch(`${API_BASE}/api/signup/assign-line`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          phone_number: state.phoneE164 || buildE164(),
-          code
-        })
+        body: JSON.stringify({ phone_number: state.phoneE164 || buildE164() })
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Verification failed');
+      const rateLimited = rateLimitMessage(res, data);
+      if (rateLimited) throw new Error(rateLimited);
+      if (!data.success) {
+        throw new Error(data.error || 'Could not assign your Somo line');
+      }
 
-      const line = data.trial?.twilio_phone_number || data.customer?.twilio_phone_number;
+      const line =
+        data.twilio_phone_number ||
+        data.trial?.twilio_phone_number ||
+        data.customer?.twilio_phone_number;
       if (data.trial_sim_flow && !line) {
         throw new Error(
           'We could not assign your dedicated line yet. Please try again or contact support.'
@@ -471,25 +506,18 @@
         persistProviderCustomer(data.customer);
       }
 
-      state.dedicatedLine = line;
-      state.revealShown = true;
       state.trialSimFlow = data.trial_sim_flow === true;
-
-      const revealPanel = $('signupReveal');
-      const phoneForm = $('signupPhoneForm');
-      if (line && revealPanel) {
-        $('signupRevealNumber').textContent = line;
-        revealPanel.classList.remove('hidden');
-        if (phoneForm) phoneForm.classList.add('hidden');
-        const callBtn = $('signupCallLine');
-        if (callBtn) callBtn.href = `tel:${line.replace(/\s/g, '')}`;
+      if (line) {
+        showLineReveal(line);
       } else if (!data.trial_sim_flow) {
         showStep(STEPS.terms);
       }
     } catch (err) {
+      if (loading) loading.classList.add('hidden');
+      if (btn) btn.disabled = false;
       showToast('signupError', err.message);
     } finally {
-      if (btn) btn.disabled = false;
+      state.assignInProgress = false;
     }
   }
 
@@ -525,8 +553,17 @@
 
   function copyLine() {
     if (!state.dedicatedLine) return;
-    navigator.clipboard?.writeText(state.dedicatedLine).then(() => {
-      showToast('signupError', 'Number copied!', 'success');
+    const raw = state.dedicatedLine.replace(/\s/g, '');
+    navigator.clipboard?.writeText(raw).then(() => {
+      const copyBtn = $('signupCopyLine');
+      if (copyBtn) {
+        const prev = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = prev;
+        }, 2000);
+      }
+      showToast('signupError', 'Number copied to clipboard', 'success');
     });
   }
 
@@ -688,8 +725,8 @@
     if (state.step === STEPS.phone) {
       if (state.revealShown) {
         nextStep();
-      } else {
-        verifyPhoneAndReveal();
+      } else if (!state.assignInProgress) {
+        assignDedicatedLine();
       }
       return;
     }
@@ -715,9 +752,30 @@
   }
 
   async function resumeFromSession() {
-    if (typeof hydrateProviderSession !== 'function') return;
-    const customer = await hydrateProviderSession(API_BASE);
-    if (!customer?.email) return;
+    const sessionRes = await fetch(`${API_BASE}/api/signup/session`, { credentials: 'include' });
+    const sessionData = await sessionRes.json().catch(() => ({}));
+
+    if (sessionRes.status === 401) {
+      if (sessionData.error === 'orphaned_session') {
+        document.cookie = 'customer_session=; Max-Age=0; path=/';
+        showToast('signupError', 'Your session expired. Please start signup again.', 'error');
+        showStep(STEPS.persona);
+      }
+      return;
+    }
+
+    const rateLimited = rateLimitMessage(sessionRes, sessionData);
+    if (rateLimited) {
+      showToast('signupError', rateLimited);
+      return;
+    }
+
+    if (!sessionRes.ok || !sessionData.success || !sessionData.customer?.email) return;
+
+    const customer = sessionData.customer;
+    if (typeof persistProviderCustomer === 'function') {
+      persistProviderCustomer(customer);
+    }
 
     state.pendingEmail = customer.email;
     draft.email = customer.email;
@@ -728,30 +786,44 @@
       return;
     }
 
-    if (customer.trial_status === 'active') {
-      window.location.href = '/business/trial-activation.html?welcome=1';
-      return;
-    }
-
-    const sessionRes = await fetch(`${API_BASE}/api/signup/session`, { credentials: 'include' });
-    const sessionData = await sessionRes.json().catch(() => ({}));
     state.trialSimFlow = sessionData.trial_sim_flow === true;
+    const termsAccepted = sessionData.terms_accepted === true;
 
-    if (state.trialSimFlow && !customer.phone_verified) {
+    if (state.trialSimFlow && !customer.twilio_phone_number) {
       showStep(STEPS.phone);
       return;
     }
 
-    if (customer.email_verified) {
-      if (customer.phone_verified && customer.twilio_phone_number) {
+    if (!termsAccepted) {
+      if (customer.twilio_phone_number) {
         state.dedicatedLine = customer.twilio_phone_number;
         state.revealShown = true;
       }
       showStep(STEPS.terms);
+      return;
+    }
+
+    if (customer.trial_status === 'active' && termsAccepted) {
+      window.location.href = '/business/trial-activation.html?welcome=1';
+      return;
+    }
+
+    if (customer.email_verified) {
+      showStep(STEPS.terms);
     }
   }
 
+  function clearSignupSession() {
+    document.cookie = 'customer_session=; Max-Age=0; path=/';
+    state.pendingEmail = '';
+    state.pendingCustomerId = null;
+    state.step = STEPS.persona;
+  }
+
   function init() {
+    if (urlParams.get('fresh') === '1') {
+      clearSignupSession();
+    }
     applyPrefill();
     populateCountries();
     const countrySel = $('signupCountry');
@@ -785,19 +857,9 @@
       e.preventDefault();
       copyLine();
     });
-    $('signupResendSms')?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      state.phoneSmsSent = false;
-      try {
-        await sendPhoneSms();
-        showToast('signupError', 'SMS code resent.', 'success');
-      } catch (err) {
-        showToast('signupError', err.message);
-      }
-    });
 
     showStep(state.step);
-    resumeFromSession();
+    resumeFromSession().catch(() => {});
   }
 
   if (document.readyState === 'loading') {

@@ -1,6 +1,15 @@
 # admin portal — consolidated documentation
 
-**Single file:** All former `docs/admin-portal/**/*.md` content is merged here. **Last updated:** 2026-04-20
+**Single file:** All former `docs/admin-portal/**/*.md` content is merged here. **Last updated:** 2026-06-15
+
+## Design (brand)
+
+- **URL:** `https://callsomo.com/admin`
+- **CSS SSOT:** [`unified-dashboard/assets/css/admin-portal.css`](../../unified-dashboard/assets/css/admin-portal.css) + [`somo-tokens.css`](../../unified-dashboard/assets/css/somo-tokens.css)
+- **Login:** [`auth-somo.css`](../../unified-dashboard/assets/css/auth-somo.css) patterns; official [`somo-logo.png`](../../unified-dashboard/assets/brand/somo-logo.png)
+- **Palette:** [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md) (light marketing — lizard CTAs, MSU headings)
+- **Typography:** League Spartan (`--font-brand`)
+- **Forbidden:** purple admin theme (`#7c5dfa`, `#38bdf8`), invented SVG cube logos, `global.css` on admin pages
 
 ## Table of contents
 

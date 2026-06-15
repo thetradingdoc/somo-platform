@@ -10,7 +10,7 @@
  *   node scripts/staging-call-verify.cjs --customer-id=<id> --within-minutes=15
  *
  * Optional: reject if latest call belongs to wrong tenant (owner bleed).
- *   SOMO_OWNER_EMAIL=drlittlekids@gmail.com node scripts/staging-call-verify.cjs --customer-id=<trial-id>
+ *   SOMO_OWNER_EMAIL=richard@callsomo.com node scripts/staging-call-verify.cjs --customer-id=<trial-id>
  */
 
 const {

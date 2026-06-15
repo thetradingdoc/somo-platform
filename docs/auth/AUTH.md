@@ -22,17 +22,19 @@
 | **Patient** | Patient portal routes | OTP / portal session | FHIR + portal tables |
 | **Legacy clinic** | `/api/auth/signup`, `users` | Deprecated | `users` |
 
-## Provider login
+## Admin portal
+
+- URL: `https://callsomo.com/admin`
+- Auth: **Email + password** for the operator account (`SOMO_OWNER_EMAIL`, default `richard@callsomo.com`), then a **6-digit verification code** emailed for step-up security
+- Legacy break-glass: `ADMIN_PORTAL_SECRET` still works via API with `{ "secret": "..." }` but is not shown in the UI
+- Operator account is also the voice billing identity (`customer_type=operator`, `CALLSOMO_OPERATOR_CUSTOMER_ID`)
+
+## Provider / operator login
 
 - UI: [`unified-dashboard/login.html`](../../unified-dashboard/login.html)
 - API: `POST /api/customers/login`
-- Bootstrap: `npm run ensure:somo-owner` — [local/README.md](../../local/README.md)
-
-## Admin portal
-
-- Requires `ADMIN_PORTAL_SECRET` in environment
-- Does **not** use `SOMO_OWNER_EMAIL` or `customers.password_hash`
-- Do not conflate admin access with SaaS tenant owner access
+- Same operator email/password as admin (`richard@callsomo.com`) — used for provider portal + voice features
+- Bootstrap: `npm run ensure:somo-owner` or `node scripts/setup-richard-admin.cjs`
 
 ## Related
 

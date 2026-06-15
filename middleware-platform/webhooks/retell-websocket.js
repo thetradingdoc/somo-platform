@@ -144,21 +144,29 @@ class RetellWebSocketHandler {
 
             // Deduct credits when call ends
             const activeConnection = this.activeConnections.get(callId);
-            if (activeConnection && activeConnection.clinic_id) {
+            const { resolveCustomerIdForBilling } = require('../services/voice-account-resolution');
+            const customerIdForCredits = activeConnection
+              ? resolveCustomerIdForBilling(this.db, activeConnection)
+              : null;
+
+            if (activeConnection && customerIdForCredits) {
                 try {
                     const callDuration = Date.now() - activeConnection.startTime;
                     const callDurationSeconds = Math.floor(callDuration / 1000);
                     const callDurationMinutes = Math.ceil(callDurationSeconds / 60); // Round up to nearest minute
 
-                    // R-1: Map clinic to customer for credits (clinic.merchant_id -> customer)
-                    const customerIdForCredits = this.db.getCustomerIdForClinic?.(activeConnection.clinic_id) || activeConnection.clinic_id;
-                    
+                    const callDirection =
+                        activeConnection.callMetadata?.metadata?.direction ||
+                        activeConnection.callMetadata?.dynamic_variables?.direction ||
+                        'inbound';
+
                     const { applyUsage } = require('../services/apply-usage');
                     const usageResult = applyUsage(this.db, {
                         customerId: customerIdForCredits,
                         callId,
                         durationMinutes: callDurationMinutes,
-                        source: 'retell_ws'
+                        source: 'retell_ws',
+                        direction: callDirection
                     });
                     const applied = usageResult.minutes_applied ?? 0;
 
@@ -195,6 +203,10 @@ class RetellWebSocketHandler {
                         if (colNames.includes('caller_phone')) {
                             sets.push('caller_phone = COALESCE(caller_phone, ?)');
                             vals.push(callerPhone);
+                        }
+                        if (colNames.includes('direction')) {
+                            sets.push('direction = COALESCE(direction, ?)');
+                            vals.push(callDirection);
                         }
                         vals.push(callId);
                         this.db.db.prepare(`
@@ -264,6 +276,10 @@ class RetellWebSocketHandler {
                 } catch (creditsError) {
                     console.error('❌ Failed to deduct credits:', creditsError);
                 }
+            } else if (activeConnection) {
+                console.warn(
+                    `⚠️  Skipping applyUsage for call ${callId}: no valid customer_id (clinic_id=${activeConnection.clinic_id || 'none'})`
+                );
             }
 
             // Save final state snapshot (medical coding agent)
@@ -346,23 +362,28 @@ class RetellWebSocketHandler {
                 connection.twilio_call_sid = callMeta.metadata.twilio_call_sid;
             }
 
-            // Extract clinic_id from various sources
-            // Priority: dynamic_variables > metadata > agent_id lookup > phone number lookup
-            // NOTE: We use clinic_id as the primary tenant identifier
+            // Extract customer_id and clinic_id separately (do not conflate lead_id with clinic_id)
+            if (callMeta.dynamic_variables && callMeta.dynamic_variables.customer_id) {
+                connection.customer_id = String(callMeta.dynamic_variables.customer_id);
+                console.log(`✅ Extracted customer_id from dynamic variables: ${connection.customer_id}`);
+            } else if (callMeta.metadata && callMeta.metadata.customer_id) {
+                connection.customer_id = String(callMeta.metadata.customer_id);
+                console.log(`✅ Extracted customer_id from metadata: ${connection.customer_id}`);
+            }
+
             if (callMeta.dynamic_variables && callMeta.dynamic_variables.clinic_id) {
                 connection.clinic_id = callMeta.dynamic_variables.clinic_id;
                 console.log(`✅ Extracted clinic_id from dynamic variables: ${connection.clinic_id}`);
             } else if (callMeta.metadata && callMeta.metadata.clinic_id) {
                 connection.clinic_id = callMeta.metadata.clinic_id;
                 console.log(`✅ Extracted clinic_id from metadata: ${connection.clinic_id}`);
-            } else if (callMeta.dynamic_variables && callMeta.dynamic_variables.customer_id) {
-                // Legacy: customer_id support (may be clinic_id in disguise)
-                connection.clinic_id = callMeta.dynamic_variables.customer_id;
-                console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
-            } else if (callMeta.metadata && callMeta.metadata.customer_id) {
-                // Legacy: customer_id support (may be clinic_id in disguise)
-                connection.clinic_id = callMeta.metadata.customer_id;
-                console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
+            } else if (connection.customer_id && !connection.clinic_id) {
+                const clinicRow = this.db.db
+                    .prepare('SELECT clinic_id FROM clinics WHERE merchant_id = (SELECT merchant_id FROM customers WHERE id = ? LIMIT 1) LIMIT 1')
+                    .get(connection.customer_id);
+                if (clinicRow?.clinic_id) {
+                    connection.clinic_id = clinicRow.clinic_id;
+                }
             } else if (callMeta.agent_id) {
                 // Look up clinic by Retell agent_id (check clinics table first, then customers for backward compatibility)
                 const clinic = this.db.db.prepare('SELECT * FROM clinics WHERE retell_agent_id = ?').get(callMeta.agent_id);
@@ -731,12 +752,22 @@ class RetellWebSocketHandler {
             try {
                 const callerPhone = connection?.customerPhone || connection?.callMetadata?.from_number || null;
                 const resolvedPatientId = connection?.patientId || null;
-                const { evaluateAsr } = require('../services/kelly-asr-gate');
+                const { evaluateAsr, extractAsrTiming } = require('../services/kelly-asr-gate');
                 const { emitLanguageMismatch } = require('../services/kelly-language-telemetry');
                 const dbLang =
                     this.db?.getKellySessionLanguage?.(callId) ||
                     connection?.preferred_language ||
                     'en';
+                const turnReceivedAt = Date.now();
+                const priorTurnAt = connection._lastTranscriptAt || connection.startTime || turnReceivedAt;
+                const fallbackLatencyMs = Math.max(0, turnReceivedAt - priorTurnAt);
+                connection._lastTranscriptAt = turnReceivedAt;
+                const asrTiming = extractAsrTiming(message, {
+                    fallbackLatencyMs,
+                    fallbackAudioDurationMs: userSaid
+                        ? Math.max(500, Math.round(String(userSaid).split(/\s+/).length * 320))
+                        : null
+                });
                 if (process.env.KELLY_ASR_DEBUG === '1' && message && typeof message === 'object') {
                     const meta = message;
                     const keys = Object.keys(meta).filter((k) => k !== 'transcript' && k !== 'content');
@@ -747,10 +778,15 @@ class RetellWebSocketHandler {
                         meta.stt_confidence ??
                         null;
                     console.log(
-                        `[Kelly ASR debug] call=${callId} keys=${keys.join(',')} confidence=${conf}`
+                        `[Kelly ASR debug] call=${callId} keys=${keys.join(',')} confidence=${conf} latency=${asrTiming.latencyMs}`
                     );
                 }
-                const asrEval = evaluateAsr(userSaid, message, { locale: dbLang });
+                const asrEval = evaluateAsr(userSaid, message, {
+                    locale: dbLang,
+                    callId,
+                    latencyMs: asrTiming.latencyMs,
+                    audioDurationMs: asrTiming.audioDurationMs
+                });
                 if (!asrEval.allow) {
                     connection._asrLowStreak = (connection._asrLowStreak || 0) + 1;
                     emitLanguageMismatch(this.db, {

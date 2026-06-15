@@ -50,6 +50,10 @@ const SECRET_KEYS = [
 ];
 
 function secretIdForEnv(name) {
+  const overrides = {
+    SMTP_PASSWORD: process.env.SECRET_SMTP_PASSWORD || 'somo-smtp-password'
+  };
+  if (overrides[name]) return overrides[name];
   return process.env[`SECRET_${name}`] || `somo-staging-${name.toLowerCase().replace(/_/g, '-')}`;
 }
 
@@ -127,8 +131,21 @@ const merged = {
   TRIAL_SIM_FLOW_ENABLED: parsed.TRIAL_SIM_FLOW_ENABLED || (isStaging ? '1' : parsed.TRIAL_SIM_FLOW_ENABLED || '0'),
   SAAS_VOICE_FAIL_CLOSED: parsed.SAAS_VOICE_FAIL_CLOSED || (isStaging ? '1' : parsed.SAAS_VOICE_FAIL_CLOSED || '1'),
   SOMO_OWNER_EMAIL: parsed.SOMO_OWNER_EMAIL || 'richard@callsomo.com',
+  CALLSOMO_OPERATOR_CUSTOMER_ID:
+    parsed.CALLSOMO_OPERATOR_CUSTOMER_ID ||
+    parsed.CALLSOMO_VOICE_CUSTOMER_ID ||
+    '',
+  CALLSOMO_VOICE_CUSTOMER_ID:
+    parsed.CALLSOMO_VOICE_CUSTOMER_ID ||
+    parsed.CALLSOMO_OPERATOR_CUSTOMER_ID ||
+    '',
   STAGING: isStaging ? '1' : '0',
-  ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0'
+  ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0',
+  EMAIL_PROVIDER: parsed.EMAIL_PROVIDER || (isStaging ? 'smtp' : parsed.EMAIL_PROVIDER || 'auto'),
+  SMTP_HOST: parsed.SMTP_HOST || (isStaging ? 'smtp.gmail.com' : ''),
+  SMTP_PORT: parsed.SMTP_PORT || (isStaging ? '587' : ''),
+  SMTP_USER: parsed.SMTP_USER || (isStaging ? 'richard@callsomo.com' : ''),
+  SMTP_FROM: parsed.SMTP_FROM || parsed.SMTP_USER || (isStaging ? 'Somo <richard@callsomo.com>' : '')
 };
 
 if (!useGcpSecrets) {
@@ -157,6 +174,8 @@ if (!isStaging) {
 if (isStaging) {
   delete merged.NGROK_URL;
   delete merged.MERCHANT_SHOP_URL;
+  delete merged.AZURE_COMMUNICATION_CONNECTION_STRING;
+  delete merged.AZURE_EMAIL_SENDER;
 }
 
 for (const key of SECRET_KEYS) {

@@ -7,7 +7,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const UsageMonitor = require('../services/usage-monitor');
-const { requireAdminAuth } = require('../middleware/admin-auth');
+const { requireAdminAuth, hasValidSession } = require('../middleware/admin-auth');
+const { hasCapability } = require('../services/customer-capabilities');
 
 // Middleware to get customer from session
 function getCustomerFromSession(req) {
@@ -89,6 +90,15 @@ router.get('/monthly/:year/:month', (req, res) => {
   }
 });
 
+function canQueryCustomerCredits(req, requestedId, sessionCustomer) {
+  if (sessionCustomer && sessionCustomer.id === requestedId) return true;
+  if (hasValidSession(req)) return true;
+  if (sessionCustomer && (hasCapability(sessionCustomer, 'platform.tenants') || hasCapability(sessionCustomer, 'platform.leads'))) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * GET /api/usage/credits
  * Get current credit balance for authenticated tenant
@@ -97,12 +107,15 @@ router.get('/monthly/:year/:month', (req, res) => {
 router.get('/credits', (req, res) => {
   try {
     let customerId = null;
-    
-    // Check if customer_id is provided (for admin access)
+
     if (req.query.customer_id) {
-      customerId = req.query.customer_id;
+      const sessionCustomer = getCustomerFromSession(req);
+      const requested = String(req.query.customer_id);
+      if (!canQueryCustomerCredits(req, requested, sessionCustomer)) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+      }
+      customerId = requested;
     } else {
-      // Otherwise, get from session
       const customer = getCustomerFromSession(req);
       if (!customer) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
@@ -118,6 +131,20 @@ router.get('/credits', (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error getting credit balance:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/voice-breakdown', (req, res) => {
+  try {
+    const customer = getCustomerFromSession(req);
+    if (!customer) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    const days = parseInt(req.query.days, 10) || 30;
+    const data = UsageMonitor.getVoiceUsageByDirection(customer.id, days);
+    res.json({ success: true, voice: data });
+  } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });

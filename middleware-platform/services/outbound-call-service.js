@@ -28,7 +28,7 @@ async function initiateOutboundCall({ phone_number, merchantId, customer_id, cal
 
   const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
   const webhookUrl = new URL(`${apiBase}/voice/incoming`);
-  webhookUrl.searchParams.set('call_type', call_type);
+  webhookUrl.searchParams.set('call_type', call_type || 'operator_outbound');
   webhookUrl.searchParams.set('agent_id', retellAgentId);
   if (merchantId) webhookUrl.searchParams.set('merchant_id', String(merchantId));
   if (customer_id) webhookUrl.searchParams.set('customer_id', String(customer_id));

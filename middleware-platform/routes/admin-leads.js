@@ -14,7 +14,7 @@
 const express = require('express');
 const { searchJobs } = require('../services/job-scraper');
 const { extractContactInfo } = require('../services/contact-extractor');
-const { requireAdminAuth } = require('../middleware/admin-auth');
+const { requireAdminOrCapability } = require('../middleware/admin-auth');
 const { adminLimiter } = require('../middleware/rate-limiter');
 const RetellService = require('../services/retell-service');
 const db = require('../database');
@@ -37,7 +37,7 @@ const retellService = new RetellService();
  *   meta: { query, location, days }
  * }
  */
-router.get('/search', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/search', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const {
       q = 'medical clinics',
@@ -78,7 +78,7 @@ router.get('/search', requireAdminAuth, adminLimiter, async (req, res) => {
  * Save a lead from search results to the database
  * Automatically extracts contact info if source_url is provided
  */
-router.post('/save', requireAdminAuth, adminLimiter, async (req, res) => {
+router.post('/save', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const leadData = req.body;
 
@@ -157,7 +157,7 @@ router.post('/save', requireAdminAuth, adminLimiter, async (req, res) => {
  * GET /api/admin/leads
  * Get all saved leads (with optional filters)
  */
-router.get('/', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { status, clinic_name, has_phone, has_contact, limit, show_all, show_test, include_test, lead_type } = req.query;
 
@@ -257,7 +257,7 @@ router.get('/', requireAdminAuth, adminLimiter, async (req, res) => {
  * Initiate an outbound call to a clinic for a lead
  * Checks monthly call limit (250/month) before initiating
  */
-router.post('/:id/call', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimiter, express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const { schedule_type = 'instant' } = req.body || {};
@@ -277,7 +277,7 @@ router.post('/:id/call', requireAdminAuth, adminLimiter, express.json(), async (
       });
     }
 
-    // Check monthly call limit (250 calls/month)
+    // Secondary guard: monthly_call_usage 250/mo cap (primary billing is usage_events via retell-websocket)
     const now = new Date();
     const billingMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -410,19 +410,24 @@ router.post('/:id/call', requireAdminAuth, adminLimiter, express.json(), async (
 
       // Create outbound call via Retell API
       // Once SIP trunk is configured in Retell dashboard, this will work properly
+      const { getOperatorCustomerId } = require('../services/voice-account-resolution');
+      const operatorCustomerId = getOperatorCustomerId();
+
       const retellResponse = await retellService.createOutboundCall(
-        salesAgentId, // Agent ID (can also use override_agent_id in options)
-        fromNumber,   // Your imported Twilio number (+15856202445)
-        toNumber,     // Target clinic phone
+        salesAgentId,
+        fromNumber,
+        toNumber,
         {
-          override_agent_id: salesAgentId, // Recommended: use override_agent_id
-          retell_llm_dynamic_variables: dynamicVariables, // Accessible in prompt
+          override_agent_id: salesAgentId,
+          retell_llm_dynamic_variables: dynamicVariables,
           metadata: {
             lead_id: id,
             clinic_name: lead.clinic_name,
             clinic_email: lead.clinic_email,
             location: lead.location,
-            call_type: 'sales_outbound'
+            call_type: 'sales_outbound',
+            direction: 'outbound',
+            ...(operatorCustomerId ? { customer_id: operatorCustomerId } : {})
           }
         }
       );
@@ -460,12 +465,18 @@ router.post('/:id/call', requireAdminAuth, adminLimiter, express.json(), async (
             }
           }
 
-          const apiBaseUrl = process.env.API_BASE_URL || process.env.TWILIO_OUTBOUND_WEBHOOK_URL || 'https://api.callsomo.com';
+          const { resolveTelephonyWebhookBase } = require('../utils/telephony-webhook-base');
+          const { getOperatorCustomerId } = require('../services/voice-account-resolution');
+          const apiBaseUrl = await resolveTelephonyWebhookBase();
+          const operatorCustomerId = getOperatorCustomerId();
           const webhookUrl = new URL(`${apiBaseUrl}/voice/incoming`);
           webhookUrl.searchParams.set('lead_id', id);
           webhookUrl.searchParams.set('clinic_name', encodeURIComponent(lead.clinic_name || ''));
           webhookUrl.searchParams.set('call_type', 'sales_outbound');
           webhookUrl.searchParams.set('call_id', callId);
+          if (operatorCustomerId) {
+            webhookUrl.searchParams.set('customer_id', operatorCustomerId);
+          }
 
           const twilioClient = twilio(accountSid, authToken);
           const call = await twilioClient.calls.create({
@@ -542,7 +553,7 @@ router.post('/:id/call', requireAdminAuth, adminLimiter, express.json(), async (
  * Update call status (e.g., when call completes)
  * Recalculates call cost based on actual duration
  */
-router.put('/calls/:callId', requireAdminAuth, adminLimiter, async (req, res) => {
+router.put('/calls/:callId', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { callId } = req.params;
     const { call_status, call_duration_seconds, outcome, notes } = req.body;
@@ -671,7 +682,7 @@ router.post('/webhooks/retell-call-event', async (req, res) => {
  * GET /api/admin/leads/stats/usage
  * Get current month call usage stats
  */
-router.get('/stats/usage', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/stats/usage', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const stats = db.getCallUsageStats();
     res.json({
@@ -692,7 +703,7 @@ router.get('/stats/usage', requireAdminAuth, adminLimiter, async (req, res) => {
  * GET /api/admin/leads/pipeline/stats
  * Get pipeline statistics (leads by stage)
  */
-router.get('/pipeline/stats', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/pipeline/stats', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const stats = db.getPipelineStats();
     res.json({
@@ -713,7 +724,7 @@ router.get('/pipeline/stats', requireAdminAuth, adminLimiter, async (req, res) =
  * GET /api/admin/leads/pipeline/:stage
  * Get leads by pipeline stage
  */
-router.get('/pipeline/:stage', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/pipeline/:stage', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { stage } = req.params;
     const leads = db.getLeadsByPipelineStage(stage);
@@ -754,7 +765,7 @@ router.get('/pipeline/:stage', requireAdminAuth, adminLimiter, async (req, res) 
  * GET /api/admin/leads/pipeline/follow-up
  * Get leads needing follow-up
  */
-router.get('/pipeline/follow-up', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/pipeline/follow-up', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const leads = db.getLeadsNeedingFollowUp();
 
@@ -786,7 +797,7 @@ router.get('/pipeline/follow-up', requireAdminAuth, adminLimiter, async (req, re
  * PUT /api/admin/leads/:id/pipeline-stage
  * Move lead to a different pipeline stage and update lead details
  */
-router.put('/:id/pipeline-stage', requireAdminAuth, adminLimiter, async (req, res) => {
+router.put('/:id/pipeline-stage', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { pipeline_stage, next_action, follow_up_date, notes, lead_score } = req.body;
@@ -849,7 +860,7 @@ router.put('/:id/pipeline-stage', requireAdminAuth, adminLimiter, async (req, re
  * GET /api/admin/leads/activities/all
  * Get all activities across all leads (for activity feed)
  */
-router.get('/activities/all', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/activities/all', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { limit = 100, type } = req.query;
 
@@ -904,7 +915,7 @@ router.get('/activities/all', requireAdminAuth, adminLimiter, async (req, res) =
  * GET /api/admin/leads/:id/activities
  * Get all activities for a lead
  */
-router.get('/:id/activities', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/:id/activities', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { type, limit } = req.query;
@@ -934,7 +945,7 @@ router.get('/:id/activities', requireAdminAuth, adminLimiter, async (req, res) =
  * POST /api/admin/leads/:id/activities
  * Create a new activity for a lead
  */
-router.post('/:id/activities', requireAdminAuth, adminLimiter, async (req, res) => {
+router.post('/:id/activities', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { activity_type, activity_subject, activity_description, activity_date, metadata } = req.body;
@@ -975,7 +986,7 @@ router.post('/:id/activities', requireAdminAuth, adminLimiter, async (req, res) 
  * GET /api/admin/leads/qualified
  * Get all qualified leads (has phone + email + is clinic)
  */
-router.get('/qualified', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/qualified', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { pipeline_stage, needs_followup, limit } = req.query;
 
@@ -1014,7 +1025,7 @@ router.get('/qualified', requireAdminAuth, adminLimiter, async (req, res) => {
  * GET /api/admin/leads/:id
  * Get a specific lead with its calls
  */
-router.get('/:id', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/:id', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const lead = db.getLead(id);
@@ -1072,7 +1083,7 @@ function qualifiesFromDescription(description) {
   return PRODUCT_KEYWORDS.some(keyword => descLower.includes(keyword.toLowerCase()));
 }
 
-router.get('/insights/medical-receptionist', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/insights/medical-receptionist', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     // Get search parameters
     const query = req.query.query || 'Medical receptionist OR dental receptionist OR healthcare receptionist';
@@ -1460,7 +1471,7 @@ router.get('/insights/medical-receptionist', requireAdminAuth, adminLimiter, asy
  * POST /api/admin/leads/:id/extract-contact
  * Extract phone/email from lead's source_url
  */
-router.post('/:id/extract-contact', requireAdminAuth, adminLimiter, async (req, res) => {
+router.post('/:id/extract-contact', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const lead = db.getLead(id);
@@ -1536,7 +1547,7 @@ router.post('/:id/extract-contact', requireAdminAuth, adminLimiter, async (req, 
  * POST /api/admin/leads/extract-contacts-batch
  * Extract contact info for multiple leads (batch processing)
  */
-router.post('/extract-contacts-batch', requireAdminAuth, adminLimiter, async (req, res) => {
+router.post('/extract-contacts-batch', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { lead_ids } = req.body;
 
@@ -1613,7 +1624,7 @@ router.post('/extract-contacts-batch', requireAdminAuth, adminLimiter, async (re
  * GET /api/admin/leads/:id/calls
  * Get all calls for a specific lead
  */
-router.get('/:id/calls', requireAdminAuth, adminLimiter, async (req, res) => {
+router.get('/:id/calls', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const calls = db.getLeadCallsByLeadId(id);
@@ -1637,7 +1648,7 @@ router.get('/:id/calls', requireAdminAuth, adminLimiter, async (req, res) => {
  * POST /api/admin/leads/configure-sales-agent
  * Configure/update the Retell sales agent with the sales prompt
  */
-router.post('/configure-sales-agent', requireAdminAuth, adminLimiter, async (req, res) => {
+router.post('/configure-sales-agent', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const salesAgentId = process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID;
 
@@ -1687,7 +1698,7 @@ router.post('/configure-sales-agent', requireAdminAuth, adminLimiter, async (req
  * PUT /api/admin/leads/:id
  * Update a lead (e.g., add phone/email, set priority, status)
  */
-router.put('/:id', requireAdminAuth, adminLimiter, async (req, res) => {
+router.put('/:id', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -1714,7 +1725,7 @@ router.put('/:id', requireAdminAuth, adminLimiter, async (req, res) => {
  * DELETE /api/admin/leads/:id
  * Delete a specific lead and all related records (calls, activities)
  */
-router.delete('/:id', requireAdminAuth, adminLimiter, async (req, res) => {
+router.delete('/:id', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const lead = db.getLead(id);
@@ -1747,7 +1758,7 @@ router.delete('/:id', requireAdminAuth, adminLimiter, async (req, res) => {
  * DELETE /api/admin/leads/test/bulk
  * Bulk delete all test leads (identified by is_test=1, test clinic names, test emails)
  */
-router.delete('/test/bulk', requireAdminAuth, adminLimiter, async (req, res) => {
+router.delete('/test/bulk', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const result = db.deleteTestLeads();
 
@@ -1775,7 +1786,7 @@ router.delete('/test/bulk', requireAdminAuth, adminLimiter, async (req, res) => 
  * Send an email to a lead
  * Supports templates and custom content
  */
-router.post('/:id/send-email', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+router.post('/:id/send-email', requireAdminOrCapability('platform.leads'), adminLimiter, express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const { subject, content, template_id, schedule_date } = req.body;
@@ -1928,7 +1939,7 @@ router.post('/:id/send-email', requireAdminAuth, adminLimiter, express.json(), a
  * GET /api/admin/leads/templates
  * Get email templates for admin leads (global templates without merchant requirement)
  */
-router.get('/templates', requireAdminAuth, adminLimiter, (req, res) => {
+router.get('/templates', requireAdminOrCapability('platform.leads'), adminLimiter, (req, res) => {
   try {
     const { type } = req.query;
 
@@ -1963,7 +1974,7 @@ router.get('/templates', requireAdminAuth, adminLimiter, (req, res) => {
  * POST /api/admin/leads/templates
  * Create a template for admin leads
  */
-router.post('/templates', requireAdminAuth, adminLimiter, express.json(), (req, res) => {
+router.post('/templates', requireAdminOrCapability('platform.leads'), adminLimiter, express.json(), (req, res) => {
   try {
     const { name, type, subject, content, variables } = req.body;
 
@@ -2049,7 +2060,7 @@ router.post('/templates', requireAdminAuth, adminLimiter, express.json(), (req, 
  * POST /api/admin/leads/:id/send-sms
  * Send an SMS to a lead
  */
-router.post('/:id/send-sms', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+router.post('/:id/send-sms', requireAdminOrCapability('platform.leads'), adminLimiter, express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const { message, schedule_date } = req.body;
@@ -2199,7 +2210,7 @@ function replaceTemplateVariables(text, lead) {
  * POST /api/admin/leads/:id/recalculate-score
  * Recalculate lead score
  */
-router.post('/:id/recalculate-score', requireAdminAuth, adminLimiter, async (req, res) => {
+router.post('/:id/recalculate-score', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const LeadIntelligenceService = require('../services/lead-intelligence-service');
@@ -2225,7 +2236,7 @@ router.post('/:id/recalculate-score', requireAdminAuth, adminLimiter, async (req
  * POST /api/admin/leads/:id/qualify
  * Qualify/unqualify lead
  */
-router.post('/:id/qualify', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+router.post('/:id/qualify', requireAdminOrCapability('platform.leads'), adminLimiter, express.json(), async (req, res) => {
   try {
     const { id } = req.params;
     const { qualified = true } = req.body;
@@ -2261,7 +2272,7 @@ router.post('/:id/qualify', requireAdminAuth, adminLimiter, express.json(), asyn
  * POST /api/admin/leads/batch/update-scores
  * Batch update scores for multiple leads
  */
-router.post('/batch/update-scores', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+router.post('/batch/update-scores', requireAdminOrCapability('platform.leads'), adminLimiter, express.json(), async (req, res) => {
   try {
     const { lead_ids } = req.body; // Optional: if not provided, update all leads
     const LeadIntelligenceService = require('../services/lead-intelligence-service');

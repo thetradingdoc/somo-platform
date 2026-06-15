@@ -93,19 +93,12 @@ async function createTrialCustomerViaApi(request) {
   let customer = sessionBody.customer || db.getCustomer(signupBody.customer_id);
 
   if (sessionBody.trial_sim_flow) {
-    const sendPhone = await request.post('/api/signup/verify-phone/send', {
+    const assignLine = await request.post('/api/signup/assign-line', {
       data: { phone_number: phone }
     });
-    if (!sendPhone.ok()) {
-      throw new Error(`verify-phone/send failed: ${sendPhone.status()}`);
-    }
-
-    const checkPhone = await request.post('/api/signup/verify-phone/check', {
-      data: { phone_number: phone, code: '000000' }
-    });
-    if (!checkPhone.ok()) {
-      const pb = await checkPhone.json().catch(() => ({}));
-      throw new Error(pb.error || `verify-phone/check failed: ${checkPhone.status()}`);
+    if (!assignLine.ok()) {
+      const pb = await assignLine.json().catch(() => ({}));
+      throw new Error(pb.error || `assign-line failed: ${assignLine.status()}`);
     }
 
     const session2 = await request.get('/api/signup/session');

@@ -5,8 +5,19 @@
 
 const express = require('express');
 const db = require('../database');
+const { requireAdminOrCapability } = require('../middleware/admin-auth');
 
 const router = express.Router();
+const requireTenantsAccess = requireAdminOrCapability('platform.tenants');
+
+function resolveTenantCustomerId(clinicId) {
+  if (!clinicId) return null;
+  return (
+    db.getCustomerIdForClinic?.(clinicId) ||
+    db.ensureCustomerIdForClinic?.(clinicId) ||
+    null
+  );
+}
 
 /**
  * Get all tenants with usage and credits summary
@@ -18,7 +29,7 @@ const router = express.Router();
  * - Usage stats (calls, minutes, function calls)
  * - Agent status
  */
-router.get('/', async (req, res) => {
+router.get('/', requireTenantsAccess, async (req, res) => {
     try {
         // Get all clinics
         const clinics = db.db.prepare('SELECT * FROM clinics ORDER BY created_at DESC').all();
@@ -26,9 +37,9 @@ router.get('/', async (req, res) => {
         // Get all tenants with usage and credits
         const tenants = await Promise.all(clinics.map(async (clinic) => {
             const clinicId = clinic.clinic_id;
+            const customerId = resolveTenantCustomerId(clinicId);
 
-            // Get credits (using clinic_id as customer_id for now)
-            const credits = db.getCustomerCredits(clinicId) || {
+            const credits = (customerId && db.getCustomerCredits(customerId)) || {
                 credits_balance_minutes: 0,
                 free_credits_allocated: 0,
                 free_credits_used: 0,
@@ -36,19 +47,19 @@ router.get('/', async (req, res) => {
                 paid_credits_used: 0
             };
 
-            // Get voice calls (using clinic_id as customer_id)
             const calls = db.db.prepare(`
                 SELECT * FROM voice_call_log 
-                WHERE customer_id = ? 
+                WHERE customer_id = ? OR clinic_id = ?
                 ORDER BY created_at DESC
-            `).all(clinicId);
+            `).all(customerId || '__none__', clinicId);
 
-            // Get function calls
-            const functionCalls = db.db.prepare(`
+            const functionCalls = customerId
+              ? db.db.prepare(`
                 SELECT * FROM function_call_log 
                 WHERE customer_id = ? 
                 ORDER BY created_at DESC
-            `).all(clinicId);
+            `).all(customerId)
+              : [];
 
             // Calculate usage metrics
             const totalCalls = calls.length;
@@ -152,17 +163,17 @@ router.get('/', async (req, res) => {
  * Get detailed tenant usage and credits
  * GET /api/admin/tenants/:clinicId
  */
-router.get('/:clinicId', async (req, res) => {
+router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
     try {
         const clinicId = req.params.clinicId;
+        const customerId = resolveTenantCustomerId(clinicId);
         const clinic = await db.getClinicById(clinicId);
 
         if (!clinic) {
             return res.status(404).json({ success: false, error: 'Tenant not found' });
         }
 
-        // Get credits
-        const credits = db.getCustomerCredits(clinicId) || {
+        const credits = (customerId && db.getCustomerCredits(customerId)) || {
             credits_balance_minutes: 0,
             free_credits_allocated: 0,
             free_credits_used: 0,
@@ -171,27 +182,28 @@ router.get('/:clinicId', async (req, res) => {
             free_credits_expires_at: null
         };
 
-        // Get all voice calls
         const calls = db.db.prepare(`
             SELECT * FROM voice_call_log 
-            WHERE customer_id = ? 
+            WHERE customer_id = ? OR clinic_id = ?
             ORDER BY created_at DESC
-        `).all(clinicId);
+        `).all(customerId || '__none__', clinicId);
 
-        // Get all function calls
-        const functionCalls = db.db.prepare(`
+        const functionCalls = customerId
+          ? db.db.prepare(`
             SELECT * FROM function_call_log 
             WHERE customer_id = ? 
             ORDER BY created_at DESC
-        `).all(clinicId);
+        `).all(customerId)
+          : [];
 
-        // Get errors
-        const errors = db.db.prepare(`
+        const errors = customerId
+          ? db.db.prepare(`
             SELECT * FROM error_log 
             WHERE customer_id = ? 
             ORDER BY created_at DESC
             LIMIT 50
-        `).all(clinicId);
+        `).all(customerId)
+          : [];
 
         // Calculate detailed metrics
         const totalMinutes = calls.reduce((sum, c) => {
@@ -293,9 +305,10 @@ router.get('/:clinicId', async (req, res) => {
  * POST /api/admin/tenants/:clinicId/credits
  * Body: { credits: number, type: 'free' | 'paid' }
  */
-router.post('/:clinicId/credits', async (req, res) => {
+router.post('/:clinicId/credits', requireTenantsAccess, async (req, res) => {
     try {
         const clinicId = req.params.clinicId;
+        const customerId = resolveTenantCustomerId(clinicId);
         const { credits, type = 'free' } = req.body;
 
         if (!credits || credits < 1) {
@@ -313,16 +326,16 @@ router.post('/:clinicId/credits', async (req, res) => {
             });
         }
 
-        // Allocate credits (using clinic_id as customer_id)
-        if (type === 'free') {
-            db.allocateFreeCredits(clinicId, credits);
-        } else {
-            // For paid credits, we'd need a different function
-            // For now, just allocate as free
-            db.allocateFreeCredits(clinicId, credits);
+        if (!customerId) {
+            return res.status(400).json({
+                success: false,
+                error: 'No SaaS customer linked to this clinic'
+            });
         }
 
-        console.log(`✅ Admin allocated ${credits} ${type} credits to tenant ${clinicId}`);
+        db.allocateFreeCredits(customerId, credits);
+
+        console.log(`✅ Admin allocated ${credits} ${type} credits to tenant ${clinicId} (customer ${customerId})`);
 
         res.json({
             success: true,

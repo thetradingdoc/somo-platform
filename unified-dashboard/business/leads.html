@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo Provider — Leads</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/provider-portal.css">
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-session.js"></script>
+  <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
+  <style>
+    .leads-frame { width: 100%; height: calc(100vh - 72px); border: 0; background: #0b0f19; }
+    .leads-denied { padding: 48px 24px; text-align: center; color: var(--muted, #8b94a7); }
+  </style>
+</head>
+<body>
+  <div id="pp-app"></div>
+  <main id="pp-main" class="pp-main">
+    <div id="leadsDenied" class="leads-denied hidden">
+      <h1>Access denied</h1>
+      <p>Your account does not have platform leads access.</p>
+      <a href="today.html">Back to Today</a>
+    </div>
+    <iframe id="leadsFrame" class="leads-frame hidden" title="Leads CRM"></iframe>
+  </main>
+  <script>
+    (async function () {
+      if (typeof requireAuth === 'function') requireAuth('../login.html');
+      if (typeof hydrateProviderSession === 'function') {
+        await hydrateProviderSession(window.API_BASE || window.location.origin);
+      }
+      const allowed = (typeof hasCapability === 'function' && hasCapability('platform.leads'))
+        || (typeof isAdminUser === 'function' && isAdminUser());
+      const denied = document.getElementById('leadsDenied');
+      const frame = document.getElementById('leadsFrame');
+      if (!allowed) {
+        denied.classList.remove('hidden');
+        return;
+      }
+      frame.src = '../admin/leads.html';
+      frame.classList.remove('hidden');
+      if (typeof mountProviderPage === 'function') mountProviderPage({ title: 'Leads', activeNav: 'leads' });
+    })();
+  </script>
+</body>
+</html>

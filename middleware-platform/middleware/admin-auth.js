@@ -1,7 +1,10 @@
 const crypto = require('crypto');
 const db = require('../database');
+const EmailService = require('../services/email-service');
+const { isOperatorCustomer } = require('../services/customer-capabilities');
 
 const COOKIE_NAME = 'admin_session';
+const ADMIN_CODE_PREFIX = 'admin:';
 const SESSION_TTL_MS = parseInt(process.env.ADMIN_SESSION_TTL_MS || '3600000', 10);
 let warnedAboutMissingSecret = false;
 
@@ -108,7 +111,159 @@ function requireAdminAuth(req, res, next) {
   next();
 }
 
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function adminCodeEmail(email) {
+  return `${ADMIN_CODE_PREFIX}${normalizeEmail(email)}`;
+}
+
+function getOwnerEmail() {
+  return normalizeEmail(process.env.SOMO_OWNER_EMAIL || 'richard@callsomo.com');
+}
+
+async function verifyOperatorPassword(email, password) {
+  const normalized = normalizeEmail(email);
+  const ownerEmail = getOwnerEmail();
+  if (!normalized || normalized !== ownerEmail) {
+    return { ok: false, status: 401, error: 'Invalid email or password' };
+  }
+
+  const customer = db.getCustomerByEmail(normalized);
+  if (!customer || !isOperatorCustomer(customer)) {
+    return { ok: false, status: 401, error: 'Invalid email or password' };
+  }
+  if (!customer.password_hash) {
+    return { ok: false, status: 403, error: 'Password not set', message: 'Admin password is not configured. Run setup-richard-admin.cjs.' };
+  }
+  if (!customer.email_verified) {
+    return { ok: false, status: 403, error: 'Email not verified' };
+  }
+  if ((customer.status || 'active').toLowerCase() !== 'active') {
+    return { ok: false, status: 403, error: 'Account suspended' };
+  }
+
+  let bcrypt;
+  try {
+    bcrypt = require('bcryptjs');
+  } catch (_) {
+    return { ok: false, status: 500, error: 'Password verification unavailable' };
+  }
+
+  const passwordMatch = await bcrypt.compare(String(password || ''), customer.password_hash);
+  if (!passwordMatch) {
+    return { ok: false, status: 401, error: 'Invalid email or password' };
+  }
+
+  return { ok: true, customer };
+}
+
+function issueAdminSession(req, res) {
+  const session = createSessionRecord(req);
+  const isSecure =
+    req.secure ||
+    req.headers['x-forwarded-proto'] === 'https' ||
+    process.env.NODE_ENV === 'production' ||
+    process.env.NODE_ENV === 'prod';
+
+  res.cookie(COOKIE_NAME, session.id, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: isSecure,
+    maxAge: SESSION_TTL_MS,
+    path: '/'
+  });
+
+  return res.json({
+    success: true,
+    session: {
+      expires_at: session.expires_at
+    }
+  });
+}
+
+async function handleAdminLoginRequestCode(req, res) {
+  try {
+    const { email, password } = req.body || {};
+    const auth = await verifyOperatorPassword(email, password);
+    if (!auth.ok) {
+      return res.status(auth.status).json({
+        success: false,
+        error: auth.error,
+        message: auth.message
+      });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    db.createEmailVerificationCode(adminCodeEmail(email), code, auth.customer.id);
+
+    const emailResult = await EmailService.sendAdminLoginCode(email, code, auth.customer.name);
+    if (!emailResult?.success) {
+      console.error('❌ Failed to send admin login code:', emailResult?.error || 'unknown');
+      return res.status(503).json({
+        success: false,
+        error: 'email_delivery_failed',
+        message: 'Could not send admin verification code. Try again shortly.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      step: 'verify_code',
+      message: 'Verification code sent to your email',
+      email: normalizeEmail(email)
+    });
+  } catch (error) {
+    console.error('❌ Admin login request-code error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to start admin login' });
+  }
+}
+
+async function handleAdminLoginVerify(req, res) {
+  try {
+    const { email, password, code } = req.body || {};
+    if (!email || !password || !code) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email, password, and verification code are required'
+      });
+    }
+
+    const auth = await verifyOperatorPassword(email, password);
+    if (!auth.ok) {
+      return res.status(auth.status).json({
+        success: false,
+        error: auth.error,
+        message: auth.message
+      });
+    }
+
+    const verification = db.verifyEmailCode(adminCodeEmail(email), String(code).trim());
+    if (!verification) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired verification code'
+      });
+    }
+
+    return issueAdminSession(req, res);
+  } catch (error) {
+    console.error('❌ Admin login verify error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to verify admin login' });
+  }
+}
+
 function handleAdminLogin(req, res) {
+  const { email, password, code, secret } = req.body || {};
+
+  if (email && password && code) {
+    return handleAdminLoginVerify(req, res);
+  }
+  if (email && password && !code) {
+    return handleAdminLoginRequestCode(req, res);
+  }
+
   const adminSecret = process.env.ADMIN_PORTAL_SECRET;
   if (!adminSecret) {
     return res.status(500).json({
@@ -117,38 +272,14 @@ function handleAdminLogin(req, res) {
     });
   }
 
-  const providedSecret = req.body?.secret;
-
-  if (!providedSecret || providedSecret !== adminSecret) {
+  if (!secret || secret !== adminSecret) {
     return res.status(401).json({
       success: false,
       error: 'Invalid admin credentials'
     });
   }
 
-  const session = createSessionRecord(req);
-  
-  // SECURITY: Always use secure cookies if HTTPS is detected or in production
-  // Check if request is over HTTPS (either directly or via proxy)
-  const isSecure = req.secure || 
-                   req.headers['x-forwarded-proto'] === 'https' ||
-                   process.env.NODE_ENV === 'production' ||
-                   process.env.NODE_ENV === 'prod';
-  
-  res.cookie(COOKIE_NAME, session.id, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: isSecure, // Use secure cookies when HTTPS is detected
-    maxAge: SESSION_TTL_MS,
-    path: '/'
-  });
-
-  res.json({
-    success: true,
-    session: {
-      expires_at: session.expires_at
-    }
-  });
+  return issueAdminSession(req, res);
 }
 
 function handleAdminLogout(req, res) {
@@ -192,9 +323,48 @@ function hasValidSession(req) {
   return !!validateSessionToken(token);
 }
 
+/**
+ * Accept admin portal session OR customer session with a platform capability.
+ */
+function requireAdminOrCapability(capability) {
+  return (req, res, next) => {
+    const token = getTokenFromRequest(req);
+    const adminSession = validateSessionToken(token);
+    if (adminSession) {
+      req.adminSession = adminSession;
+      req.adminAuthenticated = true;
+      return next();
+    }
+
+    const sessionId = req.cookies?.customer_session;
+    if (sessionId) {
+      const custSession = db.getCustomerSession(sessionId);
+      if (custSession) {
+        const customer = db.getCustomer(custSession.customer_id);
+        if (customer) {
+          const { hasCapability } = require('../services/customer-capabilities');
+          if (hasCapability(customer, capability)) {
+            req.customer = customer;
+            return next();
+          }
+        }
+      }
+    }
+
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+      message: `Admin session or capability ${capability} required`
+    });
+  };
+}
+
 module.exports = {
   requireAdminAuth,
+  requireAdminOrCapability,
   handleAdminLogin,
+  handleAdminLoginRequestCode,
+  handleAdminLoginVerify,
   handleAdminLogout,
   adminSessionStatus,
   hasValidSession

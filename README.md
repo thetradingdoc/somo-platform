@@ -186,7 +186,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email
 SMTP_PASSWORD=your_password
-SMTP_FROM=info@callsomo.com
+SMTP_FROM=richard@callsomo.com
 
 # Twilio (SMS)
 TWILIO_ACCOUNT_SID=your_twilio_sid

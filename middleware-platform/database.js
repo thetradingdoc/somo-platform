@@ -14891,42 +14891,22 @@ module.exports = {
       return { changes: 1, lastInsertRowid: callId };
     } else {
       // SQLite path
-      const hasClinicCol = db.prepare(`PRAGMA table_info(voice_call_log)`).all().some((c) => c.name === 'clinic_id');
-      const result = hasClinicCol
-        ? db.prepare(`
-        INSERT INTO voice_call_log 
-        (id, customer_id, clinic_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
-         credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
-         total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        callId,
-        call.customer_id || null,
-        call.clinic_id || null,
-        call.call_id,
-        call.twilio_call_sid || null,
-        call.call_duration_seconds || null,
-        call.call_duration_minutes || null,
-        call.credits_deducted || 0,
-        call.function_calls_count || 0,
-        call.status || 'active',
-        call.twilio_cost_usd || null,
-        call.retell_cost_usd || null,
-        call.total_cost_usd || null,
-        call.twilio_cost_calculated_usd || null,
-        call.retell_cost_calculated_usd || null,
-        call.cost_source || null,
-        call.cost_updated_at || null
-      )
-        : db.prepare(`
-        INSERT INTO voice_call_log 
-        (id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
-         credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
-         total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        callId,
-        call.customer_id || null,
+      const colInfo = db.prepare(`PRAGMA table_info(voice_call_log)`).all();
+      const hasClinicCol = colInfo.some((c) => c.name === 'clinic_id');
+      const hasDirectionCol = colInfo.some((c) => c.name === 'direction');
+      const baseCols = ['id', 'customer_id'];
+      const baseVals = [callId, call.customer_id || null];
+      if (hasClinicCol) {
+        baseCols.push('clinic_id');
+        baseVals.push(call.clinic_id || null);
+      }
+      baseCols.push(
+        'call_id', 'twilio_call_sid', 'call_duration_seconds', 'call_duration_minutes',
+        'credits_deducted', 'function_calls_count', 'status',
+        'twilio_cost_usd', 'retell_cost_usd', 'total_cost_usd',
+        'twilio_cost_calculated_usd', 'retell_cost_calculated_usd', 'cost_source', 'cost_updated_at'
+      );
+      baseVals.push(
         call.call_id,
         call.twilio_call_sid || null,
         call.call_duration_seconds || null,
@@ -14942,6 +14922,15 @@ module.exports = {
         call.cost_source || null,
         call.cost_updated_at || null
       );
+      if (hasDirectionCol) {
+        baseCols.push('direction');
+        baseVals.push(call.direction || null);
+      }
+      const placeholders = baseCols.map(() => '?').join(', ');
+      const result = db.prepare(`
+        INSERT INTO voice_call_log (${baseCols.join(', ')})
+        VALUES (${placeholders})
+      `).run(...baseVals);
       return result;
     }
   },
@@ -15745,37 +15734,40 @@ module.exports = {
     return id;
   },
 
-  insertLlmUsageLog({ call_id, clinic_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score }) {
+  insertLlmUsageLog({ call_id, clinic_id, customer_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score }) {
     const id = require('crypto').randomBytes(16).toString('hex');
     try {
       const info = db.prepare('PRAGMA table_info(llm_usage_log)').all();
-      const hasClinicId = info.some(c => c.name === 'clinic_id');
-      const hasConfidence = info.some(c => c.name === 'confidence_score');
-      if (hasClinicId && hasConfidence) {
-        db.prepare(`
-          INSERT INTO llm_usage_log (id, call_id, clinic_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          id, call_id || null, clinic_id || null, operation || 'unknown', model || '',
-          tokens_in ?? null, tokens_out ?? null, cost_usd ?? null, latency_ms ?? null, confidence_score ?? null
-        );
-      } else if (hasConfidence) {
-        db.prepare(`
-          INSERT INTO llm_usage_log (id, call_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          id, call_id || null, operation || 'unknown', model || '', tokens_in ?? null, tokens_out ?? null,
-          cost_usd ?? null, latency_ms ?? null, confidence_score ?? null
-        );
-      } else {
-        db.prepare(`
-          INSERT INTO llm_usage_log (id, call_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          id, call_id || null, operation || 'unknown', model || '', tokens_in ?? null, tokens_out ?? null,
-          cost_usd ?? null, latency_ms ?? null
-        );
+      const colNames = new Set(info.map((c) => c.name));
+      const hasClinicId = colNames.has('clinic_id');
+      const hasCustomerId = colNames.has('customer_id');
+      const hasConfidence = colNames.has('confidence_score');
+
+      const fields = ['id', 'call_id'];
+      const values = [id, call_id || null];
+      if (hasClinicId) {
+        fields.push('clinic_id');
+        values.push(clinic_id || null);
       }
+      if (hasCustomerId) {
+        fields.push('customer_id');
+        values.push(customer_id || null);
+      }
+      fields.push('operation', 'model', 'tokens_in', 'tokens_out', 'cost_usd', 'latency_ms');
+      values.push(
+        operation || 'unknown',
+        model || '',
+        tokens_in ?? null,
+        tokens_out ?? null,
+        cost_usd ?? null,
+        latency_ms ?? null
+      );
+      if (hasConfidence) {
+        fields.push('confidence_score');
+        values.push(confidence_score ?? null);
+      }
+      const placeholders = fields.map(() => '?').join(', ');
+      db.prepare(`INSERT INTO llm_usage_log (${fields.join(', ')}) VALUES (${placeholders})`).run(...values);
       if (clinic_id && (cost_usd > 0 || tokens_in > 0 || tokens_out > 0)) {
         try {
           const ym = new Date().toISOString().slice(0, 7);
@@ -16923,6 +16915,35 @@ module.exports = {
 
   insertUsageEvent(row) {
     const { v4: uuidv4 } = require('uuid');
+    const cols = db.prepare('PRAGMA table_info(usage_events)').all().map((c) => c.name);
+    const hasDirection = cols.includes('direction');
+    const hasChannel = cols.includes('channel');
+
+    if (hasDirection || hasChannel) {
+      const fields = ['id', 'customer_id', 'call_id', 'call_sid', 'minutes_requested', 'minutes_applied', 'source'];
+      const values = [
+        row.id || uuidv4(),
+        row.customer_id,
+        row.call_id,
+        row.call_sid || null,
+        row.minutes_requested,
+        row.minutes_applied,
+        row.source || null
+      ];
+      if (hasDirection) {
+        fields.push('direction');
+        values.push(row.direction || 'inbound');
+      }
+      if (hasChannel) {
+        fields.push('channel');
+        values.push(row.channel || 'voice');
+      }
+      const placeholders = fields.map(() => '?').join(', ');
+      return db.prepare(
+        `INSERT INTO usage_events (${fields.join(', ')}) VALUES (${placeholders})`
+      ).run(...values);
+    }
+
     return db.prepare(`
       INSERT INTO usage_events (id, customer_id, call_id, call_sid, minutes_requested, minutes_applied, source)
       VALUES (?, ?, ?, ?, ?, ?, ?)

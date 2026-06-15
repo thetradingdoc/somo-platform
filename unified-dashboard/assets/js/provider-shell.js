@@ -37,10 +37,19 @@
 
   const ADMIN_NAV_ITEMS = [
     { section: 'Admin' },
+    { id: 'leads', label: 'Leads', icon: 'phone', href: 'leads.html', capability: 'platform.leads' },
+    { id: 'tenants', label: 'Tenants', icon: 'building-office', href: 'tenants.html', capability: 'platform.tenants' },
     { id: 'payor-review', label: 'Payor Review', icon: 'clipboard-document-list', href: 'payor-review.html' },
     { id: 'merge-review', label: 'Merge Review', icon: 'document-text', href: 'merge-review.html' },
-    { id: 'feature-flags', label: 'Feature Flags', icon: 'cube', href: 'feature-flags.html' }
+    { id: 'feature-flags', label: 'Feature Flags', icon: 'cube', href: 'feature-flags.html', capability: 'platform.feature_flags' }
   ];
+
+  function hasCapability(cap) {
+    const customer = getCustomer();
+    const caps = customer.capabilities;
+    if (Array.isArray(caps)) return caps.includes(cap);
+    return isAdminUser();
+  }
 
   function isAdminUser() {
     try {
@@ -56,8 +65,18 @@
 
   function getPortalNav() {
     const file = (window.location.pathname.split('/').pop() || '').split('?')[0];
-    const isAdminPage = ['payor-review.html', 'merge-review.html', 'feature-flags.html'].includes(file);
-    if (isAdminPage && isAdminUser()) return PORTAL_NAV_BASE.concat(ADMIN_NAV_ITEMS);
+    const isAdminPage = ['payor-review.html', 'merge-review.html', 'feature-flags.html', 'leads.html', 'tenants.html'].includes(file);
+    if (isAdminPage && (isAdminUser() || hasCapability('platform.leads') || hasCapability('platform.tenants'))) {
+      const gated = ADMIN_NAV_ITEMS.filter((item) => {
+        if (!item.capability) return true;
+        return hasCapability(item.capability);
+      });
+      return PORTAL_NAV_BASE.concat(gated);
+    }
+    if (hasCapability('platform.leads') || hasCapability('platform.tenants')) {
+      const gated = ADMIN_NAV_ITEMS.filter((item) => !item.capability || hasCapability(item.capability));
+      return PORTAL_NAV_BASE.concat(gated);
+    }
     return PORTAL_NAV_BASE;
   }
 
@@ -1109,4 +1128,11 @@
       });
     }, 200);
   };
+
+  window.hasCapability = hasCapability;
+  window.isAdminUser = isAdminUser;
+
+  if (typeof window.hydrateProviderSession === 'function') {
+    window.hydrateProviderSession(API_BASE());
+  }
 })();

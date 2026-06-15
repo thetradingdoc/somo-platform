@@ -32,15 +32,33 @@ function resolveInboundRetellAgent({
   customerId,
   isSomoDemoDemo,
   isOutboundSales,
+  callType,
   currentRetellAgentId,
   defaultAgentId
 }) {
-  if (isSomoDemoDemo || isOutboundSales) {
+  const outboundType = String(callType || '').toLowerCase();
+  const isOperatorOutbound = outboundType === 'operator_outbound' || outboundType === 'sales_outbound';
+
+  if (isSomoDemoDemo || isOperatorOutbound) {
     return {
       retellAgentId: currentRetellAgentId,
       failClosed: false,
       reason: null
     };
+  }
+
+  // Tenant-initiated outbound misclassified as inbound should still fail-closed without agent
+  if (isOutboundSales && !isOperatorOutbound && matchedCustomer && isResolvedSaasTenant(matchedCustomer)) {
+    const tenantRetell = matchedCustomer?.retell_agent_id
+      ? String(matchedCustomer.retell_agent_id).trim()
+      : null;
+    if (!tenantRetell && isSaasVoiceFailClosedEnabled()) {
+      return {
+        retellAgentId: currentRetellAgentId,
+        failClosed: true,
+        reason: 'missing_retell_agent_outbound'
+      };
+    }
   }
 
   const tenant = matchedCustomer || null;

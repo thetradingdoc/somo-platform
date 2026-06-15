@@ -17,6 +17,33 @@ const {
 const { isKellyRailsV2Enabled } = require('./kelly-rails/config');
 const { recordCallStarted, recordCallCompleted } = require('./kelly-call-telemetry');
 
+function recordKellyLlmUsage(opts = {}, out = {}, latencyMs = 0) {
+  try {
+    const usage = out?.usage || out?.llm_usage || out?.kelly_rails?.usage || {};
+    const tokensIn = usage.prompt_tokens ?? usage.input_tokens ?? usage.tokens_in ?? null;
+    const tokensOut = usage.completion_tokens ?? usage.output_tokens ?? usage.tokens_out ?? null;
+    if (!tokensIn && !tokensOut && !latencyMs) return;
+    db.insertLlmUsageLog?.({
+      call_id: opts.callId || opts.sessionId || null,
+      clinic_id: opts.clinicId || null,
+      customer_id: opts.customerId || null,
+      operation: 'kelly_voice_turn',
+      model: usage.model || out?.model || 'kelly',
+      tokens_in: tokensIn,
+      tokens_out: tokensOut,
+      cost_usd: usage.cost_usd ?? null,
+      latency_ms: latencyMs || null,
+      confidence_score: out?.languageConfidence ?? null
+    });
+    try {
+      const { recordAssistantLatency } = require('./voice-speech-metrics');
+      recordAssistantLatency({ callId: opts.callId || opts.sessionId, latencyMs });
+    } catch (_) {}
+  } catch (e) {
+    console.warn('[kelly-turn] llm usage log skipped:', e.message);
+  }
+}
+
 function productionRuntimeError(attemptedRuntime) {
   const err = new Error(
     `Kelly runtime "${attemptedRuntime}" is disabled in production. Set KELLY_RAILS_V2=1 and KELLY_RAILS_ROLLOUT_PCT=1.`
@@ -167,6 +194,7 @@ async function runKellyTurn(opts = {}) {
         });
       }
     } catch (_) {}
+    recordKellyLlmUsage(opts, out, latencyMs);
     return out;
   }
 
@@ -192,6 +220,7 @@ async function runKellyTurn(opts = {}) {
         }
       });
     } catch (_) {}
+    recordKellyLlmUsage(opts, out, hybridLatencyMs);
     return out;
   }
 
@@ -226,6 +255,7 @@ async function runKellyTurn(opts = {}) {
       }
     });
   } catch (_) {}
+  recordKellyLlmUsage(opts, out, legacyLatencyMs);
   return out;
 }
 

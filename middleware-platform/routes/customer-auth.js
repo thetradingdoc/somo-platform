@@ -15,7 +15,7 @@ const {
   RetellService,
   TwilioPhoneService,
   uuidv4,
-  rateLimiter,
+  authLimiter,
   lenientAuthLimiter,
   generateSimplePassword,
   requireCustomerAuth,
@@ -29,7 +29,7 @@ const {
 } = shared;
 
 
-router.post('/signin', rateLimiter, async (req, res) => {
+router.post('/signin', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -109,7 +109,7 @@ router.post('/signin', rateLimiter, async (req, res) => {
  * POST /api/customers/forgot-password
  * Request password reset
  */
-router.post('/customers/forgot-password', rateLimiter, async (req, res) => {
+router.post('/customers/forgot-password', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -182,7 +182,7 @@ router.post('/customers/forgot-password', rateLimiter, async (req, res) => {
  * POST /api/customers/change-password
  * Change password (requires current password)
  */
-router.post('/customers/change-password', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.post('/customers/change-password', authLimiter, requireCustomerAuth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     const customer = req.customer;
@@ -253,7 +253,7 @@ router.post('/customers/change-password', rateLimiter, requireCustomerAuth, asyn
  * POST /api/customers/reset-password
  * Reset password using token from email
  */
-router.post('/customers/reset-password', rateLimiter, async (req, res) => {
+router.post('/customers/reset-password', authLimiter, async (req, res) => {
   try {
     const { email, token, newPassword } = req.body;
 
@@ -332,7 +332,7 @@ router.post('/customers/reset-password', rateLimiter, async (req, res) => {
  * Password-based login for customers
  */
 // Use a more lenient limiter here to avoid 429s during normal tenant logins
-router.post('/customers/login', lenientAuthLimiter || rateLimiter, async (req, res) => {
+router.post('/customers/login', lenientAuthLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -496,7 +496,7 @@ router.post('/customers/login', lenientAuthLimiter || rateLimiter, async (req, r
  * POST /api/signin/verify
  * Verify sign-in code and create session
  */
-router.post('/signin/verify', rateLimiter, async (req, res) => {
+router.post('/signin/verify', authLimiter, async (req, res) => {
   try {
     const { email, code } = req.body;
 
@@ -600,7 +600,7 @@ router.post('/signin/verify', rateLimiter, async (req, res) => {
  * Resend verification code
  */
 
-router.post('/customers/signout', rateLimiter, async (req, res) => {
+router.post('/customers/signout', authLimiter, async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
 

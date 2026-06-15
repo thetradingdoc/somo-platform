@@ -460,6 +460,49 @@ class UsageMonitor {
       return [];
     }
   }
+
+  /**
+   * Voice usage breakdown by direction with USD cost margin (G2/F3).
+   */
+  static getVoiceUsageByDirection(customerId, days = 30) {
+    try {
+      const cols = db.db.prepare('PRAGMA table_info(voice_call_log)').all().map((c) => c.name);
+      const hasDirection = cols.includes('direction');
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const rows = db.db.prepare(`
+        SELECT * FROM voice_call_log
+        WHERE customer_id = ? AND created_at >= ?
+        ORDER BY created_at DESC
+      `).all(customerId, since);
+
+      const breakdown = { inbound: { minutes: 0, cost_usd: 0 }, outbound: { minutes: 0, cost_usd: 0 } };
+      for (const row of rows) {
+        const dir = hasDirection ? (row.direction || 'inbound') : 'inbound';
+        const key = dir === 'outbound' ? 'outbound' : 'inbound';
+        breakdown[key].minutes += row.call_duration_minutes || 0;
+        breakdown[key].cost_usd += row.total_cost_usd || 0;
+      }
+
+      const usageRows = db.db.prepare(`
+        SELECT minutes_applied, direction FROM usage_events
+        WHERE customer_id = ? AND created_at >= ? AND minutes_applied > 0
+      `).all(customerId, since);
+      let windowedMinutes = 0;
+      for (const u of usageRows) {
+        windowedMinutes += u.minutes_applied || 0;
+      }
+      const minuteValue = 0.05;
+      const totalCostUsd = breakdown.inbound.cost_usd + breakdown.outbound.cost_usd;
+      return {
+        breakdown,
+        windowed_minutes_billed: windowedMinutes,
+        margin_estimate_usd: windowedMinutes * minuteValue - totalCostUsd
+      };
+    } catch (error) {
+      console.error('❌ getVoiceUsageByDirection:', error.message);
+      return null;
+    }
+  }
 }
 
 module.exports = UsageMonitor;

@@ -142,30 +142,27 @@
       <button type="button" class="signup-link-btn" id="signupResendEmail">Resend code</button>
     </div>
 
-    <div class="signup-step-panel hidden" data-signup-step="phone">
-      <p class="signup-eyebrow">Activate your line</p>
-      <h1 class="signup-title">Confirm your mobile</h1>
-      <p class="signup-sub">We will text you a code, then assign your dedicated Somo number.</p>
+    <div class="signup-step-panel hidden" data-signup-step="phone" id="signupPhoneStep">
+      <div id="signupLineIntro">
+        <p class="signup-eyebrow" id="signupLineEyebrow">Your Somo line</p>
+        <h1 class="signup-title" id="signupLineTitle">Assigning your number</h1>
+        <p class="signup-sub" id="signupLineSub">We're reserving a dedicated number for your business.</p>
+      </div>
 
-      <div id="signupPhoneForm">
-        <div class="signup-field">
-          <label for="signupPhoneDisplay">Mobile number</label>
-          <input type="tel" id="signupPhoneDisplay" readonly />
+      <div id="signupAssignLoading" class="signup-assign-loading">
+        <div class="signup-assign-loading-inner">
+          <span class="signup-spinner" aria-hidden="true"></span>
+          <p class="signup-assign-status">Reserving your dedicated number…</p>
+          <p class="signup-assign-hint">This usually takes a few seconds</p>
         </div>
-        <p class="signup-sub hidden" id="phoneSmsHint"></p>
-        <div class="signup-field">
-          <label for="signupPhoneCode">SMS code</label>
-          <input type="text" id="signupPhoneCode" inputmode="numeric" maxlength="8" placeholder="000000" />
-        </div>
-        <button type="button" class="signup-link-btn" id="signupResendSms">Resend SMS code</button>
       </div>
 
       <div class="signup-reveal hidden" id="signupReveal">
-        <p class="signup-reveal-label">Your Somo line is live</p>
+        <p class="signup-reveal-label">Your Somo number</p>
         <p class="signup-reveal-number" id="signupRevealNumber"></p>
         <p class="signup-reveal-trial">60 free minutes · 7-day trial</p>
         <div class="signup-reveal-actions">
-          <a class="signup-btn signup-btn-primary" id="signupCallLine" href="#">Call my Somo line</a>
+          <a class="signup-btn signup-btn-primary signup-btn--link" id="signupCallLine" href="#">Call my Somo line</a>
           <button type="button" class="signup-btn signup-btn-ghost" id="signupCopyLine">Copy number</button>
         </div>
       </div>

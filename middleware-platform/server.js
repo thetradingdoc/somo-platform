@@ -9212,34 +9212,29 @@ app.get('/api/ehr/epic/status', async (req, res) => {
 app.get('/health', healthCheckHandler);
 app.get('/health/ready', readinessCheck);
 app.get('/health/live', livenessCheck);
-app.get('/health/voice-deps', async (req, res) => {
+app.get('/health/voice-operator', async (req, res) => {
   try {
-    const twilioPhone = process.env.TWILIO_PHONE_NUMBER || null;
-    const retellAgentId = process.env.RETELL_AGENT_ID || null;
-    const defaultSubdomain = constants.TENANTS?.DEFAULT_SUBDOMAIN || 'akin-dunbar';
-
-    const clinicPhone = twilioPhone ? db.getClinicPhoneNumber(twilioPhone) : null;
-    const defaultMerchant = db.getMerchantBySubdomain ? db.getMerchantBySubdomain(defaultSubdomain) : null;
-
-    const checks = {
-      retell_api_key_present: !!process.env.RETELL_API_KEY,
-      retell_agent_id_present: !!retellAgentId,
-      twilio_phone_present: !!twilioPhone,
-      twilio_phone_mapped_to_clinic: !!clinicPhone?.clinic_id,
-      default_tenant_exists: !!defaultMerchant?.id
-    };
-
-    const ok = Object.values(checks).every(Boolean);
+    const { assessVoiceOperatorReadiness } = require('./services/voice-operator-readiness');
+    const assessment = assessVoiceOperatorReadiness(db);
+    const ok = assessment.ready;
     return res.status(ok ? 200 : 503).json({
       success: ok,
-      checks,
-      details: {
-        twilio_phone_number: twilioPhone,
-        mapped_clinic_id: clinicPhone?.clinic_id || null,
-        mapped_clinic_name: clinicPhone?.clinic_name || null,
-        default_subdomain: defaultSubdomain,
-        default_merchant_id: defaultMerchant?.id || null
-      },
+      ...assessment,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/health/email', (req, res) => {
+  try {
+    const EmailService = require('./services/email-service');
+    const health = EmailService.getEmailHealth();
+    const ok = health.provider_configured !== 'none';
+    return res.status(ok ? 200 : 503).json({
+      success: ok,
+      ...health,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -9713,6 +9708,10 @@ function assertProdPayorReadinessOrExit() {
 }
 
 assertProdPayorReadinessOrExit();
+
+const { assertVoiceOperatorReadinessOrExit } = require('./services/voice-operator-readiness');
+assertVoiceOperatorReadinessOrExit(db);
+
 bootLog(`calling app.listen host=${HOST} port=${PORT}`);
 function onServerListening() {
   bootLog('app.listen callback reached');

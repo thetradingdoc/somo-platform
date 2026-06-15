@@ -103,6 +103,15 @@
       }
 
       const customer = data.customer || {};
+      try {
+        const meRes = await fetch(`${API_BASE}/api/customers/me`, { credentials: 'include' });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.success && meData.customer) {
+            Object.assign(customer, meData.customer);
+          }
+        }
+      } catch (_) { /* non-fatal */ }
       persistCustomer(customer);
       window.location.href = resolvePostLoginUrl(customer);
     } catch (err) {

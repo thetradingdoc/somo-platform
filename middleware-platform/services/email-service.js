@@ -32,6 +32,45 @@ class EmailService {
     return SomoEmail.layout({ title, subtitle, bodyHtml, ...opts });
   }
   /**
+   * Resolved email provider: smtp | azure | auto (azure-first legacy)
+   */
+  static getEmailProviderMode() {
+    const mode = String(process.env.EMAIL_PROVIDER || 'auto').toLowerCase().trim();
+    if (mode === 'smtp' || mode === 'azure') return mode;
+    return 'auto';
+  }
+
+  static getEmailHealth() {
+    const mode = this.getEmailProviderMode();
+    const azureConfigured = this.isAzureConfigured();
+    const smtpConfigured = !!this.getTransporter();
+    const from =
+      process.env.SMTP_FROM ||
+      process.env.SMTP_USER ||
+      process.env.AZURE_EMAIL_SENDER ||
+      'richard@callsomo.com';
+
+    let provider_configured = 'none';
+    if (mode === 'smtp' && smtpConfigured) provider_configured = 'smtp';
+    else if (mode === 'azure' && azureConfigured) provider_configured = 'azure';
+    else if (mode === 'auto') {
+      if (azureConfigured) provider_configured = 'azure';
+      else if (smtpConfigured) provider_configured = 'smtp';
+    } else if (smtpConfigured) provider_configured = 'smtp';
+    else if (azureConfigured) provider_configured = 'azure';
+
+    return {
+      provider_mode: mode,
+      provider_configured,
+      azure_configured: azureConfigured,
+      smtp_configured: smtpConfigured,
+      from_address: from,
+      smtp_host: process.env.SMTP_HOST || null,
+      smtp_user: process.env.SMTP_USER || null
+    };
+  }
+
+  /**
    * Check if Azure Communication Services is configured
    */
   static isAzureConfigured() {
@@ -90,7 +129,7 @@ class EmailService {
     const smtpHost = process.env.SMTP_HOST;
     const smtpPort = parseInt(process.env.SMTP_PORT || '587');
     const smtpUser = process.env.SMTP_USER;
-    const smtpPassword = process.env.SMTP_PASSWORD;
+    const smtpPassword = (process.env.SMTP_PASSWORD || '').trim();
     const smtpFrom = process.env.SMTP_FROM || smtpUser;
 
     if (!nodemailer) {
@@ -212,8 +251,11 @@ class EmailService {
 
   static async sendEmail({ to, subject, html, text, attachments }) {
     try {
-      // Try Azure first if configured
-      if (this.isAzureConfigured()) {
+      const mode = this.getEmailProviderMode();
+      const tryAzure = mode === 'azure' || mode === 'auto';
+      const trySmtp = mode === 'smtp' || mode === 'auto';
+
+      if (tryAzure && this.isAzureConfigured()) {
         const azureResult = await this._sendViaAzure({ to, subject, html, text, attachments });
         if (azureResult && azureResult.success) {
           this._recordRcmE2eEmail({
@@ -225,45 +267,51 @@ class EmailService {
           });
           return azureResult;
         }
-        // If Azure fails, fall back to SMTP
+        if (mode === 'azure') {
+          return azureResult || { success: false, error: 'Azure email failed', provider: 'azure' };
+        }
         console.warn('⚠️  Azure email failed, falling back to SMTP');
       }
 
-      // Try SMTP
-      const transporter = this.getTransporter();
-      const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'Somo <info@callsomo.com>';
+      if (trySmtp) {
+        const transporter = this.getTransporter();
+        const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'Somo <richard@callsomo.com>';
 
-      if (transporter) {
-        const mailOptions = {
-          from: from,
-          to: to,
-          subject: subject,
-          html: html,
-          text: text || html.replace(/<[^>]*>/g, '')
-        };
+        if (transporter) {
+          const mailOptions = {
+            from: from,
+            to: to,
+            subject: subject,
+            html: html,
+            text: text || html.replace(/<[^>]*>/g, '')
+          };
 
-        // Add attachments if provided
-        if (attachments && attachments.length > 0) {
-          mailOptions.attachments = attachments;
+          if (attachments && attachments.length > 0) {
+            mailOptions.attachments = attachments;
+          }
+
+          const info = await transporter.sendMail(mailOptions);
+
+          console.log('📧 Email sent via SMTP:', info.messageId);
+          if (attachments && attachments.length > 0) {
+            console.log(`   Attachments: ${attachments.length} file(s)`);
+          }
+          this._recordRcmE2eEmail({
+            to,
+            subject,
+            template: 'generic',
+            provider: 'smtp',
+            success: true
+          });
+          return { success: true, message_id: info.messageId, provider: 'smtp' };
         }
 
-        const info = await transporter.sendMail(mailOptions);
-
-        console.log('📧 Email sent via SMTP:', info.messageId);
-        if (attachments && attachments.length > 0) {
-          console.log(`   Attachments: ${attachments.length} file(s)`);
+        if (mode === 'smtp') {
+          return { success: false, error: 'SMTP not configured', provider: 'smtp' };
         }
-        this._recordRcmE2eEmail({
-          to,
-          subject,
-          template: 'generic',
-          provider: 'smtp',
-          success: true
-        });
-        return { success: true, message_id: info.messageId, provider: 'smtp' };
       }
 
-      // If no email service configured, log to console
+      const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'Somo <richard@callsomo.com>';
       console.log('\n📧 EMAIL (SIMULATED):');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(`From: ${from}`);
@@ -291,7 +339,7 @@ class EmailService {
           provider: 'console'
         };
       }
-      return { success: true, message_id: 'simulated', provider: 'console' };
+      return { success: false, error: 'No email provider configured', provider: 'console' };
 
     } catch (error) {
       console.error('❌ Email send error:', error.message);
@@ -455,7 +503,7 @@ class EmailService {
     `, { preheader: `Code: ${code}` });
     return await this.sendEmail({
       to: email,
-      subject: 'Your Verification Code',
+      subject: 'Somo — Email verification code',
       html
     });
   }
@@ -926,17 +974,33 @@ class EmailService {
    * Send email verification code
    */
   static async sendVerificationCode(email, code, name) {
-    const html = this._somoLayout('Verify your email', 'Somo API', `
+    const html = this._somoLayout('Email verification', 'Somo', `
       <h2>Hi ${SomoEmail.escapeHtml(name) || 'there'},</h2>
-      <p>Thanks for signing up. Use this code to verify your email:</p>
+      <p>Use this code to verify your email address:</p>
       ${SomoEmail.codeBox(code)}
       <p><strong>Expires in 15 minutes.</strong></p>
       <p>If you did not request this, you can ignore this email.</p>
-    `, { preheader: `Verification code: ${code}` });
+    `, { preheader: `Email verification code: ${code}` });
 
     return await this.sendEmail({
       to: email,
-      subject: 'Somo — Verify your email',
+      subject: 'Somo — Email verification code',
+      html
+    });
+  }
+
+  static async sendAdminLoginCode(email, code, name) {
+    const html = this._somoLayout('Admin sign-in verification', 'Somo', `
+      <h2>Hi ${SomoEmail.escapeHtml(name) || 'there'},</h2>
+      <p>Use this code to finish signing in to the Somo admin portal:</p>
+      ${SomoEmail.codeBox(code)}
+      <p><strong>Expires in 15 minutes.</strong></p>
+      <p>If you did not request this, secure your account and contact support.</p>
+    `, { preheader: `Admin sign-in code: ${code}` });
+
+    return await this.sendEmail({
+      to: email,
+      subject: 'Somo — Admin sign-in verification code',
       html
     });
   }
@@ -1097,7 +1161,7 @@ class EmailService {
    * Send password reset email
    */
   static async sendPasswordResetEmail(email, name, resetUrl) {
-    const html = this._somoLayout('Reset your password', 'Somo account', `
+    const html = this._somoLayout('Password reset', 'Somo', `
       <h2>Hi ${SomoEmail.escapeHtml(name) || 'there'},</h2>
       <p>We received a request to reset your password.</p>
       <p style="text-align:center;">${SomoEmail.button(resetUrl, 'Reset password')}</p>
@@ -1108,7 +1172,7 @@ class EmailService {
 
     return await this.sendEmail({
       to: email,
-      subject: 'Somo — Reset your password',
+      subject: 'Somo — Password reset',
       html
     });
   }
