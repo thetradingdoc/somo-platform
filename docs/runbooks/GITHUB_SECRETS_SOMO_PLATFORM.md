@@ -2,59 +2,55 @@
 
 Configure on the **somo** GitHub repository (Settings → Secrets and variables → Actions).
 
-## Required for `deploy-callsomo.yml`
+## Local deploy (default — no GitHub Actions deploy)
+
+Production deploy uses **local CLI** (no GitHub billing for deploy):
+
+```bash
+firebase login
+gcloud auth login
+npm run deploy:callsomo
+```
+
+No GitHub secrets required for deploy when using this path.
+
+## Optional — only if re-enabling GitHub Actions deploy later
 
 | Secret | Purpose |
 |--------|---------|
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Workload Identity Federation provider for GCP deploy |
-| `GCP_SERVICE_ACCOUNT` | Deploy service account email (`@somo-callsomo.iam.gserviceaccount.com`) |
-| `FIREBASE_TOKEN` | Firebase CLI token for `firebase deploy --only hosting` to `somo-4ddf6` |
-
-Optional but recommended:
-
-| Secret | Purpose |
-|--------|---------|
-| `RETELL_API_KEY` | Post-deploy `configure-retell.js` (production WSS URL) |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Workload Identity Federation for GCP deploy |
+| `GCP_SERVICE_ACCOUNT` | Deploy service account email |
+| `FIREBASE_TOKEN` | Firebase CLI token for non-interactive `firebase deploy` |
+| `RETELL_API_KEY` | Post-deploy `configure-retell.js` |
 | `RETELL_AGENT_ID` | Target agent when multiple agents exist |
 
-Repository **variables** (Settings → Variables):
+## CI (tests only)
 
-| Variable | Purpose |
-|----------|---------|
-| `CLOUDSQL_CONNECTION_NAME` | Cloud SQL socket for production deploy |
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs tests on push/PR. It does **not** deploy.
 
-## Required for CI
+Optional manual CI input:
 
-| Secret / check | Purpose |
-|----------------|---------|
-| `npm run check:legacy-hosts` | Fails on new `myskinandcare` / `doclittle.site` in active code |
-| `npm run check:brand-strings` | Somo UI brand consistency |
+| Secret / variable | Purpose |
+|-------------------|---------|
+| `STAGING_API_BASE` | Optional staging API URL for route evidence |
 
-Optional:
+## Cloud Run runtime (Secret Manager)
 
-| Secret | Purpose |
-|--------|---------|
-| `STAGING_API_BASE` | Optional staging smoke URL in manual CI runs |
-
-## Staging / production runtime (Cloud Run Secret Manager)
-
-Provision via `scripts/provision-staging-secrets.sh` and document in team vault:
+Provision via `scripts/provision-staging-secrets.sh` from operator `.env`:
 
 - `ANTHROPIC_API_KEY`, `RETELL_API_KEY`, `STRIPE_*`, `TWILIO_*`
 - `DB_PATH` or Cloud SQL connection
 - `KELLY_RAILS_V2`, `KELLY_ALLOW_HYBRID_GRAPH`
 
-Cloud Run reads `somo-staging-*` secrets when `USE_GCP_SECRETS=1` (see `generate-cloudrun-env-yaml.cjs`).
+Cloud Run reads `somo-staging-*` secrets when `USE_GCP_SECRETS=1`.
 
 ## Verification
 
 ```bash
-gh secret list -R richiejeremiah/somo
-gh workflow run deploy-callsomo.yml -R richiejeremiah/somo
+gh secret list -R richiejeremiah/somo   # optional; not needed for local deploy
+npm run smoke:callsomo
 ```
 
 ## Railway / legacy
 
 Confirm the legacy Railway project is **not** linked to duplicate deploy triggers. See [DOCLITTLE_ARCHIVE.md](./DOCLITTLE_ARCHIVE.md).
-
-**Note:** `FIREBASE_SERVICE_ACCOUNT` (JSON) is an alternative to `FIREBASE_TOKEN`; the deploy workflow uses `FIREBASE_TOKEN`.

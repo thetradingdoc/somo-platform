@@ -60,7 +60,7 @@ case "$cmd" in
     curl -sS -o /dev/null -w "cloud_run (public): %{http_code}\n" "$RUN/health/live"
     echo ""
     echo "==> Operator checklist (order matters for API):"
-    echo "  1. Deploy API: $0 deploy-api  (or GitHub Actions deploy-callsomo workflow)"
+    echo "  1. Deploy API: npm run callsomo:deploy-api  (or npm run deploy:callsomo)"
     echo "  2. Cloud Run domain mapping: $0 fix-api-domain"
     echo "  3. Registrar DNS: CNAME api.callsomo.com -> ghs.googlehosted.com (after step 2)"
     echo "  4. Public invoker if 403: $0 fix-api-public"

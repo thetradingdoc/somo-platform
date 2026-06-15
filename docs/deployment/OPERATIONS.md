@@ -80,7 +80,7 @@ Set via `generate-cloudrun-env-yaml.cjs` when `CLOUDRUN_PROFILE=production`:
 
 Remap `api.callsomo.com` to **`somo-middleware`** (Somo API on Cloud Run).
 
-**Status (2026-06-14):** Verified checklist — run [`FRONT_DESK_PRODUCTION.md`](./FRONT_DESK_PRODUCTION.md) smoke before treating cutover as complete. Primary deploy: GitHub Actions `deploy-callsomo.yml` (not clone-from-`myskin-middleware`).
+**Status (2026-06-14):** Verified checklist — run [`FRONT_DESK_PRODUCTION.md`](./FRONT_DESK_PRODUCTION.md) smoke before treating cutover as complete. Primary deploy: `npm run deploy:callsomo` (local Firebase + gcloud).
 
 ## Preconditions
 
@@ -597,7 +597,7 @@ Firebase Hosting: redeploy prior `hosting-dist` or use Firebase release history.
 
 # Staging sign-off checklist (callsomo.com)
 
-Complete after `./scripts/callsomo-terminal-cutover.sh deploy-api` + `deploy-ui` or `.github/workflows/deploy-callsomo.yml`.
+Complete after `npm run deploy:callsomo` or `./scripts/callsomo-terminal-cutover.sh deploy-api` + `deploy-ui`.
 
 ## Automated gates
 

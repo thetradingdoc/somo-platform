@@ -1,6 +1,6 @@
 # Front-desk production — callsomo.com
 
-**Last updated:** 2026-06-14
+**Last updated:** 2026-06-15
 
 Single operator entry point for the Somo **front-desk voice agent** (Kelly rails) on production.
 
@@ -38,36 +38,58 @@ callsomo.com DemoSection
   → Kelly rails (KELLY_RAILS_V2=1)
 ```
 
-## Deploy (GitHub Actions)
+## Deploy (local — Firebase + gcloud)
 
-**Workflow:** [`.github/workflows/deploy-callsomo.yml`](../../.github/workflows/deploy-callsomo.yml)
+Production deploy runs from your machine (no GitHub Actions billing). Uses the same Firebase project you already had: **`somo-4ddf6`**.
 
-Triggers on push to `main` when `middleware-platform/`, `unified-dashboard/`, `scripts/`, or the workflow file change.
+### One-time setup
 
 ```bash
-# Manual run
-gh workflow run deploy-callsomo.yml -R richiejeremiah/somo
+firebase login
+gcloud auth login
+gcloud config set project somo-callsomo
 ```
 
-The workflow:
+### Full production deploy
 
-1. Builds and verifies `hosting-dist`
-2. Deploys Cloud Run with **`CLOUDRUN_PROFILE=production`** (`KELLY_RAILS_V2`, production Retell WSS)
-3. Creates Cloud Run domain mapping for `api.callsomo.com`
-4. Ensures public Cloud Run invoker (Twilio/Retell webhooks)
-5. Runs `configure-retell.js` when `RETELL_API_KEY` secret is set
-6. Deploys Firebase Hosting to `somo-4ddf6`
-7. Runs `npm run smoke:callsomo` (required on push; optional skip on manual dispatch only)
+```bash
+npm run deploy:callsomo
+```
 
-**First deploy after env drift:** workflow uses `CLOUDRUN_PRESERVE_ENV=0` on push so stale vars are refreshed. For image-only rollouts, use workflow_dispatch with **Preserve existing Cloud Run env vars**.
+Script: [`scripts/deploy-callsomo-local.sh`](../../scripts/deploy-callsomo-local.sh)
 
-**Secrets:** see [`docs/runbooks/GITHUB_SECRETS_SOMO_PLATFORM.md`](../runbooks/GITHUB_SECRETS_SOMO_PLATFORM.md).
+Steps:
+
+1. Build and verify `hosting-dist`
+2. Deploy Cloud Run with **`CLOUDRUN_PROFILE=production`** (`KELLY_RAILS_V2`, production Retell WSS)
+3. Create Cloud Run domain mapping for `api.callsomo.com`
+4. Ensure public Cloud Run invoker (Twilio/Retell webhooks)
+5. Run `configure-retell.js` when `RETELL_API_KEY` is in your shell env
+6. `firebase deploy --only hosting` to `somo-4ddf6`
+7. `npm run smoke:callsomo`
+
+Partial deploy flags: `--skip-api`, `--skip-ui`, `--skip-smoke`, `--skip-ci`
+
+### UI only (Firebase)
+
+```bash
+npm run callsomo:deploy-ui
+# same as: npm run deploy:landing-hosting
+```
+
+### API only (Cloud Run)
+
+```bash
+npm run callsomo:deploy-api
+```
+
+**First deploy after env drift:** set `CLOUDRUN_PRESERVE_ENV=0` (default) so stale Cloud Run vars are refreshed.
 
 ## DNS and domain mapping (order matters)
 
 Do **not** point `api.callsomo.com` at `ghs.googlehosted.com` until Cloud Run has a domain mapping.
 
-1. Deploy API (workflow or `./scripts/callsomo-terminal-cutover.sh deploy-api`)
+1. Deploy API: `npm run callsomo:deploy-api` or `npm run deploy:callsomo -- --skip-ui`
 2. Create mapping:
    ```bash
    gcloud beta run domain-mappings create --service=somo-middleware \
