@@ -20,6 +20,7 @@
     "verify:payor-navigator:local": "npm run guardrail:no-azure-deploy && npm run geo:check:crosswalk-count --prefix middleware-platform && npm test --prefix middleware-platform -- --runInBand && npm run build --prefix unified-dashboard/somo-landing",
     "guardrail:no-azure-deploy": "node scripts/guardrail-no-azure-deploy.cjs",
     "gcp:bootstrap:check": "node scripts/check-gcp-bootstrap.cjs",
+    "gcp:somo:audit": "./scripts/gcp-somo-billing-audit.sh audit",
     "seed:athlete-dtc": "npm run seed:athlete-dtc --prefix middleware-platform",
     "test:landing": "npm run build --prefix unified-dashboard/somo-landing",
     "test:reasoning-pipeline": "npm test --prefix middleware-platform -- --runInBand reasoning-pipeline",

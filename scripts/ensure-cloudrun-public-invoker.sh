@@ -25,6 +25,11 @@ else
     --no-invoker-iam-check
 fi
 
+echo "==> Ensure public ingress (required for api.callsomo.com + Twilio/Retell)"
+gcloud run services update "$SERVICE" \
+  --region="$REGION" --project="$PROJECT" \
+  --ingress=all
+
 echo "==> Verify public health"
 code=$(curl -sS -o /dev/null -w "%{http_code}" "$API_BASE/health/live" || echo "000")
 echo "    $API_BASE/health/live → $code"

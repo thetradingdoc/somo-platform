@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Builds a YAML file for `gcloud run deploy --env-vars-file`.
- * Profiles: CLOUDRUN_PROFILE=staging (default for deploy-to-gcp.sh) | production
+ * When USE_GCP_SECRETS=1, secret-backed vars are written to a separate
+ * comma-separated file for `gcloud run deploy --set-secrets` (not inlined).
  *
- * Staging: durable SQLite path, migrations on boot, no random secrets when USE_GCP_SECRETS=1.
+ * Profiles: CLOUDRUN_PROFILE=staging (default) | production
  */
 const fs = require('fs');
 const path = require('path');
@@ -14,9 +15,11 @@ const dotenv = require('dotenv');
 const MAX_VAR_CHARS = 3000;
 const profile = (process.env.CLOUDRUN_PROFILE || 'staging').toLowerCase();
 const isStaging = profile === 'staging';
+const useGcpSecrets = process.env.USE_GCP_SECRETS === '1';
 const envPath = path.join(__dirname, '..', '.env');
 const stagingExample = path.join(__dirname, '..', '.env.staging.example');
 const outPath = process.argv[2] || path.join('/tmp', `cloudrun-env-${Date.now()}.yaml`);
+const secretsOutPath = process.argv[3] || process.env.CLOUDRUN_SECRETS_FILE || '';
 const gcpProject =
   process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'somo-callsomo';
 
@@ -41,25 +44,37 @@ const SECRET_KEYS = [
   'SOMO_OWNER_PASSWORD',
   'POSTGRES_URL',
   'SMTP_PASSWORD',
-  'AZURE_COMMUNICATION_CONNECTION_STRING'
+  'AZURE_COMMUNICATION_CONNECTION_STRING',
+  'RETELL_API_KEY',
+  'RETELL_AGENT_ID'
 ];
 
-function loadGcpSecrets() {
-  if (process.env.USE_GCP_SECRETS !== '1') return {};
-  const out = {};
+function secretIdForEnv(name) {
+  return process.env[`SECRET_${name}`] || `somo-staging-${name.toLowerCase().replace(/_/g, '-')}`;
+}
+
+function secretExists(secretId) {
+  try {
+    execSync(`gcloud secrets describe "${secretId}" --project="${gcpProject}"`, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'ignore', 'ignore']
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildSecretBindings() {
+  if (!useGcpSecrets) return [];
+  const bindings = [];
   for (const name of SECRET_KEYS) {
-    const secretId = process.env[`SECRET_${name}`] || `somo-staging-${name.toLowerCase().replace(/_/g, '-')}`;
-    try {
-      const val = execSync(
-        `gcloud secrets versions access latest --secret="${secretId}" --project="${gcpProject}"`,
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-      ).trim();
-      if (val) out[name] = val;
-    } catch {
-      // optional per secret
+    const secretId = secretIdForEnv(name);
+    if (secretExists(secretId)) {
+      bindings.push(`${name}=${secretId}:latest`);
     }
   }
-  return out;
+  return bindings;
 }
 
 let parsed = {};
@@ -72,14 +87,13 @@ if (fs.existsSync(envPath)) {
   console.error('No .env at', envPath);
 }
 
-parsed = { ...parsed, ...loadGcpSecrets() };
-
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 
 function secretOrRandom(key, bytes, minLen = 0) {
+  if (useGcpSecrets && SECRET_KEYS.includes(key)) return '';
   const v = parsed[key];
   if (v && String(v).length >= (minLen || 1)) return v;
-  if (isStaging && process.env.USE_GCP_SECRETS === '1') {
+  if (isStaging && useGcpSecrets) {
     console.warn(`Missing secret ${key} — set in GCP Secret Manager (somo-staging-*)`);
     return '';
   }
@@ -94,18 +108,6 @@ const merged = {
   NODE_ENV: 'production',
   REQUIRE_JWT_FOR_FHIR: parsed.REQUIRE_JWT_FOR_FHIR || '1',
   REQUIRE_TRIAGE_FOR_VOICE: parsed.REQUIRE_TRIAGE_FOR_VOICE || '1',
-  JWT_SECRET: secretOrRandom('JWT_SECRET', 32, 32),
-  ADMIN_PORTAL_SECRET: secretOrRandom('ADMIN_PORTAL_SECRET', 24),
-  API_KEY_ENCRYPTION_KEY: secretOrRandom('API_KEY_ENCRYPTION_KEY', 32),
-  RETELL_WEBHOOK_SECRET:
-    parsed.RETELL_WEBHOOK_SECRET ||
-    parsed.RETELL_WEBHOOK_TOKEN ||
-    secretOrRandom('RETELL_WEBHOOK_SECRET', 24),
-  STRIPE_WEBHOOK_SECRET:
-    parsed.STRIPE_WEBHOOK_SECRET ||
-    parsed.STRIPEWebhook ||
-    parsed.STRIPE_WEBHOOK ||
-    secretOrRandom('STRIPE_WEBHOOK_SECRET', 24),
   BASE_URL: baseUrl,
   API_BASE_URL: baseUrl,
   BASE_DOMAIN: parsed.BASE_DOMAIN || 'callsomo.com',
@@ -113,7 +115,7 @@ const merged = {
   DB_PATH:
     process.env.CLOUDRUN_DB_PATH ||
     parsed.DB_PATH ||
-    (isStaging ? '/var/data/middleware-staging.db' : '/var/data/middleware-staging.db'),
+    '/var/data/middleware-staging.db',
   GCS_DB_BUCKET:
     process.env.GCS_DB_BUCKET ||
     parsed.GCS_DB_BUCKET ||
@@ -128,6 +130,21 @@ const merged = {
   ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0'
 };
 
+if (!useGcpSecrets) {
+  merged.JWT_SECRET = secretOrRandom('JWT_SECRET', 32, 32);
+  merged.ADMIN_PORTAL_SECRET = secretOrRandom('ADMIN_PORTAL_SECRET', 24);
+  merged.API_KEY_ENCRYPTION_KEY = secretOrRandom('API_KEY_ENCRYPTION_KEY', 32);
+  merged.RETELL_WEBHOOK_SECRET =
+    parsed.RETELL_WEBHOOK_SECRET ||
+    parsed.RETELL_WEBHOOK_TOKEN ||
+    secretOrRandom('RETELL_WEBHOOK_SECRET', 24);
+  merged.STRIPE_WEBHOOK_SECRET =
+    parsed.STRIPE_WEBHOOK_SECRET ||
+    parsed.STRIPEWebhook ||
+    parsed.STRIPE_WEBHOOK ||
+    secretOrRandom('STRIPE_WEBHOOK_SECRET', 24);
+}
+
 if (!isStaging) {
   merged.KELLY_RAILS_V2 = parsed.KELLY_RAILS_V2 || '1';
   merged.KELLY_RAILS_ROLLOUT_PCT = parsed.KELLY_RAILS_ROLLOUT_PCT ?? '1';
@@ -139,6 +156,10 @@ if (!isStaging) {
 if (isStaging) {
   delete merged.NGROK_URL;
   delete merged.MERCHANT_SHOP_URL;
+}
+
+for (const key of SECRET_KEYS) {
+  delete merged[key];
 }
 
 delete merged.PORT;
@@ -159,4 +180,14 @@ fs.writeFileSync(outPath, lines.join('\n') + '\n', 'utf8');
 console.log('Wrote', outPath, `(${lines.length} vars, profile=${profile})`);
 if (skipped.length) {
   console.warn('Skipped (too long):', skipped.join(', '));
+}
+
+const secretBindings = buildSecretBindings();
+if (secretsOutPath) {
+  if (secretBindings.length) {
+    fs.writeFileSync(secretsOutPath, secretBindings.join(','), 'utf8');
+    console.log('Wrote', secretsOutPath, `(${secretBindings.length} secret bindings)`);
+  } else {
+    fs.writeFileSync(secretsOutPath, '', 'utf8');
+  }
 }

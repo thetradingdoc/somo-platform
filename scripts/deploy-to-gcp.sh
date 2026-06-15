@@ -16,6 +16,7 @@ REGION="${GCP_REGION:-$CLOUDRUN_REGION}"
 SERVICE="${CLOUDRUN_SERVICE}"
 IMAGE="${ARTIFACT_IMAGE:-gcr.io/${PROJECT}/${SERVICE}:$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M)}"
 ENV_FILE="${CLOUDRUN_ENV_FILE:-/tmp/cloudrun-env-$$.yaml}"
+SECRETS_FILE="${CLOUDRUN_SECRETS_FILE:-/tmp/cloudrun-secrets-$$.txt}"
 PROFILE="${CLOUDRUN_PROFILE:-staging}"
 
 if [[ "${DEPLOY_INTENT:-}" == "production" && "$PROFILE" != "production" ]]; then
@@ -62,6 +63,7 @@ DEPLOY_ARGS=(
   --memory "${CLOUDRUN_MEMORY:-2Gi}"
   --cpu "${CLOUDRUN_CPU:-2}"
   --timeout "${CLOUDRUN_TIMEOUT:-300}"
+  --ingress all
   --startup-probe "httpGet.path=/health/live,initialDelaySeconds=60,timeoutSeconds=10,periodSeconds=10,failureThreshold=60"
 )
 
@@ -72,11 +74,19 @@ if [[ "$PRESERVE_ENV" == "1" ]]; then
   )
 else
   echo "==> Generating env vars file..."
-  CLOUDRUN_PROFILE="$PROFILE" \
+  USE_GCP_SECRETS="${USE_GCP_SECRETS:-}" \
+    CLOUDRUN_PROFILE="$PROFILE" \
+    GCP_PROJECT="$PROJECT" \
     GCS_DB_BUCKET="${GCS_DB_BUCKET:-}" \
     CLOUDRUN_DB_PATH="${CLOUDRUN_DB_PATH:-/var/data/middleware-staging.db}" \
-    node "$MP/scripts/generate-cloudrun-env-yaml.cjs" "$ENV_FILE"
+    CLOUDRUN_BASE_URL="${CLOUDRUN_BASE_URL:-}" \
+    node "$MP/scripts/generate-cloudrun-env-yaml.cjs" "$ENV_FILE" "$SECRETS_FILE"
   DEPLOY_ARGS+=(--env-vars-file "$ENV_FILE")
+  if [[ -f "$SECRETS_FILE" && -s "$SECRETS_FILE" ]]; then
+    SET_SECRETS="$(tr -d '\n' < "$SECRETS_FILE")"
+    echo "==> Binding Secret Manager refs (${SET_SECRETS//,/, }...)"
+    DEPLOY_ARGS+=(--set-secrets="$SET_SECRETS")
+  fi
 fi
 
 if [[ -n "${CLOUDSQL_CONNECTION_NAME:-}" ]]; then

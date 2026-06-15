@@ -83,7 +83,53 @@ npm run callsomo:deploy-ui
 npm run callsomo:deploy-api
 ```
 
-**First deploy after env drift:** set `CLOUDRUN_PRESERVE_ENV=0` (default) so stale Cloud Run vars are refreshed.
+**First deploy after env drift:** set `CLOUDRUN_PRESERVE_ENV=0` for a full non-secret env refresh (secrets stay as Secret Manager refs). Default is `1` (image-only + minimal env touch).
+
+## Troubleshooting
+
+### `callsomo.com` still shows Skin&Care / skincare tracker
+
+Firebase is serving a **stale hosting release**. The repo builds Somo correctly; push the new bundle:
+
+```bash
+npm run callsomo:deploy-ui
+curl -sS https://callsomo.com/ | grep '<title>'
+# expect: Somo — AI Front Desk...
+```
+
+Hard-refresh the browser or use a private window after deploy.
+
+### Cloud Run: `TWILIO_ACCOUNT_SID` type mismatch
+
+```
+Cannot update environment variable [TWILIO_ACCOUNT_SID] to string literal because it has already been set with a different type.
+```
+
+The live service binds Twilio/Retell keys via **Secret Manager** (`--set-secrets`), not plain env strings. Deploy scripts now use `--set-secrets` when `USE_GCP_SECRETS=1`.
+
+**Workaround** (image-only deploy):
+
+```bash
+CLOUDRUN_PRESERVE_ENV=1 npm run callsomo:deploy-api
+gcloud run services update somo-middleware --region=us-central1 --project=somo-callsomo \
+  --update-env-vars="KELLY_RAILS_V2=1,KELLY_RAILS_ROLLOUT_PCT=1,KELLY_ALLOW_HYBRID_GRAPH=0,RETELL_LLM_WEBSOCKET_URL=wss://api.callsomo.com/webhook/retell/llm,BASE_URL=https://api.callsomo.com,API_BASE_URL=https://api.callsomo.com"
+```
+
+### Full deploy stops before Firebase
+
+`deploy:callsomo` deploys **UI first**, then API, so the landing updates even if Cloud Run is slow or fails.
+
+### `api.callsomo.com` returns 404 but billing is enabled
+
+Check Cloud Run **ingress** — must be `all` for public webhooks (not `internal`):
+
+```bash
+gcloud run services describe somo-middleware --region=us-central1 --project=somo-callsomo \
+  --format='value(metadata.annotations.run.googleapis.com/ingress)'
+gcloud run services update somo-middleware --region=us-central1 --project=somo-callsomo --ingress=all
+```
+
+Or run: `npm run gcp:somo:audit` and `./scripts/gcp-somo-billing-audit.sh cleanup`
 
 ## DNS and domain mapping (order matters)
 

@@ -78,7 +78,7 @@ case "$cmd" in
     export CLOUDRUN_PROFILE=production
     export DEPLOY_INTENT=production
     export CLOUDRUN_BASE_URL="$MIDDLEWARE_API_BASE"
-    export CLOUDRUN_PRESERVE_ENV="${CLOUDRUN_PRESERVE_ENV:-0}"
+    export CLOUDRUN_PRESERVE_ENV="${CLOUDRUN_PRESERVE_ENV:-1}"
     "$ROOT/scripts/deploy-to-gcp-production.sh"
     ensure_api_domain_mapping
     "$ROOT/scripts/ensure-cloudrun-public-invoker.sh"
