@@ -597,7 +597,7 @@ Firebase Hosting: redeploy prior `hosting-dist` or use Firebase release history.
 
 # Staging sign-off checklist (callsomo.com)
 
-Complete after `./scripts/deploy-staging-all.sh` or `.github/workflows/deploy-staging.yml`.
+Complete after `./scripts/callsomo-terminal-cutover.sh deploy-api` + `deploy-ui` or `.github/workflows/deploy-callsomo.yml`.
 
 ## Automated gates
 

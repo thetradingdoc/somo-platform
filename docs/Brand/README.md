@@ -43,7 +43,7 @@
 | Secret / variable | Purpose |
 |-------------------|---------|
 | `FIREBASE_TOKEN` | `firebase deploy` for `callsomo.com` hosting |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF for deploy-staging workflow |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF for deploy-callsomo workflow |
 | `GCP_SERVICE_ACCOUNT` | SA email with Cloud Run + Secret Manager access |
 | `CLOUDSQL_CONNECTION_NAME` (repo **variable**) | e.g. `somo-callsomo:us-central1:somo-staging-pg` |
 
@@ -60,7 +60,7 @@
 
 3. **Railway** — **deprecated** for API. Production/staging API SSOT is Cloud Run `somo-middleware`. Disconnect Railway GitHub auto-deploy if still linked.
 
-4. **Deploy API** — `./scripts/deploy-to-gcp.sh` or `.github/workflows/deploy-staging.yml` (manual dispatch).
+4. **Deploy API** — `./scripts/deploy-to-gcp-production.sh` or `.github/workflows/deploy-callsomo.yml` (push to main or manual dispatch).
 
 5. **Firebase Hosting** — `npm run deploy:staging-hosting` (full `hosting-dist` bundle).
 

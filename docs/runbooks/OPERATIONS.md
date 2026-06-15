@@ -247,7 +247,7 @@ Landing builds must set `VITE_API_BASE=https://api.callsomo.com` before `npm run
 
 ## CI vs live deploy
 
-- **CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs tests on push/PR. **Staging deploy:** [`.github/workflows/deploy-staging.yml`](../../.github/workflows/deploy-staging.yml) (Cloud Run + Firebase). Railway is deprecated.
+- **CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs tests on push/PR. **Production deploy:** [`.github/workflows/deploy-callsomo.yml`](../../.github/workflows/deploy-callsomo.yml) (Cloud Run + Firebase). Railway is deprecated.
 - **Operational source of truth:** Cloud Run `somo-middleware` + Firebase Hosting + GCP Secret Manager. See [`SOMO_CLOUD_RUN_DEPLOY.md`](../deployment/SOMO_CLOUD_RUN_DEPLOY.md).
 
 See [deployment README § CI and deployment](../deployment/README.md#ci-and-deploy-source-of-truth).
