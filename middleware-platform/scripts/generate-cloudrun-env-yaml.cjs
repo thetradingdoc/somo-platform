@@ -120,7 +120,8 @@ const merged = {
     process.env.GCS_DB_BUCKET ||
     parsed.GCS_DB_BUCKET ||
     'somo-staging-db-somo-callsomo',
-  SKIP_STARTUP_MIGRATIONS: isStaging ? '0' : parsed.SKIP_STARTUP_MIGRATIONS || '1',
+  // Cloud Run API must run startup migrations (demo tables, billing, etc.). CLI scripts set SKIP_STARTUP_MIGRATIONS=1 locally only.
+  SKIP_STARTUP_MIGRATIONS: '0',
   MIGRATIONS_STRICT: isStaging ? '1' : '0',
   CLOUDRUN_BOOT_DEBUG: parsed.CLOUDRUN_BOOT_DEBUG || (isStaging ? '0' : '1'),
   TRIAL_SIM_FLOW_ENABLED: parsed.TRIAL_SIM_FLOW_ENABLED || (isStaging ? '1' : parsed.TRIAL_SIM_FLOW_ENABLED || '0'),
