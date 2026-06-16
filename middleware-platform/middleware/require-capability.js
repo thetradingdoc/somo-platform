@@ -9,7 +9,13 @@ function requireCapability(capability) {
     if (!customer) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
-    if (!hasCapability(customer, capability)) {
+
+    const caps = customer._capabilities;
+    const allowed = Array.isArray(caps)
+      ? caps.includes(capability)
+      : hasCapability(customer, capability);
+
+    if (!allowed) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden',

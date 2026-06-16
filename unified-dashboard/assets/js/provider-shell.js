@@ -46,19 +46,19 @@
 
   function hasCapability(cap) {
     const customer = getCustomer();
-    const caps = customer.capabilities;
+    const caps = customer?.capabilities;
     if (Array.isArray(caps)) return caps.includes(cap);
-    return isAdminUser();
+    return false;
   }
 
+  /**
+   * @deprecated — break-glass admin portal only (__admin_session marker).
+   */
   function isAdminUser() {
     try {
       const user = JSON.parse(sessionStorage.getItem('user') || '{}');
       const customer = getCustomer();
-      const role = String(user.role || customer.role || '').toLowerCase();
-      const email = String(user.email || customer.email || '').toLowerCase();
-      if (role.includes('admin') || role === 'insurer_admin') return true;
-      if (email === 'admin@demo.local' || email === 'insurer@demo.local') return true;
+      return user.__admin_session === true || customer.__admin_session === true;
     } catch (_) { /* ignore */ }
     return false;
   }
@@ -66,7 +66,7 @@
   function getPortalNav() {
     const file = (window.location.pathname.split('/').pop() || '').split('?')[0];
     const isAdminPage = ['payor-review.html', 'merge-review.html', 'feature-flags.html', 'leads.html', 'tenants.html'].includes(file);
-    if (isAdminPage && (isAdminUser() || hasCapability('platform.leads') || hasCapability('platform.tenants'))) {
+    if (isAdminPage && (hasCapability('platform.leads') || hasCapability('platform.tenants') || hasCapability('platform.feature_flags'))) {
       const gated = ADMIN_NAV_ITEMS.filter((item) => {
         if (!item.capability) return true;
         return hasCapability(item.capability);
@@ -581,8 +581,18 @@
       if (!user) return;
     }
     const file = (window.location.pathname.split('/').pop() || '').split('?')[0];
-    const adminPages = ['payor-review.html', 'merge-review.html', 'feature-flags.html'];
-    if (adminPages.includes(file) && !isAdminUser()) {
+    const PAGE_CAPABILITY_MAP = {
+      'payor-review.html': 'platform.leads',
+      'merge-review.html': 'platform.leads',
+      'feature-flags.html': 'platform.feature_flags',
+      'leads.html': 'platform.leads',
+      'tenants.html': 'platform.tenants',
+      'admin-billing.html': 'platform.tenants'
+    };
+
+    const requiredCap = PAGE_CAPABILITY_MAP[file];
+    if (requiredCap && !hasCapability(requiredCap)) {
+      console.warn(`[shell] Access denied to ${file}: missing capability ${requiredCap}`);
       window.location.replace(resolveHref('today.html'));
       return;
     }

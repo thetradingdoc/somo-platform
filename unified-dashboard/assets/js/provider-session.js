@@ -45,7 +45,14 @@
       if (meRes.ok) {
         const meData = await meRes.json().catch(() => ({}));
         if (meData.success && meData.customer) {
-          customer = { ...(customer || {}), ...meData.customer };
+          const merged = { ...(customer || {}), ...meData.customer };
+          if (!Array.isArray(merged.capabilities) || merged.capabilities.length === 0) {
+            console.warn(
+              '[session] /api/customers/me returned no capabilities — admin pages will be hidden. ' +
+              'Ensure customer-capabilities.js getCapabilities() returns a non-empty array for this account.'
+            );
+          }
+          customer = merged;
         }
       }
       if (customer) {
