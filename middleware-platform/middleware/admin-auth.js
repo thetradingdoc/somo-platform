@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../database');
 const EmailService = require('../services/email-service');
 const { isOperatorCustomer } = require('../services/customer-capabilities');
+const { getSessionCookieOptions } = require('../routes/lib/signup-shared');
 
 const COOKIE_NAME = 'admin_session';
 const ADMIN_CODE_PREFIX = 'admin:';
@@ -161,19 +162,12 @@ async function verifyOperatorPassword(email, password) {
 
 function issueAdminSession(req, res) {
   const session = createSessionRecord(req);
-  const isSecure =
-    req.secure ||
-    req.headers['x-forwarded-proto'] === 'https' ||
-    process.env.NODE_ENV === 'production' ||
-    process.env.NODE_ENV === 'prod';
-
-  res.cookie(COOKIE_NAME, session.id, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: isSecure,
-    maxAge: SESSION_TTL_MS,
+  const cookieOptions = {
+    ...getSessionCookieOptions(req, SESSION_TTL_MS),
     path: '/'
-  });
+  };
+
+  res.cookie(COOKIE_NAME, session.id, cookieOptions);
 
   return res.json({
     success: true,
@@ -257,10 +251,18 @@ async function handleAdminLoginVerify(req, res) {
 function handleAdminLogin(req, res) {
   const { email, password, code, secret } = req.body || {};
 
-  if (email && password && code) {
-    return handleAdminLoginVerify(req, res);
-  }
-  if (email && password && !code) {
+  if (email && password) {
+    // `code` omitted on request-code step; present (even empty) on verify step.
+    const onVerifyStep = Object.prototype.hasOwnProperty.call(req.body || {}, 'code');
+    if (onVerifyStep) {
+      if (!String(code || '').trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Verification code is required'
+        });
+      }
+      return handleAdminLoginVerify(req, res);
+    }
     return handleAdminLoginRequestCode(req, res);
   }
 
@@ -285,20 +287,15 @@ function handleAdminLogin(req, res) {
 function handleAdminLogout(req, res) {
   const token = getTokenFromRequest(req);
   destroySessionToken(token);
-  
-  // SECURITY: Always use secure cookies if HTTPS is detected or in production
-  const isSecure = req.secure || 
-                   req.headers['x-forwarded-proto'] === 'https' ||
-                   process.env.NODE_ENV === 'production' ||
-                   process.env.NODE_ENV === 'prod';
-  
-  res.cookie(COOKIE_NAME, '', {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: isSecure,
-    expires: new Date(0),
-    path: '/'
-  });
+
+  const cookieOptions = {
+    ...getSessionCookieOptions(req, 0),
+    path: '/',
+    expires: new Date(0)
+  };
+  delete cookieOptions.maxAge;
+
+  res.cookie(COOKIE_NAME, '', cookieOptions);
   res.json({ success: true });
 }
 

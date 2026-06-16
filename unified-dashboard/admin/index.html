@@ -510,11 +510,6 @@
       ? 'http://localhost:4000'
       : 'https://api.callsomo.com');
 
-    if (isLight) {
-      themeIcon.textContent = '☀️';
-      themeText.textContent = 'Light';
-    }
-
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -562,6 +557,7 @@
     const loginSubmitBtn = document.getElementById('loginSubmitBtn');
     const loginStepHint = document.getElementById('loginStepHint');
     let loginAwaitingCode = false;
+    let loginSubmitting = false;
 
     async function checkSession() {
       try {
@@ -600,10 +596,21 @@
 
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (loginSubmitting) return;
       loginError.classList.add('hidden');
       const email = adminEmailInput.value.trim();
       const password = adminPasswordInput.value;
       const code = adminCodeInput.value.trim();
+      if (loginAwaitingCode && !code) {
+        loginError.textContent = 'Enter the 6-digit code from your email.';
+        loginError.classList.remove('hidden');
+        adminCodeInput.focus();
+        return;
+      }
+      loginSubmitting = true;
+      loginSubmitBtn.disabled = true;
+      const previousBtnText = loginSubmitBtn.textContent;
+      loginSubmitBtn.textContent = loginAwaitingCode ? 'Verifying…' : 'Sending code…';
       try {
         const body = loginAwaitingCode
           ? { email, password, code }
@@ -643,6 +650,12 @@
       } catch (error) {
         loginError.textContent = 'Unable to reach server';
         loginError.classList.remove('hidden');
+      } finally {
+        loginSubmitting = false;
+        loginSubmitBtn.disabled = false;
+        if (!loginPanel.classList.contains('hidden')) {
+          loginSubmitBtn.textContent = loginAwaitingCode ? 'Verify & Sign In' : previousBtnText;
+        }
       }
     });
 
@@ -651,7 +664,11 @@
         await fetch(`${API_BASE}/api/admin/session`, { method: 'DELETE', credentials: 'include' });
         loginPanel.classList.remove('hidden');
         dashboardShell.classList.add('hidden');
-        document.getElementById('adminSecret').value = ''; // Clear password field
+        adminPasswordInput.value = '';
+        adminCodeInput.value = '';
+        loginAwaitingCode = false;
+        document.getElementById('adminCodeField').classList.add('hidden');
+        loginSubmitBtn.textContent = 'Continue';
         loginError.classList.add('hidden');
       } catch (error) {
         console.error('Logout error:', error);

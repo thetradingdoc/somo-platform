@@ -245,7 +245,7 @@ function runDeployUi() {
     cwd: ROOT,
     stdio: 'inherit',
   });
-  execSync(`npx firebase-tools deploy --only hosting --project ${FIREBASE_PROJECT}`, {
+  execSync(`npx firebase-tools deploy --only hosting:${FIREBASE_PROJECT} --project ${FIREBASE_PROJECT}`, {
     cwd: path.join(ROOT, 'unified-dashboard'),
     stdio: 'inherit',
   });

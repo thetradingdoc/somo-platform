@@ -85,7 +85,7 @@ case "$cmd" in
     ;;
   deploy-ui)
     VITE_API_BASE="$MIDDLEWARE_API_BASE" npm run build:staging-hosting --prefix "$ROOT"
-    (cd "$ROOT/unified-dashboard" && npx firebase-tools deploy --only hosting --project "$FIREBASE_HOSTING_PROJECT")
+    (cd "$ROOT/unified-dashboard" && npx firebase-tools deploy --only "hosting:${FIREBASE_HOSTING_PROJECT}" --project "$FIREBASE_HOSTING_PROJECT")
     ;;
   smoke)
     UI_BASE_URL="$UI_BASE_URL" MIDDLEWARE_API_BASE="$MIDDLEWARE_API_BASE" npm run smoke:callsomo --prefix "$ROOT"

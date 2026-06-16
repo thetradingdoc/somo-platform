@@ -45,7 +45,7 @@ ensure_api_domain_mapping() {
 deploy_ui() {
   echo "==> Deploy UI to Firebase ($FIREBASE_HOSTING_PROJECT)..."
   VITE_API_BASE="$MIDDLEWARE_API_BASE" npm run build:staging-hosting --prefix "$ROOT"
-  (cd "$ROOT/unified-dashboard" && npx firebase-tools deploy --only hosting --project "$FIREBASE_HOSTING_PROJECT")
+  (cd "$ROOT/unified-dashboard" && npx firebase-tools deploy --only "hosting:${FIREBASE_HOSTING_PROJECT}" --project "$FIREBASE_HOSTING_PROJECT")
 }
 
 deploy_api() {

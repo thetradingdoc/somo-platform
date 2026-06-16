@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "somo-4ddf6",
     "public": "hosting-dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "headers": [
