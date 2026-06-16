@@ -8,7 +8,8 @@ const {
   resolveOutboundRetellAgent,
   resolveMerchantForVoice,
   buildAccountResolutionFailureTwiml,
-  requiresCustomerId
+  requiresCustomerId,
+  getOperatorCustomerId
 } = require('./voice-account-resolution');
 
 function createVoiceIncomingHandler(deps) {
@@ -651,11 +652,28 @@ function createVoiceIncomingHandler(deps) {
     try {
       const toNumber = req.body.To;
       const clinicPhone = db.getClinicPhoneNumber(toNumber);
-      const clinicId = clinicPhone ? clinicPhone.clinic_id : null;
+      const _clinicIdForLog = clinicPhone ? clinicPhone.clinic_id : null;
+
+      let _customerIdForErrorLog = req.query.customer_id
+        ? String(req.query.customer_id).trim()
+        : null;
+      if (_customerIdForErrorLog && !db.getCustomer(_customerIdForErrorLog)) {
+        _customerIdForErrorLog = null;
+      }
+      if (!_customerIdForErrorLog && _clinicIdForLog) {
+        _customerIdForErrorLog =
+          (typeof db.getCustomerIdForClinic === 'function'
+            ? db.getCustomerIdForClinic(_clinicIdForLog)
+            : null) || null;
+      }
+      if (!_customerIdForErrorLog) {
+        const opId = getOperatorCustomerId();
+        if (opId && db.getCustomer(opId)) _customerIdForErrorLog = opId;
+      }
 
       db.logError({
         id: `error-${require('crypto').randomBytes(16).toString('hex')}`,
-        customer_id: clinicId,
+        customer_id: _customerIdForErrorLog,
         error_type: 'VoiceCallError',
         error_message: error.message,
         stack_trace: error.stack,

@@ -21,6 +21,7 @@ const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
 const somoDemoHandler = require('./somo-demo-handler');
 const VoiceAgentRuntime = require('../services/voice-agent-runtime');
+const { resolveCustomerIdForBilling } = require('../services/voice-account-resolution');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -144,7 +145,6 @@ class RetellWebSocketHandler {
 
             // Deduct credits when call ends
             const activeConnection = this.activeConnections.get(callId);
-            const { resolveCustomerIdForBilling } = require('../services/voice-account-resolution');
             const customerIdForCredits = activeConnection
               ? resolveCustomerIdForBilling(this.db, activeConnection)
               : null;
@@ -392,12 +392,19 @@ class RetellWebSocketHandler {
                     console.log(`✅ Looked up clinic_id from agent_id: ${connection.clinic_id}`);
                 } else {
                     // Fallback: check customers table (legacy support)
-                const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(callMeta.agent_id);
-                if (customer) {
-                        // R-1: Use customer's first clinic when agent maps to customer (legacy)
+                    const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(callMeta.agent_id);
+                    if (customer) {
+                        if (!connection.customer_id) {
+                            connection.customer_id = customer.id;
+                            console.log(`✅ Resolved customer_id from agent_id lookup: ${connection.customer_id}`);
+                        }
                         const clinicRow = this.db.db.prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1').get(customer.merchant_id);
-                        connection.clinic_id = clinicRow?.clinic_id || customer.id;
-                        console.log(`⚠️  Looked up clinic_id from customer agent_id (legacy): ${connection.clinic_id}`);
+                        if (clinicRow?.clinic_id) {
+                            connection.clinic_id = clinicRow.clinic_id;
+                            console.log(`✅ Looked up clinic_id from customer agent_id: ${connection.clinic_id}`);
+                        } else {
+                            console.warn(`⚠️  No clinic found for merchant_id=${customer.merchant_id} (agent_id lookup) — clinic_id left unset`);
+                        }
                     }
                 }
             }
@@ -1280,11 +1287,12 @@ class RetellWebSocketHandler {
                 }
             }
 
-            // Log function call to database
-            // NOTE: Using clinic_id as customer_id for database (schema limitation)
+            // Log function call to database — valid customers.id only (FK to customers)
+            const _customerIdForLog = resolveCustomerIdForBilling(this.db, connection) || null;
+
             await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
+                customer_id: _customerIdForLog,
                 call_id: callId,
                 function_name: functionName,
                 parameters: functionArgs,
@@ -1320,11 +1328,11 @@ class RetellWebSocketHandler {
                 }
             }
 
-            // Log error
-            // NOTE: Using clinic_id as customer_id for database (schema limitation)
+            const _customerIdForError = resolveCustomerIdForBilling(this.db, connection) || null;
+
             this.db.logError({
                 id: `error-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
+                customer_id: _customerIdForError,
                 error_type: 'FunctionCallError',
                 error_message: error.message,
                 stack_trace: error.stack,
@@ -1334,10 +1342,9 @@ class RetellWebSocketHandler {
                 severity: 'high'
             });
 
-            // Log failed function call
             await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
+                customer_id: _customerIdForError,
                 call_id: callId,
                 function_name: functionName,
                 parameters: functionArgs,
