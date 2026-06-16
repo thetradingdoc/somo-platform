@@ -139,6 +139,10 @@ const merged = {
     parsed.CALLSOMO_VOICE_CUSTOMER_ID ||
     parsed.CALLSOMO_OPERATOR_CUSTOMER_ID ||
     '',
+  CALLSOMO_OPERATOR_TWILIO_NUMBER:
+    parsed.CALLSOMO_OPERATOR_TWILIO_NUMBER ||
+    parsed.TWILIO_PHONE_NUMBER ||
+    '',
   STAGING: isStaging ? '1' : '0',
   ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0',
   EMAIL_PROVIDER: parsed.EMAIL_PROVIDER || (isStaging ? 'smtp' : parsed.EMAIL_PROVIDER || 'auto'),

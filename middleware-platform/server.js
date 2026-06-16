@@ -3318,12 +3318,19 @@ app.post(
               if (voiceCall.customer_id && callStatus === 'completed' && callDurationMinutes > 0) {
                 try {
                   const { applyUsage } = require('./services/apply-usage');
+                  const _twilioDir = String(req.body?.Direction || '').toLowerCase();
+                  const _callDirection =
+                    voiceCall.direction ||
+                    (_twilioDir === 'outbound-api' ? 'outbound' : null) ||
+                    'inbound';
                   const usageResult = applyUsage(db, {
                     customerId: voiceCall.customer_id,
                     callId: voiceCall.call_id,
                     callSid,
                     durationMinutes: callDurationMinutes,
-                    source: 'twilio_status'
+                    source: 'twilio_status',
+                    direction: _callDirection,
+                    channel: 'voice'
                   });
                   const applied = usageResult.minutes_applied ?? 0;
                   db.db.prepare(`

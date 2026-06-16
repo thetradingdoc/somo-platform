@@ -17,12 +17,28 @@ async function initiateOutboundCall({ phone_number, merchantId, customer_id, cal
   const merchant = db.getMerchant(merchantId);
   if (!merchant) throw new Error('Merchant not found');
 
-  const clinic = db.getClinicBySlug(merchant.subdomain || '');
-  const retellAgentId = clinic?.retell_agent_id || process.env.RETELL_AGENT_ID;
+  let retellAgentId = null;
+  if (customer_id) {
+    const _customer = db.getCustomer(customer_id);
+    retellAgentId = _customer?.retell_agent_id || null;
+  }
+  if (!retellAgentId) {
+    const clinic = db.getClinicBySlug(merchant.subdomain || '');
+    retellAgentId = clinic?.retell_agent_id || null;
+  }
+  retellAgentId = retellAgentId || process.env.RETELL_AGENT_ID;
   if (!retellAgentId) throw new Error('Voice agent not configured');
 
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-  if (!fromNumber) throw new Error('TWILIO_PHONE_NUMBER not configured');
+  let fromNumber = null;
+  if (customer_id) {
+    const _customer = db.getCustomer(customer_id);
+    fromNumber = _customer?.twilio_phone_number || null;
+  }
+  fromNumber =
+    fromNumber ||
+    process.env.CALLSOMO_OPERATOR_TWILIO_NUMBER ||
+    process.env.TWILIO_PHONE_NUMBER;
+  if (!fromNumber) throw new Error('No outbound phone number configured');
 
   const apiBase = await resolveTelephonyWebhookBase();
 
@@ -30,6 +46,7 @@ async function initiateOutboundCall({ phone_number, merchantId, customer_id, cal
   const webhookUrl = new URL(`${apiBase}/voice/incoming`);
   webhookUrl.searchParams.set('call_type', call_type || 'operator_outbound');
   webhookUrl.searchParams.set('agent_id', retellAgentId);
+  webhookUrl.searchParams.set('direction', 'outbound');
   if (merchantId) webhookUrl.searchParams.set('merchant_id', String(merchantId));
   if (customer_id) webhookUrl.searchParams.set('customer_id', String(customer_id));
   if (clinic_id) webhookUrl.searchParams.set('clinic_id', String(clinic_id));
