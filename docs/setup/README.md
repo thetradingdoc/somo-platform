@@ -210,7 +210,7 @@ lt --port 4000
 
 ### Frontend URL
 
-- **Netlify URL**: `https://doclittle.netlify.app`
+- **Frontend URL**: `https://callsomo.com`
 - **Custom Domain**: `https://api.callsomo.com`
 
 ---

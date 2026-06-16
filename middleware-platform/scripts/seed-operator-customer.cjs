@@ -156,7 +156,11 @@ function main() {
 
   db.updateCustomer(customer.id, patch);
 
-
+  const { ensureOperatorTenantBootstrap } = require('../services/operator-tenant-bootstrap');
+  const boot = ensureOperatorTenantBootstrap(db, customer.id);
+  if (boot?.merchantId) {
+    console.log(`   merchant_id: ${boot.merchantId}`);
+  }
 
   const credits = db.getCustomerCredits(customer.id);
 

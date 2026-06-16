@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { Storage } = require('@google-cloud/storage');
+const { gcsCp } = require('./gcs-cli-fallback.cjs');
 
 const DB_PATH = process.env.DB_PATH || '/var/data/middleware-staging.db';
 const BUCKET = (process.env.GCS_DB_BUCKET || '').trim();
@@ -48,15 +49,22 @@ async function download() {
   }
   const dir = path.dirname(DB_PATH);
   fs.mkdirSync(dir, { recursive: true });
-  const storage = new Storage();
-  const file = storage.bucket(BUCKET).file(OBJECT);
-  const [exists] = await file.exists();
-  if (!exists) {
-    console.log('[cloudrun-db-sync] No remote object — fresh DB at', DB_PATH);
-    return;
+  const remote = `gs://${BUCKET}/${OBJECT}`;
+  try {
+    const storage = new Storage();
+    const file = storage.bucket(BUCKET).file(OBJECT);
+    const [exists] = await file.exists();
+    if (!exists) {
+      console.log('[cloudrun-db-sync] No remote object — fresh DB at', DB_PATH);
+      return;
+    }
+    await file.download({ destination: DB_PATH });
+    console.log('[cloudrun-db-sync] Downloaded %s -> %s', remote, DB_PATH);
+  } catch (e) {
+    console.warn('[cloudrun-db-sync] Node GCS download failed (%s) — trying gcloud storage', e.message);
+    gcsCp(remote, DB_PATH);
+    console.log('[cloudrun-db-sync] Downloaded via CLI %s -> %s', remote, DB_PATH);
   }
-  await file.download({ destination: DB_PATH });
-  console.log('[cloudrun-db-sync] Downloaded gs://%s/%s -> %s', BUCKET, OBJECT, DB_PATH);
 }
 
 async function upload() {
@@ -66,9 +74,16 @@ async function upload() {
     console.error('[cloudrun-db-sync]', blockReason);
     return;
   }
-  const storage = new Storage();
-  await storage.bucket(BUCKET).upload(DB_PATH, { destination: OBJECT, resumable: false });
-  console.log('[cloudrun-db-sync] Uploaded %s -> gs://%s/%s', DB_PATH, BUCKET, OBJECT);
+  const remote = `gs://${BUCKET}/${OBJECT}`;
+  try {
+    const storage = new Storage();
+    await storage.bucket(BUCKET).upload(DB_PATH, { destination: OBJECT, resumable: false });
+    console.log('[cloudrun-db-sync] Uploaded %s -> %s', DB_PATH, remote);
+  } catch (e) {
+    console.warn('[cloudrun-db-sync] Node GCS upload failed (%s) — trying gcloud storage', e.message);
+    gcsCp(DB_PATH, remote);
+    console.log('[cloudrun-db-sync] Uploaded via CLI %s -> %s', DB_PATH, remote);
+  }
 }
 
 function serve(cmd, args) {

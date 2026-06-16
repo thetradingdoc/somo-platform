@@ -124,6 +124,22 @@ async function assignLineAndStartTrial(db, customer, phoneInput) {
 
   let trial = null;
   const refreshed = db.getCustomer(customer.id);
+  if (!refreshed.merchant_id && (refreshed.customer_type || 'saas') === 'saas') {
+    try {
+      const { provisionSaasTenant } = require('../services/saas-tenant-provision');
+      provisionSaasTenant(db, {
+        customerId: refreshed.id,
+        clinicName: refreshed.company_name || refreshed.name,
+        phone: e164,
+        email: refreshed.email,
+        customerType: 'saas',
+        enabledPlatforms: ['voice'],
+        useCase: refreshed.use_case || 'healthcare_clinic'
+      });
+    } catch (provisionErr) {
+      console.warn('⚠️  Pre-trial tenant provision:', provisionErr.message);
+    }
+  }
   if (isTrialSimEnabledForCustomer(refreshed)) {
     try {
       trial = await startTrialTenant(db, customer.id, {
@@ -132,6 +148,10 @@ async function assignLineAndStartTrial(db, customer, phoneInput) {
       });
     } catch (err) {
       if (err instanceof TrialProvisionError) {
+        try {
+          const { transitionState } = require('../services/voice-onboarding-state');
+          transitionState(db, customer.id, 'provisioning_failed', { error: err.message });
+        } catch (_) {}
         return {
           error: {
             status: 502,
@@ -167,6 +187,14 @@ async function assignLineAndStartTrial(db, customer, phoneInput) {
   } catch (_) {}
 
   const afterTrial = db.getCustomer(customer.id);
+  try {
+    const { transitionState } = require('../services/voice-onboarding-state');
+    if (afterTrial.twilio_phone_number) {
+      transitionState(db, customer.id, 'line_assigned');
+    }
+  } catch (stateErr) {
+    console.warn('⚠️  onboarding state line_assigned:', stateErr.message);
+  }
   const simTrialOn =
     (afterTrial.customer_type || 'saas') === 'saas' && isTrialSimEnabledForCustomer(afterTrial);
   return {
@@ -397,6 +425,12 @@ router.post('/signup', signupFlowLimiter, async (req, res) => {
       postCreatePatch.signup_attribution_json = customerRecord.signup_attribution_json;
     }
     db.updateCustomer(customerId, postCreatePatch);
+    try {
+      const { transitionState } = require('../services/voice-onboarding-state');
+      transitionState(db, customerId, 'signup_started');
+    } catch (stateErr) {
+      console.warn('⚠️  onboarding state signup_started:', stateErr.message);
+    }
 
     // Track incomplete signup (Step 1: Started)
     try {
@@ -1225,6 +1259,13 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
           ? '/verify-card?customer_type=api&redirect=' + encodeURIComponent('/docs')
           : `/verify-card?customer_type=${customerType}`;
       console.log(`✅ Payment required - redirecting to verify-card`);
+    }
+
+    try {
+      const { transitionState } = require('../services/voice-onboarding-state');
+      transitionState(db, customer.id, 'terms_accepted');
+    } catch (stateErr) {
+      console.warn('⚠️  onboarding state terms_accepted:', stateErr.message);
     }
 
     res.json({

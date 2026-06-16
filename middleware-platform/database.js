@@ -4842,6 +4842,56 @@ function migrateVoiceAgentUx() {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN caller_phone TEXT');
       console.log('✅ Migration complete: voice_call_log.caller_phone added');
     }
+    if (!callCols.some((c) => c.name === 'direction')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN direction TEXT');
+      console.log('✅ Migration complete: voice_call_log.direction added');
+    }
+    if (!callCols.some((c) => c.name === 'opener_used')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN opener_used TEXT');
+      console.log('✅ Migration complete: voice_call_log.opener_used added');
+    }
+    if (!customerCols.includes('onboarding_state')) {
+      db.prepare('ALTER TABLE customers ADD COLUMN onboarding_state TEXT').run();
+      console.log('✅ Migration complete: customers.onboarding_state added');
+    }
+    if (!customerCols.includes('onboarding_state_updated_at')) {
+      db.prepare('ALTER TABLE customers ADD COLUMN onboarding_state_updated_at DATETIME').run();
+      console.log('✅ Migration complete: customers.onboarding_state_updated_at added');
+    }
+    if (!customerCols.includes('onboarding_meta_json')) {
+      db.prepare('ALTER TABLE customers ADD COLUMN onboarding_meta_json TEXT').run();
+      console.log('✅ Migration complete: customers.onboarding_meta_json added');
+    }
+    const vasColNames = vasCols.map((c) => c.name);
+    const vasMigrations = [
+      ['outbound_opener', 'TEXT'],
+      ['outbound_enabled', 'INTEGER DEFAULT 0'],
+      ['outbound_quiet_hours', 'TEXT'],
+      ['outbound_allowed_types', 'TEXT'],
+      ['settings_version', 'INTEGER DEFAULT 1'],
+      ['sync_status', "TEXT DEFAULT 'synced'"],
+      ['synced_at', 'DATETIME'],
+      ['last_sync_error', 'TEXT'],
+      ['tone_preset', 'TEXT']
+    ];
+    for (const [col, type] of vasMigrations) {
+      if (!vasColNames.includes(col)) {
+        db.exec(`ALTER TABLE voice_agent_settings ADD COLUMN ${col} ${type}`);
+        console.log(`✅ Migration complete: voice_agent_settings.${col} added`);
+      }
+    }
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS voice_settings_audit (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT,
+        merchant_id TEXT,
+        actor_type TEXT,
+        actor_id TEXT,
+        change_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_voice_settings_audit_customer ON voice_settings_audit(customer_id, created_at DESC);
+    `);
   } catch (e) {
     console.warn('⚠️  voice agent UX migration failed:', e.message);
   }
@@ -9917,11 +9967,52 @@ module.exports = {
     const payload = {
       retell_agent_id: settings.retell_agent_id || null,
       enabled: settings.enabled !== undefined ? (settings.enabled ? 1 : 0) : 1,
-      greeting: settings.greeting || null,
+      greeting: settings.greeting ?? settings.inbound_greeting ?? null,
       after_hours_message: settings.after_hours_message || null,
       business_hours: settings.business_hours ? JSON.stringify(settings.business_hours) : null,
-      customer_id: customerId || settings.customer_id || null
+      customer_id: customerId || settings.customer_id || null,
+      outbound_opener: settings.outbound_opener ?? null,
+      outbound_enabled:
+        settings.outbound_enabled !== undefined ? (settings.outbound_enabled ? 1 : 0) : undefined,
+      outbound_quiet_hours: settings.outbound_quiet_hours
+        ? JSON.stringify(settings.outbound_quiet_hours)
+        : undefined,
+      outbound_allowed_types: settings.outbound_allowed_types
+        ? JSON.stringify(settings.outbound_allowed_types)
+        : undefined,
+      settings_version: settings.settings_version ?? undefined,
+      sync_status: settings.sync_status ?? undefined,
+      synced_at: settings.synced_at ?? undefined,
+      last_sync_error: settings.last_sync_error ?? undefined,
+      tone_preset: settings.tone_preset ?? undefined
     };
+
+    const sqliteSets = [];
+    const sqliteVals = [
+      resolvedMerchantId,
+      payload.customer_id,
+      payload.retell_agent_id,
+      payload.enabled,
+      payload.greeting,
+      payload.after_hours_message,
+      payload.business_hours
+    ];
+    const optionalCols = [
+      'outbound_opener',
+      'outbound_enabled',
+      'outbound_quiet_hours',
+      'outbound_allowed_types',
+      'settings_version',
+      'sync_status',
+      'synced_at',
+      'last_sync_error',
+      'tone_preset'
+    ];
+    for (const col of optionalCols) {
+      if (payload[col] !== undefined) {
+        sqliteSets.push(`${col} = excluded.${col}`);
+      }
+    }
 
     if (usePostgres && pgPool) {
       return pgPool`
@@ -9948,27 +10039,49 @@ module.exports = {
       `;
     }
 
-    return db.prepare(`
-      INSERT INTO voice_agent_settings (
-        merchant_id, customer_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(merchant_id) DO UPDATE SET
-        customer_id = COALESCE(excluded.customer_id, voice_agent_settings.customer_id),
-        retell_agent_id = excluded.retell_agent_id,
-        enabled = excluded.enabled,
-        greeting = excluded.greeting,
-        after_hours_message = excluded.after_hours_message,
-        business_hours = excluded.business_hours,
-        updated_at = CURRENT_TIMESTAMP
-    `).run(
+    const extraInsertCols = optionalCols.filter((c) => payload[c] !== undefined);
+    const allInsertCols = [
+      'merchant_id',
+      'customer_id',
+      'retell_agent_id',
+      'enabled',
+      'greeting',
+      'after_hours_message',
+      'business_hours',
+      ...extraInsertCols,
+      'updated_at'
+    ];
+    const allInsertVals = [
       resolvedMerchantId,
       payload.customer_id,
       payload.retell_agent_id,
       payload.enabled,
       payload.greeting,
       payload.after_hours_message,
-      payload.business_hours
-    );
+      payload.business_hours,
+      ...extraInsertCols.map((c) => payload[c]),
+      'CURRENT_TIMESTAMP'
+    ];
+    const placeholders = allInsertCols
+      .map((c) => (c === 'updated_at' ? 'CURRENT_TIMESTAMP' : '?'))
+      .join(', ');
+    const updateSets = [
+      'customer_id = COALESCE(excluded.customer_id, voice_agent_settings.customer_id)',
+      'retell_agent_id = excluded.retell_agent_id',
+      'enabled = excluded.enabled',
+      'greeting = excluded.greeting',
+      'after_hours_message = excluded.after_hours_message',
+      'business_hours = excluded.business_hours',
+      ...sqliteSets,
+      'updated_at = CURRENT_TIMESTAMP'
+    ];
+
+    return db.prepare(`
+      INSERT INTO voice_agent_settings (${allInsertCols.join(', ')})
+      VALUES (${placeholders})
+      ON CONFLICT(merchant_id) DO UPDATE SET
+        ${updateSets.join(', ')}
+    `).run(...allInsertVals.filter((v) => v !== 'CURRENT_TIMESTAMP'));
   },
 
   // ============================================
@@ -10371,6 +10484,24 @@ module.exports = {
       ...row,
       resource_data: JSON.parse(row.resource_data)
     };
+  },
+
+  /** Resolve patient by resource_id, Patient/ prefix, or numeric PK when unambiguous. */
+  resolveFHIRPatient(patientId) {
+    if (patientId == null || patientId === '') return null;
+    let id = String(patientId).trim();
+    if (!id) return null;
+    if (id.startsWith('Patient/')) id = id.slice('Patient/'.length);
+    const direct = this.getFHIRPatient(id);
+    if (direct) return direct;
+    if (/^\d+$/.test(id)) {
+      const pk = parseInt(id, 10);
+      const row = db.prepare('SELECT * FROM fhir_patients WHERE id = ? AND is_deleted = 0').get(pk);
+      if (row) {
+        return { ...row, resource_data: JSON.parse(row.resource_data) };
+      }
+    }
+    return null;
   },
 
   // Get FHIR Patient by Phone

@@ -237,8 +237,8 @@ function createVoiceIncomingHandler(deps) {
         metadata.clinic_name = clinicName;
       }
     } else if (!isSomoDemoDemo) {
-      metadata.call_type = 'inbound';
-      metadata.direction = 'inbound';
+      metadata.call_type = resolvedCallType === 'operator_outbound' ? 'operator_outbound' : 'inbound_tenant';
+      metadata.direction = isOutboundSales ? 'outbound' : 'inbound';
     }
     if (clinicId) {
       metadata.clinic_id = clinicId;
@@ -314,6 +314,12 @@ function createVoiceIncomingHandler(deps) {
         dynamicVariables.template_id = tpl.template_id;
       } catch (_) {}
       console.log('📋 Added Somo demo demo context to dynamic variables');
+    }
+
+    // Outbound: mirror call_type/direction in dynamic variables (Retell sometimes omits metadata on WS)
+    if (isOutboundSales) {
+      dynamicVariables.call_type = String(resolvedCallType || 'operator_outbound');
+      dynamicVariables.direction = 'outbound';
     }
 
     // For outbound sales calls, add lead-specific variables
@@ -605,6 +611,9 @@ function createVoiceIncomingHandler(deps) {
               merchantId = customer.merchant_id;
             }
           }
+
+          const FHIRAdapter = require('../adapters/fhir-adapter');
+          const FHIRService = require('./fhir-service');
 
           const callData = FHIRAdapter.retellCallToFHIR({
             call_id: callId,

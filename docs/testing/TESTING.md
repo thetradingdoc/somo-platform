@@ -1,6 +1,6 @@
 # TESTING
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-16
 
 
 ---
@@ -182,7 +182,7 @@ npm run staging:trial-provision
 | T4 | `node scripts/audit-voice-twilio-numbers.cjs` — no orphans |
 
 ```bash
-STAGING_DB_PATH=... npm run staging:db-assert -- --email=trial-smoke-...@doclittle.test
+STAGING_DB_PATH=... npm run staging:db-assert -- --email=trial-smoke-...@callsomo.test
 ```
 
 ### Provisioning failure matrix
@@ -302,3 +302,53 @@ Store under `middleware-platform/test-results/staging-run-YYYYMMDD/`:
 - [STAGING_SIGNOFF.md](../deployment/STAGING_SIGNOFF.md)
 - [STAGING_TRIAL_ROLLOUT.md](../deployment/STAGING_TRIAL_ROLLOUT.md)
 - [voice-inbound-troubleshooting.md](../runbooks/voice-inbound-troubleshooting.md)
+
+---
+
+<a id="kelly-rails-and-conversation-mode"></a>
+
+## Kelly rails + conversation mode (local)
+
+Run from `middleware-platform/`. Requires `middleware-dev.db` (or `DB_PATH`) and at least one LLM key for multi-turn Kelly turns (`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, or `OPENAI_API_KEY`).
+
+| npm script | What it exercises |
+|------------|-------------------|
+| `npm run test:kelly:rails:golden` | Router, tool allowlists, execute-turn, lanes-payment, voice-payment, kelly-turn-resolver (50 tests) |
+| `npx jest --testPathPattern='conversation-mode'` | Resolver, pivot engine, acceptance matrix, V1–V14 scenarios (19 tests) |
+| `npm run test:rails:conversation-sandbox` | Seven scripted multi-turn dialogs (booking, copay, appt lookup, outbound reminder, urgent, Spanish booking, Mandarin copay) via `runKellyTurn` with `CONVERSATION_MODE_ROUTING=enforce` |
+
+Sandbox reports (generated on run):
+
+- `middleware-platform/test-results/rails-conversation-sandbox.md`
+- `middleware-platform/test-results/rails-conversation-sandbox.json`
+
+Single scenario: `node scripts/rails-conversation-sandbox.cjs --scenario booking`
+
+Related: [CONVERSATION_MODE_MATRIX.md](../conversation/CONVERSATION_MODE_MATRIX.md), [CONVERSATION_MODE_ROLLOUT.md](../runbooks/CONVERSATION_MODE_ROLLOUT.md).
+
+---
+
+<a id="tenant-front-desk-audit"></a>
+
+## Tenant front desk audit (Playwright)
+
+Probes every provider portal page and primary controls without live Twilio/Retell actions (safe mode).
+
+| npm script | Middleware | Live actions |
+|------------|------------|--------------|
+| `npm run test:e2e:tenant-audit:safe` | Dedicated audit instance on **:4001** (`middleware-audit.db`) | No |
+| `npm run test:e2e:tenant-audit` | Same | Yes (`PW_ALLOW_LIVE_ACTIONS=1`) |
+
+**Setup:** global setup seeds FHIR patient + provider login. Start audit middleware separately if port 4001 is not already running:
+
+```bash
+cd middleware-platform
+node scripts/start-audit-middleware.cjs   # AUDIT_MIDDLEWARE=1, PORT=4001, .env.audit
+npm run test:e2e:tenant-audit:safe
+```
+
+Report: `middleware-platform/test-results/tenant-front-desk-audit.md`
+
+**Last run (2026-06-16):** 94 pass · 2 fail · 17 skip. Known failures: revenue-payments Send button visibility (collection queue empty-state), video-call page (no provider shell nav — standalone telehealth surface).
+
+Spec: `e2e/tenant-front-desk-audit.spec.cjs` · helpers: `e2e/helpers/tenant-ui-audit.cjs`.

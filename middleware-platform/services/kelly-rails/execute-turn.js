@@ -1,11 +1,12 @@
 'use strict';
 
 const KellyToolExecutor = require('../kelly-tool-executor');
-const { KELLY_LANE, normalizeState, routeOrchestratorLane, paymentGateOpen, PAYMENT_SIGNALS } = require('./state-schema');
+const { KELLY_LANE, normalizeState, routeOrchestratorLane, paymentGateOpen, PAYMENT_SIGNALS, LANE_FIRST_STEP } = require('./state-schema');
 const { hydrateFlagsFromDb } = require('./hydrate');
 const { executeLaneStep } = require('./lanes');
 const { persistRailsSessionState } = require('./session-ssot');
 const { KELLY_LANE: LANE } = require('./state-schema');
+const { shouldEnforceMode } = require('../conversation-mode/config');
 
 function shouldReroute(state, message) {
   const msg = String(message || '').toLowerCase();
@@ -132,13 +133,54 @@ async function executeTurn(input = {}) {
     state.v2_hydrated = true;
   }
 
+  if (input.conversation_mode) {
+    state.conversation_mode = input.conversation_mode;
+    state.flags.conversation_mode = input.conversation_mode;
+  }
+  if (input.active_subrail) {
+    state.active_subrail = input.active_subrail;
+    state.flags.active_subrail = input.active_subrail;
+  }
+  if (input.conversation_session) {
+    Object.assign(state.flags, input.conversation_session);
+  }
+
+  const enforceMode = state.conversation_mode && shouldEnforceMode(state.conversation_mode);
+  if (enforceMode && input.kelly_lane_hint) {
+    state.active_lane = input.kelly_lane_hint;
+    state.step = LANE_FIRST_STEP[input.kelly_lane_hint] || state.step;
+  }
+
+  const subrailStep =
+    state.active_subrail_step ||
+    state.flags?.active_subrail_step ||
+    input.conversation_session?.active_subrail_step ||
+    null;
+  if (state.active_subrail === 'booking' || state.flags?.active_subrail === 'booking') {
+    state.active_lane = KELLY_LANE.BOOKING;
+    if (['contact_confirm', 'schedule', 'confirm'].includes(subrailStep)) {
+      state.step = 'confirm_visit';
+    } else if (['slot_lookup', 'slot_select'].includes(subrailStep)) {
+      state.step = 'schedule_visit';
+    }
+  }
+  if (
+    (state.active_subrail === 'cancellation' || state.flags?.active_subrail === 'cancellation') &&
+    (subrailStep === 'find_booking' || state.flags?.appt_lookup_only)
+  ) {
+    state.active_lane = KELLY_LANE.RESCHEDULE;
+    state.step = 'find_booking';
+    state.flags.appt_lookup_only = true;
+  }
+
   state.last_user_message = ctx.message;
-  const payIntentNow = PAYMENT_SIGNALS.some((s) => String(ctx.message || '').toLowerCase().includes(s));
-
+  const normalizedMessage = String(ctx.message || '').toLowerCase();
+  const payIntentNow = PAYMENT_SIGNALS.some((s) => normalizedMessage.includes(s));
   const onRecordsRail = state.active_lane === LANE.RECORDS;
-  const payIntentNowPre = PAYMENT_SIGNALS.some((s) => String(ctx.message || '').toLowerCase().includes(s));
 
-  if (shouldReroute(state, ctx.message) && !(onRecordsRail && payIntentNowPre)) {
+  const skipLegacyReroute = enforceMode && !!state.conversation_mode;
+
+  if (!skipLegacyReroute && shouldReroute(state, ctx.message) && !(onRecordsRail && payIntentNow)) {
     const route = routeOrchestratorLane(state);
     state.active_lane = route.lane;
     state.step = route.step;
@@ -154,7 +196,7 @@ async function executeTurn(input = {}) {
     }
   }
 
-  if (state.active_lane === KELLY_LANE.ROUTER) {
+  if (!skipLegacyReroute && state.active_lane === KELLY_LANE.ROUTER) {
     const route = routeOrchestratorLane(state);
     state.active_lane = route.lane;
     state.step = route.step;
@@ -193,12 +235,21 @@ async function executeTurn(input = {}) {
   syncMetaFromFlags(ctx.sessionId, state.flags, state.active_lane);
   KellyToolExecutor._setSessionMeta(ctx.sessionId, 'kelly_graph_branch', state.active_lane);
   KellyToolExecutor._setSessionMeta(ctx.sessionId, 'kelly_graph_step', state.step);
+  if (state.conversation_mode) {
+    KellyToolExecutor._setSessionMeta(ctx.sessionId, 'conversation_mode', state.conversation_mode);
+  }
+  if (state.active_subrail) {
+    KellyToolExecutor._setSessionMeta(ctx.sessionId, 'active_subrail', state.active_subrail);
+  }
 
   const { reply, toolsUsed, endCall } = await executeLaneStep(state, ctx);
 
   state.last_reply = reply;
   state.tools_used_last_turn = toolsUsed || [];
-  persistRailsSessionState(ctx.sessionId, state);
+  persistRailsSessionState(ctx.sessionId, {
+    ...state,
+    flags: { ...state.flags, conversation_mode: state.conversation_mode, active_subrail: state.active_subrail }
+  });
 
   if (state.step === 'done') {
     if (state.active_lane === KELLY_LANE.POST_PAYMENT) {

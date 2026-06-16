@@ -53,6 +53,12 @@ function productionRuntimeError(attemptedRuntime) {
   return err;
 }
 
+function emitKellyCallEvent(payload = {}) {
+  try {
+    db.insertKellyCallEvent?.(payload);
+  } catch (_) {}
+}
+
 /**
  * Single Kelly conversation turn — priority: KELLY_RAILS_V2 → hybrid graph+processTurn → legacy.
  */
@@ -75,7 +81,7 @@ async function runKellyTurn(opts = {}) {
         patient_id: opts.patientId || null,
       });
     }
-    db.insertKellyCallEvent?.({
+    emitKellyCallEvent({
       session_id: sessionId || null,
       call_id: opts.callId || null,
       event_type: 'turn_received',
@@ -88,18 +94,22 @@ async function runKellyTurn(opts = {}) {
   } catch (_) {}
 
   let sessionLanguage = null;
-  if (sessionId && message && db.getKellySessionLanguage && db.upsertKellySessionLanguage) {
+  if (sessionId && db.getKellySessionLanguage && db.upsertKellySessionLanguage) {
     sessionLanguage = db.getKellySessionLanguage(sessionId);
+    const explicitLocale = opts.preferredLanguage ? String(opts.preferredLanguage).slice(0, 2) : null;
     if (!sessionLanguage) {
-      const detected = evaluateFirstTurnLanguage(message);
-      db.upsertKellySessionLanguage(sessionId, detected.language);
-      opts.preferredLanguage = detected.language;
-      opts.languageConfidence = detected.confidence;
-      if (detected.forceLanguageHandoff) {
-        opts.forceLanguageHandoff = true;
-      }
-      try {
-        db.insertKellyCallEvent?.({
+      if (explicitLocale) {
+        db.upsertKellySessionLanguage(sessionId, explicitLocale);
+        opts.preferredLanguage = explicitLocale;
+      } else if (message) {
+        const detected = evaluateFirstTurnLanguage(message);
+        db.upsertKellySessionLanguage(sessionId, detected.language);
+        opts.preferredLanguage = detected.language;
+        opts.languageConfidence = detected.confidence;
+        if (detected.forceLanguageHandoff) {
+          opts.forceLanguageHandoff = true;
+        }
+        emitKellyCallEvent({
           session_id: sessionId,
           event_type: 'language_detected',
           payload_json: {
@@ -112,32 +122,34 @@ async function runKellyTurn(opts = {}) {
             force_language_handoff: !!detected.forceLanguageHandoff
           }
         });
-      } catch (_) {}
 
-      if (detected.forceLanguageHandoff) {
-        emitLanguageMismatch(db, {
-          session_id: sessionId,
-          detected_language: detected.language,
-          session_language: null,
-          mismatch_type: 'low_confidence_first_turn',
-          action_taken: 'handoff',
-          channel,
-          runtime: 'kelly_rails_v2'
-        });
+        if (detected.forceLanguageHandoff) {
+          emitLanguageMismatch(db, {
+            session_id: sessionId,
+            detected_language: detected.language,
+            session_language: null,
+            mismatch_type: 'low_confidence_first_turn',
+            action_taken: 'handoff',
+            channel,
+            runtime: 'kelly_rails_v2'
+          });
+        }
       }
     } else {
-      opts.preferredLanguage = opts.preferredLanguage || sessionLanguage;
-      const detected = evaluateFirstTurnLanguage(message);
-      if (detected.language && detected.language !== sessionLanguage && !detected.explicitPreference) {
-        emitLanguageMismatch(db, {
-          session_id: sessionId,
-          detected_language: detected.language,
-          session_language: sessionLanguage,
-          mismatch_type: 'detected_vs_session',
-          action_taken: 'continue',
-          channel,
-          runtime: 'kelly_rails_v2'
-        });
+      opts.preferredLanguage = explicitLocale || sessionLanguage;
+      if (message) {
+        const detected = evaluateFirstTurnLanguage(message);
+        if (detected.language && detected.language !== sessionLanguage && !detected.explicitPreference && !explicitLocale) {
+          emitLanguageMismatch(db, {
+            session_id: sessionId,
+            detected_language: detected.language,
+            session_language: sessionLanguage,
+            mismatch_type: 'detected_vs_session',
+            action_taken: 'continue',
+            channel,
+            runtime: 'kelly_rails_v2'
+          });
+        }
       }
     }
   }
@@ -152,6 +164,86 @@ async function runKellyTurn(opts = {}) {
 
   if (sessionId && shouldUseKellyRailsV2Production(sessionId, clinicId)) {
     opts.db = opts.db || db;
+
+    let convResult = null;
+    try {
+      const { runConversationDispatch, emitDisposition } = require('./conversation-mode/conversation-mode-session');
+      convResult = await runConversationDispatch({
+        sessionId,
+        message,
+        clinicId,
+        customerId: opts.customerId || null,
+        callId: opts.callId || null,
+        call_type: opts.call_type || null,
+        direction: opts.direction || null,
+        opener_delivered: opts.opener_delivered || false,
+        appointmentId: opts.appointmentId || opts.appointment_id || null,
+        outbound_purpose: opts.outbound_purpose || null,
+        db,
+        patientId: opts.patientId || null,
+        patientName: opts.patientName || null,
+        utterance: message
+      });
+      opts.conversation_mode = convResult.session?.conversation_mode || null;
+      opts.active_subrail = convResult.session?.active_subrail || null;
+      opts.kelly_lane_hint = convResult.dispatch?.kelly_lane_hint || null;
+      opts.conversation_session = convResult.session;
+
+      if (convResult.enforce && convResult.dispatch?.reply && convResult.dispatch.use_kelly !== true) {
+        const latencyMs = Math.max(0, Date.now() - turnReceivedAt);
+        const out = {
+          reply: convResult.dispatch.reply,
+          endCall: !!convResult.dispatch.endCall,
+          toolsUsed: convResult.dispatch.toolsUsed || [],
+          language: locale,
+          conversation_mode: convResult.session.conversation_mode,
+          active_subrail: convResult.session.active_subrail,
+          kelly_rails: {
+            active_lane: convResult.dispatch.kelly_lane_hint || null,
+            step: convResult.dispatch.active_subrail_step || null,
+            flags: convResult.dispatch.flags || convResult.session
+          }
+        };
+        try {
+          db.insertKellyCallEvent?.({
+            session_id: sessionId,
+            call_id: opts.callId || null,
+            event_type: 'turn_resolved',
+            payload_json: {
+              runtime: 'conversation_mode_dispatch',
+              conversation_mode: convResult.session.conversation_mode,
+              active_subrail: convResult.session.active_subrail,
+              pivot_reason: convResult.pivot?.pivot_reason,
+              latency_ms: latencyMs
+            }
+          });
+          if (out.endCall) {
+            const disposition = emitDisposition(db, {
+              sessionId,
+              callId: opts.callId,
+              session: convResult.session,
+              disposition: convResult.dispatch.disposition
+            });
+            recordCallCompleted({
+              session_id: sessionId,
+              call_id: opts.callId || null,
+              channel,
+              runtime: 'conversation_mode_dispatch',
+              final_lane: convResult.dispatch.kelly_lane_hint || null,
+              final_step: convResult.dispatch.active_subrail_step || null,
+              disposition,
+              guardrail_count: 0,
+              turn_count: 1
+            });
+          }
+        } catch (_) {}
+        recordKellyLlmUsage(opts, out, latencyMs);
+        return out;
+      }
+    } catch (e) {
+      console.warn('[kelly-turn] conversation mode dispatch skipped:', e.message);
+    }
+
     const out = await handleTurn(opts);
     const latencyMs = Math.max(0, Date.now() - turnReceivedAt);
     const lane = out?.kelly_rails?.active_lane || null;
@@ -168,6 +260,8 @@ async function runKellyTurn(opts = {}) {
           patient_id: opts.patientId || null,
           lane,
           step,
+          conversation_mode: opts.conversation_mode || convResult?.session?.conversation_mode || null,
+          active_subrail: opts.active_subrail || convResult?.session?.active_subrail || null,
           tools_used: out?.toolsUsed || [],
           language: out?.language || locale,
           locale,
@@ -175,13 +269,14 @@ async function runKellyTurn(opts = {}) {
         }
       });
       if (out?.endCall) {
-        const disposition = flags.safety_blocked
-          ? 'escalated'
-          : flags.payment_complete
-            ? 'paid'
-            : flags.pending_human_handoff
-              ? 'handoff'
-              : 'completed';
+        const { resolveDispositionFromState } = require('./conversation-mode/disposition-taxonomy');
+        const { emitDisposition: emitDisp } = require('./conversation-mode/conversation-mode-session');
+        const disposition = emitDisp(db, {
+          sessionId,
+          callId: opts.callId,
+          session: { flags, conversation_mode: opts.conversation_mode, active_subrail: opts.active_subrail },
+          disposition: resolveDispositionFromState({ flags, conversation_mode: opts.conversation_mode })
+        });
         recordCallCompleted({
           session_id: sessionId,
           call_id: opts.callId || null,

@@ -1,7 +1,13 @@
 # Middleware platform documentation (consolidated)
-> Last reviewed: 2026-05-30
+> Last reviewed: 2026-06-16
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-16
+
+## 2026-06-16 changelog
+
+- Added as-built conversation-mode architecture references (resolver, pivot engine, dispatcher, subrails, mode firewall).
+- Clarified that Kelly turn routing now runs through conversation-mode session dispatch before lane execution.
+- Consolidated rollout truth to conversation matrix + rollout runbook for production readiness tracking.
 
 **Somo marketing landing** at `/` is [`somo-landing`](../../unified-dashboard/somo-landing/). Kelly/LiveKit CRA client paths below refer to [`_archive/littlelab-landing`](../../unified-dashboard/_archive/littlelab-landing/) unless noted.
 

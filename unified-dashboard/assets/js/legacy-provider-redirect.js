@@ -36,8 +36,6 @@
     'invoices.html': 'revenue.html?tab=payments',
     'treatments.html': 'today.html',
     'wallets.html': 'settings.html',
-    'voice-setup.html': 'agent.html',
-    'trial-activation.html': 'agent.html',
     'rcm.html': 'revenue.html?tab=pipeline',
     'patient-payments.html': 'revenue.html?tab=payments',
     'claims.html': 'revenue.html?tab=work',

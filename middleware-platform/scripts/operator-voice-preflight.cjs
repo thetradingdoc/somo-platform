@@ -145,6 +145,21 @@ async function main() {
     if (!credits) fail(`customer_credits missing for ${OPERATOR_ID}`);
     else pass('customer_credits row present');
 
+    const { resolveVoiceMerchantId } = require('../services/operator-tenant-bootstrap');
+    const merchantId = row ? resolveVoiceMerchantId(db, row) : null;
+    const voiceSettings = row
+      ? db.getVoiceAgentSettingsForProvider({ merchantId, customerId: OPERATOR_ID })
+      : null;
+    if (!voiceSettings?.outbound_opener) {
+      fail('voice_agent_settings.outbound_opener missing for operator');
+    } else if (!/somo/i.test(voiceSettings.outbound_opener)) {
+      fail(`outbound_opener should mention Somo: ${voiceSettings.outbound_opener}`);
+    } else if (/our office|somo owner|part of owner/i.test(voiceSettings.outbound_opener)) {
+      fail(`outbound_opener has legacy phrasing: ${voiceSettings.outbound_opener}`);
+    } else {
+      pass(`outbound_opener configured: ${voiceSettings.outbound_opener.slice(0, 60)}…`);
+    }
+
     const mockDb = {
       getCustomer: (id) => db.getCustomer(id),
       getCustomerByTwilioNumber: (n) => db.getCustomerByTwilioNumber(n),

@@ -1,7 +1,7 @@
 # testing — consolidated documentation
-> Last reviewed: 2026-05-25
+> Last reviewed: 2026-06-16
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-16
 
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.

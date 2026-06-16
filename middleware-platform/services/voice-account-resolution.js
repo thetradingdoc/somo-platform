@@ -39,7 +39,7 @@ function normalizeCallType(req, { isOutbound, isSomoDemoDemo, leadId }) {
   if (explicit) return explicit;
   if (leadId) return 'sales_outbound';
   if (isOutbound) return 'operator_outbound';
-  return 'inbound';
+  return 'inbound_tenant';
 }
 
 /**
@@ -145,6 +145,9 @@ function resolveMerchantForVoice(db, {
     if (customer?.merchant_id) {
       merchantId = customer.merchant_id;
       reason = 'customer_lookup';
+    } else if (customer?.id) {
+      merchantId = db.customerVoiceSettingsMerchantKey(customer.id);
+      if (merchantId) reason = 'customer_voice_settings_key';
     }
   }
   if (!merchantId && clinicId) {
@@ -241,5 +244,10 @@ module.exports = {
   resolveMerchantForVoice,
   resolveCustomerIdForBilling,
   buildAccountResolutionFailureTwiml,
-  requiresCustomerId
+  requiresCustomerId,
+  resolveVoiceMerchantId: (db, customer) => {
+    if (!customer) return null;
+    if (customer.merchant_id) return customer.merchant_id;
+    return db.customerVoiceSettingsMerchantKey(customer.id);
+  }
 };

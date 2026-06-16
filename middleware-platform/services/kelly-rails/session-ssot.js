@@ -39,7 +39,19 @@ function persistRailsSessionState(sessionId, state = {}) {
     has_rag: !!flags.has_rag,
     safety_blocked: !!flags.safety_blocked,
     payment_complete: !!flags.payment_complete,
-    routine_intake_active: !!flags.routine_intake_active
+    routine_intake_active: !!flags.routine_intake_active,
+    conversation_mode: state.conversation_mode || flags.conversation_mode || null,
+    active_subrail: state.active_subrail || flags.active_subrail || null,
+    active_subrail_step: state.active_subrail_step || flags.active_subrail_step || null,
+    pivot_reason: flags.pivot_reason || null,
+    pivot_event: flags.pivot_event || null,
+    billing_step: flags.billing_step || null,
+    opqrst_accumulator: flags.opqrst_accumulator || null,
+    current_booking_slot: flags.current_booking_slot || null,
+    cancellation_context: flags.cancellation_context || null,
+    pending_intent_queue: flags.pending_intent_queue || [],
+    completed_intents: flags.completed_intents || [],
+    opqrst_exit_state: flags.opqrst_exit_state || null
   };
   try {
     db.db

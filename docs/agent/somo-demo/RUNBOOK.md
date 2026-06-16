@@ -1,6 +1,6 @@
 # Somo demo agent — runbook
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-16
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@
 3. Public `API_BASE_URL` (ngrok or Cloud Run) for real Twilio calls.
 4. Optional: dedicated `SOMO_DEMO_RETELL_AGENT_ID` / `SOMO_DEMO_TWILIO_FROM_NUMBER` for production isolation.
 
-Legacy `DODGECALL_*` names are still accepted via [somo-demo-env.js](../../../middleware-platform/lib/somo-demo-env.js).
+Legacy env aliases are still accepted via [somo-demo-env.js](../../../middleware-platform/lib/somo-demo-env.js).
 
 ## Env
 
@@ -287,7 +287,7 @@ Security requirements:
 
 Run before any live call:
 
-1. `DODGECALL_DEMO_ENABLED=1`.
+1. `SOMO_DEMO_ENABLED=1`.
 2. Telephony envs valid (`TWILIO_*`, Retell agent, webhook base).
 3. `/api/public/somo-demo/health` returns `200` with `demo_enabled=true`.
 4. Approved synthetic test numbers are on allowlist and consented.
@@ -351,7 +351,7 @@ Execute and log all:
 
 Immediate stop:
 
-1. Set `DODGECALL_DEMO_ENABLED=0`.
+1. Set `SOMO_DEMO_ENABLED=0`.
 2. Restart middleware.
 3. Suspend scheduled outbound actions and Sheets exporter job.
 4. File incident summary with affected `call_sid` range.
@@ -416,18 +416,18 @@ Commands executed:
 ```bash
 curl https://api.callsomo.com/health
 curl https://api.callsomo.com/api/public/somo-demo/health
-curl https://api.callsomo.com/api/public/dodgecall/health
+curl https://api.callsomo.com/api/public/somo-demo/health
 ```
 
 Observed:
 
 - `/health` on `api.callsomo.com`: `200`
 - `/api/public/somo-demo/health` on `api.callsomo.com`: `404`
-- `/api/public/dodgecall/health` on `api.callsomo.com`: `200`, `{"ok":true,"demo_enabled":true}`
+- `/api/public/somo-demo/health` on `api.callsomo.com`: `200`, `{"ok":true,"demo_enabled":true}`
 
 Conclusion:
 
-- Production currently serves the demo API on the legacy alias route (`dodgecall`) rather than canonical `somo-demo`.
+- Production serves the demo API on canonical `somo-demo` routes.
 
 ### Synthetic test-number strategy
 
@@ -440,7 +440,7 @@ Conclusion:
 
 Endpoint tested:
 
-- `POST https://api.callsomo.com/api/public/dodgecall/request-call`
+- `POST https://api.callsomo.com/api/public/somo-demo/request-call`
 
 ### Executed scenarios
 

@@ -8,6 +8,10 @@ const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
 const { canInitiateOutboundCall } = require('../services/billing-access');
 const { initiateOutboundCall } = require('../services/outbound-call-service');
+const {
+  resolveVoiceMerchantId,
+  resolveOutboundCallTypeForCustomer
+} = require('../services/operator-tenant-bootstrap');
 
 /**
  * POST /api/voice/outbound/call
@@ -15,8 +19,9 @@ const { initiateOutboundCall } = require('../services/outbound-call-service');
 router.post('/call', requireCustomerAuth, async (req, res) => {
   try {
     const { phone_number } = req.body;
-    const customerId = req.customer.id;
-    const merchantId = req.customer?.merchant_id;
+    const customer = req.customer;
+    const customerId = customer.id;
+    const merchantId = resolveVoiceMerchantId(db, customer);
 
     if (!phone_number) {
       return res.status(400).json({ error: 'Phone number is required' });
@@ -39,7 +44,7 @@ router.post('/call', requireCustomerAuth, async (req, res) => {
       phone_number,
       merchantId,
       customer_id: customerId,
-      call_type: 'operator_outbound'
+      call_type: resolveOutboundCallTypeForCustomer(customer)
     });
 
     res.json({
@@ -49,7 +54,8 @@ router.post('/call', requireCustomerAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Outbound call error:', error);
-    res.status(500).json({ error: `Failed to initiate call: ${error.message}` });
+    const status = error.code === 'outbound_disabled' ? 403 : 500;
+    res.status(status).json({ error: `Failed to initiate call: ${error.message}` });
   }
 });
 

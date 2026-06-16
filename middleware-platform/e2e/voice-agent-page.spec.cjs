@@ -14,12 +14,85 @@ test.describe('Voice agent page', () => {
     }
   });
 
-  test('agent.html loads control center markup', async ({ page }) => {
-    await page.goto('/unified-dashboard/business/agent.html');
-    await expect(page.locator('#vaPhone')).toBeVisible();
-    await expect(page.locator('#vaToggle')).toBeVisible();
-    await expect(page.locator('#vaKpiCalls')).toBeVisible();
-    await expect(page.locator('#vaGreeting')).toBeVisible();
+  test('agent.html loads control center markup', async ({ playwright, request }) => {
+    const { customer } = await ensureAuthenticatedCustomer(request);
+    db.updateCustomer(customer.id, {
+      voice_setup_completed_at: new Date().toISOString(),
+      kelly_status: 'active'
+    });
+    const fresh = db.getCustomer(customer.id);
+    const { browser, page } = await browserContextWithCustomer(playwright, request, fresh);
+
+    await page.route('**/api/voice-agent/onboarding**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          onboarding_state: 'voice_setup_complete',
+          destination: { path: '/business/agent.html' }
+        })
+      });
+    });
+    await page.route('**/api/kelly/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          status: 'active',
+          phone_number: '+15551234567'
+        })
+      });
+    });
+    await page.route('**/api/voice-billing/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          billing: { twilio_phone_number: '+15551234567' }
+        })
+      });
+    });
+    await page.route('**/api/voice-agent/settings**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          settings: { enabled: true, greeting: 'Hi from E2E' }
+        })
+      });
+    });
+    await page.route('**/api/customer/dashboard/agent/stats**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          stats: { calls_today: 0, avg_duration_seconds_today: 0, appts_booked_today: 0 },
+          recent_calls: []
+        })
+      });
+    });
+    await page.route('**/api/customer/agent/prompt**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, prompt: 'test' })
+      });
+    });
+
+    try {
+      await page.goto('/unified-dashboard/business/agent.html');
+      await expect(page.locator('#vaPhone')).toBeVisible();
+      await expect(page.locator('#vaToggle')).toBeVisible();
+      await expect(page.locator('#vaKpiCalls')).toBeVisible();
+      await expect(page.locator('#vaGreeting')).toBeVisible();
+    } finally {
+      await browser.close();
+    }
   });
 
   test('voice-setup.html shows step 1 when authenticated', async ({ playwright, request }) => {
@@ -54,17 +127,62 @@ test.describe('Voice agent page', () => {
     const { customer } = await ensureAuthenticatedCustomer(request);
     const { browser, page } = await browserContextWithCustomer(playwright, request, customer);
     try {
+      await page.route('**/api/voice-agent/onboarding**', async (route) => {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            onboarding_state: 'voice_setup_incomplete',
+            destination: { path: '/business/voice-setup.html?step=1', wizard_step: 1 }
+          })
+        });
+      });
       await page.goto('/unified-dashboard/business/agent.html');
       await page.waitForURL(/voice-setup\.html/, { timeout: 15000 });
-      await expect(page.locator('#setupTitle')).toContainText('greeting', { ignoreCase: true });
+      await expect(page.locator('#setupTitle')).toContainText('practice', { ignoreCase: true });
     } finally {
       await browser.close();
     }
   });
 
-  test('voice-setup 3-step wizard completes to agent.html', async ({ playwright, request }) => {
+  test('voice-setup 5-step wizard completes to agent.html', async ({ playwright, request }) => {
     const { customer } = await ensureAuthenticatedCustomer(request);
     const { browser, page } = await browserContextWithCustomer(playwright, request, customer);
+
+    await page.route('**/api/voice-agent/onboarding**', async (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            onboarding_state: 'voice_setup_incomplete',
+            destination: { path: '/business/voice-setup.html?step=1' }
+          })
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, onboarding_state: 'voice_setup_incomplete' })
+      });
+    });
+
+    await page.route('**/api/voice-agent/preview**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          preview: {
+            inbound: { text: 'Hi from preview' },
+            outbound: { text: null, enabled: false }
+          },
+          sync_status: 'synced'
+        })
+      });
+    });
 
     await page.route('**/api/voice-agent/settings**', async (route) => {
       if (route.request().method() === 'GET') {
@@ -111,12 +229,16 @@ test.describe('Voice agent page', () => {
 
     try {
       await page.goto('/unified-dashboard/business/voice-setup.html');
+      await expect(page.locator('#setupTitle')).toContainText('practice', { ignoreCase: true });
+      await page.locator('#setupNext1').click();
       await expect(page.locator('#setupTitle')).toContainText('greeting', { ignoreCase: true });
       await page.locator('#setupGreeting').fill('Hi, this is our E2E greeting.');
-      await page.locator('#setupNext1').click();
-      await expect(page.locator('#setupTitle')).toContainText('hours', { ignoreCase: true });
       await page.locator('#setupNext2').click();
-      await expect(page.locator('#setupTitle')).toContainText('line', { ignoreCase: true });
+      await expect(page.locator('#setupTitle')).toContainText('hours', { ignoreCase: true });
+      await page.locator('#setupNext3').click();
+      await expect(page.locator('#setupTitle')).toContainText('outbound', { ignoreCase: true });
+      await page.locator('#setupNext4').click();
+      await expect(page.locator('#setupTitle')).toContainText('test', { ignoreCase: true });
       await page.locator('#setupFinish').click();
       await page.waitForURL(/agent\.html/, { timeout: 15000 });
       await expect(page.locator('#vaGreeting')).toBeVisible();
@@ -213,7 +335,61 @@ test.describe('Voice agent page', () => {
     }
   });
 
-  test('recent calls render caller_label and PA badge from stats API', async ({ page }) => {
+  test('recent calls render caller_label and PA badge from stats API', async ({
+    playwright,
+    request
+  }) => {
+    const { customer } = await ensureAuthenticatedCustomer(request);
+    db.updateCustomer(customer.id, {
+      voice_setup_completed_at: new Date().toISOString(),
+      kelly_status: 'active'
+    });
+    const fresh = db.getCustomer(customer.id);
+    const { browser, page } = await browserContextWithCustomer(playwright, request, fresh);
+
+    await page.route('**/api/voice-agent/onboarding**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          onboarding_state: 'voice_setup_complete',
+          destination: { path: '/business/agent.html' }
+        })
+      });
+    });
+    await page.route('**/api/kelly/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          status: 'active',
+          phone_number: '+15551234567'
+        })
+      });
+    });
+    await page.route('**/api/voice-billing/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, billing: {} })
+      });
+    });
+    await page.route('**/api/voice-agent/settings**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, settings: { enabled: true } })
+      });
+    });
+    await page.route('**/api/customer/agent/prompt**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, prompt: 'test' })
+      });
+    });
     await page.route('**/api/customer/dashboard/agent/stats**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -243,8 +419,99 @@ test.describe('Voice agent page', () => {
       });
     });
 
-    await page.goto('/unified-dashboard/business/agent.html');
-    await expect(page.locator('#vaCallList')).toContainText('Maria Lopez');
-    await expect(page.locator('.va-outcome-pa_flagged')).toContainText('PA flagged');
+    try {
+      await page.goto('/unified-dashboard/business/agent.html');
+      await expect(page.locator('#vaCallList')).toContainText('Maria Lopez');
+      await expect(page.locator('.va-outcome-pa_flagged')).toContainText('PA flagged');
+    } finally {
+      await browser.close();
+    }
+  });
+
+  test('agent.html test outbound button calls API', async ({ playwright, request }) => {
+    const { customer } = await ensureAuthenticatedCustomer(request);
+    db.updateCustomer(customer.id, {
+      voice_setup_completed_at: new Date().toISOString(),
+      kelly_status: 'active'
+    });
+    const fresh = db.getCustomer(customer.id);
+    const { browser, page } = await browserContextWithCustomer(playwright, request, fresh);
+
+    let outboundCalled = false;
+    await page.route('**/api/voice-agent/onboarding**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          onboarding_state: 'voice_setup_complete',
+          destination: { path: '/business/agent.html' }
+        })
+      });
+    });
+    await page.route('**/api/kelly/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, status: 'active', phone_number: '+15551234567' })
+      });
+    });
+    await page.route('**/api/voice-billing/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, billing: { twilio_phone_number: '+15551234567' } })
+      });
+    });
+    await page.route('**/api/voice-agent/settings**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          settings: {
+            enabled: true,
+            greeting: 'Hi from E2E',
+            outbound_opener: 'Hi, this is Kelly from Somo.'
+          }
+        })
+      });
+    });
+    await page.route('**/api/customer/dashboard/agent/stats**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          stats: { calls_today: 0, avg_duration_seconds_today: 0, appts_booked_today: 0 },
+          recent_calls: []
+        })
+      });
+    });
+    await page.route('**/api/customer/agent/prompt**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, prompt: 'test' })
+      });
+    });
+    await page.route('**/api/voice/outbound/call**', async (route) => {
+      outboundCalled = true;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, call_id: 'CA_e2e_test', message: 'Call initiated' })
+      });
+    });
+
+    try {
+      await page.goto('/unified-dashboard/business/agent.html');
+      await expect(page.locator('#vaTestOutbound')).toBeVisible();
+      await page.fill('#vaTestOutboundPhone', '+15559876543');
+      await page.click('#vaTestOutbound');
+      await expect.poll(() => outboundCalled).toBe(true);
+    } finally {
+      await browser.close();
+    }
   });
 });

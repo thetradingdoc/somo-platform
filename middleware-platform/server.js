@@ -5,7 +5,8 @@ try {
   const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
   const isProduction = nodeEnv === 'production' || nodeEnv === 'prod';
   // In local/dev test runs, prefer .env values over inherited shell exports.
-  require('dotenv').config({ override: !isProduction });
+  const dotenvPath = process.env.AUDIT_MIDDLEWARE === '1' ? '.env.audit' : undefined;
+  require('dotenv').config({ path: dotenvPath, override: !isProduction });
 } catch (e) {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
 }
@@ -4865,6 +4866,9 @@ app.use('/api/admin/payment-ops', paymentOpsRoutes);
 
 const adminKellyCallsRoutes = require('./routes/admin-kelly-calls');
 app.use('/api/admin/kelly', adminKellyCallsRoutes);
+
+const adminVoiceOnboardingRoutes = require('./routes/admin-voice-onboarding');
+app.use('/api/admin/voice-onboarding', adminVoiceOnboardingRoutes);
 
 // Visit pricing admin (Task 16)
 

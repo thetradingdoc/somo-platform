@@ -1,7 +1,7 @@
 # Somo Platform Documentation
-> Last reviewed: 2026-06-14
+> Last reviewed: 2026-06-16
 
-**Last Updated:** 2026-06-14
+**Last Updated:** 2026-06-16
 
 ### Front-desk production (callsomo.com)
 
@@ -139,7 +139,7 @@
 #### Deployment
 - **[Deployment Guide](./deployment/README.md)** - Main GCP deployment guide
 - **[DNS Configuration](./deployment/README.md#dns-ionos-ionos-dns-setup)** - DNS setup
-- **[SSL Setup](./deployment/README.md#dns-ssl-doclittle-site-ssl-setup)** - SSL certificates
+- **[SSL Setup](./deployment/OPERATIONS.md#gcp-somo-service-cutover)** - SSL and domain mapping on current production stack
 - **[Security](./deployment/README.md#security-production-deployment-api-keys)** - Security setup
 - **[Database Migration](./deployment/README.md#database-postgres-migration)** - Postgres migration
 

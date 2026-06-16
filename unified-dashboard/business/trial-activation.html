@@ -118,6 +118,13 @@
           return;
         }
 
+        try {
+          await fetch(API_BASE + '/api/voice-agent/onboarding/activation-shown', {
+            method: 'POST',
+            credentials: 'include'
+          });
+        } catch (_) {}
+
         const line = customer.twilio_phone_number;
         const numEl = document.getElementById('activationNumber');
         const callEl = document.getElementById('activationCall');

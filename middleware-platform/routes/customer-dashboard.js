@@ -366,11 +366,42 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
                 if (call.status === 'completed') outcome = 'info';
                 else outcome = 'info';
             }
+            let openerUsed = call.opener_used || null;
+            let direction = call.direction || null;
+            if (!openerUsed && call.call_id && db.db) {
+                try {
+                    const ev = db.db.prepare(`
+                      SELECT payload_json FROM kelly_call_events
+                      WHERE call_id = ? AND event_type = 'call_opener_used'
+                      ORDER BY created_at DESC LIMIT 1
+                    `).get(call.call_id);
+                    if (ev?.payload_json) {
+                        const payload = JSON.parse(ev.payload_json);
+                        openerUsed = payload.opener_text || openerUsed;
+                        direction = direction || payload.direction || null;
+                    }
+                } catch (_) {}
+            }
+            let openerMatch = null;
+            if (openerUsed && customer.merchant_id) {
+                try {
+                    const settings = db.getVoiceAgentSettingsForProvider({
+                        merchantId: customer.merchant_id,
+                        customerId: customer.id
+                    });
+                    const expected =
+                        direction === 'outbound' ? settings?.outbound_opener : settings?.greeting;
+                    if (expected) openerMatch = String(expected).trim() === String(openerUsed).trim();
+                } catch (_) {}
+            }
             return {
                 id: call.id,
                 call_id: call.call_id,
                 status: call.status,
                 outcome,
+                direction,
+                opener_used: openerUsed,
+                opener_match: openerMatch,
                 duration: call.call_duration_seconds,
                 duration_seconds: call.call_duration_seconds,
                 cost: call.total_cost_usd || 0,

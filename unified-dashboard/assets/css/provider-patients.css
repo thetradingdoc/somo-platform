@@ -360,3 +360,16 @@ a.pp-patient-chip--action,
     grid-template-columns: 1fr;
   }
 }
+
+.pp-patients-open-case-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand) 25%, var(--border));
+  font-size: 14px;
+}

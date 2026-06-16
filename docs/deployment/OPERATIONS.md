@@ -1,6 +1,6 @@
 # OPERATIONS
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-16
 
 
 ---
@@ -57,7 +57,7 @@ npm run test:prod:smoke --prefix middleware-platform
 
 ## Somo demo secrets
 
-Prefer `SOMO_DEMO_*` in Secret Manager / `.env`. Legacy `DODGECALL_*` values are read via [somo-demo-env.js](../../middleware-platform/lib/somo-demo-env.js).
+Prefer `SOMO_DEMO_*` in Secret Manager / `.env`.
 
 ## Kelly rails (production profile)
 
@@ -262,7 +262,7 @@ If `:4000` is still slow with the light profile, `middleware-dev.db` may be very
 ## Env (middleware)
 
 ```bash
-DODGECALL_DEMO_ENABLED=1
+SOMO_DEMO_ENABLED=1
 API_BASE_URL=http://localhost:4000
 TWILIO_OUTBOUND_WEBHOOK_URL=https://YOUR-SUBDOMAIN.ngrok-free.app  # for real demo calls locally
 ```
@@ -1162,7 +1162,7 @@ Progress bar shows **Step N of M** (M excludes phone step when `TRIAL_SIM_FLOW_E
 ## SaaS happy path (SIM enabled)
 
 ```text
-/signup?utm_source=somo|dodgecall
+/signup?utm_source=somo
   → POST /api/signup
   → POST /api/signup/verify-email
   → POST /api/signup/assign-line → startTrialTenant()
@@ -1273,10 +1273,10 @@ E2E:
 
 | World | Who | Number / agent | Data |
 |-------|-----|----------------|------|
-| **Demo** | Landing visitors | Shared Somo Twilio + Retell | `dodgecall_demo_requests` |
+| **Demo** | Landing visitors | Shared Somo Twilio + Retell | `somo_demo_requests` |
 | **Provider** | Paying / trial customers | Dedicated per `customers` row | `customers`, portal call logs |
 
-Nothing from demo carries over automatically. Signup bridge tracks `utm_source=dodgecall` for onboarding copy only.
+Nothing from demo carries over automatically.
 
 ## Feature flags
 

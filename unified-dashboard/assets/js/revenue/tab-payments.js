@@ -5,12 +5,84 @@
   const UI = () => window.RevenueUI;
   const clinicId = () => (window.ppGetClinicId ? window.ppGetClinicId() : 'clinic-default');
   let allPayments = [];
+  let collectionQueue = [];
   let statusFilter = '';
+  let selectedBalance = null;
 
   function statusPill(status) {
     const st = String(status || 'requested').toLowerCase();
     const cls = st === 'paid' ? 'paid' : 'open';
     return `<span class="pp-status-pill pp-status-pill--${cls}">${UI().escapeHtml(st)}</span>`;
+  }
+
+  function updateSendButtonState(root) {
+    const btn = root.querySelector('#revPaySendBtn');
+    const hint = root.querySelector('#revPaySendHint');
+    if (!btn) return;
+    const patientId = root.querySelector('#revPayPatientId')?.value?.trim();
+    const amount = Number(root.querySelector('#revPayAmount')?.value);
+    const ready = !!(patientId && amount > 0);
+    btn.disabled = !ready;
+    if (hint) {
+      hint.textContent = ready
+        ? 'Ready to send via Kelly.'
+        : 'Select an open balance row below or enter Patient ID and amount.';
+    }
+  }
+
+  function selectBalanceRow(root, item, rowEl) {
+    selectedBalance = item;
+    root.querySelectorAll('[data-balance-row]').forEach((el) => {
+      el.classList.toggle('pp-table-row--selected', el === rowEl);
+    });
+    const pidInput = root.querySelector('#revPayPatientId');
+    const amtInput = root.querySelector('#revPayAmount');
+    if (pidInput) pidInput.value = item.patient_id || '';
+    if (amtInput) amtInput.value = Number(item.amount_due || 0).toFixed(2);
+    updateSendButtonState(root);
+  }
+
+  function renderBalanceQueue(root) {
+    const ui = UI();
+    const listEl = root.querySelector('#revPayBalanceList');
+    if (!listEl) return;
+    if (!collectionQueue.length) {
+      listEl.innerHTML = ui.renderEmptyState(
+        'credit-card',
+        'No open balances in collection. Enter Patient ID and amount above to request payment.'
+      );
+      return;
+    }
+    const head = `<div class="pp-table-header pp-table-cols-pipeline"><span>Patient</span><span>Stage</span><span>Balance</span><span></span></div>`;
+    const body = collectionQueue.slice(0, 30).map((j, idx) => {
+      const name = j.patient_name || j.patient_id || 'Patient';
+      const amount = `$${Number(j.amount_due || 0).toFixed(2)}`;
+      const stage = j.stage_label || j.stage || 'Collection';
+      const selected =
+        selectedBalance &&
+        selectedBalance.patient_id === j.patient_id &&
+        Number(selectedBalance.amount_due || 0) === Number(j.amount_due || 0);
+      return `<div class="pp-table-row pp-table-cols-pipeline${selected ? ' pp-table-row--selected' : ''}" data-balance-row data-balance-idx="${idx}" role="button" tabindex="0">
+        <span style="font-weight:600">${ui.escapeHtml(name)}</span>
+        ${ui.renderStatusPill(stage)}
+        <span class="pp-table-amount">${amount}</span>
+        <span class="pp-muted" style="font-size:12px">Click to select</span>
+      </div>`;
+    }).join('');
+    listEl.innerHTML = `<div class="pp-table-wrap">${head}${body}</div>`;
+    listEl.querySelectorAll('[data-balance-row]').forEach((rowEl) => {
+      const idx = Number(rowEl.getAttribute('data-balance-idx'));
+      const item = collectionQueue[idx];
+      if (!item) return;
+      const activate = () => selectBalanceRow(root, item, rowEl);
+      rowEl.addEventListener('click', activate);
+      rowEl.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          activate();
+        }
+      });
+    });
   }
 
   function renderPaymentsTable(root) {
@@ -82,13 +154,19 @@
       summaryUrl.searchParams.set('clinic_id', clinicId());
       const listUrl = new URL(`${window.API_BASE || ''}/api/rcm/payments`);
       listUrl.searchParams.set('clinic_id', clinicId());
-      const [sumRes, listRes] = await Promise.all([
+      const cqUrl = new URL(`${window.API_BASE || ''}/api/rcm/collection-queue`);
+      cqUrl.searchParams.set('clinic_id', clinicId());
+      const [sumRes, listRes, cqRes] = await Promise.all([
         fetch(summaryUrl.toString(), { credentials: 'include', headers }),
         fetch(listUrl.toString(), { credentials: 'include', headers }),
+        fetch(cqUrl.toString(), { credentials: 'include', headers }),
       ]);
       const sumData = await sumRes.json();
       const listData = await listRes.json();
+      const cqData = await cqRes.json().catch(() => ({}));
       allPayments = listData.payments || [];
+      collectionQueue = cqData.collection_queue || [];
+      selectedBalance = null;
       const ui = UI();
       const s = sumData.summary || sumData || {};
       const recent = Number(s.total || s.recent || allPayments.length);
@@ -110,11 +188,14 @@
           <span class="pp-revenue-composer-label">Request payment from patient</span>
           <input class="pp-input" id="revPayPatientId" placeholder="Patient ID" style="width:140px;height:36px" />
           <input class="pp-input" id="revPayAmount" placeholder="$0.00" type="number" min="0.01" step="0.01" style="width:90px;height:36px;font-family:var(--mono)" />
-          <button type="button" class="pp-btn pp-btn-primary" id="revPaySendBtn">
+          <button type="button" class="pp-btn pp-btn-primary" id="revPaySendBtn" disabled>
             <span class="pp-inline-icon" aria-hidden="true">${ui.iconHtml('paper-airplane')}</span>
             Send via Kelly
           </button>
         </div>
+        <p id="revPaySendHint" class="pp-muted" style="font-size:13px;margin:-4px 0 16px">Select an open balance row below or enter Patient ID and amount.</p>
+        ${ui.renderSectionLabel('Open balances')}
+        <div id="revPayBalanceList"></div>
         ${ui.renderSectionLabel('Recent requests')}
         <div class="pp-panel-tabs" id="revPayFilters" style="margin-bottom:12px;border-bottom:1px solid var(--border)">
           <button type="button" class="pp-ptab act" data-status="">All</button>
@@ -122,6 +203,9 @@
           <button type="button" class="pp-ptab" data-status="paid">Paid</button>
         </div>
         <div id="revPayList"></div>`;
+
+      root.querySelector('#revPayPatientId')?.addEventListener('input', () => updateSendButtonState(root));
+      root.querySelector('#revPayAmount')?.addEventListener('input', () => updateSendButtonState(root));
 
       root.querySelector('#revPaySendBtn')?.addEventListener('click', async () => {
         const patientId = root.querySelector('#revPayPatientId')?.value?.trim();
@@ -133,13 +217,15 @@
         const btn = root.querySelector('#revPaySendBtn');
         btn.disabled = true;
         try {
+          const body = { patient_id: patientId, amount };
+          if (selectedBalance?.id) body.journey_id = selectedBalance.id;
           const res = await fetch(
             `${window.API_BASE || ''}/api/rcm/payments/request?clinic_id=${encodeURIComponent(clinicId())}`,
             {
               method: 'POST',
               credentials: 'include',
               headers: window.ppGetAuthHeaders?.() || { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ patient_id: patientId, amount }),
+              body: JSON.stringify(body),
             }
           );
           const data = await res.json();
@@ -149,7 +235,7 @@
         } catch (e) {
           window.ppToast?.(e.message || 'Request failed', 'error');
         } finally {
-          btn.disabled = false;
+          updateSendButtonState(root);
         }
       });
 
@@ -163,7 +249,9 @@
         renderPaymentsTable(root);
       });
 
+      renderBalanceQueue(root);
       renderPaymentsTable(root);
+      updateSendButtonState(root);
     } catch (e) {
       root.innerHTML = `<div class="pp-empty">Error: ${UI().escapeHtml(e.message)}</div>`;
     }

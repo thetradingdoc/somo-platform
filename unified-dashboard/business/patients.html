@@ -95,6 +95,10 @@
                 <input type="search" id="searchInput" class="pp-input" placeholder="Search by name, phone, or email…" autocomplete="off" />
               </div>
             </div>
+            <div id="patientsOpenCaseBanner" class="pp-patients-open-case-banner" hidden>
+              <span>Patient highlighted from your link.</span>
+              <a class="pp-btn pp-btn-primary pp-btn-sm" href="patient-case.html">Open case</a>
+            </div>
             <div class="pp-patients-grid" id="patientsRosterGrid" data-roster-mount>
               <div class="pp-patients-empty" id="patientsRosterLoading">
                 <div class="pp-patients-empty-title">Loading patients</div>
@@ -170,6 +174,14 @@
                 return p.get('patient_id') || p.get('patientId') || '';
             } catch (_) { return ''; }
         })();
+        const openCaseRequested = (() => {
+            try {
+                return new URLSearchParams(window.location.search).get('open_case') === '1';
+            } catch (_) { return false; }
+        })();
+        if (openCaseRequested && requestedPatientId) {
+            window.location.replace(`patient-case.html?patient_id=${encodeURIComponent(requestedPatientId)}`);
+        }
 
         function escapeHtml(s) {
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -778,6 +790,13 @@
             card.classList.add('pp-patient-card--focus');
             card.scrollIntoView({ behavior: 'smooth', block: 'center' });
             setTimeout(() => card.classList.remove('pp-patient-card--focus'), 3000);
+            const caseHref = card.getAttribute('data-case-href');
+            const banner = document.getElementById('patientsOpenCaseBanner');
+            if (banner && caseHref) {
+                banner.hidden = false;
+                const link = banner.querySelector('a');
+                if (link) link.href = caseHref;
+            }
         }
 
         function patientCoverageChip(eligibility) {

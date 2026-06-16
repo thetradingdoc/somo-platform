@@ -16,6 +16,7 @@
   <script src="/assets/js/provider-layout.js"></script>
   <script src="/assets/js/voice-hours-picker.js"></script>
   <script src="/assets/js/voice-agent-page.js"></script>
+  <script src="/assets/js/voice-preview.js"></script>
 </head>
 <body class="provider-portal provider-portal--scroll" data-page="agent">
   <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">☰</button>
@@ -46,7 +47,7 @@
         <div class="pp-topbar-left">
           <p class="pp-page-eyebrow">Voice</p>
           <h1 class="pp-page-title">AI front desk</h1>
-          <p class="pp-page-sub">Greeting, hours, and Kelly behavior for live calls.</p>
+          <p class="pp-page-sub">Kelly front desk — inbound receptionist and outbound assistant.</p>
         </div>
         <div class="pp-topbar-right">
           <div class="pp-date-chip" id="ppDateChip"></div>
@@ -54,7 +55,7 @@
       </header>
 
       <main class="pp-content pp-content--agent" id="ppMainContent">
-        <div class="va-toast error hidden" id="vaToast" role="alert"></div>
+        <div class="va-toast error hidden" id="vaToast" role="status" aria-live="polite" aria-atomic="true"></div>
         <!-- Zone 1: Line card -->
         <section class="va-zone" id="zoneLine">
           <div class="va-line-card">
@@ -73,28 +74,63 @@
                     </div>
         </section>
 
-        <!-- Zone 2: Quick settings -->
+        <section class="va-zone" id="zonePolicy">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between">
+            <div>
+              <h3 style="margin:0;font-size:1rem">Call behavior</h3>
+              <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-600,#64748b)">Inbound answers your line; outbound calls out when enabled.</p>
+            </div>
+            <span class="va-sync-chip" id="vaSyncChip" role="status">Synced</span>
+          </div>
+          <div id="vaLivePreview" style="margin-top:12px"></div>
+          <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaPreviewBtn" style="margin-top:8px" aria-label="Preview current call behavior">Preview current call behavior</button>
+        </section>
+
+        <div class="va-dual-grid">
+        <section class="va-zone" id="zoneInbound">
+          <h3 style="margin:0 0 12px;font-size:1rem">Inbound front desk</h3>
+          <div class="va-field-label">Greeting</div>
+          <textarea class="va-textarea" id="vaGreeting" rows="3" placeholder="Opening message callers hear…" aria-label="Inbound greeting"></textarea>
+          <div class="va-save-hint" id="vaGreetingHint">Applies on your next inbound call</div>
+          <div class="va-save-hint" id="vaGreetingSync" style="margin-top:4px"></div>
+          <div class="va-field-label" style="margin-top:12px">Business hours</div>
+          <div id="vaHoursPicker"></div>
+          <div class="va-field-label" style="margin-top:12px">After-hours message</div>
+          <textarea class="va-textarea" id="vaAfterHours" rows="2" placeholder="Message when closed…"></textarea>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveGreeting">Save inbound</button>
+            <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaSaveHours">Save hours</button>
+            <a class="pp-btn pp-btn-ghost pp-btn-sm" id="vaTestInbound" href="#" aria-label="Test inbound call">Test inbound</a>
+          </div>
+        </section>
+
+        <section class="va-zone" id="zoneOutbound">
+          <h3 style="margin:0 0 12px;font-size:1rem">Outbound assistant</h3>
+          <label class="va-field-label" style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="vaOutboundEnabled" aria-label="Enable outbound calls" /> Outbound enabled
+          </label>
+          <div class="va-field-label" style="margin-top:12px">Outbound opener</div>
+          <textarea class="va-textarea" id="vaOutboundOpener" rows="3" placeholder="First line on outbound calls…" aria-label="Outbound opener"></textarea>
+          <p id="vaOutboundHelp" style="font-size:0.85rem;color:var(--gray-600,#64748b);margin:8px 0 0">
+            The opener is the <strong>first spoken line</strong> when Kelly calls out. Advanced behavior (below) controls what Kelly says <em>after</em> the caller picks up.
+            For clinic accounts, outbound is off by default — enable only when your team is ready.
+          </p>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input type="tel" id="vaTestOutboundPhone" class="va-textarea" style="flex:1;min-width:140px;max-width:220px;padding:8px 10px;rows:1;height:auto" placeholder="+1… test number" aria-label="Outbound test phone number" />
+            <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaTestOutbound">Test outbound</button>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveOutbound">Save outbound</button>
+          </div>
+        </section>
+        </div>
+
         <section class="va-zone" id="zoneSettings">
-          <h3 style="margin:0 0 16px;font-size:1rem">Quick settings</h3>
-          <div class="va-quick-grid">
-            <div id="greeting">
-              <div class="va-field-label">Greeting</div>
-              <textarea class="va-textarea" id="vaGreeting" rows="3" placeholder="Opening message callers hear…"></textarea>
-              <div class="va-save-hint" id="vaGreetingHint">Applies on your next call</div>
-              <div class="va-save-hint" id="vaGreetingSync" style="margin-top:4px"></div>
-              <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveGreeting" style="margin-top:8px">Save greeting</button>
-                    </div>
-            <div id="hours">
-              <div class="va-field-label">Business hours</div>
-              <div id="vaHoursPicker"></div>
-              <div class="va-field-label" style="margin-top:12px">After-hours message</div>
-              <textarea class="va-textarea" id="vaAfterHours" rows="2" placeholder="Message when closed…"></textarea>
-              <div class="va-save-hint" id="vaHoursHint">Applies on your next call</div>
-              <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveHours" style="margin-top:8px">Save hours</button>
-                </div>
-                    </div>
-          <details class="va-prompt-details" id="prompt" style="margin-top:20px">
-            <summary>Customize Kelly (advanced)</summary>
+          <details class="va-prompt-details" id="prompt">
+            <summary>Advanced behavior (optional)</summary>
+            <p style="font-size:0.85rem;color:var(--gray-600,#64748b);margin:8px 0 0">
+              Applies <strong>after</strong> the inbound greeting or outbound opener — not the first line callers hear.
+            </p>
             <textarea class="va-textarea" id="vaPrompt" rows="8" style="margin-top:8px"></textarea>
             <div class="va-save-hint" id="vaPromptHint"></div>
             <button type="button" class="pp-btn pp-btn-secondary pp-btn-sm" id="vaSavePrompt" style="margin-top:8px">Save prompt</button>
@@ -218,7 +254,12 @@
             '/login?redirect=' + encodeURIComponent('/unified-dashboard/business/agent.html');
                     return;
                 }
-        if (VoiceAgentPage.shouldRedirectToSetup(customer)) {
+        const onboardingRedirect = await VoiceAgentPage.resolveOnboardingRedirect();
+        if (onboardingRedirect && !onboardingRedirect.includes('agent.html')) {
+          window.location.href = onboardingRedirect.replace(/^\/business\//, '');
+          return;
+        }
+        if (!onboardingRedirect && VoiceAgentPage.shouldRedirectToSetup(customer)) {
           window.location.href = 'voice-setup.html';
           return;
         }
@@ -227,28 +268,83 @@
           onChange: scheduleAutosave
         });
 
-        document.getElementById('vaGreeting').addEventListener('input', scheduleAutosave);
-        document.getElementById('vaAfterHours').addEventListener('input', scheduleAutosave);
-        document.getElementById('vaPrompt').addEventListener('input', schedulePromptAutosave);
-
-        document.getElementById('vaToggle').addEventListener('click', onToggle);
-        document.getElementById('vaCopyPhone').addEventListener('click', copyPhone);
         document.getElementById('vaSaveGreeting').addEventListener('click', saveGreeting);
         document.getElementById('vaSaveHours').addEventListener('click', saveHours);
+        document.getElementById('vaSaveOutbound').addEventListener('click', saveOutbound);
+        document.getElementById('vaTestOutbound')?.addEventListener('click', testOutbound);
         document.getElementById('vaSavePrompt').addEventListener('click', savePrompt);
+        document.getElementById('vaPreviewBtn')?.addEventListener('click', refreshLivePreview);
+        document.getElementById('vaGreeting').addEventListener('input', () => { scheduleAutosave(); schedulePreview(); });
+        document.getElementById('vaAfterHours').addEventListener('input', scheduleAutosave);
+        document.getElementById('vaPrompt').addEventListener('input', schedulePromptAutosave);
+        document.getElementById('vaOutboundOpener')?.addEventListener('input', schedulePreview);
+        document.getElementById('vaOutboundEnabled')?.addEventListener('change', schedulePreview);
+        document.getElementById('vaToggle').addEventListener('click', onToggle);
+        document.getElementById('vaCopyPhone').addEventListener('click', copyPhone);
 
         await refreshAll();
+        updateOutboundHelp(customer);
         setInterval(refreshStats, 30000);
+      }
+
+      function updateOutboundHelp(customer) {
+        const help = document.getElementById('vaOutboundHelp');
+        const outboundToggle = document.getElementById('vaOutboundEnabled');
+        if (!help) return;
+        const isOperator = customer?.customer_type === 'operator';
+        if (isOperator) {
+          help.innerHTML =
+            'The opener is the <strong>first spoken line</strong> on operator outbound calls. Advanced behavior controls Kelly after pickup. System outbound for the Somo operator does not require enabling the toggle below.';
+          if (outboundToggle) {
+            const label = outboundToggle.closest('label');
+            if (label) label.style.display = 'none';
+          }
+        }
       }
 
       async function refreshAll() {
         await Promise.all([
           refreshLineCard(),
           refreshSettings(),
+          refreshLivePreview(),
           refreshStats(),
           refreshPrompt(),
           loadPaymentQueue()
         ]);
+      }
+
+      let previewTimer = null;
+      function schedulePreview() {
+        if (previewTimer) clearTimeout(previewTimer);
+        previewTimer = setTimeout(refreshLivePreview, 350);
+      }
+
+      async function refreshLivePreview() {
+        if (!window.VoicePreview) return;
+        try {
+          const data = await VoicePreview.fetchPreview({
+            greeting: document.getElementById('vaGreeting')?.value?.trim(),
+            outbound_opener: document.getElementById('vaOutboundOpener')?.value?.trim(),
+            outbound_enabled: document.getElementById('vaOutboundEnabled')?.checked
+          });
+          VoicePreview.renderPreviewCards(document.getElementById('vaLivePreview'), data);
+        } catch (_) {}
+      }
+
+      function updateSyncChip(settings) {
+        const chip = document.getElementById('vaSyncChip');
+        if (!chip) return;
+        const status = settings?.sync_status || 'synced';
+        chip.className = 'va-sync-chip' + (status === 'pending' ? ' pending' : status === 'failed' ? ' failed' : '');
+        if (status === 'failed') {
+          chip.textContent = 'Sync failed — retry save';
+        } else if (status === 'pending') {
+          chip.textContent = 'Syncing…';
+        } else {
+          chip.textContent = settings?.synced_at
+            ? 'Synced to live calls'
+            : 'Synced';
+        }
       }
 
       async function refreshLineCard() {
@@ -262,6 +358,8 @@
           const callLink = document.getElementById('vaCallLink');
           if (phone && phone !== '—') {
             callLink.href = 'tel:' + phone.replace(/\s/g, '');
+            const testInbound = document.getElementById('vaTestInbound');
+            if (testInbound) testInbound.href = callLink.href;
           }
 
           kellyEnabled = String(kelly.status || 'active').toLowerCase() !== 'paused';
@@ -292,13 +390,20 @@
         if (settings.greeting) {
           document.getElementById('vaGreeting').value = settings.greeting;
         }
+        if (settings.outbound_opener) {
+          document.getElementById('vaOutboundOpener').value = settings.outbound_opener;
+        }
+        if (document.getElementById('vaOutboundEnabled')) {
+          document.getElementById('vaOutboundEnabled').checked = !!settings.outbound_enabled;
+        }
         if (settings.after_hours_message) {
           document.getElementById('vaAfterHours').value = settings.after_hours_message;
         }
         if (hoursPickerApi && settings.business_hours) {
           hoursPickerApi.setValue(settings.business_hours);
         }
-        updatePromptSyncLabel(settings.prompt_synced_at || null);
+        updateSyncChip(settings);
+        updatePromptSyncLabel(settings.synced_at || settings.prompt_synced_at || null);
       }
 
       async function refreshPrompt() {
@@ -338,9 +443,11 @@
                 : '—';
               const label = c.caller_label || 'Caller';
               const oc = c.outcome || 'info';
+              const dir = c.direction ? ` · ${c.direction}` : '';
+              const match = c.opener_match === false ? ' · script mismatch' : '';
               return `<div class="va-call-row">
                 <span style="min-width:56px;font-size:0.85rem;color:#64748b">${time}</span>
-                <span style="flex:1;font-weight:500">${label}</span>
+                <span style="flex:1;font-weight:500">${label}${dir}${match}</span>
                 <span class="${VoiceAgentPage.outcomeBadgeClass(oc)}">${VoiceAgentPage.outcomeLabel(oc)}</span>
                 <span style="font-size:0.85rem;color:#64748b">${VoiceAgentPage.formatDuration(c.duration_seconds || c.duration)}</span>
               </div>`;
@@ -443,24 +550,23 @@
 
       async function saveGreeting(fromAutosave) {
         const hint = document.getElementById('vaGreetingHint');
-        const hoursHint = document.getElementById('vaHoursHint');
         try {
-          await VoiceAgentPage.saveVoiceSettings({
+          const result = await VoiceAgentPage.saveVoiceSettings({
             enabled: kellyEnabled,
             greeting: document.getElementById('vaGreeting').value.trim(),
             after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
             business_hours: hoursPickerApi ? hoursPickerApi.getValue() : null,
-            retell_agent_id: cachedSettings?.retell_agent_id || null
+            retell_agent_id: cachedSettings?.retell_agent_id || null,
+            settings_version: cachedSettings?.settings_version ?? null
           });
-          const saved = 'Saved · applies on your next call';
+          const saved = 'Saved · synced to live inbound calls';
           hint.textContent = saved;
           hint.classList.add('ok');
-          if (hoursHint) {
-            hoursHint.textContent = saved;
-            hoursHint.classList.add('ok');
-          }
-          const settings = await VoiceAgentPage.fetchVoiceSettings();
-          if (settings?.prompt_synced_at) updatePromptSyncLabel(settings.prompt_synced_at);
+          showVaToast(saved, 'success');
+          cachedSettings = { ...cachedSettings, settings_version: result.settings_version, sync_status: result.sync_status };
+          updateSyncChip(cachedSettings);
+          if (result.synced_at) updatePromptSyncLabel(result.synced_at);
+          await refreshLivePreview();
         } catch (e) {
           hint.textContent = e.message;
           hint.classList.remove('ok');
@@ -469,23 +575,73 @@
       }
 
       async function saveHours(fromAutosave) {
-        const hint = document.getElementById('vaHoursHint');
+        const hint = document.getElementById('vaGreetingHint');
         try {
-          await VoiceAgentPage.saveVoiceSettings({
+          const result = await VoiceAgentPage.saveVoiceSettings({
             enabled: kellyEnabled,
             greeting: document.getElementById('vaGreeting').value.trim() || null,
             after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
             business_hours: hoursPickerApi.getValue(),
-            retell_agent_id: cachedSettings?.retell_agent_id || null
+            retell_agent_id: cachedSettings?.retell_agent_id || null,
+            settings_version: cachedSettings?.settings_version ?? null
           });
-          hint.textContent = 'Saved · applies on your next call';
+          hint.textContent = 'Saved · hours apply on your next call';
           hint.classList.add('ok');
-          const settings = await VoiceAgentPage.fetchVoiceSettings();
-          if (settings?.prompt_synced_at) updatePromptSyncLabel(settings.prompt_synced_at);
+          showVaToast('Hours saved', 'success');
+          cachedSettings = { ...cachedSettings, settings_version: result.settings_version };
+          updateSyncChip(cachedSettings);
         } catch (e) {
           hint.textContent = e.message;
           hint.classList.remove('ok');
           if (!fromAutosave) showRetellSyncFailure(e);
+        }
+      }
+
+      async function testOutbound() {
+        const phoneEl = document.getElementById('vaTestOutboundPhone');
+        const phone = phoneEl?.value?.trim();
+        if (!phone) {
+          showVaToast('Enter a phone number to test outbound', 'error');
+          phoneEl?.focus();
+          return;
+        }
+        const btn = document.getElementById('vaTestOutbound');
+        if (btn) btn.disabled = true;
+        try {
+          const res = await fetch(`${API_BASE}/api/voice/outbound/call`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone_number: phone })
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(json.error || json.message || `Request failed (${res.status})`);
+          }
+          showVaToast('Outbound test call placed — answer your phone', 'success');
+        } catch (e) {
+          showVaToast(e.message || 'Could not place outbound test call', 'error');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
+
+      async function saveOutbound() {
+        const hint = document.getElementById('vaGreetingHint');
+        try {
+          const result = await VoiceAgentPage.saveVoiceSettings({
+            enabled: kellyEnabled,
+            outbound_opener: document.getElementById('vaOutboundOpener').value.trim(),
+            outbound_enabled: document.getElementById('vaOutboundEnabled').checked,
+            retell_agent_id: cachedSettings?.retell_agent_id || null,
+            settings_version: cachedSettings?.settings_version ?? null
+          });
+          showVaToast('Outbound settings saved', 'success');
+          cachedSettings = { ...cachedSettings, settings_version: result.settings_version };
+          updateSyncChip(cachedSettings);
+          await refreshLivePreview();
+        } catch (e) {
+          showRetellSyncFailure(e);
         }
       }
 

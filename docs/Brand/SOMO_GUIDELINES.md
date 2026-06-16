@@ -22,7 +22,7 @@
 
 | Tagline | **Somo — never answer business calls again.** |
 
-| Assistant copy (user-facing) | **Somo** (not Kelly, Somo, or Somo in UI) |
+| Assistant copy (user-facing) | **Somo** product chrome; spoken voice persona is **Kelly** (e.g. "Hi, I'm Kelly, Somo's front desk receptionist") |
 
 | Legal / invoices | **Somo** in product UI; registered entity name may differ on contracts — confirm before filing |
 

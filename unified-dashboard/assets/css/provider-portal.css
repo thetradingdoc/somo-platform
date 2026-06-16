@@ -2532,6 +2532,16 @@ body.billing--sidebar-nav #billingSectionTabs {
   background: var(--bg2);
 }
 
+.pp-table-row--selected {
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg2));
+  outline: 2px solid color-mix(in srgb, var(--brand) 35%, transparent);
+  outline-offset: -2px;
+}
+
+.pp-table-row[data-balance-row] {
+  cursor: pointer;
+}
+
 .pp-table-cols-pipeline { grid-template-columns: 2fr 1fr 1fr minmax(280px, 1.4fr); }
 .pp-table-cols-claims { grid-template-columns: 2fr 1fr 1fr 80px; }
 .pp-table-cols-remit { grid-template-columns: 1fr 1fr 1fr; }

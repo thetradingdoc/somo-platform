@@ -5,6 +5,7 @@ const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'somo-landi
 const serveScript = path.join(__dirname, 'scripts', 'serve-cra-build.cjs');
 
 const headed = process.env.HEADED === '1';
+const tenantAuditOnly = process.argv.some((a) => a.includes('tenant-audit') || a.includes('tenant-front-desk-audit'));
 
 /** Static server port (Playwright webServer + baseURL). Override if 5199 is busy: `PW_LANDING_PORT=5200 npx playwright test …` */
 const landingPort = String(process.env.PW_LANDING_PORT || '5199').trim() || '5199';
@@ -22,6 +23,9 @@ module.exports = defineConfig({
   expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
   workers: 1,
+  globalSetup: tenantAuditOnly
+    ? require.resolve('./e2e/global-setup-tenant-audit.cjs')
+    : undefined,
   reporter: [
     ['list'],
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
@@ -138,6 +142,24 @@ module.exports = defineConfig({
         browserName: 'chromium',
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
       },
+      env: {
+        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+      },
+    },
+    {
+      name: 'tenant-audit',
+      testDir: './e2e',
+      testMatch: '**/tenant-front-desk-audit.spec.cjs',
+      timeout: 180_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4001').replace(/\/$/, ''),
+        serviceWorkers: 'block',
+      },
+      env: {
+        DB_PATH: path.join(__dirname, 'middleware-audit.db'),
+        PW_API_BASE_URL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4001').replace(/\/$/, ''),
+      },
     },
     {
       name: 'somo-login',
@@ -149,10 +171,12 @@ module.exports = defineConfig({
       },
     },
   ],
-  webServer: {
-    command: `node "${serveScript}" "${landingBuild}" ${landingPort}`,
-    url: landingOrigin,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: tenantAuditOnly
+    ? undefined
+    : {
+        command: `node "${serveScript}" "${landingBuild}" ${landingPort}`,
+        url: landingOrigin,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });

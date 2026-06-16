@@ -815,26 +815,26 @@ Update `.env.example` with placeholder names only (no secrets).
 
 *Merged from `docs/runbooks/LEGACY_DOMAIN_RETIREMENT.md` on 2026-06-02.*
 
-# Legacy domain retirement (myskinandcare.com → callsomo.com)
+# Legacy domain retirement
 
 After **callsomo.com** is stable for 24–48 hours, retire the old consumer brand domain.
 
 ## DNS redirects (registrar)
 
-Configure at **Squarespace** (or the myskinandcare.com registrar):
+Configure redirects at your current domain registrar:
 
 | From | To |
 |------|-----|
-| `https://myskinandcare.com/*` | `https://callsomo.com/$1` (301 permanent) |
-| `https://www.myskinandcare.com/*` | `https://callsomo.com/$1` (301) |
-| `https://api.myskinandcare.com/*` | `https://api.callsomo.com/$1` (301) optional |
+| `https://<legacy-domain>/*` | `https://callsomo.com/$1` (301 permanent) |
+| `https://www.<legacy-domain>/*` | `https://callsomo.com/$1` (301) |
+| `https://api.<legacy-domain>/*` | `https://api.callsomo.com/$1` (301) optional |
 
 Squarespace: **Settings → Domains → callsomo.com → Domain Forwarding** (or URL redirect), not only A-record changes.
 
 Verify after 301:
 
 ```bash
-curl -sI https://myskinandcare.com/ | grep -i '^location:'
+curl -sI https://<legacy-domain>/ | grep -i '^location:'
 curl -sI https://callsomo.com/login | grep -i '^HTTP'
 ```
 
@@ -945,3 +945,31 @@ Approved for dev Week 1 work: [ ] yes  [ ] no
 
 - [ENV_AND_DB_SSOT.md](../Database/ENV_AND_DB_SSOT.md)
 - [wipe-tenant-data.md](./wipe-tenant-data.md)
+- [KELLY_FRONT_DESK_UX.md](../product/KELLY_FRONT_DESK_UX.md)
+
+## Kelly front desk — support triage
+
+### Wrong greeting on live calls
+
+1. Check `voice_agent_settings.greeting` (inbound) vs `outbound_opener` for outbound calls.
+2. Compare with `GET /api/admin/voice-onboarding/customers/:id/opener-compare`.
+3. Verify `kelly_call_events` where `event_type = call_opener_used`.
+4. Confirm tenant `onboarding_state` is not stuck before `voice_setup_complete`.
+
+### Sync failed after save
+
+1. Check `voice_agent_settings.sync_status` and `last_sync_error`.
+2. Retry save from `agent.html` or `PATCH /api/voice-agent/settings`.
+3. Verify Retell agent id on customer record.
+
+### Reset onboarding
+
+1. `POST /api/admin/voice-onboarding/customers/:id/reset-onboarding` with `{ "state": "voice_setup_incomplete" }`.
+2. Tenant opens `voice-setup.html` from Today banner or agent redirect.
+
+### Migration (installed base)
+
+```bash
+node middleware-platform/scripts/migrate-voice-onboarding-v1.cjs --dry-run
+node middleware-platform/scripts/migrate-voice-onboarding-v1.cjs
+```

@@ -36,7 +36,11 @@ const PAYMENT_SIGNALS = [
   'pay before',
   'send me a link',
   'pay $',
-  'copay now'
+  'copay now',
+  '付款',
+  '支付',
+  '付款链接',
+  '发短信'
 ];
 
 const BILLING_FAQ_SIGNALS = [
@@ -162,6 +166,50 @@ function defaultFlags() {
   };
 }
 
+/** Conversation mode SSOT fields (persisted in flags_json). */
+function defaultConversationFields() {
+  return {
+    ...defaultFlags(),
+    conversation_mode: null,
+    active_subrail: null,
+    active_subrail_step: null,
+    prior_conversation_mode: null,
+    pivot_reason: null,
+    pivot_event: null,
+    opqrst_accumulator: { O: null, P: null, Q: null, R: null, S: null, T: null, rich_intake: null },
+    opqrst_exit_state: null,
+    opqrst_current_field: null,
+    opqrst_frozen: false,
+    current_booking_slot: null,
+    billing_step: null,
+    billing_retry_count: 0,
+    cancellation_context: null,
+    pending_intent_queue: [],
+    completed_intents: [],
+    booking_conflict: false,
+    triage_inconclusive: false,
+    records_deferred: false,
+    payment_failed: false,
+    handoff_failed: false,
+    fail_closed: false,
+    opener_delivered: false
+  };
+}
+
+/** Map legacy Kelly lane to conversation mode during hydrate migration. */
+function laneToConversationMode(lane) {
+  const map = {
+    clinical: 'tenant_inbound_clinical',
+    booking: 'tenant_inbound_admin',
+    payment: 'tenant_billing',
+    records: 'tenant_records',
+    support: 'tenant_inbound_admin',
+    basic_intake: 'tenant_inbound_admin',
+    reschedule: 'tenant_inbound_admin'
+  };
+  return map[String(lane || '').toLowerCase()] || 'tenant_inbound_admin';
+}
+
 function isEmergencyUtterance(msg) {
   const m = String(msg || '').toLowerCase();
   if (/\b(not an emergency|no emergency)\b/.test(m)) return false;
@@ -178,7 +226,11 @@ function resolveLocale(input = {}) {
 }
 
 function normalizeState(input = {}) {
-  const flags = { ...defaultFlags(), ...(input.flags || {}) };
+  const convDefaults = defaultConversationFields();
+  const flags = { ...convDefaults, ...defaultFlags(), ...(input.flags || {}) };
+  const conversationMode =
+    input.conversation_mode || flags.conversation_mode || laneToConversationMode(input.active_lane);
+  if (!flags.conversation_mode) flags.conversation_mode = conversationMode;
   return {
     session_id: String(input.session_id || input.sessionId || '').trim(),
     clinic_id: input.clinic_id || input.clinicId || null,
@@ -187,6 +239,9 @@ function normalizeState(input = {}) {
     locale: resolveLocale(input),
     active_lane: input.active_lane || KELLY_LANE.ROUTER,
     step: input.step || 'await_intent',
+    conversation_mode: conversationMode,
+    active_subrail: input.active_subrail || flags.active_subrail || null,
+    active_subrail_step: input.active_subrail_step || flags.active_subrail_step || null,
     flags,
     last_user_message: String(input.last_user_message || input.message || ''),
     last_reply: input.last_reply || '',
@@ -313,6 +368,8 @@ module.exports = {
   KELLY_LANE,
   LANE_FIRST_STEP,
   defaultFlags,
+  defaultConversationFields,
+  laneToConversationMode,
   normalizeState,
   routeOrchestratorLane,
   paymentGateOpen,
@@ -320,6 +377,7 @@ module.exports = {
   EMERGENCY_SIGNALS,
   POST_VISIT_SIGNALS,
   RECORDS_SIGNALS,
+  CLINICAL_SIGNALS,
   isEmergencyUtterance,
   isPostVisitUtterance
 };

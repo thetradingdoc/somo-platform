@@ -6,6 +6,7 @@ const { getAllowedToolNames } = require('./tool-allowlists');
 const { laneSystemPrompt } = require('./prompts');
 const { loadHistory, appendHistory } = require('./history');
 const { formatVoiceReply } = require('../voice-reply-formatter');
+const { isToolAllowedForMode, logModeViolation } = require('../conversation-mode/mode-tool-firewall');
 
 const MAX_ITERATIONS = parseInt(process.env.KELLY_RAILS_MAX_TOOL_ITERATIONS || '2', 10);
 const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300', 10);
@@ -79,7 +80,15 @@ async function runNodeStep(state, ctx) {
   const step = state.step;
 
   const providerCtx = _loadProviderCtx(ctx);
-  const allowedNames = getAllowedToolNames(lane, step, state.flags || {}, providerCtx.allowedTools);
+  let allowedNames = getAllowedToolNames(lane, step, state.flags || {}, providerCtx.allowedTools);
+  const modeCtx = {
+    conversation_mode: state.conversation_mode || state.flags?.conversation_mode,
+    active_subrail: state.active_subrail || state.flags?.active_subrail,
+    sessionId,
+    step
+  };
+  allowedNames = allowedNames.filter((n) => isToolAllowedForMode(n, modeCtx));
+  if (allowedNames.length === 0) allowedNames = ['get_triage_session'];
   const allTools = getKellyTools();
   const tools = filterTools(allTools, allowedNames);
 
@@ -124,6 +133,10 @@ async function runNodeStep(state, ctx) {
       for (const tc of msg.tool_calls) {
         const name = tc.function?.name;
         if (!name || !allowedNames.includes(name)) continue;
+        if (!isToolAllowedForMode(name, modeCtx)) {
+          logModeViolation(ctx.db, { ...modeCtx, toolName: name, callId: sessionId });
+          continue;
+        }
         let args = {};
         try {
           args = JSON.parse(tc.function.arguments || '{}');

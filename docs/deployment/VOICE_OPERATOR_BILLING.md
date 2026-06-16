@@ -116,7 +116,64 @@ npm run preflight:operator-voice -- --live-api
 
 
 
-Checks: GCS backup, DB fingerprint, duplicate operators/emails, FK, resolution paths A/B/C, Twilio voice + status callbacks, Retell agent, Cloud Run scaling, billing smoke.
+Checks: GCS backup, DB fingerprint, duplicate operators/emails, FK, resolution paths A/B/C, Twilio voice + status callbacks, Retell agent, Cloud Run scaling, billing smoke, **operator outbound_opener** in `voice_agent_settings`.
+
+
+
+## Post-deploy opener verification
+
+
+
+After deploying opener fixes and patching prod DB:
+
+
+
+```bash
+
+cd middleware-platform
+
+
+
+# DB + opener copy (local copy of prod DB)
+
+STAGING_DB_PATH=./backups/middleware-staging.db node scripts/operator-outbound-smoke.cjs
+
+
+
+# Live health + optional test call
+
+API_BASE_URL=https://api.callsomo.com node scripts/operator-outbound-smoke.cjs --live --test-call 8622307479
+
+```
+
+
+
+**Pass criteria (what you should hear):**
+
+
+
+- Single opener on answer — mentions **Somo** (not "our office" or "Somo owner")
+- No duplicate Kelly intro immediately after opener (`callback_intro` skipped when `opener_delivered`)
+- Cloud Run logs: `voice_opener_sent` JSON with `direction: outbound`, `callType: operator_outbound`
+- `kelly_call_events` row with `event_type: call_opener_used` for the call
+
+
+
+**Prod DB patch (company_name + crisp opener):**
+
+
+
+```bash
+
+node scripts/rollout-voice-outbound-opener.cjs --apply-prod-db
+
+# Uses gcloud storage cp fallback when Node @google-cloud/storage auth fails
+
+```
+
+
+
+Then restart Cloud Run so instances reload GCS SQLite.
 
 
 
