@@ -118,10 +118,13 @@ async function executeTurn(input = {}) {
   const ctx = {
     sessionId: state.session_id,
     clinicId: input.clinicId || state.clinic_id,
+    customerId: input.customerId || input.turn_context?.customerId || null,
     patientId: input.patientId || state.patient_id,
     callerPhone: input.callerPhone || null,
     channel: state.channel || 'chat',
-    message: String(input.message || state.last_user_message || '')
+    message: String(input.message || state.last_user_message || ''),
+    db: input.db || input.turn_context?.db || null,
+    providerInstructions: input.providerInstructions || input.turn_context?.providerInstructions || null
   };
 
   if (!state.v2_hydrated) {

@@ -1046,7 +1046,8 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
           phone: customer.phone_number || customer.twilio_phone_number,
           email: customer.email,
           customerType,
-          enabledPlatforms
+          enabledPlatforms,
+          useCase: customer.use_case || 'healthcare_clinic'
         });
         merchantId = provisioned.merchantId;
         clinicId = provisioned.clinicId;

@@ -21,6 +21,55 @@ function filterTools(allTools, allowedNames) {
   return allTools.filter((t) => set.has(t?.function?.name));
 }
 
+function _loadProviderCtx(ctx) {
+  const { db, clinicId, customerId, providerInstructions } = ctx;
+  const providerCtx = {};
+
+  if (!db) return providerCtx;
+
+  try {
+    if (typeof db.getClinicPromptProfile === 'function') {
+      const profile = db.getClinicPromptProfile(clinicId || null, customerId || null);
+      if (profile) {
+        if (profile.system_prompt) providerCtx.profilePrompt = profile.system_prompt;
+        if (profile.specialty) providerCtx.specialty = profile.specialty;
+        if (profile.allowed_tools) {
+          try {
+            providerCtx.allowedTools = JSON.parse(profile.allowed_tools);
+          } catch (_) {
+            providerCtx.allowedTools = String(profile.allowed_tools)
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean);
+          }
+        }
+      }
+    }
+
+    if (clinicId && typeof db.getClinicById === 'function') {
+      const clinic = db.getClinicById(clinicId);
+      if (clinic?.name) providerCtx.clinicName = clinic.name;
+    }
+    if (customerId && typeof db.getCustomer === 'function') {
+      const customer = db.getCustomer(customerId);
+      if (customer?.custom_prompt && !providerCtx.profilePrompt) {
+        providerCtx.customPrompt = customer.custom_prompt;
+      }
+      if (!providerCtx.clinicName && customer?.name) {
+        providerCtx.clinicName = customer.name;
+      }
+    }
+
+    if (providerInstructions && !providerCtx.profilePrompt && !providerCtx.customPrompt) {
+      providerCtx.customPrompt = providerInstructions;
+    }
+  } catch (err) {
+    console.warn('[node-runner] Failed to load provider context:', err.message);
+  }
+
+  return providerCtx;
+}
+
 /**
  * Bounded LLM + tool loop for one graph node step.
  */
@@ -28,13 +77,15 @@ async function runNodeStep(state, ctx) {
   const { sessionId, clinicId, patientId, callerPhone, channel, message } = ctx;
   const lane = state.active_lane;
   const step = state.step;
-  const allowedNames = getAllowedToolNames(lane, step, state.flags || {});
+
+  const providerCtx = _loadProviderCtx(ctx);
+  const allowedNames = getAllowedToolNames(lane, step, state.flags || {}, providerCtx.allowedTools);
   const allTools = getKellyTools();
   const tools = filterTools(allTools, allowedNames);
 
   appendHistory(sessionId, 'user', message);
   const history = loadHistory(sessionId);
-  const systemContent = laneSystemPrompt(lane, step, state);
+  const systemContent = laneSystemPrompt(lane, step, state, providerCtx);
   const maxTok = channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS;
 
   let messages = [{ role: 'system', content: systemContent }, ...history];

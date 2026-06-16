@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const { resolveUseCaseTemplate } = require('./prompt-profile-templates');
 
 function slugify(name) {
   return String(name || 'clinic')
@@ -19,6 +20,39 @@ function uniqueClinicSlug(db, baseSlug) {
     slug = `${slugify(baseSlug)}-${n++}`;
   }
   return slug;
+}
+
+function seedPromptProfile(dbModule, { clinicId, customerId, useCase, clinicName }) {
+  try {
+    const template = resolveUseCaseTemplate(useCase);
+    const existing = dbModule.getClinicPromptProfile?.(clinicId, customerId);
+    if (existing) {
+      console.log(`[provision] prompt_profile already exists for clinic ${clinicId}`);
+      return existing.id;
+    }
+
+    const profileId = uuidv4();
+    dbModule.db.prepare(`
+      INSERT INTO prompt_profiles (
+        id, clinic_id, customer_id, name, specialty,
+        system_prompt, allowed_tools, version, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'v1', 'active', datetime('now'), datetime('now'))
+    `).run(
+      profileId,
+      clinicId,
+      customerId,
+      `${clinicName || 'Practice'} — ${template.specialty}`,
+      template.specialty,
+      template.system_prompt,
+      JSON.stringify(template.allowed_tools)
+    );
+
+    console.log(`✅ [provision] Seeded prompt_profile ${profileId} for clinic ${clinicId} (${useCase || 'healthcare_clinic'})`);
+    return profileId;
+  } catch (err) {
+    console.warn('⚠️  [provision] Failed to seed prompt_profile:', err.message);
+    return null;
+  }
 }
 
 /**
@@ -125,7 +159,14 @@ function provisionSaasTenant(dbModule, options = {}) {
     dbModule.migrateVoiceAgentSettingsToMerchant(customerId, merchantId);
   }
 
-  return { merchantId, clinicId };
+  const profileId = seedPromptProfile(dbModule, {
+    clinicId,
+    customerId,
+    useCase: options.useCase || options.use_case || customer.use_case || 'healthcare_clinic',
+    clinicName: displayName
+  });
+
+  return { merchantId, clinicId, promptProfileId: profileId };
 }
 
-module.exports = { provisionSaasTenant, slugify, uniqueClinicSlug };
+module.exports = { provisionSaasTenant, seedPromptProfile, slugify, uniqueClinicSlug };

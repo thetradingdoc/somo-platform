@@ -78,6 +78,7 @@
         "test:e2e:login": "playwright test --project somo-login",
         "ensure:somo-owner": "node scripts/ensure-somo-owner-account.cjs",
         "seed:operator-customer": "node scripts/seed-operator-customer.cjs",
+        "seed:prompt-profiles": "node scripts/backfill-prompt-profiles.cjs",
         "verify:email-provider": "node scripts/verify-email-provider.cjs",
         "preflight:operator-voice": "node scripts/operator-voice-preflight.cjs",
         "smoke:operator-billing": "node scripts/operator-billing-smoke.cjs",

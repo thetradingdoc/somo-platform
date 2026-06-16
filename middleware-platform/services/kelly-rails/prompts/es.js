@@ -29,10 +29,28 @@ const LANE_HINTS = {
     `Carril: soporte (paso: ${step}). FAQs de facturación o derivación a humano.`
 };
 
-function laneSystemPrompt(lane, step, state) {
+function laneSystemPrompt(lane, step, state, providerCtx = {}) {
   const hintFn = LANE_HINTS[lane];
   const hint = hintFn ? hintFn(step) : '';
-  return `${BASE}\n\n${hint}\nSesión: ${state.session_id || ''}`;
+
+  const identityParts = [];
+  const name = providerCtx.clinicName ? String(providerCtx.clinicName).trim() : null;
+  const specialty = providerCtx.specialty ? String(providerCtx.specialty).trim() : null;
+
+  if (name) identityParts.push(`Eres el asistente de recepción de ${name}.`);
+  if (specialty) identityParts.push(`Esta es una práctica de ${specialty}.`);
+
+  const overlay = providerCtx.profilePrompt
+    ? String(providerCtx.profilePrompt).trim()
+    : providerCtx.customPrompt
+      ? String(providerCtx.customPrompt).trim()
+      : null;
+
+  if (overlay) identityParts.push(`Instrucciones del proveedor: ${overlay}`);
+
+  const identityBlock = identityParts.length ? identityParts.join(' ') + '\n\n' : '';
+
+  return `${identityBlock}${BASE}\n\n${hint}\nSesión: ${state.session_id || ''}`;
 }
 
 module.exports = { laneSystemPrompt, BASE, LANE_HINTS };

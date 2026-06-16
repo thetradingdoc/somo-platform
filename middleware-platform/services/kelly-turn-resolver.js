@@ -151,6 +151,7 @@ async function runKellyTurn(opts = {}) {
   }
 
   if (sessionId && shouldUseKellyRailsV2Production(sessionId, clinicId)) {
+    opts.db = opts.db || db;
     const out = await handleTurn(opts);
     const latencyMs = Math.max(0, Date.now() - turnReceivedAt);
     const lane = out?.kelly_rails?.active_lane || null;
