@@ -14,6 +14,8 @@
 const express = require('express');
 const { searchJobs } = require('../services/job-scraper');
 const { extractContactInfo } = require('../services/contact-extractor');
+const leadIngestion = require('../services/lead-ingestion');
+const { buildLanguageInstruction, parseRequiredLanguages, extractLanguagesFromJob } = require('../services/lead-language-extractor');
 const { requireAdminOrCapability } = require('../middleware/admin-auth');
 const { adminLimiter } = require('../middleware/rate-limiter');
 const RetellService = require('../services/retell-service');
@@ -94,31 +96,39 @@ router.post('/save', requireAdminOrCapability('platform.leads'), adminLimiter, a
       }
     }
 
-    // If source_url is provided and no phone/email, try to extract
-    let extractedContacts = { phone: null, email: null, openingHours: null };
-    if (leadData.source_url && (!leadData.clinic_phone || !leadData.clinic_email || !leadData.opening_hours)) {
-      try {
-        console.log(`🔍 Auto-extracting contacts from: ${leadData.source_url}`);
-        const clinicName = leadData.clinic_name || 'Unknown Clinic';
-        const location = leadData.location || null;
-        const extracted = await extractContactInfo(leadData.source_url, clinicName, location);
-        extractedContacts = extracted;
+    const jobLike = {
+      ...leadData,
+      source_url: leadData.source_url,
+      clinic_name: leadData.clinic_name,
+      location: leadData.location,
+    };
+    const enriched = await leadIngestion.enrichJobCandidate(jobLike);
 
-        // Merge extracted contacts (don't overwrite if already present)
-        if (extracted.phone && !leadData.clinic_phone) {
-          leadData.clinic_phone = extracted.phone;
-        }
-        if (extracted.email && !leadData.clinic_email) {
-          leadData.clinic_email = extracted.email;
-        }
-        if (extracted.openingHours && !leadData.opening_hours) {
-          leadData.opening_hours = extracted.openingHours;
-        }
-      } catch (extractError) {
-        console.warn('⚠️  Auto-extraction failed (continuing anyway):', extractError.message);
-        // Continue saving even if extraction fails
-      }
+    if (!leadIngestion.isCallableLead(enriched)) {
+      return res.status(422).json({
+        success: false,
+        error: 'Lead has no callable phone number after enrichment',
+      });
     }
+
+    leadData.clinic_phone = enriched.clinic_phone;
+    leadData.clinic_email = enriched.clinic_email || leadData.clinic_email;
+    leadData.opening_hours = enriched.opening_hours || leadData.opening_hours;
+    leadData.source_url = enriched.source_url;
+    leadData.notes = leadIngestion.buildNotesWithJobPosting(enriched.job_posting_url, leadData.notes);
+    const lang = extractLanguagesFromJob({
+      title: leadData.title,
+      description: leadData.description,
+    });
+    leadData.required_languages = lang.required_languages.length
+      ? JSON.stringify(lang.required_languages)
+      : null;
+    leadData.preferred_language = lang.preferred_language;
+    const extractedContacts = {
+      phone: enriched.clinic_phone,
+      email: enriched.clinic_email,
+      openingHours: enriched.opening_hours,
+    };
 
     const result = db.createLead(leadData);
     const lead = db.getLead(result.lastInsertRowid || leadData.id);
@@ -405,7 +415,10 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
         job_title: lead.title || 'Decision Maker',
         location: lead.location || 'your area',
         specialty: lead.specialty || 'General',
-        lead_source: lead.source || 'job_search'
+        lead_source: lead.source || 'job_search',
+        preferred_language: lead.preferred_language || 'en',
+        required_languages: parseRequiredLanguages(lead.required_languages).join(', ') || 'English only',
+        language_instruction: buildLanguageInstruction(lead),
       };
 
       // Create outbound call via Retell API
@@ -425,6 +438,8 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
             clinic_name: lead.clinic_name,
             clinic_email: lead.clinic_email,
             location: lead.location,
+            preferred_language: lead.preferred_language || 'en',
+            required_languages: parseRequiredLanguages(lead.required_languages).join(', '),
             call_type: 'sales_outbound',
             direction: 'outbound',
             ...(operatorCustomerId ? { customer_id: operatorCustomerId } : {})
@@ -610,6 +625,96 @@ router.put('/calls/:callId', requireAdminOrCapability('platform.leads'), adminLi
       error: 'Failed to update call',
       message: error.message
     });
+  }
+});
+
+/**
+ * GET /api/admin/leads/calls/:callId/transcript
+ */
+router.get('/calls/:callId/transcript', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const call = db.getLeadCall(callId);
+    if (!call) {
+      return res.status(404).json({ success: false, error: 'Call not found' });
+    }
+
+    if (call.transcript_url) {
+      try {
+        const axios = require('axios');
+        const resp = await axios.get(call.transcript_url, { timeout: 15000 });
+        const data = resp.data;
+        if (Array.isArray(data)) {
+          return res.json({
+            lines: data.map((line) => ({
+              role: line.role || line.speaker || 'user',
+              text: line.content || line.text || String(line),
+            })),
+          });
+        }
+        if (typeof data === 'string') {
+          return res.json({ raw: data });
+        }
+        if (data?.transcript) {
+          return res.json({ raw: data.transcript });
+        }
+      } catch (fetchErr) {
+        console.warn('transcript_url fetch failed:', fetchErr.message);
+      }
+    }
+
+    if (call.call_id) {
+      try {
+        const retellData = await retellService.getCall(call.call_id);
+        const transcript = retellData?.transcript || retellData?.transcript_object;
+        if (Array.isArray(transcript)) {
+          return res.json({
+            lines: transcript.map((line) => ({
+              role: line.role === 'agent' ? 'agent' : 'user',
+              text: line.content || line.text || '',
+            })),
+          });
+        }
+        if (typeof retellData?.transcript === 'string') {
+          return res.json({ raw: retellData.transcript });
+        }
+      } catch (retellErr) {
+        console.warn('Retell transcript fetch failed:', retellErr.message);
+      }
+    }
+
+    res.json({ lines: [], raw: null });
+  } catch (error) {
+    console.error('transcript error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/leads/:id/enrich — alias for extract-contact (admin portal mockup)
+ */
+router.post('/:id/enrich', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const lead = db.getLead(id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    if (!lead.source_url) return res.status(400).json({ error: 'No source_url' });
+
+    const { phone, email, openingHours } = await extractContactInfo(
+      lead.source_url,
+      lead.clinic_name,
+      lead.location
+    );
+
+    const updates = {};
+    if (phone && !lead.clinic_phone) updates.clinic_phone = phone;
+    if (email && !lead.clinic_email) updates.clinic_email = email;
+    if (openingHours && !lead.opening_hours) updates.opening_hours = openingHours;
+    if (Object.keys(updates).length > 0) db.updateLead(id, updates);
+
+    res.json({ phone: phone || null, email: email || null, success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -1177,27 +1282,16 @@ router.get('/insights/medical-receptionist', requireAdminOrCapability('platform.
 
     const leads = [];
     for (const job of candidates) {
-      let clinic_phone = job.clinic_phone || null;
-      let clinic_email = job.clinic_email || null;
-      let opening_hours = job.opening_hours || null;
       const description = job.description || job.snippet || job.job_description || null;
 
-      // Try to extract contact info - use clinic website if job board URL
-      if ((!clinic_phone || !clinic_email || !opening_hours)) {
-        try {
-          const clinicName = job.clinic_name || job.company || job.source || 'Unknown Clinic';
-          const jobLocation = job.location || job.city || job.job_location || 'NY or NJ';
-          const extracted = await extractContactInfo(job.source_url, clinicName, jobLocation);
-          clinic_phone = clinic_phone || extracted.phone;
-          clinic_email = clinic_email || extracted.email;
-          opening_hours = opening_hours || extracted.openingHours;
-          if (extracted.phone || extracted.email) {
-            console.log(`✅ Extracted contact for ${clinicName}: phone=${!!extracted.phone}, email=${!!extracted.email}`);
-          }
-        } catch (extractErr) {
-          console.warn('⚠️  Contact extraction failed for insight job:', extractErr.message);
-        }
+      const enriched = await leadIngestion.enrichJobCandidate(job);
+      if (!leadIngestion.isCallableLead(enriched)) {
+        continue;
       }
+
+      let clinic_phone = enriched.clinic_phone;
+      let clinic_email = enriched.clinic_email;
+      let opening_hours = enriched.opening_hours;
 
       // Check if job description qualifies them for our AI product
       const qualifiesFromDesc = qualifiesFromDescription(description);
@@ -1386,6 +1480,8 @@ router.get('/insights/medical-receptionist', requireAdminOrCapability('platform.
         specialty = null;
       }
 
+      const lang = extractLanguagesFromJob({ title: job.title, description });
+
       leads.push({
         id: job.id || job.external_id || job.job_id || job.source_url,
         external_id: job.external_id || job.job_id || job.id || job.source_url,
@@ -1399,7 +1495,12 @@ router.get('/insights/medical-receptionist', requireAdminOrCapability('platform.
         description,
         salary, // Include salary in lead data
         specialty, // Include specialty
-        source_url: job.source_url || job.link || job.url,
+        source_url: enriched.source_url,
+        notes: leadIngestion.buildNotesWithJobPosting(enriched.job_posting_url, null),
+        required_languages: lang.required_languages.length
+          ? JSON.stringify(lang.required_languages)
+          : null,
+        preferred_language: lang.preferred_language,
         qualifies_from_description: qualifiesFromDesc // Flag for frontend
       });
     }

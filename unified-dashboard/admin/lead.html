@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Lead detail</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/admin-portal.css">
+  <script src="/assets/js/config.js"></script>
+</head>
+<body>
+  <aside id="admin-sidebar"></aside>
+  <main class="admin-crm-main admin-crm-main--narrow">
+    <a href="/admin/pipeline.html" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:16px;">← Back to pipeline</a>
+
+    <div id="loading" style="padding:40px;text-align:center;color:var(--muted);">Loading lead...</div>
+    <div id="leadDetail" class="hidden">
+      <div class="admin-crm-header">
+        <div style="flex:1;">
+          <div class="admin-crm-title" id="leadName">—</div>
+          <div id="leadMeta" style="font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+        </div>
+        <div class="admin-crm-header-actions">
+          <div class="admin-crm-lead-score" id="leadScore">—</div>
+          <button class="btn btn-primary" id="callBtn">Call now</button>
+        </div>
+      </div>
+
+      <div class="admin-crm-two-col">
+        <div class="admin-crm-card">
+          <div class="admin-crm-card-title">Contact</div>
+          <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);width:38%;">Phone</td><td id="iPhone">—</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Email</td><td id="iEmail">—</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Location</td><td id="iLocation">—</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Specialty</td><td id="iSpecialty">—</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Job title</td><td id="iTitle">—</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Languages</td><td id="iLanguages">—</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Website</td><td id="iWebsite">—</td></tr>
+            <tr><td style="padding:6px 0;color:var(--muted);">Contact status</td><td id="iContactStatus">—</td></tr>
+          </table>
+          <button class="admin-crm-btn-outline" style="margin-top:12px;font-size:12px;" id="btnReEnrich">Re-enrich contact</button>
+        </div>
+        <div class="admin-crm-card">
+          <div class="admin-crm-card-title">Pipeline stage</div>
+          <select id="stageSelect" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;margin-bottom:8px;">
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="demo">Demo scheduled</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+          <div id="stageMeta" style="font-size:12px;color:var(--muted);"></div>
+        </div>
+      </div>
+
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title">Add a note</div>
+        <textarea id="noteText" style="width:100%;min-height:80px;padding:10px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;" placeholder="Notes, next steps..."></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" id="btnSaveNote">Save note</button>
+          <button class="admin-crm-btn-outline btn-sm" id="btnEmail">Send email</button>
+        </div>
+      </div>
+
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title">Call history</div>
+        <div id="callHistory"></div>
+      </div>
+
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title">Activity log</div>
+        <div id="activityLog"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/admin/assets/js/admin-shell.js"></script>
+  <script>
+    const { apiFetch, esc, init } = AdminShell;
+    let leadId, leadData;
+
+    init('pipeline');
+
+    document.addEventListener('DOMContentLoaded', () => {
+      leadId = new URLSearchParams(location.search).get('id');
+      if (!leadId) {
+        document.getElementById('loading').textContent = 'No lead ID. Open from pipeline.';
+        return;
+      }
+      document.getElementById('callBtn').onclick = callLead;
+      document.getElementById('btnReEnrich').onclick = reEnrich;
+      document.getElementById('btnSaveNote').onclick = saveNote;
+      document.getElementById('btnEmail').onclick = sendEmail;
+      document.getElementById('stageSelect').onchange = (e) => updateStage(e.target.value);
+      loadLead();
+    });
+
+    async function loadLead() {
+      try {
+        const r = await apiFetch(`/api/admin/scrape/leads/${leadId}`);
+        leadData = r.lead;
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('leadDetail').classList.remove('hidden');
+        document.title = `Somo — ${leadData.clinic_name}`;
+        renderLead(r);
+      } catch (e) {
+        document.getElementById('loading').textContent = 'Could not load: ' + e.message;
+      }
+    }
+
+    function renderLead({ lead, calls, activities }) {
+      document.getElementById('leadName').textContent = lead.clinic_name || 'Unknown';
+      document.getElementById('leadScore').textContent = lead.lead_score || '—';
+      document.getElementById('leadMeta').innerHTML = [
+        lead.location && `<span>${esc(lead.location)}</span>`,
+        lead.specialty && `<span>${esc(lead.specialty)}</span>`,
+        lead.lead_source && `<span>via ${esc(String(lead.lead_source).split(':')[0])}</span>`,
+      ].filter(Boolean).join('');
+
+      document.getElementById('iPhone').textContent = lead.clinic_phone || '—';
+      document.getElementById('iEmail').innerHTML = lead.clinic_email
+        ? `<a href="mailto:${esc(lead.clinic_email)}">${esc(lead.clinic_email)}</a>` : '—';
+      document.getElementById('iLocation').textContent = lead.location || '—';
+      document.getElementById('iSpecialty').textContent = lead.specialty || '—';
+      document.getElementById('iTitle').textContent = lead.title || '—';
+      document.getElementById('iLanguages').textContent = (lead.language_labels && lead.language_labels.length)
+        ? `${lead.language_labels.join(', ')}${lead.preferred_language ? ` (agent: ${lead.preferred_language})` : ''}`
+        : 'English';
+      document.getElementById('iWebsite').innerHTML = lead.website_url
+        ? `<a href="${esc(lead.website_url)}" target="_blank" rel="noopener">clinic website ↗</a>`
+        : '—';
+      document.getElementById('iContactStatus').textContent = lead.contact_status || '—';
+
+      document.getElementById('stageSelect').value = lead.pipeline_stage || 'new';
+      document.getElementById('stageMeta').textContent = [
+        lead.call_count && `${lead.call_count} call(s)`,
+        lead.last_called_at && `last call ${formatDate(lead.last_called_at)}`,
+      ].filter(Boolean).join(' · ');
+
+      const callBtn = document.getElementById('callBtn');
+      callBtn.disabled = !lead.clinic_phone;
+      callBtn.style.opacity = lead.clinic_phone ? '1' : '0.5';
+
+      renderCalls(calls || []);
+      renderActivities(activities || []);
+    }
+
+    function renderCalls(calls) {
+      const el = document.getElementById('callHistory');
+      if (!calls.length) {
+        el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">No calls yet</p>';
+        return;
+      }
+      el.innerHTML = calls.map(c => `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-weight:600;">${formatDate(c.created_at, true)}</span>
+            <span class="admin-crm-badge admin-crm-badge-muted">${esc(c.outcome || c.status)}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Duration ${c.duration_seconds ? Math.floor(c.duration_seconds / 60) + 'm' : '—'}</div>
+          <button class="admin-crm-btn-outline" style="font-size:12px;padding:4px 8px;" onclick="toggleTranscript('${c.id}')">View transcript</button>
+          <div id="transcript-${c.id}" class="hidden" style="margin-top:10px;background:var(--bg);border-radius:8px;padding:12px;font-size:12px;font-family:monospace;max-height:240px;overflow-y:auto;"></div>
+        </div>
+      `).join('');
+    }
+
+    async function toggleTranscript(callId) {
+      const body = document.getElementById(`transcript-${callId}`);
+      body.classList.toggle('hidden');
+      if (body.classList.contains('hidden') || body.innerHTML) return;
+      body.textContent = 'Loading...';
+      try {
+        const r = await apiFetch(`/api/admin/leads/calls/${callId}/transcript`);
+        if (r.lines?.length) {
+          body.innerHTML = r.lines.map(l => `<div style="margin-bottom:6px;"><strong>${l.role === 'agent' ? 'Alex' : 'Contact'}:</strong> ${esc(l.text)}</div>`).join('');
+        } else {
+          body.textContent = r.raw || 'Transcript not available.';
+        }
+      } catch (e) { body.textContent = e.message; }
+    }
+
+    function renderActivities(activities) {
+      const el = document.getElementById('activityLog');
+      if (!activities.length) {
+        el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">No activity yet</p>';
+        return;
+      }
+      el.innerHTML = activities.map(a => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+          <div>${esc(a.content)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${formatDate(a.created_at, true)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function callLead() {
+      if (!leadData?.clinic_phone) return alert('No phone');
+      if (!confirm(`Call ${leadData.clinic_name}?`)) return;
+      try {
+        const r = await apiFetch(`/api/admin/leads/${leadId}/call`, { method: 'POST' });
+        alert(r.message || 'Call initiated');
+        setTimeout(loadLead, 3000);
+      } catch (e) { alert(e.message); }
+    }
+
+    async function updateStage(stage) {
+      try {
+        await apiFetch(`/api/admin/scrape/leads/${leadId}/stage`, {
+          method: 'PUT',
+          body: JSON.stringify({ stage }),
+        });
+      } catch (e) {
+        alert(e.message);
+        document.getElementById('stageSelect').value = leadData.pipeline_stage;
+      }
+    }
+
+    async function saveNote() {
+      const content = document.getElementById('noteText').value.trim();
+      if (!content) return;
+      await apiFetch(`/api/admin/scrape/leads/${leadId}/note`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+      document.getElementById('noteText').value = '';
+      loadLead();
+    }
+
+    async function sendEmail() {
+      if (!leadData?.clinic_email) return alert('No email');
+      try {
+        await apiFetch(`/api/admin/leads/${leadId}/send-email`, { method: 'POST' });
+        alert('Email sent');
+        loadLead();
+      } catch (e) { alert(e.message); }
+    }
+
+    async function reEnrich() {
+      document.getElementById('iContactStatus').textContent = 'Enriching...';
+      try {
+        const r = await apiFetch(`/api/admin/leads/${leadId}/enrich`, { method: 'POST' });
+        document.getElementById('iPhone').textContent = r.phone || '—';
+        document.getElementById('iContactStatus').textContent = r.phone ? 'verified' : 'no phone found';
+        if (r.email) document.getElementById('iEmail').innerHTML = `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`;
+      } catch (e) { alert(e.message); }
+    }
+
+    function formatDate(iso, withTime) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (withTime) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  </script>
+</body>
+</html>

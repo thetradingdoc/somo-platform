@@ -2609,6 +2609,12 @@ app.use('/api/onboarding', onboardingRoutes);
 const adminLeadsRoutes = require('./routes/admin-leads');
 app.use('/api/admin/leads', adminLeadsRoutes);
 
+const adminScrapeRoutes = require('./routes/admin-scrape');
+app.use('/api/admin/scrape', adminScrapeRoutes);
+
+const adminEnrichRoutes = require('./routes/admin-enrich');
+app.use('/api/admin/enrich', adminEnrichRoutes);
+
 // Sequences (Phase 2)
 const sequencesRoutes = require('./routes/sequences');
 app.use('/api/sequences', sequencesRoutes);

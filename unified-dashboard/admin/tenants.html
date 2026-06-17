@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Tenants</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/admin-portal.css">
+  <script src="/assets/js/config.js"></script>
+</head>
+<body>
+  <aside id="admin-sidebar"></aside>
+  <main class="admin-crm-main">
+    <div class="admin-crm-header">
+      <div>
+        <div class="admin-crm-title">Tenants</div>
+        <div class="admin-crm-subtitle">Clinic health, billing, and credits</div>
+      </div>
+      <input class="admin-crm-search" type="text" id="tenantSearch" placeholder="Search tenants...">
+    </div>
+
+    <div class="admin-crm-metrics admin-crm-metrics--3">
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Total tenants</div><div class="admin-crm-metric-value" id="mTotal">—</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Critical alerts</div><div class="admin-crm-metric-value admin-crm-metric-danger" id="mCritical">—</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Warnings</div><div class="admin-crm-metric-value" id="mWarning">—</div></div>
+    </div>
+
+    <div class="admin-crm-two-col">
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title">Alerts</div>
+        <div id="alertsList"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
+      </div>
+      <div class="admin-crm-card" id="detailPanel">
+        <div class="admin-crm-card-title">Tenant detail</div>
+        <p style="color:var(--muted);font-size:13px;">Select a tenant from the table to view usage and allocate credits.</p>
+      </div>
+    </div>
+
+    <div class="admin-crm-card">
+      <div class="admin-crm-card-title">All tenants</div>
+      <div id="tenantTable"><div class="admin-crm-skeleton" style="height:240px;"></div></div>
+    </div>
+  </main>
+
+  <script src="/admin/assets/js/admin-shell.js"></script>
+  <script>
+    const { apiFetch, esc, init } = AdminShell;
+    let allTenants = [];
+
+    init('tenants');
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('tenantSearch').oninput = () => renderTable();
+      loadAll();
+    });
+
+    async function loadAll() {
+      await Promise.all([loadAlerts(), loadTenants()]);
+    }
+
+    async function loadAlerts() {
+      try {
+        const r = await apiFetch('/api/admin/tenants/alerts');
+        const alerts = r.alerts || [];
+        const critical = alerts.filter(a => a.severity === 'critical').length;
+        const warning = alerts.filter(a => a.severity === 'warning').length;
+        document.getElementById('mCritical').textContent = critical;
+        document.getElementById('mWarning').textContent = warning;
+
+        const el = document.getElementById('alertsList');
+        if (!alerts.length) {
+          el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">All tenants healthy</p>';
+          return;
+        }
+        el.innerHTML = alerts.map(a => `
+          <div class="admin-crm-row" onclick="showDetail('${a.clinic_id}')">
+            <div>
+              <div style="font-weight:600;">${esc(a.company_name)}</div>
+              <div style="font-size:12px;color:var(--muted);">${esc(a.reason)}</div>
+            </div>
+            <span class="admin-crm-badge admin-crm-badge-${a.severity === 'critical' ? 'danger' : a.severity === 'info' ? 'info' : 'warning'}">${esc(a.severity)}</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        document.getElementById('alertsList').innerHTML = '<p style="color:var(--muted);">Could not load alerts</p>';
+      }
+    }
+
+    async function loadTenants() {
+      try {
+        const r = await apiFetch('/api/admin/tenants');
+        allTenants = r.tenants || [];
+        document.getElementById('mTotal').textContent = r.summary?.total_tenants || allTenants.length;
+        renderTable();
+
+        const id = new URLSearchParams(location.search).get('id');
+        if (id) showDetail(id);
+      } catch (e) {
+        document.getElementById('tenantTable').innerHTML = '<p style="color:var(--muted);">' + esc(e.message) + '</p>';
+      }
+    }
+
+    function renderTable() {
+      const q = document.getElementById('tenantSearch').value.trim().toLowerCase();
+      const filtered = allTenants.filter(t => !q || (t.name || '').toLowerCase().includes(q));
+      const el = document.getElementById('tenantTable');
+      if (!filtered.length) {
+        el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No tenants found</p>';
+        return;
+      }
+      el.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;">
+              <th style="padding:8px 0;">Name</th>
+              <th>Minutes</th>
+              <th>Subscription</th>
+              <th>Trial</th>
+              <th>Agent</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.map(t => `
+              <tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="showDetail('${t.clinic_id}')">
+                <td style="padding:10px 0;font-weight:600;">${esc(t.name)}</td>
+                <td>${t.minutes_remaining ?? t.credits?.balance_minutes ?? '—'}</td>
+                <td>${esc(t.subscription_status || '—')}</td>
+                <td>${esc(t.trial_status || '—')}</td>
+                <td>${t.agent?.has_agent ? '<span class="admin-crm-badge admin-crm-badge-success">yes</span>' : '<span class="admin-crm-badge admin-crm-badge-muted">no</span>'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    async function showDetail(clinicId) {
+      const panel = document.getElementById('detailPanel');
+      panel.innerHTML = '<div class="admin-crm-card-title">Loading...</div>';
+      try {
+        const r = await apiFetch(`/api/admin/tenants/${clinicId}`);
+        const t = r.tenant;
+        const credits = r.credits || {};
+        panel.innerHTML = `
+          <div class="admin-crm-card-title">${esc(t.name)}</div>
+          <div style="font-size:13px;margin-bottom:12px;color:var(--muted);">
+            ${esc(t.email || '')} · ${t.minutes_remaining ?? credits.balance_minutes ?? 0} min remaining
+          </div>
+          <div style="font-size:13px;margin-bottom:16px;">
+            <div>Subscription: <strong>${esc(t.subscription_status || '—')}</strong></div>
+            <div>Trial: <strong>${esc(t.trial_status || '—')}</strong></div>
+            <div>Calls (30d): <strong>${r.usage?.by_period?.last_30d?.calls ?? '—'}</strong></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+            <input type="number" id="creditAmount" min="1" value="60" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:8px;">
+            <button class="btn btn-primary btn-sm" onclick="allocateCredits('${clinicId}')">Allocate free minutes</button>
+          </div>
+          <a href="/business/today.html" style="font-size:12px;color:var(--accent-green);">Open provider portal →</a>
+        `;
+      } catch (e) {
+        panel.innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
+      }
+    }
+
+    async function allocateCredits(clinicId) {
+      const credits = parseInt(document.getElementById('creditAmount').value, 10);
+      if (!credits || credits < 1) return alert('Enter valid minutes');
+      try {
+        await apiFetch(`/api/admin/tenants/${clinicId}/credits`, {
+          method: 'POST',
+          body: JSON.stringify({ credits, type: 'free' }),
+        });
+        alert('Credits allocated');
+        loadAll();
+        showDetail(clinicId);
+      } catch (e) { alert(e.message); }
+    }
+  </script>
+</body>
+</html>

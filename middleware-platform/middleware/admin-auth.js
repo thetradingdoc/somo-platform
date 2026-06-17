@@ -325,6 +325,15 @@ function hasValidSession(req) {
  */
 function requireAdminOrCapability(capability) {
   return (req, res, next) => {
+    const adminSecret = process.env.ADMIN_PORTAL_SECRET;
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+
+    // Development: when admin secret is not configured, allow access (matches requireAdminAuth)
+    if (!adminSecret && !isProduction) {
+      req.adminAuthenticated = true;
+      return next();
+    }
+
     const token = getTokenFromRequest(req);
     const adminSession = validateSessionToken(token);
     if (adminSession) {

@@ -31,6 +31,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Medical coding** | [`Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) | [`Medical Coding/README.md`](../Medical%20Coding/README.md) |
 | **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
 | **Middleware depth** | [`middleware-platform/README.md`](../middleware-platform/README.md) | TOC anchors — do not duplicate |
+| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
 | **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
 | **Active work** | [`todos/pending/`](../../todos/pending/) | Do not copy long checklists into product docs |
 

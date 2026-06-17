@@ -4001,6 +4001,16 @@ function migrateLeadsPipeline() {
       `).run();
     }
 
+    if (!columnNames.includes('required_languages')) {
+      console.log('🔄 Migrating: Adding required_languages column to leads table');
+      db.prepare('ALTER TABLE leads ADD COLUMN required_languages TEXT').run();
+    }
+
+    if (!columnNames.includes('preferred_language')) {
+      console.log('🔄 Migrating: Adding preferred_language column to leads table');
+      db.prepare('ALTER TABLE leads ADD COLUMN preferred_language TEXT').run();
+    }
+
     db.pragma('foreign_keys = ON');
     console.log('✅ Migration complete: pipeline columns added to leads');
   } catch (error) {
@@ -17737,6 +17747,18 @@ module.exports = {
       }
     }
 
+    if (!columnNames.includes('required_languages')) {
+      try {
+        db.prepare('ALTER TABLE leads ADD COLUMN required_languages TEXT').run();
+      } catch (err) { /* ignore */ }
+    }
+
+    if (!columnNames.includes('preferred_language')) {
+      try {
+        db.prepare('ALTER TABLE leads ADD COLUMN preferred_language TEXT').run();
+      } catch (err) { /* ignore */ }
+    }
+
     // Detect specialty from job description (prioritize description)
     function detectSpecialtyFromDescription(desc) {
       if (!desc || desc.trim().length < 10) return null;
@@ -17901,8 +17923,8 @@ module.exports = {
     const result = db.prepare(`
       INSERT INTO leads (
         id, external_id, title, clinic_name, clinic_phone, clinic_email, opening_hours,
-        location, source_url, status, pipeline_stage, is_qualified, priority, lead_score, source, posted_at, notes, description, salary, specialty, follow_up_date, next_action, estimated_value, owner_id, is_test, lead_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        location, source_url, status, pipeline_stage, is_qualified, priority, lead_score, source, posted_at, notes, description, salary, specialty, required_languages, preferred_language, follow_up_date, next_action, estimated_value, owner_id, is_test, lead_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       leadData.external_id || null,
@@ -17924,6 +17946,8 @@ module.exports = {
       leadData.description || null,
       leadData.salary || null,
       specialty,
+      leadData.required_languages || null,
+      leadData.preferred_language || null,
       leadData.follow_up_date || null,
       leadData.next_action || null,
       leadData.estimated_value || null,

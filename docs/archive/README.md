@@ -119,8 +119,7 @@ This document summarizes all fixes applied to the admin portal to resolve naviga
 - `middleware-platform/server.js` - Routing configuration
 
 ### Documentation
-- `docs/admin-portal/README.md#admin-portal-structure` - Structure guide
-- `docs/admin-portal/README.md#admin-portal-testing` - Testing guide
+- `docs/admin-portal/README.md` - Operator CRM (4-page portal; replaces tabbed dashboard)
 - `docs/archive/README.md#admin-portal-fixes-complete` - This file (archived)
 
 ### Testing
@@ -128,12 +127,11 @@ This document summarizes all fixes applied to the admin portal to resolve naviga
 
 ## Testing Status
 
-See [ADMIN_PORTAL_TESTING.md](../admin-portal/README.md#admin-portal-testing) for full testing guide.
+See [Admin Portal README](../admin-portal/README.md#admin-portal-testing) for the current testing guide.
 
 ## Related Documentation
 
-- [ADMIN_PORTAL_STRUCTURE.md](../admin-portal/README.md#admin-portal-structure)
-- [ADMIN_PORTAL_TESTING.md](../admin-portal/README.md#admin-portal-testing)
+- [Admin Portal README](../admin-portal/README.md) — 4-page operator CRM (supersedes tabbed dashboard from this archive)
 
 ---
 

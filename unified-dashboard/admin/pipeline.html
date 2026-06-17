@@ -1,399 +1,178 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="light" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../assets/css/somo-tokens.css" />
-  <link rel="stylesheet" href="../assets/css/signup-somo.css" />
-  <link rel="stylesheet" href="../assets/css/auth-somo.css" />
-  <link rel="stylesheet" href="../assets/css/admin-portal.css" />
-  <link rel="stylesheet" href="assets/css/admin-ai-assistant.css" />
-  <script src="../assets/js/config.js"></script>
-  <title>Sales Pipeline - Somo Admin</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Sales pipeline</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/admin-portal.css">
+  <script src="/assets/js/config.js"></script>
 </head>
-<body class="admin-portal-body">
-    <div class="shell">
-        <aside>
-            <div class="logo admin-sidebar-logo"><img src="/assets/brand/somo-icon-lizard.png" alt="Somo" width="36" height="36" /></div>
-            <div class="nav-icon" onclick="window.location.href='index.html'" title="Dashboard">📊</div>
-            <div class="nav-icon" onclick="window.location.href='index.html?tab=tenants'" title="Tenants">🏥</div>
-            <div class="nav-icon" onclick="window.location.href='index.html?tab=leads'" title="Leads">👥</div>
-            <div class="nav-icon" title="Pipeline">📈</div>
-            <div class="nav-icon" onclick="window.location.href='workflows.html'" title="Workflows">⚡</div>
-            <div class="nav-icon" onclick="window.location.href='index.html?tab=clients'" title="Clients">💼</div>
-        </aside>
-        <main>
-    <div class="container">
-        <div style="margin-bottom: 16px;">
-          <a href="index.html" style="color: var(--muted); text-decoration: none; font-size: 13px;">Dashboard</a>
-          <span style="color: var(--muted); margin: 0 8px;">/</span>
-          <span style="color: var(--text); font-size: 13px;">Pipeline</span>
+<body>
+  <aside id="admin-sidebar"></aside>
+  <main class="admin-crm-main">
+    <div class="admin-crm-header admin-crm-header--with-filters">
+      <div class="admin-crm-title">Sales pipeline</div>
+      <div class="admin-crm-header-toolbar">
+        <div class="admin-crm-pills" id="specialtyPills">
+          <span class="admin-crm-pill active" data-specialty="">All</span>
+          <span class="admin-crm-pill" data-specialty="dental">Dental</span>
+          <span class="admin-crm-pill" data-specialty="medical">Medical</span>
         </div>
-        <div class="header">
-            <h1>Sales Pipeline</h1>
-            <p>Track leads through the sales process - see who was called, who needs follow-up, and manage your pipeline</p>
+        <div class="admin-crm-header-actions">
+          <button class="admin-crm-btn-outline" id="btnEnrich">Enrich contacts</button>
+          <button class="btn btn-primary" onclick="location.href='/admin/'">Scrape leads</button>
         </div>
-
-        <div class="stats-bar" id="statsBar">
-            <div class="stat-card">
-                <h3>Total Leads</h3>
-                <div class="value" id="totalLeads">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>Needs Follow-Up</h3>
-                <div class="value" id="followUpCount">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>This Month Calls</h3>
-                <div class="value" id="callsUsed">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>Calls Remaining</h3>
-                <div class="value" id="callsRemaining">-</div>
-            </div>
-        </div>
-
-        <div class="pipeline-container" id="pipelineContainer">
-            <!-- Pipeline columns will be populated here -->
-        </div>
+      </div>
     </div>
 
-    <!-- Lead Detail Modal -->
-    <div class="modal" id="leadModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Lead Details</h2>
-                <button class="close-btn" onclick="closeModal()">&times;</button>
-            </div>
-            <div id="leadDetails">
-                <!-- Lead details will be populated here -->
-            </div>
-        </div>
+    <div class="admin-crm-card">
+      <div class="admin-crm-card-title admin-crm-card-title--split">
+        <span>Call-ready queue <span id="queueCount" class="admin-crm-badge admin-crm-badge-muted">—</span></span>
+        <button class="btn btn-primary btn-sm" id="btnCall10">Call next 10</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <input class="admin-crm-search" type="text" id="queueSearch" placeholder="Search leads...">
+      </div>
+      <div id="queueList"><div class="admin-crm-skeleton" style="height:200px;"></div></div>
+      <div id="queuePagination" style="display:flex;gap:6px;justify-content:center;margin-top:12px;"></div>
     </div>
 
-    <script>
-        const API_BASE = window.API_BASE_URL || 'http://localhost:4000';
-        const PIPELINE_STAGES = [
-            { id: 'new', name: 'New Leads', color: '#6b7280' },
-            { id: 'contacted', name: 'Contacted', color: '#16a637' },
-            { id: 'qualified', name: 'Qualified', color: '#8b5cf6' },
-            { id: 'demo', name: 'Demo Scheduled', color: '#f59e0b' },
-            { id: 'proposal', name: 'Proposal Sent', color: '#ec4899' },
-            { id: 'negotiation', name: 'Negotiation', color: '#14b8a6' },
-            { id: 'closed_won', name: 'Closed Won', color: '#10b981' },
-            { id: 'closed_lost', name: 'Closed Lost', color: '#ef4444' }
+    <div class="admin-crm-card admin-crm-kanban-scroll">
+      <div class="admin-crm-card-title">Pipeline stages</div>
+      <div class="admin-crm-kanban" id="kanbanBoard">
+        <div class="admin-crm-skeleton" style="height:300px;grid-column:1/-1;"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/admin/assets/js/admin-shell.js"></script>
+  <script>
+    const { apiFetch, esc, init } = AdminShell;
+    let currentSpecialty = '';
+    let currentPage = 0;
+    let searchTimer;
+
+    init('pipeline');
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach(p => {
+        p.onclick = () => {
+          document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach(x => x.classList.remove('active'));
+          p.classList.add('active');
+          currentSpecialty = p.dataset.specialty;
+          currentPage = 0;
+          loadQueue();
+          loadKanban();
+        };
+      });
+      document.getElementById('queueSearch').oninput = () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { currentPage = 0; loadQueue(); }, 300);
+      };
+      document.getElementById('btnCall10').onclick = callNext10;
+      document.getElementById('btnEnrich').onclick = () => { location.href = '/admin/'; };
+      loadQueue();
+      loadKanban();
+    });
+
+    async function loadQueue(page = 0) {
+      currentPage = page;
+      const search = document.getElementById('queueSearch').value.trim();
+      const params = new URLSearchParams({ contact_status: 'verified', limit: 15, offset: page * 15 });
+      if (currentSpecialty) params.set('specialty', currentSpecialty);
+      if (search) params.set('search', search);
+
+      try {
+        const r = await apiFetch(`/api/admin/scrape/leads?${params}`);
+        const verified = r.leads || [];
+        document.getElementById('queueCount').textContent = r.total || 0;
+        const container = document.getElementById('queueList');
+        if (!verified.length) {
+          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No call-ready leads. Run scrape from control board.</p>';
+          document.getElementById('queuePagination').innerHTML = '';
+          return;
+        }
+        container.innerHTML = verified.map((l) => renderRow(l)).join('');
+        const pages = Math.ceil((r.total || 0) / 15);
+        const pag = document.getElementById('queuePagination');
+        pag.innerHTML = pages <= 1 ? '' : Array.from({ length: Math.min(pages, 7) }, (_, i) =>
+          `<button class="admin-crm-btn-outline" style="padding:5px 10px;${i === page ? 'background:var(--admin-cta);' : ''}" onclick="loadQueue(${i})">${i + 1}</button>`
+        ).join('');
+      } catch (e) {
+        document.getElementById('queueList').innerHTML = `<p style="color:var(--muted);">Failed: ${esc(e.message)}</p>`;
+      }
+    }
+
+    function renderRow(l) {
+      const scoreCls = l.lead_score >= 70 ? ' high' : '';
+      return `
+        <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${l.id}'">
+          <div style="flex:1;min-width:0;">
+            <div class="admin-crm-row-name" style="font-weight:600;">${esc(l.clinic_name)}</div>
+            <div style="font-size:12px;color:var(--muted);">${esc(l.location)} · ${esc(l.specialty || '')}${(l.language_labels && l.language_labels.length) ? ` · ${esc(l.language_labels.join(', '))}` : ''}</div>
+          </div>
+          <div class="admin-crm-row-actions">
+            <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
+            <button class="btn btn-primary btn-sm admin-crm-btn-sm" onclick="event.stopPropagation();callLead(${l.id},'${esc(l.clinic_name)}')">Call</button>
+          </div>
+        </div>`;
+    }
+
+    async function loadKanban() {
+      const params = currentSpecialty ? `?specialty=${currentSpecialty}` : '';
+      try {
+        const r = await apiFetch(`/api/admin/scrape/leads/pipeline${params}`);
+        const stages = [
+          { key: 'new', label: 'New' },
+          { key: 'contacted', label: 'Contacted' },
+          { key: 'demo', label: 'Demo' },
+          { key: 'won', label: 'Won' },
+          { key: 'lost', label: 'Lost' },
         ];
+        document.getElementById('kanbanBoard').innerHTML = stages.map(s => {
+          const cards = (r.cards || {})[s.key] || [];
+          return `
+            <div class="admin-crm-kanban-col">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;">
+                ${s.label}<span class="admin-crm-badge admin-crm-badge-muted">${(r.counts || {})[s.key] || 0}</span>
+              </div>
+              ${cards.map(l => `
+                <div class="admin-crm-kanban-card" onclick="location.href='/admin/lead.html?id=${l.id}'">
+                  <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(l.clinic_name)}</div>
+                  <div style="font-size:11px;color:var(--muted);">${esc(l.location || '')}</div>
+                </div>
+              `).join('')}
+              ${!cards.length ? '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px;border:1px dashed var(--border);border-radius:8px;">empty</div>' : ''}
+            </div>`;
+        }).join('');
+      } catch (e) {
+        document.getElementById('kanbanBoard').innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
+      }
+    }
 
-        function getAuthHeaders() {
-            return {
-                'Content-Type': 'application/json'
-            };
+    async function callLead(id, name) {
+      if (!confirm(`Call ${name}?`)) return;
+      try {
+        const r = await apiFetch(`/api/admin/leads/${id}/call`, { method: 'POST' });
+        alert(r.message || 'Call initiated');
+        loadKanban();
+      } catch (e) { alert(e.message); }
+    }
+
+    async function callNext10() {
+      if (!confirm('Call top 10 call-ready leads?')) return;
+      try {
+        const r = await apiFetch('/api/admin/scrape/leads/call-ready?limit=10');
+        for (const l of r.leads || []) {
+          await apiFetch(`/api/admin/leads/${l.id}/call`, { method: 'POST' });
+          await new Promise(res => setTimeout(res, 500));
         }
-
-        async function loadPipeline() {
-            try {
-                // Load pipeline stats
-                const statsRes = await fetch(`${API_BASE}/api/admin/leads/pipeline/stats`, {
-                    headers: getAuthHeaders()
-                });
-                const statsData = await statsRes.json();
-
-                if (statsData.success) {
-                    updateStats(statsData);
-                }
-
-                // Load call usage
-                const usageRes = await fetch(`${API_BASE}/api/admin/leads/stats/usage`, {
-                    headers: getAuthHeaders()
-                });
-                const usageData = await usageRes.json();
-
-                if (usageData.success) {
-                    document.getElementById('callsUsed').textContent = usageData.calls_used || 0;
-                    document.getElementById('callsRemaining').textContent = usageData.calls_remaining || 0;
-                }
-
-                // Load leads for each stage
-                const container = document.getElementById('pipelineContainer');
-                container.innerHTML = '';
-
-                for (const stage of PIPELINE_STAGES) {
-                    const column = await createPipelineColumn(stage);
-                    container.appendChild(column);
-                }
-
-            } catch (error) {
-                console.error('Error loading pipeline:', error);
-            }
-        }
-
-        async function createPipelineColumn(stage) {
-            const column = document.createElement('div');
-            column.className = 'pipeline-column';
-            column.style.borderTop = `4px solid ${stage.color}`;
-
-            const header = document.createElement('h2');
-            header.innerHTML = `
-                ${stage.name}
-                <span class="count" id="count-${stage.id}">0</span>
-            `;
-            column.appendChild(header);
-
-            const leadsContainer = document.createElement('div');
-            leadsContainer.id = `leads-${stage.id}`;
-            column.appendChild(leadsContainer);
-
-            // Load leads for this stage
-            try {
-                const res = await fetch(`${API_BASE}/api/admin/leads/pipeline/${stage.id}`, {
-                    headers: getAuthHeaders()
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    document.getElementById(`count-${stage.id}`).textContent = data.total;
-                    
-                    if (data.leads.length === 0) {
-                        leadsContainer.innerHTML = '<p style="color: var(--gray-400); font-size: 12px; text-align: center; padding: 20px;">No leads</p>';
-                    } else {
-                        data.leads.forEach(lead => {
-                            const card = createLeadCard(lead, stage.id);
-                            leadsContainer.appendChild(card);
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error(`Error loading ${stage.id}:`, error);
-                leadsContainer.innerHTML = '<p style="color: var(--danger); font-size: 12px;">Error loading leads</p>';
-            }
-
-            return column;
-        }
-
-        function createLeadCard(lead, currentStage) {
-            const card = document.createElement('div');
-            card.className = 'lead-card';
-            card.onclick = () => showLeadDetails(lead);
-
-            const hasFollowUp = lead.follow_up_date && new Date(lead.follow_up_date) <= new Date();
-
-            card.innerHTML = `
-                <h3>${lead.clinic_name || 'Unknown Clinic'}</h3>
-                <div class="meta">📍 ${lead.location || 'No location'}</div>
-                ${lead.clinic_phone ? `<div class="meta">📞 ${lead.clinic_phone}</div>` : ''}
-                ${lead.call_count > 0 ? `<div class="meta">📞 ${lead.call_count} call(s)</div>` : ''}
-                ${lead.lead_score > 0 ? `<span class="score">Score: ${lead.lead_score}</span>` : ''}
-                ${hasFollowUp ? `<div class="follow-up">⚠️ Follow-up needed</div>` : ''}
-            `;
-
-            return card;
-        }
-
-        function updateStats(stats) {
-            document.getElementById('totalLeads').textContent = stats.total || 0;
-            
-            // Count follow-ups
-            let followUpCount = 0;
-            stats.stages.forEach(stage => {
-                followUpCount += stage.needs_followup || 0;
-            });
-            document.getElementById('followUpCount').textContent = followUpCount;
-        }
-
-        async function showLeadDetails(lead) {
-            const modal = document.getElementById('leadModal');
-            const details = document.getElementById('leadDetails');
-
-            // Get full lead details with calls
-            try {
-                const res = await fetch(`${API_BASE}/api/admin/leads/${lead.id}`, {
-                    headers: getAuthHeaders()
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    const fullLead = data.lead;
-                    renderLeadDetails(fullLead);
-                    modal.classList.add('active');
-                }
-            } catch (error) {
-                console.error('Error loading lead details:', error);
-                alert('Error loading lead details');
-            }
-        }
-
-        function renderLeadDetails(lead) {
-            const details = document.getElementById('leadDetails');
-            
-            details.innerHTML = `
-                <div class="form-group">
-                    <label>Clinic Name</label>
-                    <input type="text" value="${lead.clinic_name || ''}" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label>Location</label>
-                    <input type="text" value="${lead.location || ''}" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label>Phone</label>
-                    <input type="text" value="${lead.clinic_phone || 'Not available'}" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="text" value="${lead.clinic_email || 'Not available'}" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label>Pipeline Stage</label>
-                    <select id="pipelineStage" onchange="updatePipelineStage('${lead.id}')">
-                        ${PIPELINE_STAGES.map(s => 
-                            `<option value="${s.id}" ${lead.pipeline_stage === s.id ? 'selected' : ''}>${s.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Lead Score</label>
-                    <input type="number" id="leadScore" value="${lead.lead_score || 0}" min="0" max="100">
-                </div>
-
-                <div class="form-group">
-                    <label>Follow-Up Date</label>
-                    <input type="datetime-local" id="followUpDate" value="${lead.follow_up_date ? new Date(lead.follow_up_date).toISOString().slice(0, 16) : ''}">
-                </div>
-
-                <div class="form-group">
-                    <label>Next Action</label>
-                    <input type="text" id="nextAction" value="${lead.next_action || ''}" placeholder="e.g., Schedule demo, Send proposal">
-                </div>
-
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="leadNotes" placeholder="Add notes about this lead...">${lead.notes || ''}</textarea>
-                </div>
-
-                <div style="margin-top: 20px;">
-                    <h3>Call History (${lead.calls ? lead.calls.length : 0})</h3>
-                    ${lead.calls && lead.calls.length > 0 ? 
-                        lead.calls.map(call => `
-                            <div style="background: var(--gray-100); padding: 12px; border-radius: 6px; margin-bottom: 8px;">
-                                <div><strong>Status:</strong> ${call.call_status}</div>
-                                ${call.call_duration_seconds ? `<div><strong>Duration:</strong> ${Math.round(call.call_duration_seconds / 60)} min</div>` : ''}
-                                ${call.call_cost ? `<div><strong>Cost:</strong> $${call.call_cost.toFixed(2)}</div>` : ''}
-                                ${call.outcome ? `<div><strong>Outcome:</strong> ${call.outcome}</div>` : ''}
-                                ${call.notes ? `<div><strong>Notes:</strong> ${call.notes}</div>` : ''}
-                                <div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">
-                                    ${new Date(call.created_at).toLocaleString()}
-                                </div>
-                            </div>
-                        `).join('') :
-                        '<p style="color: var(--gray-400);">No calls yet</p>'
-                    }
-                </div>
-
-                <div style="margin-top: 20px; display: flex; gap: 12px;">
-                    <button class="btn btn-primary" onclick="saveLeadDetails('${lead.id}')">Save Changes</button>
-                    ${lead.clinic_phone ? `<button class="btn btn-primary" onclick="initiateCall('${lead.id}')">🤖 Agent Call</button>` : ''}
-                    <button class="btn" onclick="closeModal()">Close</button>
-                </div>
-            `;
-        }
-
-        async function saveLeadDetails(leadId) {
-            const pipelineStage = document.getElementById('pipelineStage').value;
-            const leadScore = parseInt(document.getElementById('leadScore').value) || 0;
-            const followUpDate = document.getElementById('followUpDate').value;
-            const nextAction = document.getElementById('nextAction').value;
-            const notes = document.getElementById('leadNotes').value;
-
-            try {
-                const res = await fetch(`${API_BASE}/api/admin/leads/${leadId}/pipeline-stage`, {
-                    method: 'PUT',
-                    headers: getAuthHeaders(),
-                    body: JSON.stringify({
-                        pipeline_stage: pipelineStage,
-                        lead_score: leadScore,
-                        follow_up_date: followUpDate || null,
-                        next_action: nextAction || null,
-                        notes: notes || null
-                    })
-                });
-
-                const data = await res.json();
-                
-                if (data.success) {
-                    alert('Lead updated successfully!');
-                    closeModal();
-                    loadPipeline();
-                } else {
-                    alert('Failed to update: ' + data.message);
-                }
-            } catch (error) {
-                alert('Error updating lead: ' + error.message);
-            }
-        }
-
-        async function initiateCall(leadId) {
-            if (!confirm('Initiate agent call to this clinic?')) return;
-
-            try {
-                const res = await fetch(`${API_BASE}/api/admin/leads/${leadId}/call`, {
-                    method: 'POST',
-                    headers: getAuthHeaders()
-                });
-
-                const data = await res.json();
-                
-                if (data.success) {
-                    alert(`Call initiated! Remaining calls: ${data.call_usage.calls_remaining}`);
-                    loadPipeline();
-                } else {
-                    alert('Failed to initiate call: ' + data.message);
-                }
-            } catch (error) {
-                alert('Error initiating call: ' + error.message);
-            }
-        }
-
-        function closeModal() {
-            document.getElementById('leadModal').classList.remove('active');
-        }
-
-        // Set active state for current page
-        window.addEventListener('DOMContentLoaded', () => {
-          const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-          document.querySelectorAll('.nav-icon').forEach(icon => {
-            icon.classList.remove('active');
-            const onclick = icon.getAttribute('onclick');
-            if (onclick && onclick.includes(currentPage)) {
-              icon.classList.add('active');
-            }
-          });
-          // If no link matches, set pipeline as active (current page)
-          if (currentPage === 'pipeline.html') {
-            document.querySelectorAll('.nav-icon').forEach(icon => {
-              if (icon.textContent.includes('📈')) {
-                icon.classList.add('active');
-              }
-            });
-          }
-        });
-
-        // Load pipeline on page load
-        loadPipeline();
-
-        // Refresh every 30 seconds
-        setInterval(loadPipeline, 30000);
-    </script>
-        </main>
-    </div>
+        alert(`Initiated ${(r.leads || []).length} calls`);
+        loadQueue();
+        loadKanban();
+      } catch (e) { alert(e.message); }
+    }
+  </script>
 </body>
 </html>
-

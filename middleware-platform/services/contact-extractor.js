@@ -8,6 +8,45 @@
 const axios = require('axios');
 const { searchJobs } = require('./job-scraper');
 
+/** Domains that are job boards, ATS pages, or aggregators — not clinic websites. */
+const JOB_BOARD_DOMAINS = [
+  'linkedin.com',
+  'indeed.com',
+  'glassdoor.com',
+  'ziprecruiter.com',
+  'snagajob.com',
+  'recruit.net',
+  'monster.com',
+  'careerbuilder.com',
+  'jobs.com',
+  'simplyhired.com',
+  'google.com',
+  'talent.com',
+  'careerplug.com',
+  'smartrecruiters.com',
+  'icims.com',
+  'myworkdayjobs.com',
+  'workday.com',
+  'greenhouse.io',
+  'boards.greenhouse.io',
+  'lever.co',
+  'jobs.lever.co',
+  'applytojob.com',
+  'bamboohr.com',
+  'paylocity.com',
+  'ultipro.com',
+  'adp.com',
+  'jobvite.com',
+  'ashbyhq.com',
+  'example.com',
+];
+
+function isJobBoardUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const lower = url.toLowerCase();
+  return JOB_BOARD_DOMAINS.some((d) => lower.includes(d));
+}
+
 /**
  * Validate US phone number
  * Returns true if valid US phone number (10 digits or 11 starting with 1)
@@ -223,9 +262,7 @@ async function findClinicWebsite(clinicName, location) {
 
     // Find the first result that looks like the clinic's website
     // (not a job board, not LinkedIn, not Indeed, etc.)
-    const excludeDomains = ['linkedin.com', 'indeed.com', 'glassdoor.com', 'ziprecruiter.com',
-      'snagajob.com', 'monster.com', 'careerbuilder.com', 'recruit.net',
-      'jobs.com', 'simplyhired.com', 'google.com'];
+    const excludeDomains = JOB_BOARD_DOMAINS;
 
     for (const result of results) {
       const link = result.link || result.url || '';
@@ -272,30 +309,27 @@ async function findClinicWebsite(clinicName, location) {
  * @returns {Promise<{phone: string|null, email: string|null, openingHours: string|null}>}
  */
 async function extractContactInfo(url, clinicName = null, location = null) {
+  const jobPostingUrl = url && isJobBoardUrl(url) ? url : null;
+  let website_url = url && !isJobBoardUrl(url) ? url : null;
+
   if (!url) {
-    // If no URL but we have clinic name, try to find their website
     if (clinicName) {
       const website = await findClinicWebsite(clinicName, location);
       if (website) {
-        return extractContactInfo(website);
+        website_url = website;
+        return { ...(await extractContactInfo(website)), website_url: website, job_posting_url: null };
       }
     }
-    return { phone: null, email: null, openingHours: null };
+    return { phone: null, email: null, openingHours: null, website_url: null, job_posting_url: null };
   }
 
-  // Check if URL is a job board - if so, try to find clinic website instead
-  const jobBoardDomains = ['linkedin.com', 'indeed.com', 'snagajob.com', 'recruit.net',
-    'ziprecruiter.com', 'monster.com', 'careerbuilder.com'];
-  const isJobBoard = jobBoardDomains.some(domain => url.includes(domain));
+  const isJobBoard = isJobBoardUrl(url);
 
   if (isJobBoard && clinicName) {
     console.log(`🔍 Job board URL detected, searching for ${clinicName} website...`);
 
-    // Try multiple methods to find contact info
-    // Method 1: Search for clinic website via Google
     let website = await findClinicWebsite(clinicName, location);
 
-    // Method 2: Try common website patterns
     if (!website && clinicName) {
       const cleanName = clinicName
         .toLowerCase()
@@ -309,51 +343,77 @@ async function extractContactInfo(url, clinicName = null, location = null) {
         try {
           const testResponse = await axios.get(testUrl, {
             timeout: 3000,
-            validateStatus: (status) => status < 500 // Accept 404, etc.
+            validateStatus: (status) => status < 500,
           });
           if (testResponse.status === 200) {
             website = testUrl;
             console.log(`✅ Found clinic website via pattern: ${website}`);
             break;
           }
-        } catch (e) {
-          // Continue trying
+        } catch {
+          // continue
         }
       }
     }
 
     if (website) {
       console.log(`✅ Using clinic website: ${website}`);
-      url = website; // Use clinic website instead
+      url = website;
+      website_url = website;
     } else {
-      console.log(`⚠️  Could not find clinic website for ${clinicName}, trying job board anyway...`);
+      console.log(`⚠️  No clinic website for ${clinicName} — skipping job board scrape`);
+      return {
+        phone: null,
+        email: null,
+        openingHours: null,
+        website_url: null,
+        job_posting_url: jobPostingUrl,
+        error: 'job_board_only',
+      };
     }
+  } else if (!isJobBoard) {
+    website_url = url;
   }
 
   try {
-    // Fetch the page
     const response = await axios.get(url, {
       timeout: 10000,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       },
-      maxRedirects: 5
+      maxRedirects: 5,
     });
 
     const html = response.data;
-    // Ensure html is a string (axios might parse JSON)
     const htmlString = typeof html === 'string' ? html : JSON.stringify(html);
-    return extractFromHTML(htmlString);
-
+    const parsed = extractFromHTML(htmlString);
+    return {
+      ...parsed,
+      website_url: website_url || url,
+      job_posting_url: jobPostingUrl,
+    };
   } catch (error) {
     console.error('❌ Contact extraction error:', error.message);
 
-    // If it's a timeout or network error, return null
     if (error.code === 'ECONNABORTED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
-      return { phone: null, email: null, openingHours: null, error: 'Network error' };
+      return {
+        phone: null,
+        email: null,
+        openingHours: null,
+        website_url: website_url || null,
+        job_posting_url: jobPostingUrl,
+        error: 'Network error',
+      };
     }
 
-    return { phone: null, email: null, openingHours: null, error: error.message };
+    return {
+      phone: null,
+      email: null,
+      openingHours: null,
+      website_url: website_url || null,
+      job_posting_url: jobPostingUrl,
+      error: error.message,
+    };
   }
 }
 
@@ -381,6 +441,8 @@ module.exports = {
   extractContactInfoBatch,
   extractPhoneNumber,
   extractEmail,
-  extractOpeningHours
+  extractOpeningHours,
+  isJobBoardUrl,
+  JOB_BOARD_DOMAINS,
 };
 

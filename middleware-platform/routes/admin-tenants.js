@@ -6,18 +6,25 @@
 const express = require('express');
 const db = require('../database');
 const { requireAdminOrCapability } = require('../middleware/admin-auth');
+const tenantHealth = require('../services/tenant-health');
 
 const router = express.Router();
 const requireTenantsAccess = requireAdminOrCapability('platform.tenants');
 
-function resolveTenantCustomerId(clinicId) {
-  if (!clinicId) return null;
-  return (
-    db.getCustomerIdForClinic?.(clinicId) ||
-    db.ensureCustomerIdForClinic?.(clinicId) ||
-    null
-  );
-}
+const resolveTenantCustomerId = tenantHealth.resolveTenantCustomerId;
+
+/**
+ * GET /api/admin/tenants/alerts
+ */
+router.get('/alerts', requireTenantsAccess, async (req, res) => {
+  try {
+    const alerts = tenantHealth.getAllTenantAlerts();
+    res.json({ alerts, total: alerts.length });
+  } catch (error) {
+    console.error('tenant alerts error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 /**
  * Get all tenants with usage and credits summary
@@ -87,9 +94,12 @@ router.get('/', requireTenantsAccess, async (req, res) => {
             // Get phone numbers
             const phoneNumbers = db.getClinicPhoneNumbers(clinicId) || [];
 
+            const billing = tenantHealth.enrichTenantRow(clinic);
+
             return {
                 clinic_id: clinicId,
                 name: clinic.name,
+                company_name: billing.company_name,
                 slug: clinic.slug,
                 email: clinic.email,
                 phone_number: clinic.phone_number,
@@ -99,6 +109,12 @@ router.get('/', requireTenantsAccess, async (req, res) => {
                 is_active: clinic.is_active === 1,
                 created_at: clinic.created_at,
                 updated_at: clinic.updated_at,
+                subscription_status: billing.subscription_status,
+                trial_status: billing.trial_status,
+                trial_expires_at: billing.trial_expires_at,
+                onboarding_state: billing.onboarding_state,
+                plan_tier: billing.plan_tier,
+                minutes_remaining: billing.minutes_remaining,
                 credits: {
                     balance_minutes: credits.credits_balance_minutes || 0,
                     free_allocated: credits.free_credits_allocated || 0,
@@ -247,14 +263,23 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
         // Get phone numbers
         const phoneNumbers = db.getClinicPhoneNumbers(clinicId) || [];
 
+        const billing = tenantHealth.enrichTenantRow(clinic);
+
         res.json({
             success: true,
             tenant: {
                 clinic_id: clinic.clinic_id,
                 name: clinic.name,
+                company_name: billing.company_name,
                 slug: clinic.slug,
                 email: clinic.email,
                 phone_number: clinic.phone_number,
+                subscription_status: billing.subscription_status,
+                trial_status: billing.trial_status,
+                trial_expires_at: billing.trial_expires_at,
+                onboarding_state: billing.onboarding_state,
+                plan_tier: billing.plan_tier,
+                minutes_remaining: billing.minutes_remaining,
                 phone_numbers: phoneNumbers.map(p => ({
                     phone_number: p.phone_number,
                     is_primary: p.is_primary === 1

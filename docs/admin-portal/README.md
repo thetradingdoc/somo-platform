@@ -1,238 +1,147 @@
-# admin portal — consolidated documentation
+# Admin Portal — Operator CRM
 
-**Single file:** All former `docs/admin-portal/**/*.md` content is merged here. **Last updated:** 2026-06-15
+**URL:** [https://callsomo.com/admin](https://callsomo.com/admin)
 
-## Design (brand)
-
-- **URL:** `https://callsomo.com/admin`
-- **CSS SSOT:** [`unified-dashboard/assets/css/admin-portal.css`](../../unified-dashboard/assets/css/admin-portal.css) + [`somo-tokens.css`](../../unified-dashboard/assets/css/somo-tokens.css)
-- **Login:** [`auth-somo.css`](../../unified-dashboard/assets/css/auth-somo.css) patterns; official [`somo-logo.png`](../../unified-dashboard/assets/brand/somo-logo.png)
-- **Palette:** [SOMO_MARKETING_COLORS.md](../design/SOMO_MARKETING_COLORS.md) (light marketing — lizard CTAs, MSU headings)
-- **Typography:** League Spartan (`--font-brand`)
-- **Forbidden:** purple admin theme (`#7c5dfa`, `#38bdf8`), invented SVG cube logos, `global.css` on admin pages
-
-## Table of contents
-
-- [Admin Portal Structure (`ADMIN_PORTAL_STRUCTURE.md`)](#admin-portal-structure)
-- [Admin Portal Testing Guide (`ADMIN_PORTAL_TESTING.md`)](#admin-portal-testing)
-- [Admin Portal Documentation (`README.md`)](#readme)
----
-
-## Introduction
-
-Browse by anchor above. Each section notes the former file path.
-
----
+**Last updated:** 2026-06-16
 
 <a id="admin-portal-structure"></a>
 
-## Admin Portal Structure
-
-*Former path: `docs/admin-portal/ADMIN_PORTAL_STRUCTURE.md`*
-
-
 ## Overview
 
-The admin portal is a hybrid system combining:
-- **Main Dashboard** (`index.html`) with tabs for quick access to core features
-- **Standalone Pages** for complex features that need full-page real estate
+The admin portal is a focused 4-page operator CRM for outbound sales and tenant health:
 
-## Current Structure (Updated)
+| Page | URL | Purpose |
+|------|-----|---------|
+| Control board | `/admin/` | Metrics, tenant alerts, funnel, scrape/enrich jobs |
+| Sales pipeline | `/admin/pipeline.html` | Call-ready queue, kanban, batch calling |
+| Lead detail | `/admin/lead.html?id=` | Contact, stage, notes, calls, transcripts |
+| Tenants | `/admin/tenants.html` | Tenant alerts, usage, credit allocation |
 
-### Main Dashboard (`/admin` or `/admin/index.html`)
+## Design
 
-**Tabs:**
-- **Dashboard** - Overview with stats and activity feed
-- **Tenants (Clinics)** - Healthcare clinics using the platform (end users)
-- **Leads** - Lead search, management, and intelligence
-- **Pipeline** - Redirects to `pipeline.html` (standalone page has more features)
-- **Clients (API Customers)** - API customers (developers/companies using the API)
-- **⚡ Workflows** - Redirects to `workflows.html` (standalone visual builder)
+- **CSS:** [`unified-dashboard/assets/css/admin-portal.css`](../unified-dashboard/assets/css/admin-portal.css) + [`somo-tokens.css`](../unified-dashboard/assets/css/somo-tokens.css)
+- **Shared JS:** [`unified-dashboard/admin/assets/js/admin-shell.js`](../unified-dashboard/admin/assets/js/admin-shell.js)
+- **API config:** [`unified-dashboard/assets/js/config.js`](../unified-dashboard/assets/js/config.js) — always use `window.API_BASE`
 
-**Note:** Pipeline and Workflows tabs redirect to standalone pages because those features require more screen space and have richer functionality.
+## API surface
 
-### Standalone Pages
+### Scrape / CRM facade (`/api/admin/scrape/*`)
 
-1. **`/admin/workflows.html`** - Visual workflow builder with node-based editor
-2. **`/admin/pipeline.html`** - Enhanced sales pipeline with drag-and-drop
-3. **`/admin/leads.html`** - Lead generation and management (complements Leads tab)
-4. **`/admin/clients.html`** - Client and credit management (identical to Clients tab)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/status` | Job scheduler state, lead counts, call cap |
+| GET | `/leads` | Filtered lead list (`contact_status`, `specialty`, `search`) |
+| GET | `/leads/call-ready` | Top verified leads in `new` stage |
+| GET | `/leads/pipeline` | Kanban counts + cards |
+| GET | `/leads/:id` | Lead + calls + activities |
+| PUT | `/leads/:id/stage` | Update pipeline stage |
+| POST | `/leads/:id/note` | Add note activity |
+| POST | `/run` | SSE scrape job |
 
-**Note:** `clients.html` is functionally identical to the Clients tab in `index.html`. Both are kept for flexibility, but they use the same API endpoints and data structure.
+### Enrichment (`/api/admin/enrich/*`)
 
-## URL Patterns
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/batch` | SSE batch contact enrichment |
 
-### Main Dashboard
-- `/admin` → `index.html` (default: Dashboard tab)
-- `/admin/index.html` → `index.html` (default: Dashboard tab)
-- `/admin?tab=leads` → `index.html` with Leads tab active
-- `/admin?tab=clients` → `index.html` with Clients tab active
-- `/admin?tab=tenants` → `index.html` with Tenants tab active
+### Leads (existing + aliases)
 
-### Standalone Pages
-All admin pages are accessible ONLY under `/admin/`:
-- `/admin/workflows.html` → Workflow builder
-- `/admin/pipeline.html` → Sales pipeline
-- `/admin/leads.html` → Lead management
-- `/admin/clients.html` → Client management
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/admin/leads/:id/call` | Outbound sales call (HITL confirm in UI) |
+| POST | `/api/admin/leads/:id/enrich` | Single-lead enrich alias |
+| GET | `/api/admin/leads/calls/:callId/transcript` | Call transcript |
 
-## File Locations
+### Tenants
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/tenants/alerts` | Computed tenant health alerts |
+| GET | `/api/admin/tenants` | Tenant list with billing fields |
+| GET | `/api/admin/tenants/:clinicId` | Tenant detail |
+| POST | `/api/admin/tenants/:clinicId/credits` | Allocate free minutes |
+
+## Human-in-the-loop automation
+
+**Automated:** nightly scrape (cron script), contact extraction on save, lead scoring, post-call stage hints via Retell webhook, monthly call cap.
+
+**Human gates:** scrape now, batch enrich, single/batch outbound calls, pipeline stage changes, demo review, transcript review, tenant credit allocation.
+
+## Lead ingestion rules
+
+- Scrape uses JSearch (RapidAPI) or SerpAPI — configure `JOB_SEARCH_*` in `.env` (see `.env.example`).
+- Job-board URLs (Indeed, LinkedIn, etc.) are never shown as the lead website; clinic sites are preferred when discoverable.
+- **Only leads with a verified US phone number are saved** to the CRM (`lead-ingestion.js`, `contact-extractor.js`).
+- Job posting URLs are stored in lead notes as `job_posting_url: …` for operator reference.
+- Batch enrich deletes leads that still lack a callable phone after extraction.
+
+## Language requirements (outbound calls)
+
+Job titles/descriptions are parsed for bilingual requirements (Russian, Mandarin, Spanish, etc.) via `lead-language-extractor.js`. Stored on each lead:
+
+| Field | Purpose |
+|-------|---------|
+| `required_languages` | JSON array of language names |
+| `preferred_language` | ISO code for Retell routing |
+| `language_instruction` | Prompt snippet for the sales agent |
+
+Outbound calls pass these as Retell dynamic variables. Add to the sales agent prompt:
 
 ```
-unified-dashboard/admin/
-├── index.html          # Main dashboard with tabs
-├── workflows.html      # Visual workflow builder
-├── pipeline.html       # Sales pipeline
-├── leads.html          # Lead management
-└── clients.html        # Client management
+{{language_instruction}}
+Preferred language code: {{preferred_language}}
+Required languages: {{required_languages}}
 ```
-
-## Related Documentation
-
-- [ADMIN_PORTAL_FIXES_COMPLETE.md](../archive/README.md#admin-portal-fixes-complete) (archived)
-- [ADMIN_PORTAL_TESTING.md](./README.md#admin-portal-testing)
-
-
----
 
 <a id="admin-portal-testing"></a>
 
-## Admin Portal Testing Guide
-
-*Former path: `docs/admin-portal/ADMIN_PORTAL_TESTING.md`*
-
-
-**Last Updated:** 2025-12-13  
-**Status:** ✅ Testing Script Created
-
-## Overview
-
-This document outlines how to test the admin portal to ensure all navigation, routing, and functionality works correctly.
-
-## Automated Testing
-
-### Route Testing Script
-
-A Node.js script is available to test all admin portal routes:
+## Local development
 
 ```bash
-# Test against local server
-node middleware-platform/scripts/test-admin-routes.js http://localhost:4000
+# API (from middleware-platform/)
+npm start
 
-# Test against production (if accessible)
-node middleware-platform/scripts/test-admin-routes.js https://api.callsomo.com
+# Admin UI — served at http://localhost:4000/admin/
+# Static files: unified-dashboard/admin/
+
+# Route smoke test (from middleware-platform/)
+node scripts/test-admin-routes.js
+
+# Pipeline debug (optional — hits live scrape/enrich APIs)
+node scripts/debug-crm-pipeline.js --scrape
+
+# Cleanup no-phone leads and strip job-board URLs
+node scripts/cleanup-sales-leads.js
+
+# Language extractor unit tests
+npm test -- --testPathPattern=lead-language-extractor
 ```
 
-**What it tests:**
-- Main dashboard access (`/admin`, `/admin/index.html`)
-- Tab URL parameters (`/admin?tab=leads`, `/admin?tab=clients`, etc.)
-- Standalone pages with `/admin/` prefix
-- Standalone pages with direct access (root URLs)
-- HTTP status codes (expects 200 for all)
+## Deployment
 
-**Expected Output:**
+Firebase hosting copies `unified-dashboard/admin/` → `hosting-dist/admin/` via `npm run build:staging-hosting`. API lives at `api.callsomo.com`.
+
+## File locations
+
 ```
-🧪 Testing Admin Portal Routes
+unified-dashboard/admin/
+  index.html          # Control board
+  pipeline.html       # Sales pipeline
+  lead.html           # Lead detail
+  tenants.html        # Tenant health
+  assets/js/admin-shell.js
 
-Base URL: http://localhost:4000
+middleware-platform/routes/
+  admin-scrape.js     # CRM facade
+  admin-enrich.js     # Batch enrich SSE
+  admin-leads.js      # Core lead/call APIs
+  admin-tenants.js    # Tenant monitoring + alerts
 
-──────────────────────────────────────────────────────────────────────
-Testing: Main Dashboard                        ... ✅ PASS
-Testing: Dashboard (index.html)                ... ✅ PASS
-Testing: Dashboard (leads tab)                 ... ✅ PASS
-...
-📊 Summary: 14/14 passed, 0 failed
+middleware-platform/services/
+  admin-lead-facade.js
+  admin-job-tracker.js
+  tenant-health.js
+  lead-ingestion.js
+  lead-language-extractor.js
+  contact-extractor.js
 ```
-
-## Manual Testing Checklist
-
-### 1. Navigation Links
-
-Test navigation from each page:
-
-#### From Main Dashboard (`/admin`)
-- [ ] Click "Dashboard" tab → Shows dashboard content
-- [ ] Click "Tenants" tab → Shows tenants/clinics list
-- [ ] Click "Leads" tab → Shows leads search interface
-- [ ] Click "Pipeline" tab → Redirects to `pipeline.html`
-- [ ] Click "Clients" tab → Shows clients/credits table
-- [ ] Click "⚡ Workflows" tab → Redirects to `workflows.html`
-- [ ] Click sidebar icons → Navigate to corresponding pages
-
-#### From Workflows, Pipeline, Leads, Clients pages
-- [ ] Sidebar navigation works
-- [ ] Breadcrumbs show correct context
-
-### 2. Tab Functionality
-
-Test tabs in main dashboard (`/admin`):
-
-- [ ] **Dashboard Tab** - Loads, shows stats, activity feed, AI Assistant
-- [ ] **Tenants Tab** - Shows clinics, credit allocation, tooltips
-- [ ] **Leads Tab** - Search interface, sub-tabs, lead data
-- [ ] **Pipeline Tab** - Redirects to `pipeline.html`
-- [ ] **Clients Tab** - Clients table, credits, tooltips, XSS escaping
-- [ ] **Workflows Tab** - Redirects to `workflows.html`
-
-### 3. URL Parameter Support
-
-- [ ] `/admin?tab=dashboard` → Opens dashboard tab
-- [ ] `/admin?tab=tenants` → Opens tenants tab
-- [ ] `/admin?tab=leads` → Opens leads tab
-- [ ] `/admin?tab=clients` → Opens clients tab
-- [ ] Invalid tab parameter → Falls back to dashboard
-
-### 4. Direct URL Access
-
-With `/admin/` prefix:
-- [ ] `/admin`, `/admin/index.html` → Main dashboard
-- [ ] `/admin/workflows.html`, `/admin/pipeline.html`, `/admin/leads.html`, `/admin/clients.html` → Respective pages
-
-Root-level access (should be blocked):
-- [ ] `/workflows.html`, `/pipeline.html`, etc. → 404
-
-### 5. Active State Highlighting
-
-- [ ] Sidebar icon highlights for current page/tab
-
-### 6. Authentication
-
-- [ ] Login form shows when unauthenticated
-- [ ] Valid credentials → Dashboard
-- [ ] Session persists, logout works
-
-### 7. Security
-
-- [ ] HTML escaping in client table (XSS prevention)
-
-## Related Documentation
-
-- [ADMIN_PORTAL_STRUCTURE.md](./README.md#admin-portal-structure)
-- [ADMIN_PORTAL_FIXES_COMPLETE.md](../archive/README.md#admin-portal-fixes-complete) (archived)
-
-
----
-
-<a id="readme"></a>
-
-## Admin Portal Documentation
-
-*Former path: `docs/admin-portal/README.md`*
-
-**Last Updated:** April 9, 2026
-
-Documentation for the Somo admin portal (unified dashboard admin section).
-
-## Documents
-
-- **[ADMIN_PORTAL_STRUCTURE.md](./README.md#admin-portal-structure)** - Structure, URL patterns, navigation
-- **[ADMIN_PORTAL_TESTING.md](./README.md#admin-portal-testing)** - Testing guide and checklist
-- **[ADMIN_PORTAL_FIXES_COMPLETE.md](../archive/README.md#admin-portal-fixes-complete)** - Summary of fixes applied (archived)
-
-## Quick Reference
-
-- **Main Dashboard**: `/admin` or `/admin/index.html`
-- **Standalone Pages**: `/admin/workflows.html`, `/admin/pipeline.html`, `/admin/leads.html`, `/admin/clients.html`
-- **Route Test**: `node middleware-platform/scripts/test-admin-routes.js http://localhost:4000`
-
-
