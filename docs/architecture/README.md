@@ -18,6 +18,8 @@
 | Platform snapshot | [#current-state-architecture](./LIVE.md#current-state-architecture) |
 | Route ownership | [#runtime-entrypoints-and-route-ownership](./LIVE.md#runtime-entrypoints-and-route-ownership) |
 | Kelly rails | [#kelly-rails-v2-as-built](./LIVE.md#kelly-rails-v2-as-built) |
+| Orchestration (L2/L4) | [`KELLY_ORCHESTRATION_ARCHITECTURE.md`](./KELLY_ORCHESTRATION_ARCHITECTURE.md) |
+| Gap matrix / backlog | [`ORCHESTRATION_GAP_MATRIX.md`](./ORCHESTRATION_GAP_MATRIX.md) |
 | Patient timeline | [#patient-timeline-routine-and-billing](./LIVE.md#patient-timeline-routine-and-billing) |
 
 The sections below are a **consolidated archive** of former per-folder markdown files (searchable TOC). Prefer [`LIVE.md`](./LIVE.md) for new work.

@@ -39,6 +39,17 @@ const facade = require('../services/admin-lead-facade');
 assert.strictEqual(facade.normalizeStage('closed_won'), 'won');
 assert.strictEqual(facade.denormalizeStage('won'), 'closed_won');
 assert.strictEqual(facade.getContactStatus({ clinic_phone: '+15551234567' }), 'verified');
+assert.strictEqual(facade.hasValidPhone('555-1234'), false);
+assert.strictEqual(facade.hasValidPhone('+1 (555) 123-4567'), true);
+assert.strictEqual(
+  facade.filterCallableLeads([
+    { clinic_phone: '+15551234567' },
+    { clinic_phone: '123' },
+    { clinic_phone: null },
+  ]).length,
+  1
+);
+assert.throws(() => facade.assertCallableLead({ clinic_phone: '123' }), /verified phone/i);
 
 const jobTracker = require('../services/admin-job-tracker');
 jobTracker.ensureTable();

@@ -2,6 +2,7 @@
 
 const { UserIntent } = require('./conversation-mode-types');
 const { EMERGENCY_SIGNALS, PAYMENT_SIGNALS, RECORDS_SIGNALS, CLINICAL_SIGNALS } = require('../kelly-rails/state-schema');
+const { normalizeForIntentDetection } = require('./asr-normalize');
 
 const BILLING_PIVOT_PHRASES = [
   'pay copay',
@@ -58,6 +59,9 @@ const BOOK_PHRASES = [
   'schedule appointment',
   'make an appointment',
   'need an appointment',
+  'need to book',
+  'book a',
+  'book an',
   'see a doctor',
   'agendar cita',
   'hacer una cita',
@@ -66,6 +70,18 @@ const BOOK_PHRASES = [
   'necesito una cita',
   'cita de',
   'reservar una cita'
+];
+
+const CANCEL_REBOOK_PHRASES = [
+  'cancel and rebook',
+  'cancel and book',
+  'cancel this and book',
+  'cancel it and book',
+  'book another time',
+  'book a new time',
+  'new appointment instead',
+  'book a different time instead',
+  'cancel my appointment and book'
 ];
 
 const HANDOFF_PHRASES = [
@@ -100,8 +116,8 @@ const INTENT_PRIORITY = {
   [UserIntent.APPT_LOOKUP]: 2.5,
   [UserIntent.RESCHEDULE]: 3,
   [UserIntent.BOOK]: 4,
+  [UserIntent.RECORDS]: 4.5,
   [UserIntent.SYMPTOM]: 5,
-  [UserIntent.RECORDS]: 6,
   [UserIntent.BILLING_FAQ]: 7,
   [UserIntent.HANDOFF]: 8,
   [UserIntent.GENERAL]: 99
@@ -115,6 +131,20 @@ function matchesAny(msg, phrases) {
   return phrases.some((p) => msg.includes(p));
 }
 
+function isAdminBookingPhrase(msg) {
+  if (/\b(rash|itch|pain|hurt|symptom|fever|burn|swollen|erupcion|erupción|picor|comezón|comezon|dolor)\b/.test(msg)) {
+    return false;
+  }
+  return (
+    matchesAny(msg, BOOK_PHRASES) ||
+    isCancelRebookUtterance(msg) ||
+    /\bbook\b.*\b(appointment|visit|cita)\b/.test(msg) ||
+    /\b(appointment|visit|cita)\b.*\bbook\b/.test(msg) ||
+    /\b(available|times|slots|openings)\b.*\b(appointment|visit|time)\b/.test(msg) ||
+    /\bwhat time/.test(msg)
+  );
+}
+
 function isEmergency(msg) {
   const m = normalizeMsg(msg);
   if (/\b(not an emergency|no emergency)\b/.test(m)) return false;
@@ -122,7 +152,8 @@ function isEmergency(msg) {
 }
 
 function detectIntents(utterance) {
-  const msg = normalizeMsg(utterance);
+  const { normalized } = normalizeForIntentDetection(utterance);
+  const msg = normalizeMsg(normalized || utterance);
   const intents = [];
 
   if (!msg) return [{ intent: UserIntent.GENERAL, confidence: 0.5 }];
@@ -133,7 +164,7 @@ function detectIntents(utterance) {
     intents.push({ intent: UserIntent.PAY_COPAY, confidence: 0.9 });
   }
 
-  if (matchesAny(msg, CANCEL_PHRASES)) {
+  if (matchesAny(msg, CANCEL_PHRASES) || isCancelRebookUtterance(msg)) {
     intents.push({ intent: UserIntent.CANCEL, confidence: 0.9 });
   }
 
@@ -145,12 +176,17 @@ function detectIntents(utterance) {
     intents.push({ intent: UserIntent.RESCHEDULE, confidence: 0.85 });
   }
 
-  if (matchesAny(msg, BOOK_PHRASES)) {
+  if (isAdminBookingPhrase(msg)) {
     intents.push({ intent: UserIntent.BOOK, confidence: 0.85 });
   }
 
-  if (CLINICAL_SIGNALS.some((s) => msg.includes(s)) && !matchesAny(msg, BOOK_PHRASES)) {
-    intents.push({ intent: UserIntent.SYMPTOM, confidence: 0.8 });
+  const hasRecordsSignals =
+    RECORDS_SIGNALS.some((s) => msg.includes(s)) || /medical record|health record|my chart/.test(msg);
+
+  if (CLINICAL_SIGNALS.some((s) => msg.includes(s)) && !isAdminBookingPhrase(msg)) {
+    if (!hasRecordsSignals) {
+      intents.push({ intent: UserIntent.SYMPTOM, confidence: 0.8 });
+    }
   }
 
   if (
@@ -176,6 +212,12 @@ function detectIntents(utterance) {
   return intents;
 }
 
+function isCancelRebookUtterance(utterance) {
+  const msg = normalizeMsg(utterance);
+  if (matchesAny(msg, CANCEL_REBOOK_PHRASES)) return true;
+  return /cancel/.test(msg) && /book|rebook|new (time|appointment|slot)/.test(msg);
+}
+
 function primaryIntent(utterance) {
   const intents = detectIntents(utterance);
   return intents[0] || { intent: UserIntent.GENERAL, confidence: 0.5 };
@@ -189,6 +231,7 @@ function secondaryIntents(utterance) {
 module.exports = {
   BILLING_PIVOT_PHRASES,
   CANCEL_PHRASES,
+  CANCEL_REBOOK_PHRASES,
   RESCHEDULE_PHRASES,
   APPT_LOOKUP_PHRASES,
   BOOK_PHRASES,
@@ -196,5 +239,6 @@ module.exports = {
   detectIntents,
   primaryIntent,
   secondaryIntents,
-  isEmergency
+  isEmergency,
+  isCancelRebookUtterance
 };

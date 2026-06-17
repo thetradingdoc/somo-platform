@@ -66,9 +66,11 @@ router.get('/leads/call-ready', requireLeads, adminLimiter, async (req, res) => 
     const limit = parseInt(req.query.limit, 10) || 10;
     const { leads } = facade.querySalesLeads({
       contact_status: 'verified',
+      callable_only: true,
       limit: 500,
     });
-    const callReady = leads
+    const callReady = facade
+      .filterCallableLeads(leads)
       .filter((l) => l.pipeline_stage === 'new' || !l.pipeline_stage)
       .slice(0, limit);
 
@@ -102,6 +104,7 @@ router.get('/leads', requireLeads, adminLimiter, async (req, res) => {
       contact_status: req.query.contact_status || undefined,
       specialty: req.query.specialty || undefined,
       search: req.query.search || undefined,
+      callable_only: req.query.contact_status === 'verified' || req.query.callable_only === '1',
       limit,
       offset,
     });
@@ -140,6 +143,12 @@ router.put('/leads/:id/stage', requireLeads, adminLimiter, async (req, res) => {
     const { stage } = req.body;
     const lead = db.getLead(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    try {
+      facade.assertCallableLead(lead);
+    } catch (e) {
+      return res.status(400).json({ error: e.message, code: e.code });
+    }
 
     const dbStage = facade.denormalizeStage(stage);
     const oldStage = lead.pipeline_stage;

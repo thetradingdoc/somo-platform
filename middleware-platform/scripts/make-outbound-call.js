@@ -15,8 +15,16 @@ const {
 } = require('../services/operator-tenant-bootstrap');
 
 const phoneNumber = process.argv[2];
+const appointmentIdArg = (() => {
+  const i = process.argv.indexOf('--appointment-id');
+  return i > -1 ? process.argv[i + 1] : process.env.OUTBOUND_APPOINTMENT_ID || null;
+})();
+const outboundPurpose = (() => {
+  const i = process.argv.indexOf('--purpose');
+  return i > -1 ? process.argv[i + 1] : process.env.OUTBOUND_PURPOSE || null;
+})();
 
-if (!phoneNumber) {
+if (!phoneNumber || phoneNumber.startsWith('--')) {
   console.error('❌ Error: Phone number required');
   console.log('Usage: node scripts/make-outbound-call.js <phone_number>');
   process.exit(1);
@@ -60,7 +68,9 @@ async function makeCall() {
       phone_number: toNumber,
       merchantId,
       customer_id: operatorCustomerId,
-      call_type: 'operator_outbound'
+      call_type: 'operator_outbound',
+      appointment_id: appointmentIdArg,
+      outbound_purpose: outboundPurpose || (appointmentIdArg ? 'appointment_reminder' : null)
     });
 
     console.log('✅ Call initiated successfully!');

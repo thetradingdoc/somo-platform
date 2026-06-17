@@ -1,6 +1,7 @@
 'use strict';
 
 const { KELLY_LANE } = require('../state-schema');
+const { subrailPromptBlock, localePromptBlock } = require('./subrail-step-objectives');
 
 const BASE =
   'You are Kelly, a clinical office assistant. Use tools for facts; never invent appointments, copays, or payment links. ' +
@@ -50,7 +51,8 @@ function laneSystemPrompt(lane, step, state, providerCtx = {}) {
 
   const identityBlock = identityParts.length ? identityParts.join(' ') + '\n\n' : '';
 
-  return `${identityBlock}${BASE}\n\n${hint}\nSession: ${state.session_id || ''}`;
+  const locale = state.locale || state.flags?.locale || 'en';
+  return `${identityBlock}${BASE}\n\n${hint}${subrailPromptBlock(state)}${localePromptBlock(locale)}\nSession: ${state.session_id || ''}`;
 }
 
 module.exports = { laneSystemPrompt, BASE, LANE_HINTS };

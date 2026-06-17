@@ -2,8 +2,13 @@
 
 const { OpqrstExitState, InconclusiveTriageAction } = require('../opqrst-exit-states');
 const { Subrail } = require('../conversation-mode-types');
+const {
+  mergeAccumulator,
+  applyFieldUtterance,
+  OPQRST_FIELDS,
+  FIELD_KEYS
+} = require('../opqrst-accumulator');
 
-const OPQRST_FIELDS = ['O', 'P', 'Q', 'R', 'S', 'T'];
 const FIELD_LABELS = {
   O: 'When did this start?',
   P: 'What makes it better or worse?',
@@ -11,15 +16,6 @@ const FIELD_LABELS = {
   R: 'Where exactly is it located?',
   S: 'On a scale of 1 to 10, how severe is it?',
   T: 'Have you had this before, or is anything else going on?'
-};
-
-const FIELD_KEYS = {
-  O: 'onset',
-  P: 'provocation',
-  Q: 'quality',
-  R: 'region',
-  S: 'severity',
-  T: 'timing'
 };
 
 function nextMissingField(accumulator = {}) {
@@ -58,14 +54,13 @@ function inconclusiveActionReply(action) {
 }
 
 async function handleOpqrstSubrail(ctx = {}) {
-  const acc = { ...(ctx.opqrst_accumulator || {}) };
+  const acc = mergeAccumulator(ctx.opqrst_accumulator || {});
   const msg = String(ctx.message || '').trim();
   const policy = ctx.tenantPolicy || {};
   const field = ctx.opqrst_current_field || nextMissingField(acc);
 
   if (field && msg) {
-    acc[field] = msg;
-    acc[FIELD_KEYS[field]] = msg;
+    Object.assign(acc, applyFieldUtterance(acc, field, msg));
   }
 
   const nextField = nextMissingField(acc);
@@ -151,6 +146,7 @@ module.exports = {
   handleOpqrstSubrail,
   OPQRST_FIELDS,
   FIELD_LABELS,
+  FIELD_KEYS,
   nextMissingField,
   assessExit,
   inconclusiveActionReply

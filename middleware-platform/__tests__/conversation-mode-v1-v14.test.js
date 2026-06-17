@@ -77,12 +77,13 @@ describe('conversation mode acceptance V1–V14', () => {
     expect(out.state_updates.opqrst_frozen).toBe(true);
   });
 
-  test('V9 reschedule after cancel pivots to booking', async () => {
+  test('V9 reschedule instead sets reschedule_pending on cancellation subrail', async () => {
     const out = await handleCancellationSubrail({
       active_subrail_step: 'confirm_cancel',
       message: 'reschedule instead'
     });
-    expect(out.active_subrail).toBe('booking');
+    expect(out.active_subrail).toBe('cancellation');
+    expect(out.state_updates.reschedule_pending).toBe(true);
   });
 
   test('V10 OPQRST inconclusive exits safely', async () => {

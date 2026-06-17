@@ -243,6 +243,18 @@ function createVoiceIncomingHandler(deps) {
     if (clinicId) {
       metadata.clinic_id = clinicId;
     }
+    const appointmentIdFromQuery = req.query.appointment_id
+      ? String(req.query.appointment_id).trim()
+      : null;
+    const outboundPurposeFromQuery = req.query.outbound_purpose
+      ? String(req.query.outbound_purpose).trim()
+      : null;
+    if (appointmentIdFromQuery) {
+      metadata.appointment_id = appointmentIdFromQuery;
+    }
+    if (outboundPurposeFromQuery) {
+      metadata.outbound_purpose = outboundPurposeFromQuery;
+    }
     if (customerId) {
       metadata.customer_id = customerId;
     }
@@ -343,6 +355,16 @@ function createVoiceIncomingHandler(deps) {
     }
     if (matchedCustomer?.customer_type) {
       dynamicVariables.customer_type = String(matchedCustomer.customer_type);
+    }
+    if (appointmentIdFromQuery) {
+      dynamicVariables.appointment_id = appointmentIdFromQuery;
+    }
+    if (outboundPurposeFromQuery) {
+      dynamicVariables.outbound_purpose = outboundPurposeFromQuery;
+    }
+    if (resolvedCallType === 'operator_outbound') {
+      dynamicVariables.call_type = 'operator_outbound';
+      dynamicVariables.direction = 'outbound';
     }
 
     // Pre-populate patient context for cost optimization (P1 - reduce data entry during call)

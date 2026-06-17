@@ -280,10 +280,11 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
       });
     }
 
-    if (!lead.clinic_phone) {
+    if (!leadIngestion.isCallableLead(lead)) {
       return res.status(400).json({
         success: false,
-        error: 'Clinic phone number not available for this lead. Please add phone number first.'
+        error: 'Clinic phone number not callable for this lead. Need a valid 10-digit US phone before outbound call.',
+        code: 'LEAD_NOT_CALLABLE',
       });
     }
 

@@ -8,6 +8,35 @@ const { loadHistory, appendHistory } = require('./history');
 const { formatVoiceReply } = require('../voice-reply-formatter');
 const { isToolAllowedForMode, logModeViolation } = require('../conversation-mode/mode-tool-firewall');
 
+const OFF_TOPIC_PATTERNS = [
+  /\bI can also help with\b/i,
+  /\bby the way\b/i,
+  /\badditionally\b/i,
+  /\bother services\b/i,
+  /\bdid you know\b/i
+];
+
+function enforceScopeGuardrail(reply, state = {}, ctx = {}) {
+  const text = String(reply || '').trim();
+  if (!text) return text;
+  if (!OFF_TOPIC_PATTERNS.some((r) => r.test(text))) return text;
+  try {
+    ctx.db?.insertKellyCallEvent?.({
+      session_id: ctx.sessionId || null,
+      event_type: 'scope_guardrail_triggered',
+      payload_json: {
+        active_subrail: state.active_subrail || state.flags?.active_subrail,
+        active_subrail_step: state.active_subrail_step || state.flags?.active_subrail_step,
+        truncated: true
+      }
+    });
+  } catch (_) {}
+  const firstSentence = text.split(/(?<=[.!?])\s+/)[0] || text;
+  return firstSentence.endsWith('.') || firstSentence.endsWith('!') || firstSentence.endsWith('?')
+    ? firstSentence
+    : `${firstSentence}.`;
+}
+
 const MAX_ITERATIONS = parseInt(process.env.KELLY_RAILS_MAX_TOOL_ITERATIONS || '2', 10);
 const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300', 10);
 const KELLY_VOICE_MAX_TOKENS = parseInt(process.env.KELLY_VOICE_MAX_TOKENS || '200', 10);
@@ -94,7 +123,7 @@ async function runNodeStep(state, ctx) {
 
   appendHistory(sessionId, 'user', message);
   const history = loadHistory(sessionId);
-  const systemContent = laneSystemPrompt(lane, step, state, providerCtx);
+  const systemContent = laneSystemPrompt(lane, step, { ...state, locale: state.locale || ctx.locale }, providerCtx);
   const maxTok = channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS;
 
   let messages = [{ role: 'system', content: systemContent }, ...history];
@@ -148,12 +177,23 @@ async function runNodeStep(state, ctx) {
           callerPhone,
           channel
         });
-        toolsUsed.push(name);
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: JSON.stringify(result).slice(0, 4000)
-        });
+        if (!result || result.success === false || result.error) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify({
+              ToolError: result?.error || 'tool_failed',
+              success: false
+            }).slice(0, 4000)
+          });
+        } else {
+          toolsUsed.push(name);
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify(result).slice(0, 4000)
+          });
+        }
       }
       continue;
     }
@@ -173,8 +213,10 @@ async function runNodeStep(state, ctx) {
     reply = formatVoiceReply(reply, state);
   }
 
+  reply = enforceScopeGuardrail(reply, state, { ...ctx, db: ctx.db });
+
   appendHistory(sessionId, 'assistant', reply);
   return { reply, toolsUsed, endCall };
 }
 
-module.exports = { runNodeStep, filterTools, getKellyTools };
+module.exports = { runNodeStep, filterTools, getKellyTools, enforceScopeGuardrail };

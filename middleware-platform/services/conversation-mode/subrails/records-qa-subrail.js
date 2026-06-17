@@ -2,6 +2,7 @@
 
 async function handleRecordsQaSubrail(ctx = {}) {
   const msg = String(ctx.message || '').toLowerCase();
+  const { Handoff } = require('../handoff-types');
 
   if (/upload|send records|fax|mail/.test(msg)) {
     return {
@@ -10,8 +11,7 @@ async function handleRecordsQaSubrail(ctx = {}) {
       active_subrail: 'records_qa',
       disposition: 'records_requested',
       state_updates: { records_deferred: true },
-      toolsUsed: ['query_patient_records'],
-      use_kelly: true
+      handoff: Handoff.KELLY_REQUIRED
     };
   }
 
@@ -19,8 +19,8 @@ async function handleRecordsQaSubrail(ctx = {}) {
     reply:
       'Let me look up your records. What specific information from your last visit would you like to know?',
     active_subrail: 'records_qa',
-    toolsUsed: ['query_patient_records'],
-    use_kelly: true
+    handoff: Handoff.KELLY_REQUIRED,
+    kelly_lane_hint: 'records'
   };
 }
 

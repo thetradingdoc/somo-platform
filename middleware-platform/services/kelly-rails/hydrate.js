@@ -78,6 +78,18 @@ function hydrateFlagsFromDb(sessionId, patientId) {
   const payTok = KellyToolExecutor._getSessionMeta(sessionId, 'rcm_pay_token');
   if (payTok) flags.payment_token = payTok;
 
+  if (flags.cancel_complete == null && projection?.flags_json) {
+    try {
+      const parsed = JSON.parse(projection.flags_json);
+      if (parsed.cancel_complete) flags.cancel_complete = true;
+      if (parsed.rebook_after_cancel) flags.rebook_after_cancel = true;
+      if (parsed.booking_conflict) flags.booking_conflict = true;
+      if (parsed.provider_mismatch) flags.provider_mismatch = true;
+      if (parsed.provider_preference) flags.provider_preference = parsed.provider_preference;
+      if (parsed.reschedule_pending) flags.reschedule_pending = true;
+    } catch (_) {}
+  }
+
   if (patientId && db.db) {
     try {
       const elig = db.db

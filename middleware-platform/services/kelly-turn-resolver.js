@@ -16,6 +16,8 @@ const {
 } = require('./kelly-rails/runtime-guard');
 const { isKellyRailsV2Enabled } = require('./kelly-rails/config');
 const { recordCallStarted, recordCallCompleted } = require('./kelly-call-telemetry');
+const { Handoff } = require('./conversation-mode/handoff-types');
+const KellyToolExecutor = require('./kelly-tool-executor');
 
 function recordKellyLlmUsage(opts = {}, out = {}, latencyMs = 0) {
   try {
@@ -157,6 +159,46 @@ async function runKellyTurn(opts = {}) {
   const locale = String(opts.preferredLanguage || sessionLanguage || 'en').slice(0, 2);
   opts.locale = locale;
 
+  if (!opts.skipIdentityAdmission) {
+    const {
+      evaluateIdentityAdmission,
+      emitIdentityInvalid
+    } = require('./voice-identity-admission');
+    const admission = evaluateIdentityAdmission({
+      sessionId,
+      callId: opts.callId || null,
+      clinicId,
+      customerId: opts.customerId || null,
+      call_type: opts.call_type || null,
+      direction: opts.direction || null,
+      tenantResolved: !!(clinicId || opts.customerId),
+      preferredLanguage: locale
+    });
+    if (!admission.admitted) {
+      emitIdentityInvalid(db, {
+        sessionId,
+        callId: opts.callId || null,
+        clinicId,
+        customerId: opts.customerId || null,
+        call_type: opts.call_type || null,
+        direction: opts.direction || null,
+        reason: admission.reason
+      });
+      return {
+        reply: admission.reply || '',
+        endCall: false,
+        toolsUsed: [],
+        language: admission.locale || locale,
+        identity_admission_failed: true,
+        kelly_rails: { active_lane: 'support', step: 'handoff', flags: { identity_invalid: true } }
+      };
+    }
+  }
+
+  if (sessionId) {
+    KellyToolExecutor.beginTurnToolLog(sessionId);
+  }
+
   if (isProductionKellyEnforced() && !isKellyRailsV2Enabled()) {
     logBlockedRuntime(db, sessionId, 'kelly_rails_v2', 'v2_flag_off_in_production');
     throw productionRuntimeError('kelly_rails_v2_disabled');
@@ -179,6 +221,7 @@ async function runKellyTurn(opts = {}) {
         opener_delivered: opts.opener_delivered || false,
         appointmentId: opts.appointmentId || opts.appointment_id || null,
         outbound_purpose: opts.outbound_purpose || null,
+        tenantPolicy: opts.tenantPolicy || null,
         db,
         patientId: opts.patientId || null,
         patientName: opts.patientName || null,
@@ -186,15 +229,21 @@ async function runKellyTurn(opts = {}) {
       });
       opts.conversation_mode = convResult.session?.conversation_mode || null;
       opts.active_subrail = convResult.session?.active_subrail || null;
-      opts.kelly_lane_hint = convResult.dispatch?.kelly_lane_hint || null;
+      opts.kelly_lane_hint = convResult.kelly_lane_hint || convResult.dispatch?.kelly_lane_hint || null;
       opts.conversation_session = convResult.session;
 
-      if (convResult.enforce && convResult.dispatch?.reply && convResult.dispatch.use_kelly !== true) {
+      const scriptOnly =
+        convResult.enforce &&
+        (convResult.handoff === Handoff.SCRIPT_ONLY ||
+          convResult.dispatch?.handoff === Handoff.SCRIPT_ONLY);
+
+      if (scriptOnly && convResult.dispatch?.reply) {
         const latencyMs = Math.max(0, Date.now() - turnReceivedAt);
+        const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);
         const out = {
           reply: convResult.dispatch.reply,
           endCall: !!convResult.dispatch.endCall,
-          toolsUsed: convResult.dispatch.toolsUsed || [],
+          toolsUsed: executorTools.length ? executorTools : [],
           language: locale,
           conversation_mode: convResult.session.conversation_mode,
           active_subrail: convResult.session.active_subrail,
@@ -245,7 +294,46 @@ async function runKellyTurn(opts = {}) {
     }
 
     const out = await handleTurn(opts);
+    const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);
+    if (executorTools.length) {
+      out.toolsUsed = [...new Set([...(out?.toolsUsed || []), ...executorTools])];
+    }
+
+    if (convResult?.session && sessionId) {
+      try {
+        const { mergeKellyRailsIntoSession, saveConversationSession } = require('./conversation-mode/conversation-mode-session');
+        const merged = mergeKellyRailsIntoSession(
+          convResult.session,
+          out?.kelly_rails || {},
+          out?.toolsUsed || []
+        );
+        saveConversationSession(sessionId, merged);
+        out.conversation_mode = merged.conversation_mode || out.conversation_mode;
+        out.active_subrail = merged.active_subrail || out.active_subrail;
+        if (out.kelly_rails) {
+          out.kelly_rails.flags = { ...(out.kelly_rails.flags || {}), ...merged };
+        }
+      } catch (e) {
+        console.warn('[kelly-turn] session merge skipped:', e.message);
+      }
+    }
+
     const latencyMs = Math.max(0, Date.now() - turnReceivedAt);
+    try {
+      const { emitOrchestrationTrace } = require('./voice-orchestration-trace');
+      emitOrchestrationTrace(db, {
+        sessionId,
+        callId: opts.callId,
+        conversation_mode: opts.conversation_mode || convResult?.session?.conversation_mode,
+        active_subrail: opts.active_subrail || convResult?.session?.active_subrail,
+        handoff: convResult?.handoff,
+        lane: out?.kelly_rails?.active_lane,
+        step: out?.kelly_rails?.step,
+        tools_executed: out?.toolsUsed || [],
+        runtime: 'kelly_rails_v2',
+        latency_ms: latencyMs
+      });
+    } catch (_) {}
     const lane = out?.kelly_rails?.active_lane || null;
     const step = out?.kelly_rails?.step || null;
     const flags = out?.kelly_rails?.flags || {};

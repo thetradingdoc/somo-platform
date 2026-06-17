@@ -1,5 +1,11 @@
 'use strict';
 
+const { Handoff } = require('../handoff-types');
+const {
+  detectBookingIntents,
+  parseProviderFromMessage
+} = require('../../kelly-rails/turn-planner');
+
 const BOOKING_STEPS = [
   'intent_confirm',
   'slot_lookup',
@@ -20,12 +26,6 @@ const STEP_PROMPTS = {
 
 const KELLY_BOOKING_STEPS = new Set(['slot_lookup', 'slot_select', 'contact_confirm', 'schedule', 'confirm']);
 
-function stepTools(step) {
-  if (step === 'confirm' || step === 'schedule') return ['schedule_appointment'];
-  if (['slot_lookup', 'slot_select'].includes(step)) return ['get_available_slots'];
-  return [];
-}
-
 async function handleBookingSubrail(ctx = {}) {
   const step = ctx.active_subrail_step || 'intent_confirm';
   const idx = BOOKING_STEPS.indexOf(step);
@@ -36,6 +36,23 @@ async function handleBookingSubrail(ctx = {}) {
   let endCall = false;
   let disposition = null;
   const stateUpdates = { active_subrail: 'booking', active_subrail_step: nextStep };
+  const bookingIntents = detectBookingIntents(ctx.message, step);
+  if (bookingIntents.length) {
+    stateUpdates.booking_intents = bookingIntents;
+  }
+
+  if (step === 'slot_lookup' && !ctx.flags?.last_slot_bundles?.length && !ctx.flags?._slot_lookup_done) {
+    stateUpdates._slot_lookup_done = true;
+    return {
+      reply: null,
+      endCall: false,
+      active_subrail: 'booking',
+      active_subrail_step: 'slot_lookup',
+      state_updates: stateUpdates,
+      handoff: Handoff.KELLY_REQUIRED,
+      kelly_lane_hint: 'booking'
+    };
+  }
 
   if (/no slots|nothing available|fully booked/.test(msg)) {
     reply = 'I do not see any openings that match. Would you like me to check a different day or provider?';
@@ -43,39 +60,58 @@ async function handleBookingSubrail(ctx = {}) {
     stateUpdates.booking_conflict = true;
   }
 
+  const providerNamed = parseProviderFromMessage(ctx.message);
+  if (providerNamed && (step === 'slot_select' || step === 'slot_lookup')) {
+    stateUpdates.provider_preference = providerNamed;
+    const slotBundles = ctx.flags?._conflict_slot_bundles || ctx.flags?.last_slot_bundles || [];
+    if (slotBundles.length) {
+      const match = slotBundles.some((b) =>
+        String(b.practitioner_name || '').toLowerCase().includes(providerNamed.toLowerCase())
+      );
+      if (!match) {
+        stateUpdates.provider_mismatch = true;
+        stateUpdates.booking_conflict = true;
+        stateUpdates.active_subrail_step = 'slot_select';
+        return {
+          reply: null,
+          endCall: false,
+          active_subrail: 'booking',
+          active_subrail_step: 'slot_select',
+          state_updates: stateUpdates,
+          handoff: Handoff.KELLY_REQUIRED,
+          kelly_lane_hint: 'booking'
+        };
+      }
+    }
+  }
+
   if (
     step === 'slot_select' &&
-    /\d|monday|tuesday|wednesday|thursday|friday|morning|afternoon|pm|am|lunes|martes|miércoles|miercoles|jueves|viernes|mañana|tarde|sí|si\b/.test(
-      msg
-    )
+    bookingIntents.some((i) => i.type === 'slot_selected')
   ) {
-    stateUpdates.current_booking_slot = {
-      slot_id: `slot_${Date.now()}`,
-      date: 'pending',
-      time: msg.trim().slice(0, 40),
-      specialty: ctx.specialty || 'general',
-      provider: ctx.provider || 'available'
-    };
     stateUpdates.active_subrail_step = 'contact_confirm';
     reply = STEP_PROMPTS.contact_confirm;
   }
 
   if (step === 'confirm') {
     endCall = false;
-    const hasAppt = !!(ctx.appointment_id || ctx.flags?.last_appointment_id || ctx.flags?.appointment_id);
+    const hasAppt = !!(
+      ctx.flags?.schedule_appointment_success ||
+      (ctx.appointment_id && ctx.flags?.last_appointment_id)
+    );
     if (hasAppt) disposition = 'completed';
   }
 
   return {
-    reply,
+    reply: KELLY_BOOKING_STEPS.has(step) ? null : reply,
     endCall,
-    toolsUsed: stepTools(step),
     active_subrail: 'booking',
     active_subrail_step: stateUpdates.active_subrail_step,
     state_updates: stateUpdates,
     disposition,
-    use_kelly: KELLY_BOOKING_STEPS.has(step)
+    handoff: KELLY_BOOKING_STEPS.has(step) ? Handoff.KELLY_REQUIRED : Handoff.KELLY_OPTIONAL,
+    kelly_lane_hint: 'booking'
   };
 }
 
-module.exports = { handleBookingSubrail, BOOKING_STEPS, STEP_PROMPTS };
+module.exports = { handleBookingSubrail, BOOKING_STEPS, STEP_PROMPTS, parseProviderFromMessage };

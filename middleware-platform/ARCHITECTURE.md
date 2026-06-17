@@ -1,8 +1,10 @@
 # Middleware platform architecture
 
-Last updated: 2026-06-16
+Last updated: 2026-06-17
 
-## 2026-06-16 changelog
+## 2026-06-17 changelog
+
+- Linked Kelly orchestration architecture SSOT and gap matrix docs.
 
 - Added conversation-mode call-control architecture references and runtime entrypoints.
 - Updated voice/Kelly ownership to include resolver + pivot + mode-dispatch integration.
@@ -47,6 +49,7 @@ HTTP (routes/*.js)
 
 ## Conversation-mode control plane (as built)
 
+- **Architecture SSOT:** [`docs/architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../docs/architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md)
 - **Resolver:** `services/conversation-mode/conversation-mode-resolver.js`
 - **Turn pivots:** `services/conversation-mode/pivot-engine.js`
 - **Session wiring:** `services/conversation-mode/conversation-mode-session.js`

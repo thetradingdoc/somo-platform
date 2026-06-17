@@ -22,6 +22,9 @@ async function loadLangGraph() {
 }
 
 async function getCheckpointer() {
+  if (process.env.NODE_ENV === 'production' && process.env.LANGGRAPH_USE_POSTGRES !== 'true') {
+    return null;
+  }
   const connStr = process.env.POSTGRES_URL || process.env.DATABASE_URL;
   const usePostgres =
     connStr && (process.env.NODE_ENV === 'production' || process.env.LANGGRAPH_USE_POSTGRES === 'true');
@@ -39,6 +42,30 @@ async function getCheckpointer() {
   }
   const LG = await loadLangGraph();
   return LG ? new LG.MemorySaver() : null;
+}
+
+/** Merge conversation dispatch context into executeTurn input. */
+function buildExecuteTurnInput(state = {}, ctx = {}, opts = {}) {
+  const session = opts.conversation_session || ctx.conversation_session || {};
+  return {
+    ...state,
+    message: ctx.message || state.last_user_message,
+    clinicId: ctx.clinicId || opts.clinicId,
+    customerId: ctx.customerId || opts.customerId || null,
+    patientId: ctx.patientId || opts.patientId,
+    callerPhone: ctx.callerPhone || opts.callerPhone,
+    db: ctx.db || opts.db || null,
+    providerInstructions: ctx.providerInstructions || opts.providerInstructions || null,
+    locale: ctx.locale || opts.locale || opts.preferredLanguage,
+    preferredLanguage: ctx.locale || opts.preferredLanguage || opts.locale,
+    conversation_mode:
+      opts.conversation_mode || ctx.conversation_mode || session.conversation_mode || null,
+    active_subrail: opts.active_subrail || ctx.active_subrail || session.active_subrail || null,
+    active_subrail_step:
+      session.active_subrail_step || ctx.active_subrail_step || opts.active_subrail_step || null,
+    kelly_lane_hint: opts.kelly_lane_hint || ctx.kelly_lane_hint || null,
+    conversation_session: Object.keys(session).length ? session : opts.conversation_session || null
+  };
 }
 
 async function getMainGraph() {
@@ -68,16 +95,9 @@ async function getMainGraph() {
   const workflow = new StateGraph(KellyRailsAnnotation)
     .addNode('execute_turn', async (state) => {
       const ctx = state.turn_context || {};
-      const { state: nextState, reply, toolsUsed, endCall } = await executeTurn({
-        ...state,
-        message: ctx.message || state.last_user_message,
-        clinicId: ctx.clinicId,
-        customerId: ctx.customerId,
-        patientId: ctx.patientId,
-        callerPhone: ctx.callerPhone,
-        db: ctx.db,
-        providerInstructions: ctx.providerInstructions
-      });
+      const { state: nextState, reply, toolsUsed, endCall } = await executeTurn(
+        buildExecuteTurnInput(state, ctx, ctx)
+      );
       return {
         ...nextState,
         last_reply: reply,
@@ -88,7 +108,7 @@ async function getMainGraph() {
     .addEdge(START, 'execute_turn')
     .addEdge('execute_turn', END);
 
-  compiledGraph = workflow.compile({ checkpointer });
+  compiledGraph = checkpointer ? workflow.compile({ checkpointer }) : workflow.compile();
   return compiledGraph;
 }
 
@@ -102,23 +122,27 @@ async function invokeMainGraph(opts = {}) {
   if (!sessionId) return null;
 
   const graph = await getMainGraph();
-  if (!graph) {
-    const direct = await executeTurn({
+  const directInput = buildExecuteTurnInput(
+    {
       session_id: sessionId,
       clinic_id: opts.clinicId,
       patient_id: opts.patientId,
-      channel: opts.channel || 'chat',
+      channel: opts.channel || 'chat'
+    },
+    {
       message: opts.message,
       clinicId: opts.clinicId,
       customerId: opts.customerId || null,
       patientId: opts.patientId,
       callerPhone: opts.callerPhone,
-      locale: opts.locale || opts.preferredLanguage,
-      preferredLanguage: opts.preferredLanguage || opts.locale,
       db: opts.db || null,
       providerInstructions: opts.providerInstructions || null
-    });
-    return direct;
+    },
+    opts
+  );
+
+  if (!graph) {
+    return executeTurn(directInput);
   }
 
   const laneHint = String(opts.message || '').slice(0, 40);
@@ -152,7 +176,12 @@ async function invokeMainGraph(opts = {}) {
       callerPhone: opts.callerPhone,
       locale,
       db: opts.db || null,
-      providerInstructions: opts.providerInstructions || null
+      providerInstructions: opts.providerInstructions || null,
+      conversation_mode: opts.conversation_mode || null,
+      active_subrail: opts.active_subrail || null,
+      kelly_lane_hint: opts.kelly_lane_hint || null,
+      conversation_session: opts.conversation_session || null,
+      active_subrail_step: opts.conversation_session?.active_subrail_step || null
     }
   };
 
@@ -166,20 +195,8 @@ async function invokeMainGraph(opts = {}) {
     };
   } catch (e) {
     console.warn('[kelly-rails] graph invoke failed:', e.message);
-    return executeTurn({
-      session_id: sessionId,
-      message: opts.message,
-      clinicId: opts.clinicId,
-      customerId: opts.customerId || null,
-      patientId: opts.patientId,
-      callerPhone: opts.callerPhone,
-      channel: opts.channel,
-      locale: opts.locale || opts.preferredLanguage,
-      preferredLanguage: opts.preferredLanguage || opts.locale,
-      db: opts.db || null,
-      providerInstructions: opts.providerInstructions || null
-    });
+    return executeTurn(directInput);
   }
 }
 
-module.exports = { getMainGraph, invokeMainGraph };
+module.exports = { getMainGraph, invokeMainGraph, buildExecuteTurnInput };

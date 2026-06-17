@@ -486,7 +486,15 @@ class RetellWebSocketHandler {
                     customerId: connection.customer_id,
                     call_type: callTypeMeta,
                     direction: directionMeta,
-                    tenantResolved
+                    tenantResolved,
+                    appointmentId:
+                        connection.appointment_id ||
+                        callMeta.metadata?.appointment_id ||
+                        dv?.appointment_id ||
+                        null,
+                    outbound_purpose:
+                        callMeta.metadata?.outbound_purpose || dv?.outbound_purpose || null,
+                    firstUtterance: String(dv?.opening_intent || callMeta.metadata?.opening_intent || '').trim()
                 });
                 connection.conversation_mode = seeded.resolved.mode;
                 connection.active_subrail = seeded.resolved.subrail;
@@ -899,7 +907,13 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     callId,
                     call_type: connection?.call_type || connection?.callMetadata?.metadata?.call_type || null,
                     direction: connection?.direction || connection?.callMetadata?.metadata?.direction || null,
-                    opener_delivered: !!connection?.opener_delivered
+                    opener_delivered: !!connection?.opener_delivered,
+                    appointmentId: connection?.appointment_id || null,
+                    appointment_id: connection?.appointment_id || null,
+                    outbound_purpose:
+                        connection?.outbound_purpose ||
+                        connection?.callMetadata?.metadata?.outbound_purpose ||
+                        null
                 };
                 const fillerMs = parseInt(process.env.KELLY_VOICE_FILLER_MS || '1200', 10) || 1200;
                 const voiceLocaleForFiller =

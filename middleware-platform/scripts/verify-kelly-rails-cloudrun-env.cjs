@@ -59,7 +59,12 @@ function main() {
   }
 
   const env = envMap(json);
-  const keys = ['KELLY_RAILS_V2', 'KELLY_ALLOW_HYBRID_GRAPH', 'KELLY_RAILS_ROLLOUT_PCT'];
+  const keys = [
+    'KELLY_RAILS_V2',
+    'KELLY_ALLOW_HYBRID_GRAPH',
+    'KELLY_RAILS_ROLLOUT_PCT',
+    'CONVERSATION_MODE_ROUTING'
+  ];
   const snapshot = {};
   for (const k of keys) snapshot[k] = env[k] ?? '(unset)';
 
@@ -71,6 +76,9 @@ function main() {
   if (hybrid === '1' || hybrid === 'true') errors.push('KELLY_ALLOW_HYBRID_GRAPH must be 0 or unset');
   const pct = env.KELLY_RAILS_ROLLOUT_PCT;
   if (pct != null && pct !== '' && parseFloat(pct) < 1) errors.push('KELLY_RAILS_ROLLOUT_PCT must be 1');
+  if (String(env.CONVERSATION_MODE_ROUTING || 'shadow').toLowerCase() !== 'enforce') {
+    errors.push('CONVERSATION_MODE_ROUTING must be enforce');
+  }
 
   if (errors.length) {
     console.error('Cloud Run Kelly env FAILED:', errors.join('; '));

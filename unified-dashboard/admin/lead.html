@@ -139,8 +139,9 @@
       ].filter(Boolean).join(' · ');
 
       const callBtn = document.getElementById('callBtn');
-      callBtn.disabled = !lead.clinic_phone;
-      callBtn.style.opacity = lead.clinic_phone ? '1' : '0.5';
+      const callable = lead.callable === true || String(lead.clinic_phone || '').replace(/\D/g, '').length >= 10;
+      callBtn.disabled = !callable;
+      callBtn.style.opacity = callable ? '1' : '0.5';
 
       renderCalls(calls || []);
       renderActivities(activities || []);
@@ -195,7 +196,8 @@
     }
 
     async function callLead() {
-      if (!leadData?.clinic_phone) return alert('No phone');
+      const callable = leadData?.callable === true || String(leadData?.clinic_phone || '').replace(/\D/g, '').length >= 10;
+      if (!callable) return alert('No verified phone number for this lead.');
       if (!confirm(`Call ${leadData.clinic_name}?`)) return;
       try {
         const r = await apiFetch(`/api/admin/leads/${leadId}/call`, { method: 'POST' });

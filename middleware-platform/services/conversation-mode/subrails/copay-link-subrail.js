@@ -1,6 +1,7 @@
 'use strict';
 
 const { BillingStep } = require('../conversation-mode-types');
+const { Handoff } = require('../handoff-types');
 
 const BILLING_STEPS = [
   BillingStep.IDENTIFY_ACCOUNT,
@@ -34,12 +35,12 @@ async function handleCopayLinkSubrail(ctx = {}) {
   if (/failed|didn't work|not working|error/.test(msg) && step === BillingStep.LINK_SENT) {
     if (retryCount < 1) {
       return {
-        reply: 'Sorry about that. Let me try sending the payment link again.',
+        reply: null,
         active_subrail: 'copay_link',
         billing_step: BillingStep.LINK_SENT,
         billing_retry_count: retryCount + 1,
-        toolsUsed: ['request_patient_payment'],
-        use_kelly: true
+        handoff: Handoff.KELLY_REQUIRED,
+        kelly_lane_hint: 'payment'
       };
     }
     return {
@@ -48,7 +49,8 @@ async function handleCopayLinkSubrail(ctx = {}) {
       active_subrail: 'handoff',
       disposition: 'handoff_failed',
       flags: { payment_failed: true, handoff_failed: true, pending_human_handoff: true },
-      use_kelly: true
+      handoff: Handoff.KELLY_REQUIRED,
+      kelly_lane_hint: 'payment'
     };
   }
 
@@ -65,18 +67,20 @@ async function handleCopayLinkSubrail(ctx = {}) {
     }
   }
 
+  const needsKelly =
+    [BillingStep.LINK_SENT, BillingStep.AMOUNT_CONFIRM].includes(step) ||
+    step === BillingStep.IDENTIFY_ACCOUNT;
+
   return {
-    reply,
+    reply: needsKelly ? null : reply,
     endCall,
-    toolsUsed: [BillingStep.LINK_SENT, BillingStep.AMOUNT_CONFIRM].includes(step)
-      ? ['request_patient_payment']
-      : ['get_patient_claims'],
     active_subrail: 'copay_link',
     billing_step: nextStep,
     active_subrail_step: nextStep,
     state_updates: { billing_step: nextStep, active_subrail: 'copay_link' },
     disposition,
-    use_kelly: true,
+    handoff: needsKelly ? Handoff.KELLY_REQUIRED : Handoff.KELLY_OPTIONAL,
+    kelly_lane_hint: 'payment',
     drain_pending_intents: step === BillingStep.RECEIPT_CONFIRM
   };
 }

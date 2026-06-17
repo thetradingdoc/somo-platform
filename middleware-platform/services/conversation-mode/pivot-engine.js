@@ -2,7 +2,8 @@
 
 const { ConversationMode, Subrail, UserIntent } = require('./conversation-mode-types');
 const { PivotEvent } = require('./pivot-events');
-const { detectIntents, isEmergency } = require('./intent-detector');
+const { detectIntents, isEmergency, isCancelRebookUtterance } = require('./intent-detector');
+const { normalizeForIntentDetection } = require('./asr-normalize');
 const { canPivotToBilling, canPivotToRecords, canPivotToClinical } = require('./tenant-policy');
 
 function isConversationModeRoutingEnforced() {
@@ -26,7 +27,8 @@ const OUTBOUND_MODES = new Set([
  * @returns {{ mode, subrail, pivot_event, pivot_reason, pending_intents, prior_mode }}
  */
 function evaluateTurn(input = {}) {
-  const utterance = input.utterance || input.message || '';
+  const rawUtterance = input.utterance || input.message || '';
+  const { normalized: utterance } = normalizeForIntentDetection(rawUtterance);
   const policy = input.tenantPolicy || {};
   const session = input.sessionState || {};
   const currentMode = session.conversation_mode || input.mode || ConversationMode.TENANT_INBOUND_ADMIN;
@@ -56,6 +58,16 @@ function evaluateTurn(input = {}) {
   const intents = detectIntents(utterance);
   const primary = intents[0]?.intent || UserIntent.GENERAL;
   const secondary = intents.slice(1).map((i) => i.intent);
+
+  if (
+    isConversationModeRoutingEnforced() &&
+    primary === UserIntent.GENERAL &&
+    /demo|qualification|product demo/i.test(utterance) &&
+    currentMode !== ConversationMode.DEMO_QUAL
+  ) {
+    result.pivot_reason = 'demo_qual_pivot_blocked';
+    return result;
+  }
 
   if (secondary.length > 0) {
     const existing = new Set(result.pending_intents);
@@ -96,7 +108,9 @@ function evaluateTurn(input = {}) {
   if (
     primary === UserIntent.SYMPTOM &&
     canPivotToClinical(policy) &&
-    currentMode === ConversationMode.TENANT_INBOUND_ADMIN
+    currentMode === ConversationMode.TENANT_INBOUND_ADMIN &&
+    !session.rebook_after_cancel &&
+    currentSubrail !== Subrail.BOOKING
   ) {
     result.prior_mode = currentMode;
     result.mode = ConversationMode.TENANT_INBOUND_CLINICAL;
@@ -107,9 +121,21 @@ function evaluateTurn(input = {}) {
   }
 
   if (primary === UserIntent.CANCEL) {
+    const wantsRebook =
+      isCancelRebookUtterance(utterance) || result.pending_intents.includes(UserIntent.BOOK);
     result.subrail = Subrail.CANCELLATION;
     result.pivot_event = PivotEvent.CANCEL_INTENT_DETECTED;
-    result.pivot_reason = 'cancel_subrail';
+    result.pivot_reason = wantsRebook ? 'cancel_rebook_subrail' : 'cancel_subrail';
+    if (wantsRebook) {
+      if (!result.pending_intents.includes(UserIntent.BOOK)) {
+        result.pending_intents.push(UserIntent.BOOK);
+      }
+      result.state_updates = {
+        active_subrail_step: 'find_booking',
+        rebook_after_cancel: true,
+        pending_intent_queue: [...result.pending_intents]
+      };
+    }
     return result;
   }
 
@@ -121,7 +147,31 @@ function evaluateTurn(input = {}) {
     return result;
   }
 
-  if (primary === UserIntent.RESCHEDULE || primary === UserIntent.BOOK) {
+  if (primary === UserIntent.RESCHEDULE) {
+    result.subrail = Subrail.CANCELLATION;
+    result.pivot_event = PivotEvent.CANCEL_INTENT_DETECTED;
+    result.pivot_reason = 'reschedule_subrail';
+    result.state_updates = {
+      active_subrail_step: 'find_booking',
+      reschedule_pending: true
+    };
+    return result;
+  }
+
+  if (primary === UserIntent.BOOK) {
+    if (session.rebook_after_cancel || (session.cancel_complete && /book|new time|schedule/.test(utterance))) {
+      result.mode = ConversationMode.TENANT_INBOUND_ADMIN;
+      result.subrail = Subrail.BOOKING;
+      result.pivot_event = PivotEvent.BOOK_INTENT_DETECTED;
+      result.pivot_reason = 'rebook_after_cancel';
+      result.state_updates = {
+        rebook_after_cancel: true,
+        active_subrail: 'booking',
+        active_subrail_step: 'slot_lookup',
+        conversation_mode: ConversationMode.TENANT_INBOUND_ADMIN
+      };
+      return result;
+    }
     if (currentSubrail === Subrail.CANCELLATION) {
       result.subrail = Subrail.BOOKING;
       result.pivot_event = PivotEvent.BOOK_INTENT_DETECTED;

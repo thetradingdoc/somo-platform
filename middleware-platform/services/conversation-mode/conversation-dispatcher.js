@@ -2,6 +2,7 @@
 
 const { ConversationMode, Subrail } = require('./conversation-mode-types');
 const { shouldEnforceMode } = require('./config');
+const { Handoff } = require('./handoff-types');
 const { handleOutboundSalesTurn } = require('./rails/outbound-sales-rail');
 const { handleOperatorOutboundTurn } = require('./rails/operator-outbound-rail');
 const { handleEmergencyTurn } = require('./rails/emergency-rail');
@@ -33,31 +34,52 @@ async function dispatchConversationTurn(mode, ctx = {}) {
   const enforced = shouldEnforceMode(mode);
 
   if (mode === ConversationMode.EMERGENCY_SAFETY) {
-    return handleEmergencyTurn(ctx);
+    const out = await handleEmergencyTurn(ctx);
+    return { ...out, handoff: Handoff.SCRIPT_ONLY, conversation_mode: mode, enforced };
   }
 
   if (mode === ConversationMode.OUTBOUND_SALES) {
-    return handleOutboundSalesTurn(ctx);
+    const out = await handleOutboundSalesTurn(ctx);
+    return { ...out, handoff: Handoff.SCRIPT_ONLY, conversation_mode: mode, enforced };
   }
 
   if (mode === ConversationMode.OPERATOR_OUTBOUND) {
-    return handleOperatorOutboundTurn(ctx);
+    const out = await handleOperatorOutboundTurn(ctx);
+    return { ...out, handoff: Handoff.SCRIPT_ONLY, conversation_mode: mode, enforced };
   }
 
   if (mode === ConversationMode.DEMO_QUAL) {
+    if (enforced) {
+      return {
+        reply: MODE_SAFE_FALLBACK[ConversationMode.TENANT_INBOUND_ADMIN],
+        endCall: false,
+        toolsUsed: [],
+        conversation_mode: ConversationMode.TENANT_INBOUND_ADMIN,
+        handoff: Handoff.KELLY_REQUIRED,
+        kelly_lane_hint: 'booking',
+        enforced
+      };
+    }
     return {
       reply: MODE_SAFE_FALLBACK[ConversationMode.DEMO_QUAL],
       endCall: false,
       toolsUsed: [],
       conversation_mode: mode,
-      use_kelly: false
+      handoff: Handoff.SCRIPT_ONLY,
+      enforced
     };
   }
 
   if (ctx.active_subrail) {
     const subrailOut = await handleSubrailTurn(ctx.active_subrail, ctx);
     if (subrailOut) {
-      return { ...subrailOut, conversation_mode: mode, enforced };
+      return {
+        ...subrailOut,
+        conversation_mode: mode,
+        enforced,
+        handoff: subrailOut.handoff || Handoff.KELLY_OPTIONAL,
+        kelly_lane_hint: subrailOut.kelly_lane_hint || modeToKellyLane(mode, ctx.active_subrail)
+      };
     }
   }
 
@@ -68,7 +90,7 @@ async function dispatchConversationTurn(mode, ctx = {}) {
     mode === ConversationMode.TENANT_INBOUND_CLINICAL
   ) {
     return {
-      use_kelly: true,
+      handoff: Handoff.KELLY_REQUIRED,
       conversation_mode: mode,
       active_subrail: ctx.active_subrail || null,
       enforced,
@@ -81,6 +103,7 @@ async function dispatchConversationTurn(mode, ctx = {}) {
     endCall: false,
     toolsUsed: [],
     conversation_mode: mode,
+    handoff: Handoff.SCRIPT_ONLY,
     enforced
   };
 }

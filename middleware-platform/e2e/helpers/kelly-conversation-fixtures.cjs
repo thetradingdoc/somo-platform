@@ -1162,6 +1162,44 @@ function setupGoldenPathContext(opts = {}) {
   };
 }
 
+function seedTenantPolicyJson(clinicId, policyJson = {}, opts = {}) {
+  const { dbModule } = loadDb();
+  const crypto = require('crypto');
+  const id = opts.profileId || `pp_${crypto.randomBytes(8).toString('hex')}`;
+  const json = typeof policyJson === 'string' ? policyJson : JSON.stringify(policyJson);
+  try {
+    dbModule.db
+      .prepare(
+        `INSERT INTO prompt_profiles (id, clinic_id, customer_id, status, specialty, use_case, policy_json, created_at, updated_at)
+         VALUES (?, ?, ?, 'active', ?, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET
+           policy_json = excluded.policy_json,
+           specialty = excluded.specialty,
+           use_case = excluded.use_case,
+           status = 'active',
+           updated_at = datetime('now')`
+      )
+      .run(
+        id,
+        clinicId,
+        opts.customerId || null,
+        opts.specialty || 'Dermatology',
+        opts.use_case || 'dermatology',
+        json
+      );
+  } catch (e) {
+    try {
+      dbModule.db
+        .prepare(
+          `UPDATE prompt_profiles SET policy_json = ?, status = 'active', updated_at = datetime('now')
+           WHERE clinic_id = ?`
+        )
+        .run(json, clinicId);
+    } catch (_) {}
+  }
+  return { profileId: id, policy_json: json };
+}
+
 module.exports = {
   newE2eSessionId,
   loadDb,
@@ -1205,5 +1243,6 @@ module.exports = {
   TOM_HARRIS_MESSAGES,
   ensureClinicalTriageReady,
   seedTriageWithRag,
+  seedTenantPolicyJson,
 };
 

@@ -7,6 +7,11 @@ const { executeLaneStep } = require('./lanes');
 const { persistRailsSessionState } = require('./session-ssot');
 const { KELLY_LANE: LANE } = require('./state-schema');
 const { shouldEnforceMode } = require('../conversation-mode/config');
+const {
+  detectBookingIntents,
+  applyBookingIntentsToFlags,
+  planTurnOwner
+} = require('./turn-planner');
 
 function shouldReroute(state, message) {
   const msg = String(message || '').toLowerCase();
@@ -95,9 +100,13 @@ function syncMetaFromFlags(sessionId, flags, lane) {
   try {
     KellyToolExecutor._setSessionMeta(sessionId, 'kelly_rails_v2', '1');
     KellyToolExecutor._setSessionMeta(sessionId, 'kelly_graph_active', '1');
-    KellyToolExecutor._setSessionMeta(sessionId, 'kelly_graph_branch', String(flags._lane_export || lane || ''));
+    const exportLane = String(flags._lane_export || lane || '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'kelly_graph_branch', exportLane);
     if (lane) {
       KellyToolExecutor._setSessionMeta(sessionId, 'kelly_orchestrator_phase', laneToOrchestratorPhase(lane));
+    }
+    if (flags.active_subrail) {
+      KellyToolExecutor._setSessionMeta(sessionId, 'active_subrail', flags.active_subrail);
     }
     if (flags.appointment_id) {
       KellyToolExecutor._setSessionMeta(sessionId, 'last_appointment_id', flags.appointment_id);
@@ -116,6 +125,17 @@ async function executeTurn(input = {}) {
     locale = db.getKellySessionLanguage?.(sid);
   }
   const state = normalizeState({ ...input, locale: locale || 'en' });
+  const { getRailsSessionProjection } = require('./session-ssot');
+  const projection = sid ? getRailsSessionProjection(sid) : null;
+  if (projection?.active_lane) {
+    const fromInput = input.active_lane;
+    if (!fromInput || fromInput === KELLY_LANE.ROUTER) {
+      state.active_lane = projection.active_lane;
+    }
+  }
+  if (projection?.step && projection.step !== 'await_intent') {
+    state.step = projection.step;
+  }
   const ctx = {
     sessionId: state.session_id,
     clinicId: input.clinicId || state.clinic_id,
@@ -133,17 +153,23 @@ async function executeTurn(input = {}) {
     state.v2_hydrated = true;
   }
 
-  if (input.conversation_mode) {
-    state.conversation_mode = input.conversation_mode;
-    state.flags.conversation_mode = input.conversation_mode;
-  }
-  if (input.active_subrail) {
-    state.active_subrail = input.active_subrail;
-    state.flags.active_subrail = input.active_subrail;
-  }
   if (input.conversation_session) {
     Object.assign(state.flags, input.conversation_session);
   }
+
+  state.conversation_mode =
+    input.conversation_mode || state.flags.conversation_mode || state.conversation_mode;
+  state.active_subrail = input.active_subrail || state.flags.active_subrail || state.active_subrail;
+  state.active_subrail_step =
+    input.active_subrail_step ||
+    state.flags.active_subrail_step ||
+    state.active_subrail_step ||
+    input.conversation_session?.active_subrail_step ||
+    null;
+
+  if (state.conversation_mode) state.flags.conversation_mode = state.conversation_mode;
+  if (state.active_subrail) state.flags.active_subrail = state.active_subrail;
+  if (state.active_subrail_step) state.flags.active_subrail_step = state.active_subrail_step;
 
   const enforceMode = state.conversation_mode && shouldEnforceMode(state.conversation_mode);
   if (enforceMode && input.kelly_lane_hint) {
@@ -151,26 +177,105 @@ async function executeTurn(input = {}) {
     state.step = LANE_FIRST_STEP[input.kelly_lane_hint] || state.step;
   }
 
-  const subrailStep =
-    state.active_subrail_step ||
-    state.flags?.active_subrail_step ||
-    input.conversation_session?.active_subrail_step ||
-    null;
-  if (state.active_subrail === 'booking' || state.flags?.active_subrail === 'booking') {
+  const subrailStep = state.active_subrail_step;
+  const activeSubrail = state.active_subrail || state.flags?.active_subrail;
+
+  if (activeSubrail === 'booking' || state.flags?.rebook_after_cancel) {
+    state.conversation_mode = 'tenant_inbound_admin';
+    state.flags.conversation_mode = 'tenant_inbound_admin';
+  }
+
+  if (activeSubrail === 'booking' || state.flags?.active_subrail === 'booking') {
     state.active_lane = KELLY_LANE.BOOKING;
-    if (['contact_confirm', 'schedule', 'confirm'].includes(subrailStep)) {
+    const intents =
+      state.flags.booking_intents?.length > 0
+        ? state.flags.booking_intents
+        : detectBookingIntents(ctx.message, subrailStep);
+    applyBookingIntentsToFlags(state.flags, intents);
+    state.flags._turn_plan = planTurnOwner({ subrail: 'booking', flags: state.flags, intents });
+
+    const hasBookableSlot =
+      !!(state.flags.current_booking_slot?.date && state.flags.current_booking_slot?.time) ||
+      !!state.flags._slot_selected_time ||
+      !!(
+        KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_date') &&
+        KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_time')
+      );
+    if (
+      ['contact_confirm', 'schedule', 'confirm'].includes(subrailStep) &&
+      hasBookableSlot &&
+      !state.flags?.no_provider_availability
+    ) {
       state.step = 'confirm_visit';
     } else if (['slot_lookup', 'slot_select'].includes(subrailStep)) {
       state.step = 'schedule_visit';
     }
   }
-  if (
-    (state.active_subrail === 'cancellation' || state.flags?.active_subrail === 'cancellation') &&
-    (subrailStep === 'find_booking' || state.flags?.appt_lookup_only)
-  ) {
+
+  if (state.flags?.appt_lookup_only) {
     state.active_lane = KELLY_LANE.RESCHEDULE;
     state.step = 'find_booking';
-    state.flags.appt_lookup_only = true;
+    state.active_subrail = state.active_subrail || 'cancellation';
+  } else if (
+    activeSubrail === 'cancellation' &&
+    !state.flags?.reschedule_pending &&
+    (subrailStep === 'cancel_execute' || state.flags?.cancel_pending || state.flags?.cancel_confirmed)
+  ) {
+    state.active_lane = KELLY_LANE.RESCHEDULE;
+    state.step = 'move_or_cancel';
+    state.flags.cancel_pending = true;
+  } else if (activeSubrail === 'cancellation' && subrailStep === 'find_booking') {
+    state.active_lane = KELLY_LANE.RESCHEDULE;
+    state.step = 'find_booking';
+    state.flags.cancel_find_pending = true;
+  }
+
+  if (state.flags?.reschedule_pending) {
+    const msg = String(ctx.message || '').toLowerCase();
+    const hasExplicitSlot =
+      /\d{4}-\d{2}-\d{2}/.test(msg) ||
+      /\b\d{1,2}:\d{2}\b/.test(msg) ||
+      !!(state.flags.current_booking_slot?.date && state.flags.current_booking_slot?.time);
+    if (state.flags.lookup_complete || hasExplicitSlot) {
+      state.active_lane = KELLY_LANE.RESCHEDULE;
+      state.step = 'move_or_cancel';
+    } else {
+      state.active_lane = KELLY_LANE.RESCHEDULE;
+      state.step = 'find_booking';
+      state.flags.cancel_find_pending = true;
+    }
+  }
+
+  if (
+    state.conversation_mode === 'tenant_records' ||
+    input.kelly_lane_hint === 'records' ||
+    state.flags?.conversation_mode === 'tenant_records'
+  ) {
+    state.active_lane = KELLY_LANE.RECORDS;
+    state.step = 'records_qa';
+  }
+
+  if (state.conversation_mode === 'tenant_billing' && enforceMode) {
+    state.active_lane = KELLY_LANE.PAYMENT;
+    state.step = 'pay_invoice';
+  }
+
+  if (state.flags?.rebook_after_cancel && state.flags?.cancel_complete) {
+    state.active_lane = KELLY_LANE.BOOKING;
+    state.step = 'schedule_visit';
+    state.active_subrail = 'booking';
+    state.active_subrail_step = 'slot_lookup';
+    state.conversation_mode = 'tenant_inbound_admin';
+    state.flags.conversation_mode = 'tenant_inbound_admin';
+    state.flags.cancel_pending = false;
+    state.flags.cancel_find_pending = false;
+    state.flags.reschedule_pending = false;
+  }
+
+  if (state.flags?.rebook_after_cancel && !state.flags?.cancel_complete && activeSubrail === 'booking') {
+    state.active_lane = KELLY_LANE.BOOKING;
+    state.step = 'schedule_visit';
+    state.conversation_mode = 'tenant_inbound_admin';
   }
 
   state.last_user_message = ctx.message;
@@ -244,11 +349,41 @@ async function executeTurn(input = {}) {
 
   const { reply, toolsUsed, endCall } = await executeLaneStep(state, ctx);
 
+  if (state.active_lane === KELLY_LANE.BOOKING) {
+    state.active_subrail = state.active_subrail || 'booking';
+    state.flags.active_subrail = state.active_subrail;
+  }
+
+  if ((toolsUsed || []).includes('get_available_slots')) {
+    const slotDate = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_date');
+    const slotTime = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_time');
+    const slotId = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_id');
+    if (slotDate && slotTime) {
+      state.flags.current_booking_slot = {
+        slot_id: slotId || null,
+        date: slotDate,
+        time: slotTime
+      };
+    }
+  }
+
   state.last_reply = reply;
   state.tools_used_last_turn = toolsUsed || [];
   persistRailsSessionState(ctx.sessionId, {
     ...state,
-    flags: { ...state.flags, conversation_mode: state.conversation_mode, active_subrail: state.active_subrail }
+    active_lane: state.active_lane,
+    step: state.step,
+    active_subrail_step: state.active_subrail_step || state.flags?.active_subrail_step,
+    flags: {
+      ...state.flags,
+      conversation_mode: state.conversation_mode,
+      active_subrail: state.active_subrail,
+      active_subrail_step: state.active_subrail_step || state.flags?.active_subrail_step,
+      active_lane: state.active_lane,
+      step: state.step,
+      locale: state.locale || state.flags?.locale || null
+    },
+    locale: state.locale || state.flags?.locale || null
   });
 
   if (state.step === 'done') {
@@ -258,6 +393,12 @@ async function executeTurn(input = {}) {
     } else if (state.flags.safety_blocked) {
       state.active_lane = KELLY_LANE.SUPPORT;
       state.step = 'handoff';
+    } else if (
+      state.flags?.active_subrail === 'booking' &&
+      !state.flags?.schedule_appointment_success
+    ) {
+      state.active_lane = KELLY_LANE.BOOKING;
+      state.step = 'confirm_visit';
     } else {
       state.active_lane = KELLY_LANE.ROUTER;
       state.step = 'await_intent';

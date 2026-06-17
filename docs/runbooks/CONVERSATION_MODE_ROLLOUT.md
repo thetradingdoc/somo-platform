@@ -1,6 +1,9 @@
 # Conversation Mode Routing Rollout
 
-Last updated: 2026-06-16
+Last updated: 2026-06-17
+
+**Architecture:** [`KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md)  
+**Gap matrix:** [`ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md)
 
 ## Flags
 
@@ -85,11 +88,35 @@ npm run smoke:tenant-billing-pivot
 
 Reports: `test-results/rails-conversation-sandbox.md` after sandbox run.
 
+## Rollback procedure
+
+If enforce mode causes regressions on live tenants:
+
+1. **Fast rollback:** set `CONVERSATION_MODE_ROUTING=shadow` on Cloud Run and redeploy (or disable scoped `CONVERSATION_MODE_ENFORCE_*` flags).
+2. **Partial rollback:** keep global `shadow` but leave `CONVERSATION_MODE_ENFORCE_OPERATOR_OUTBOUND=1` if outbound-only is healthy.
+3. **Confirm within one call:** query `kelly_call_events` for the test `session_id` — `mode_resolved.payload_json.shadow_only` should be `true` after rollback.
+
+### Regression signals (require telemetry-p0-minimum)
+
+| Signal | Event |
+|--------|-------|
+| Wrong tenant | `identity_invalid` |
+| LLM off-scope | `scope_guardrail_triggered` |
+| Wrong tools | `mode_violation` |
+| Booking broken | `turn_resolved` without `schedule_appointment` on booking sessions |
+
+## CI and deploy gates (2026-06-17)
+
+- `KELLY_RAILS_ENV_PROFILE=staging npm run verify:kelly-rails-env` must pass before deploy
+- `npm run verify:kelly-rails-cloudrun` checks live env including `CONVERSATION_MODE_ROUTING=enforce`
+- `staging:preflight` includes Kelly + conversation mode verify
+
 ## Post-deploy checklist
 
 1. Cloud Run image includes conversation-mode stack (`services/conversation-mode/*`).
-2. Env vars set per staged table above (shadow + scoped enforce).
-3. `kelly_call_events` shows `mode_resolved`, `pivot_evaluated`, `opener_used` on test calls.
+2. Env vars set per staged table above (shadow + scoped enforce, then global enforce when green).
+3. `kelly_call_events` shows `mode_resolved`, `pivot_evaluated`, `opener_used`, and on failure paths `identity_invalid`.
 4. Firebase UI deployed if provider portal or voice-setup pages changed.
 5. Optional: `npm run test:e2e:tenant-audit:safe` against staging middleware before tenant inbound enforce.
+6. Run `npm run test:rails:conversation-sandbox` — target 12/12 TCR after deterministic schedule gate ships.
 

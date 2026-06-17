@@ -1,11 +1,44 @@
 'use strict';
 
 const HANDOFF_STEPS = ['offer', 'attempt', 'failed_retry', 'message_taken', 'resume'];
+const HANDOFF_RETRY_CEILING = 2;
+
+function emitHandoffEvent(db, sessionId, eventType, payload = {}) {
+  try {
+    db?.insertKellyCallEvent?.({
+      session_id: sessionId || null,
+      event_type: eventType,
+      payload_json: payload
+    });
+  } catch (_) {}
+}
+
+function callbackOfferReply(locale = 'en') {
+  if (locale === 'es') {
+    return 'Nuestro equipo no está disponible en este momento. Puedo tomar un mensaje y alguien le devolverá la llamada. ¿Cuál es el mejor número para contactarle?';
+  }
+  if (locale === 'zh') {
+    return '我们的团队目前无法接听。我可以记录留言并安排回电。请问最佳联系电话是多少？';
+  }
+  return 'Our team is not available right now. I can take a message and have someone call you back. What is the best callback number?';
+}
+
+function exhaustedReply(locale = 'en') {
+  if (locale === 'es') {
+    return 'Lo siento — no pude conectarle con nuestro equipo después de varios intentos. He registrado su solicitud y le llamaremos lo antes posible.';
+  }
+  if (locale === 'zh') {
+    return '抱歉，多次尝试后仍无法为您转接人工。我已记录您的请求，我们会尽快回电。';
+  }
+  return 'I apologize — I could not reach our team after several attempts. I have logged your request and someone will call you back as soon as possible.';
+}
 
 async function handleHandoffSubrail(ctx = {}) {
   const step = ctx.handoff_step || ctx.active_subrail_step || 'offer';
   const msg = String(ctx.message || '').toLowerCase();
   const retryCount = ctx.handoff_retry_count || 0;
+  const locale = String(ctx.locale || ctx.preferredLanguage || 'en').slice(0, 2);
+  const db = ctx.db || null;
 
   const contextPayload = {
     conversation_mode: ctx.conversation_mode,
@@ -14,24 +47,37 @@ async function handleHandoffSubrail(ctx = {}) {
     active_subrail: ctx.active_subrail
   };
 
-  if (step === 'attempt' && /unavailable|no answer|can't connect|not available/.test(msg)) {
-    if (retryCount < 1) {
+  const failedSignal = /unavailable|no answer|can't connect|not available|failed|didn't connect/.test(msg);
+
+  if ((step === 'attempt' || step === 'failed_retry') && failedSignal) {
+    const nextRetry = retryCount + 1;
+    emitHandoffEvent(db, ctx.sessionId, 'handoff_recovery', {
+      handoff_retry_count: nextRetry,
+      handoff_step: step
+    });
+
+    if (nextRetry < HANDOFF_RETRY_CEILING) {
       return {
-        reply:
-          'Our team is not available right now. I can take a message and have someone call you back. What is the best callback number?',
+        reply: callbackOfferReply(locale),
         handoff_step: 'failed_retry',
-        handoff_retry_count: retryCount + 1,
+        handoff_retry_count: nextRetry,
         disposition: 'handoff_failed',
-        state_updates: { handoff_failed: true },
+        state_updates: { handoff_failed: true, handoff_retry_count: nextRetry },
         context_payload: contextPayload
       };
     }
+
+    emitHandoffEvent(db, ctx.sessionId, 'handoff_exhausted', {
+      handoff_retry_count: nextRetry,
+      ceiling: HANDOFF_RETRY_CEILING
+    });
     return {
-      reply:
-        'I apologize — our team is unavailable at the moment. I have taken your message and someone will call you back. Is there anything else I can help with in the meantime?',
+      reply: exhaustedReply(locale),
       handoff_step: 'message_taken',
+      handoff_retry_count: nextRetry,
       disposition: 'handoff_failed',
-      flags: { handoff_failed: true, pending_human_handoff: true },
+      state_updates: { handoff_failed: true, handoff_exhausted: true, handoff_retry_count: nextRetry },
+      flags: { handoff_failed: true, handoff_exhausted: true, pending_human_handoff: true },
       context_payload: contextPayload
     };
   }
@@ -42,7 +88,7 @@ async function handleHandoffSubrail(ctx = {}) {
       active_subrail: null,
       handoff_step: 'resume',
       disposition: 'completed',
-      flags: { pending_human_handoff: false },
+      flags: { pending_human_handoff: false, handoff_exhausted: false },
       resume_automated_flow: true,
       context_payload: contextPayload
     };
@@ -70,4 +116,4 @@ async function handleHandoffSubrail(ctx = {}) {
   };
 }
 
-module.exports = { handleHandoffSubrail, HANDOFF_STEPS };
+module.exports = { handleHandoffSubrail, HANDOFF_STEPS, HANDOFF_RETRY_CEILING };

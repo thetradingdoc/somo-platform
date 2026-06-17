@@ -13,7 +13,15 @@ const {
 /**
  * Initiate outbound call via Twilio (same path as routes/outbound-call.js).
  */
-async function initiateOutboundCall({ phone_number, merchantId, customer_id, call_type = 'rcm_follow_up', clinic_id }) {
+async function initiateOutboundCall({
+  phone_number,
+  merchantId,
+  customer_id,
+  call_type = 'rcm_follow_up',
+  clinic_id,
+  appointment_id = null,
+  outbound_purpose = null
+}) {
   if (!phone_number) throw new Error('Phone number is required');
   const phoneRegex = /^\+?[\d\s\-()]{10,}$/;
   if (!phoneRegex.test(phone_number)) throw new Error('Invalid phone number format');
@@ -77,6 +85,8 @@ async function initiateOutboundCall({ phone_number, merchantId, customer_id, cal
   if (resolvedMerchantId) webhookUrl.searchParams.set('merchant_id', String(resolvedMerchantId));
   if (customer_id) webhookUrl.searchParams.set('customer_id', String(customer_id));
   if (clinic_id) webhookUrl.searchParams.set('clinic_id', String(clinic_id));
+  if (appointment_id) webhookUrl.searchParams.set('appointment_id', String(appointment_id));
+  if (outbound_purpose) webhookUrl.searchParams.set('outbound_purpose', String(outbound_purpose));
 
   const twilioCall = await twilioClient.calls.create({
     from: fromNumber,

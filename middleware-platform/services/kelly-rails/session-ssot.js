@@ -6,6 +6,48 @@
  */
 
 const db = require('../../database');
+const KellyToolExecutor = require('../kelly-tool-executor');
+
+function laneToOrchestratorPhase(lane) {
+  const map = {
+    clinical: 'TRIAGE_ACTIVE',
+    booking: 'BOOKING',
+    payment: 'BILLING',
+    basic_intake: 'TRIAGE_DISCOVERY',
+    education: 'ROUTINE_INTAKE',
+    support: 'BILLING',
+    account: 'BILLING',
+    records: 'BILLING',
+    reschedule: 'BOOKING'
+  };
+  return map[String(lane || '').toLowerCase()] || 'TRIAGE_DISCOVERY';
+}
+
+function mirrorMetaFromPayload(sessionId, payload = {}) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) return;
+  try {
+    KellyToolExecutor._setSessionMeta(sid, 'kelly_rails_v2', '1');
+    KellyToolExecutor._setSessionMeta(sid, 'kelly_graph_active', '1');
+    const exportLane = String(payload.active_lane || '');
+    if (exportLane) {
+      KellyToolExecutor._setSessionMeta(sid, 'kelly_graph_branch', exportLane);
+      KellyToolExecutor._setSessionMeta(sid, 'kelly_orchestrator_phase', laneToOrchestratorPhase(exportLane));
+    }
+    if (payload.active_subrail) {
+      KellyToolExecutor._setSessionMeta(sid, 'active_subrail', payload.active_subrail);
+    }
+    if (payload.conversation_mode) {
+      KellyToolExecutor._setSessionMeta(sid, 'conversation_mode', payload.conversation_mode);
+    }
+    if (payload.last_appointment_id) {
+      KellyToolExecutor._setSessionMeta(sid, 'last_appointment_id', payload.last_appointment_id);
+    }
+    if (payload.locale) {
+      KellyToolExecutor._setSessionMeta(sid, 'kelly_session_locale', payload.locale);
+    }
+  } catch (_) {}
+}
 
 function ensureProjectionTable() {
   if (!db.db) return;
@@ -51,12 +93,26 @@ function persistRailsSessionState(sessionId, state = {}) {
     cancellation_context: flags.cancellation_context || null,
     pending_intent_queue: flags.pending_intent_queue || [],
     completed_intents: flags.completed_intents || [],
-    opqrst_exit_state: flags.opqrst_exit_state || null
+    opqrst_exit_state: flags.opqrst_exit_state || null,
+    appt_lookup_only: !!flags.appt_lookup_only,
+    schedule_appointment_success: !!flags.schedule_appointment_success,
+    lookup_complete: !!flags.lookup_complete,
+    cancel_complete: !!flags.cancel_complete,
+    rebook_after_cancel: !!flags.rebook_after_cancel,
+    reschedule_pending: !!flags.reschedule_pending,
+    reschedule_complete: !!flags.reschedule_complete,
+    booking_conflict: !!flags.booking_conflict,
+    provider_mismatch: !!flags.provider_mismatch,
+    provider_preference: flags.provider_preference || null,
+    last_appointment_id: flags.last_appointment_id || flags.appointment_id || null,
+    outbound_purpose: flags.outbound_purpose || null,
+    locale: state.locale || flags.locale || null
   };
   try {
-    db.db
-      .prepare(
-        `INSERT INTO kelly_rails_session_projection (
+    const write = () => {
+      db.db
+        .prepare(
+          `INSERT INTO kelly_rails_session_projection (
           session_id, active_lane, step, flags_json, appointment_id, runtime, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'kelly_rails_v2', datetime('now'))
         ON CONFLICT(session_id) DO UPDATE SET
@@ -66,19 +122,46 @@ function persistRailsSessionState(sessionId, state = {}) {
           appointment_id = excluded.appointment_id,
           runtime = excluded.runtime,
           updated_at = datetime('now')`
-      )
-      .run(
-        sid,
-        payload.active_lane,
-        payload.step,
-        JSON.stringify(payload),
-        payload.appointment_id
-      );
+        )
+        .run(
+          sid,
+          payload.active_lane,
+          payload.step,
+          JSON.stringify(payload),
+          payload.appointment_id
+        );
+      mirrorMetaFromPayload(sid, payload);
+    };
+    if (typeof db.db.transaction === 'function') {
+      db.db.transaction(write)();
+    } else {
+      write();
+    }
   } catch (e) {
     if (process.env.NODE_ENV !== 'test') {
       console.warn('[kelly-rails] persistRailsSessionState failed:', e.message);
     }
   }
+}
+
+/** Strip L4-owned slot fields from L2 dispatch updates; persist in one transaction. */
+function mergeConversationStateUpdates(sessionId, sessionFields = {}, dispatchUpdates = {}) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) return { ...sessionFields, ...dispatchUpdates };
+
+  const merged = { ...sessionFields, ...dispatchUpdates };
+  if (merged.current_booking_slot && !merged.schedule_appointment_success) {
+    delete merged.current_booking_slot;
+  }
+
+  persistRailsSessionState(sid, {
+    active_lane: merged.kelly_lane_hint || merged.active_lane || null,
+    step: merged.active_subrail_step || merged.step || null,
+    conversation_mode: merged.conversation_mode || null,
+    active_subrail: merged.active_subrail || null,
+    flags: merged
+  });
+  return merged;
 }
 
 function getRailsSessionProjection(sessionId) {
@@ -138,5 +221,7 @@ module.exports = {
   ensureProjectionTable,
   persistRailsSessionState,
   getRailsSessionProjection,
-  linkSessionToAppointment
+  linkSessionToAppointment,
+  mirrorMetaFromPayload,
+  mergeConversationStateUpdates
 };

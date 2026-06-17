@@ -27,6 +27,27 @@ const { getAvailableSlotsWithSpecialist, isSpecialtyType } = require('./speciali
 const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, normalizeDateStr } = require('../config/clinic-business-hours');
 
 const BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+
+/** Per-turn executor tool log — source of truth for toolsUsed (not subrail metadata). */
+const _turnToolLog = new Map();
+
+function _toolSuccess(result) {
+  if (!result || typeof result !== 'object') return false;
+  if (result.success === false) return false;
+  if (result.error) return false;
+  return true;
+}
+
+function _emitToolTelemetry(sessionId, eventType, payload = {}) {
+  if (!sessionId) return;
+  try {
+    db.insertKellyCallEvent?.({
+      session_id: sessionId,
+      event_type: eventType,
+      payload_json: payload
+    });
+  } catch (_) {}
+}
 const REQUIRE_COMMERCE_EMAIL_VERIFICATION =
   String(process.env.REQUIRE_COMMERCE_EMAIL_VERIFICATION || 'true').toLowerCase() !== 'false';
 const STRICT_CHECKOUT_STAGE_GATE =
@@ -75,6 +96,33 @@ function _emitAppointmentBooked(ctx, appointment, extra = {}) {
       patient_name: appointment.patient_name || extra.patient_name,
       ...extra,
     },
+  });
+}
+
+function _emitNotificationFailed(ctx, channel, error, extra = {}) {
+  try {
+    db.insertKellyCallEvent?.({
+      session_id: ctx.sessionId || null,
+      event_type: 'notification_failed',
+      payload_json: {
+        channel: channel || 'unknown',
+        error: String(error?.message || error || 'unknown'),
+        clinic_id: ctx.clinicId || null,
+        patient_id: ctx.patientId || null,
+        ...extra
+      }
+    });
+  } catch (_) {}
+  _emitKellyActivityEvent({
+    sessionId: ctx.sessionId,
+    clinicId: ctx.clinicId,
+    patientId: ctx.patientId,
+    eventType: 'notification_failed',
+    payload: {
+      channel: channel || 'unknown',
+      error: String(error?.message || error || 'unknown'),
+      ...extra
+    }
   });
 }
 
@@ -601,10 +649,73 @@ class KellyToolExecutor {
    */
   static async execute(toolName, args, context) {
     const { sessionId, clinicId, patientId, callerPhone, channel } = context;
+    const t0 = Date.now();
 
     if (_kellyToolDebug()) {
       console.log(`[KellyToolExecutor] ${toolName}`, { sessionId, clinicId });
     }
+
+    _emitToolTelemetry(sessionId, 'tool_invoked', {
+      tool_name: toolName,
+      clinic_id: clinicId || null,
+      patient_id: patientId || null,
+      channel: channel || null
+    });
+
+    try {
+      const result = await KellyToolExecutor._executeToolCore(toolName, args, context);
+      const success = _toolSuccess(result);
+      const latencyMs = Date.now() - t0;
+      _emitToolTelemetry(sessionId, 'tool_completed', {
+        tool_name: toolName,
+        success,
+        latency_ms: latencyMs,
+        error: success ? null : result?.error || 'tool_failed',
+        clinic_id: clinicId || null
+      });
+      if (sessionId && success) {
+        const list = _turnToolLog.get(sessionId) || [];
+        if (!list.includes(toolName)) list.push(toolName);
+        _turnToolLog.set(sessionId, list);
+      }
+      return result;
+    } catch (err) {
+      const latencyMs = Date.now() - t0;
+      _emitToolTelemetry(sessionId, 'tool_completed', {
+        tool_name: toolName,
+        success: false,
+        latency_ms: latencyMs,
+        error: err.message,
+        clinic_id: clinicId || null
+      });
+      if (toolName === 'prepare_commerce_checkout') {
+        try {
+          KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '0');
+        } catch (_) {}
+      }
+      console.error(`[KellyToolExecutor] ${toolName} error:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /** Tools successfully executed this turn (cleared at turn start). */
+  static beginTurnToolLog(sessionId) {
+    const sid = String(sessionId || '').trim();
+    if (sid) _turnToolLog.set(sid, []);
+  }
+
+  static getTurnToolsUsed(sessionId) {
+    const sid = String(sessionId || '').trim();
+    return [...(_turnToolLog.get(sid) || [])];
+  }
+
+  static clearTurnToolLog(sessionId) {
+    const sid = String(sessionId || '').trim();
+    if (sid) _turnToolLog.delete(sid);
+  }
+
+  static async _executeToolCore(toolName, args, context) {
+    const { sessionId, clinicId, patientId, callerPhone, channel } = context;
 
     try {
       switch (toolName) {
@@ -732,6 +843,12 @@ class KellyToolExecutor {
                 };
               } catch (checkoutErr) {
                 console.warn('[KellyToolExecutor] Routine schedule checkout failed:', checkoutErr?.message);
+                _emitNotificationFailed(
+                  { sessionId, clinicId, patientId },
+                  'checkout',
+                  checkoutErr,
+                  { appointment_id: scheduleResultRoutine?.appointment?.id || null }
+                );
                 return scheduleResultRoutine;
               }
             }
@@ -987,6 +1104,12 @@ class KellyToolExecutor {
               };
             } catch (checkoutErr) {
               console.warn('[KellyToolExecutor] auto checkout chain failed (non-fatal):', checkoutErr.message);
+              _emitNotificationFailed(
+                { sessionId, clinicId, patientId },
+                'checkout',
+                checkoutErr,
+                { appointment_id: scheduleResult?.appointment?.id || null }
+              );
               // Fall back to schedule result only; LLM can call create_appointment_checkout itself.
             }
           }
@@ -2099,8 +2222,7 @@ class KellyToolExecutor {
           KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '0');
         } catch (_) {}
       }
-      console.error(`[KellyToolExecutor] ${toolName} error:`, err.message);
-      return { success: false, error: err.message };
+      throw err;
     }
   }
 
@@ -2501,6 +2623,49 @@ class KellyToolExecutor {
         primary_icd10: body.primary_icd10 || null,
         primary_cpt: body.primary_cpt || null
       });
+    }
+    if (p.includes('/appointments/search') || p.includes('search')) {
+      if (body.patient_id && body.clinic_id) {
+        const dbMod = require('../database');
+        const rows =
+          dbMod.db
+            ?.prepare(
+              `SELECT * FROM appointments WHERE patient_id = ? AND clinic_id = ?
+               AND (deleted_at IS NULL OR deleted_at = '')
+               ORDER BY datetime(created_at) DESC LIMIT 10`
+            )
+            ?.all(body.patient_id, body.clinic_id) || [];
+        if (rows.length) {
+          return { success: true, appointments: rows, count: rows.length };
+        }
+      }
+      const searchTerm =
+        body.search_term ||
+        body.phone ||
+        body.patient_phone ||
+        body.email ||
+        body.patient_email;
+      if (!searchTerm) {
+        return { success: false, error: 'search_term required' };
+      }
+      return BookingService.searchAppointments(searchTerm, body.clinic_id || null);
+    }
+    if (p.includes('/cancel')) {
+      return BookingService.cancelAppointment(
+        body.appointment_id,
+        body.reason || null,
+        body.clinic_id || null
+      );
+    }
+    if (p.includes('/reschedule')) {
+      return BookingService.rescheduleAppointment(
+        body.appointment_id,
+        body.new_date,
+        body.new_time,
+        body.reason || null,
+        body.timezone || null,
+        body.clinic_id || null
+      );
     }
     throw new Error(`RCM_E2E_DIRECT_TOOLS: unsupported path ${path}`);
   }

@@ -1,6 +1,9 @@
 # Conversation Mode Matrix
 
-Last updated: 2026-06-16
+Last updated: 2026-06-17
+
+**Architecture SSOT:** [`docs/architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md)  
+**Gap matrix:** [`docs/architecture/ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md)
 
 Maps `call_type × direction × tenant_policy × intent → conversation_mode`.
 
@@ -72,10 +75,23 @@ When utterance has 2+ intents (e.g. "pay copay and reschedule"):
 2. Secondary intents enqueued in `pending_intent_queue`
 3. After primary rail completes, drain queue
 
+## Identity admission (2026-06-17)
+
+Before L2 dispatch, Retell calls must pass tenant identity validation (`clinic_id` or `customer_id` resolvable). Failure → fail-closed SCRIPT_ONLY handoff (en/es/zh copy), event `identity_invalid`. See `services/voice-identity-admission.js`.
+
+## ASR normalization (2026-06-17)
+
+Intent detection and pivot use ASR-normalized utterances (filler strip, punctuation). **Conversation history is not mutated.** See `services/conversation-mode/asr-normalize.js`.
+
+## demo_qual under enforce (2026-06-17)
+
+Under `CONVERSATION_MODE_ROUTING=enforce`, pivot engine must **not** route to `demo_qual` from tenant modes. Either implement the rail or block pivot; static dispatcher fallback is not allowed in production.
+
 ## Environment
 
-- `CONVERSATION_MODE_ROUTING=shadow` — log decisions, no enforcement (default)
-- `CONVERSATION_MODE_ROUTING=enforce` — hard mode dispatch + tool firewall
+- `CONVERSATION_MODE_ROUTING=shadow` — log decisions, no enforcement (dev/staged default)
+- `CONVERSATION_MODE_ROUTING=enforce` — hard mode dispatch + tool firewall (**production target**)
+- `verify-kelly-rails-env` fails staging/prod profile when routing is not `enforce`
 
 ## Appointment lookup (2026-06-16)
 
@@ -95,9 +111,10 @@ When utterance has 2+ intents (e.g. "pay copay and reschedule"):
 
 Sandbox verification: `npm run test:rails:conversation-sandbox` (seven scenarios, target ≥ 8/10 each).
 
-## As-is status (2026-06-16)
+## As-is status (2026-06-17)
 
 - Implemented: resolver + per-turn pivoting + mode dispatch + subrail routing + mode tool firewall.
 - Implemented: session SSOT fields for `conversation_mode`, `active_subrail`, pending/completed intent queues, and subrail accumulators.
-- Verified: booking, copay, appt lookup, outbound reminder, urgent, Spanish booking, Mandarin copay (sandbox avg ~9.4/10).
-- Open tuning: outbound reminder phrasing (8/10), mixed-intent queue drain on cross-rail turns.
+- Documented: [`KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md), [`ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md).
+- **In progress (code):** identity admission gate, ASR normalization, deterministic schedule gate, booking conflict confirm gate, telemetry P0 minimum.
+- Open: booking/spanish_booking TCR flake until schedule gate ships; clinical path harness blocked on OPQRST unification; production enforce rollout pending staging smoke.

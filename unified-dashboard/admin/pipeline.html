@@ -53,6 +53,13 @@
     let currentPage = 0;
     let searchTimer;
 
+    function isCallableLead(l) {
+      if (l.callable === true) return true;
+      if (l.callable === false) return false;
+      const digits = String(l?.clinic_phone || '').replace(/\D/g, '');
+      return digits.length >= 10;
+    }
+
     init('pipeline');
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -79,17 +86,17 @@
     async function loadQueue(page = 0) {
       currentPage = page;
       const search = document.getElementById('queueSearch').value.trim();
-      const params = new URLSearchParams({ contact_status: 'verified', limit: 15, offset: page * 15 });
+      const params = new URLSearchParams({ contact_status: 'verified', callable_only: '1', limit: 15, offset: page * 15 });
       if (currentSpecialty) params.set('specialty', currentSpecialty);
       if (search) params.set('search', search);
 
       try {
         const r = await apiFetch(`/api/admin/scrape/leads?${params}`);
-        const verified = r.leads || [];
-        document.getElementById('queueCount').textContent = r.total || 0;
+        const verified = (r.leads || []).filter(isCallableLead);
+        document.getElementById('queueCount').textContent = verified.length ? (r.total || verified.length) : 0;
         const container = document.getElementById('queueList');
         if (!verified.length) {
-          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No call-ready leads. Run scrape from control board.</p>';
+          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No call-ready leads with verified phone numbers. Run scrape from control board.</p>';
           document.getElementById('queuePagination').innerHTML = '';
           return;
         }
@@ -106,6 +113,7 @@
 
     function renderRow(l) {
       const scoreCls = l.lead_score >= 70 ? ' high' : '';
+      const canCall = isCallableLead(l);
       return `
         <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${l.id}'">
           <div style="flex:1;min-width:0;">
@@ -114,7 +122,9 @@
           </div>
           <div class="admin-crm-row-actions">
             <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
-            <button class="btn btn-primary btn-sm admin-crm-btn-sm" onclick="event.stopPropagation();callLead(${l.id},'${esc(l.clinic_name)}')">Call</button>
+            ${canCall
+              ? `<button class="btn btn-primary btn-sm admin-crm-btn-sm" onclick="event.stopPropagation();callLead(${l.id},'${esc(l.clinic_name)}')">Call</button>`
+              : `<span class="admin-crm-badge admin-crm-badge-muted" title="No verified phone">No phone</span>`}
           </div>
         </div>`;
     }
@@ -131,7 +141,7 @@
           { key: 'lost', label: 'Lost' },
         ];
         document.getElementById('kanbanBoard').innerHTML = stages.map(s => {
-          const cards = (r.cards || {})[s.key] || [];
+          const cards = ((r.cards || {})[s.key] || []).filter(isCallableLead);
           return `
             <div class="admin-crm-kanban-col">
               <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;">
@@ -164,11 +174,12 @@
       if (!confirm('Call top 10 call-ready leads?')) return;
       try {
         const r = await apiFetch('/api/admin/scrape/leads/call-ready?limit=10');
-        for (const l of r.leads || []) {
+        const callable = (r.leads || []).filter(isCallableLead);
+        for (const l of callable) {
           await apiFetch(`/api/admin/leads/${l.id}/call`, { method: 'POST' });
           await new Promise(res => setTimeout(res, 500));
         }
-        alert(`Initiated ${(r.leads || []).length} calls`);
+        alert(`Initiated ${callable.length} calls`);
         loadQueue();
         loadKanban();
       } catch (e) { alert(e.message); }

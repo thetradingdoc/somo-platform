@@ -5,17 +5,34 @@ const OPERATOR_STAGES = ['callback_intro', 'update', 'confirm', 'handoff_offer',
 function loadAppointmentSummary(appointmentId) {
   if (!appointmentId) return null;
   try {
-    const db = require('../../../database');
-    const row = db.db
+    const dbModule = require('../../../database');
+    const row = dbModule.db
       ?.prepare(
-        `SELECT appointment_type, specialty, appointment_date, date, appointment_time, time, patient_name
-         FROM appointments WHERE id = ? OR appointment_id = ? LIMIT 1`
+        `SELECT appointment_type, date, time, start_time, patient_name
+         FROM appointments WHERE id = ? AND deleted_at IS NULL LIMIT 1`
       )
-      ?.get(appointmentId, appointmentId);
+      ?.get(appointmentId);
     if (!row) return null;
-    const when = [row.appointment_date || row.date, row.appointment_time || row.time].filter(Boolean).join(' at ');
+    let time = String(row.time || '').trim();
+    if (!time || time === '00:00' || time === '0:00') {
+      if (row.start_time) {
+        try {
+          const d = new Date(row.start_time);
+          if (!Number.isNaN(d.getTime())) {
+            const hrs = d.getHours();
+            const mins = String(d.getMinutes()).padStart(2, '0');
+            if (hrs !== 0 || mins !== '00') {
+              const h12 = hrs % 12 || 12;
+              time = `${h12}:${mins}${hrs >= 12 ? ' PM' : ' AM'}`;
+            }
+          }
+        } catch (_) {}
+      }
+      if (time === '00:00' || time === '0:00') time = '';
+    }
+    const when = [row.date, time].filter(Boolean).join(' at ');
     return {
-      type: row.appointment_type || row.specialty || 'appointment',
+      type: row.appointment_type || 'appointment',
       when: when || 'soon',
       patientName: row.patient_name
     };
@@ -24,9 +41,18 @@ function loadAppointmentSummary(appointmentId) {
   }
 }
 
+function isReminderContext(ctx = {}) {
+  return (
+    ctx.outbound_purpose === 'appointment_reminder' ||
+    ctx.flags?.outbound_purpose === 'appointment_reminder' ||
+    !!ctx.appointment_id ||
+    !!ctx.appointmentId
+  );
+}
+
 function stageReply(stage, ctx) {
   const name = ctx.patientName || ctx.leadName || 'there';
-  const isReminder = ctx.outbound_purpose === 'appointment_reminder' || !!ctx.appointment_id;
+  const isReminder = isReminderContext(ctx);
   const appt = ctx._apptSummary;
 
   switch (stage) {
@@ -52,9 +78,28 @@ function stageReply(stage, ctx) {
 }
 
 async function handleOperatorOutboundTurn(ctx = {}) {
+  const isReminder = isReminderContext(ctx);
+  const appointmentId =
+    ctx.appointment_id || ctx.appointmentId || ctx.flags?.appointment_id || null;
+  ctx.outbound_purpose = ctx.outbound_purpose || ctx.flags?.outbound_purpose || null;
+
+  if (isReminder && !appointmentId) {
+    return {
+      reply:
+        'I am calling with an appointment reminder but I do not have your visit details loaded. I will have a team member follow up with you shortly.',
+      endCall: false,
+      conversation_mode: 'operator_outbound',
+      operator_stage: 'handoff_offer',
+      active_subrail: 'handoff',
+      disposition: 'handoff_requested',
+      flags: { pending_human_handoff: true, reminder_context_missing: true }
+    };
+  }
+
   let step = ctx.operator_stage || ctx.active_subrail_step || 'callback_intro';
-  const apptSummary = loadAppointmentSummary(ctx.appointment_id);
+  const apptSummary = loadAppointmentSummary(appointmentId);
   if (apptSummary) ctx._apptSummary = apptSummary;
+  ctx.appointment_id = appointmentId;
 
   if (ctx.opener_delivered && step === 'callback_intro') {
     step = 'update';
@@ -92,13 +137,51 @@ async function handleOperatorOutboundTurn(ctx = {}) {
     endCall = true;
   }
 
+  if (/cancel|reschedule|change my appointment|move my appointment/.test(msg)) {
+    const isCancel = /cancel/.test(msg);
+    return {
+      reply: isCancel
+        ? 'I can help you cancel that appointment. Let me pull up your visit details.'
+        : 'I can help you reschedule. Let me pull up your visit details.',
+      endCall: false,
+      conversation_mode: 'tenant_inbound_admin',
+      operator_stage: 'handoff_offer',
+      active_subrail: isCancel ? 'cancellation' : 'cancellation',
+      active_subrail_step: 'find_booking',
+      disposition: isCancel ? 'cancel_requested' : 'reschedule_requested',
+      kelly_lane_hint: 'reschedule',
+      state_updates: {
+        conversation_mode: 'tenant_inbound_admin',
+        active_subrail: 'cancellation',
+        active_subrail_step: 'find_booking',
+        reschedule_pending: !isCancel,
+        cancel_pending: isCancel,
+        appointment_id: appointmentId || undefined,
+        operator_outbound_pivot: true
+      },
+      toolsUsed: []
+    };
+  }
+
+  const disposition = endCall
+    ? isReminder
+      ? 'reminder_delivered'
+      : 'completed'
+    : null;
+
   return {
     reply,
     endCall,
-    toolsUsed: [],
     conversation_mode: 'operator_outbound',
     operator_stage: nextStage,
-    active_subrail_step: nextStage
+    active_subrail_step: nextStage,
+    disposition,
+    state_updates: {
+      operator_stage: nextStage,
+      active_subrail_step: nextStage,
+      appointment_id: appointmentId || undefined,
+      outbound_purpose: ctx.outbound_purpose || undefined
+    }
   };
 }
 

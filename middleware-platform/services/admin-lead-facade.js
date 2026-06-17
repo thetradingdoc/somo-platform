@@ -31,6 +31,28 @@ function hasValidPhone(phone) {
   return digits.length >= 10;
 }
 
+/** SQL fragment — leads with at least 10 phone digits (pipeline / call-ready gate). */
+const CALLABLE_PHONE_WHERE = `
+  AND clinic_phone IS NOT NULL
+  AND TRIM(clinic_phone) != ''
+  AND LENGTH(
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(clinic_phone,
+      '+', ''), '-', ''), ' ', ''), '(', ''), ')', ''), '.', '')
+  ) >= 10
+`;
+
+function filterCallableLeads(leads) {
+  return (leads || []).filter((l) => hasValidPhone(l.clinic_phone));
+}
+
+function assertCallableLead(lead) {
+  if (!hasValidPhone(lead?.clinic_phone)) {
+    const err = new Error('Lead must have a verified phone number (10+ digits) to enter the sales pipeline.');
+    err.code = 'LEAD_NOT_CALLABLE';
+    throw err;
+  }
+}
+
 function normalizeStage(stage) {
   if (!stage) return 'new';
   return STAGE_TO_UI[stage] || stage;
@@ -81,6 +103,7 @@ function formatLeadForApi(lead, enrichingIds = new Set()) {
     preferred_language: lead.preferred_language || (language_labels.length ? null : 'en'),
     pipeline_stage: normalizeStage(lead.pipeline_stage),
     contact_status: getContactStatus(lead, enrichingIds),
+    callable: hasValidPhone(lead.clinic_phone),
     lead_source: lead.source || lead.lead_source || null,
     location: lead.location || null,
     last_called_at: lead.last_called_at || lead.last_call_at || null,
@@ -121,7 +144,13 @@ function querySalesLeads(filters = {}) {
     offset = 0,
     pipeline_stage,
     call_ready,
+    callable_only,
   } = filters;
+
+  const requireCallable =
+    callable_only === true ||
+    contact_status === 'verified' ||
+    call_ready === true;
 
   let sql = `
     SELECT * FROM leads
@@ -130,6 +159,10 @@ function querySalesLeads(filters = {}) {
   `;
   const params = [];
 
+  if (requireCallable) {
+    sql += CALLABLE_PHONE_WHERE;
+  }
+
   if (pipeline_stage) {
     const stages = dbStagesForUiStage(pipeline_stage);
     sql += ` AND pipeline_stage IN (${stages.map(() => '?').join(',')})`;
@@ -137,7 +170,6 @@ function querySalesLeads(filters = {}) {
   }
 
   if (call_ready) {
-    sql += ` AND clinic_phone IS NOT NULL AND LENGTH(clinic_phone) > 0`;
     sql += ` AND (pipeline_stage IS NULL OR pipeline_stage IN ('new', 'call_ready'))`;
   }
 
@@ -153,6 +185,10 @@ function querySalesLeads(filters = {}) {
 
   if (contact_status) {
     filtered = filtered.filter((l) => l.contact_status === contact_status);
+  }
+
+  if (requireCallable) {
+    filtered = filterCallableLeads(filtered);
   }
 
   const total = filtered.length;
@@ -193,6 +229,7 @@ function getPipelineView(specialty) {
     SELECT * FROM leads
     WHERE (is_test IS NULL OR is_test = 0)
       AND (lead_type IS NULL OR lead_type = 'sales')
+      ${CALLABLE_PHONE_WHERE}
     ORDER BY lead_score DESC, created_at DESC
   `).all();
 
@@ -238,6 +275,9 @@ function formatCalls(calls) {
 module.exports = {
   UI_STAGES,
   hasValidPhone,
+  CALLABLE_PHONE_WHERE,
+  filterCallableLeads,
+  assertCallableLead,
   normalizeStage,
   denormalizeStage,
   dbStagesForUiStage,

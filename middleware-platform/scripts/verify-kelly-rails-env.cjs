@@ -43,6 +43,10 @@ function main() {
     if (!Number.isFinite(pct) || pct < 1) {
       errors.push('KELLY_RAILS_ROLLOUT_PCT must be 1 in staging/production profile.');
     }
+    const modeRouting = String(process.env.CONVERSATION_MODE_ROUTING || 'shadow').toLowerCase();
+    if (modeRouting !== 'enforce') {
+      errors.push('CONVERSATION_MODE_ROUTING must be enforce in staging/production profile.');
+    }
   } else if (!truthy(railsV2)) {
     warnings.push('KELLY_RAILS_V2 is not 1 (OK for local dev; set for v2 E2E).');
   }
@@ -60,7 +64,8 @@ function main() {
         profile: strictProfile ? 'staging_or_prod' : 'dev',
         KELLY_RAILS_V2: railsV2 ?? '(unset)',
         KELLY_ALLOW_HYBRID_GRAPH: hybrid ?? '(unset)',
-        KELLY_RAILS_ROLLOUT_PCT: rollout ?? '(default 1)'
+        KELLY_RAILS_ROLLOUT_PCT: rollout ?? '(default 1)',
+        CONVERSATION_MODE_ROUTING: process.env.CONVERSATION_MODE_ROUTING ?? '(unset)'
       },
       null,
       2

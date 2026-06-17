@@ -94,6 +94,16 @@ function resolveConversationMode(input = {}) {
     };
   }
 
+  if (pi === UserIntent.RESCHEDULE) {
+    return {
+      mode: ConversationMode.TENANT_INBOUND_ADMIN,
+      subrail: Subrail.CANCELLATION,
+      reason: 'intent_reschedule',
+      call_type: callType,
+      direction
+    };
+  }
+
   if (pi === UserIntent.SYMPTOM && canPivotToClinical(policy)) {
     return {
       mode: ConversationMode.TENANT_INBOUND_CLINICAL,

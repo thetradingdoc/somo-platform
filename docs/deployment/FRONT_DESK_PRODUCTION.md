@@ -189,15 +189,19 @@ Uncommitted work on `feat/signup-assign-line-and-portal-hardening` spans **two s
 
 **UI-only changes** (calendar Escape/backdrop, patient-case deep links, revenue Send UX, voice-setup/agent): Firebase UI deploy is required; API redeploy is optional unless matching API routes changed.
 
-**Recommended staged voice rollout** after API deploy (do not flip global enforce on day one):
+**Recommended staged voice rollout** after API deploy (see [`CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md)):
 
 ```bash
-# See docs/runbooks/CONVERSATION_MODE_ROLLOUT.md
-CONVERSATION_MODE_ROUTING=shadow
-CONVERSATION_MODE_ENFORCE_OPERATOR_OUTBOUND=1
-CONVERSATION_MODE_ENFORCE_OUTBOUND_SALES=1
-CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=0   # enable after 48h clean shadow
+# Phase 0 staging — then global enforce when green
+CONVERSATION_MODE_ROUTING=enforce
+KELLY_RAILS_V2=1
+KELLY_RAILS_ROLLOUT_PCT=1
+KELLY_ALLOW_HYBRID_GRAPH=0
 ```
+
+Rollback: set `CONVERSATION_MODE_ROUTING=shadow` and redeploy. See rollout runbook regression signals.
+
+**Architecture:** [`KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md)
 
 Post-deploy DB scripts (production, one-time):
 

@@ -1,6 +1,13 @@
 # LIVE
 
-**Last updated:** 2026-06-16
+**Last updated:** 2026-06-17
+
+## 2026-06-17 changelog
+
+- Added [`KELLY_ORCHESTRATION_ARCHITECTURE.md`](./KELLY_ORCHESTRATION_ARCHITECTURE.md) — two-plane L2/L4 stack, guardrails, SSOT, telemetry.
+- Added [`ORCHESTRATION_GAP_MATRIX.md`](./ORCHESTRATION_GAP_MATRIX.md) — production gaps and remediation backlog (with status column).
+- Added [`TURN_COMPLETION_CONTRACT.md`](./TURN_COMPLETION_CONTRACT.md) — stated-time booking path, failure outcomes.
+- Shipped: `turn-planner.js`, `gate-registry.js`, `booking-outcome` telemetry, `mergeConversationStateUpdates`, sandbox `booking_user_dialog` scenario.
 
 ## 2026-06-16 changelog
 
