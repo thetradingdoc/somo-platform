@@ -109,6 +109,15 @@ function requireCustomerAuth(req, res, next) {
     req.provider_id = customer.merchant_id; // Preferred naming alias
     req.session = session;
 
+    if (!customer._capabilities) {
+      try {
+        const { getCapabilities } = require('../services/customer-capabilities');
+        customer._capabilities = getCapabilities(customer);
+      } catch (_) {
+        customer._capabilities = [];
+      }
+    }
+
     // Continue to next middleware/route
     next();
   } catch (error) {

@@ -1,6 +1,12 @@
 # LIVE
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-16
+
+## 2026-06-16 changelog
+
+- Documented conversation-mode routing as the active as-built control plane for Kelly call handling.
+- Updated architecture status to reflect resolver + pivot + dispatcher + subrails + tool-firewall integration.
+- Marked remaining risk focus as edge-case transition tuning and rollout hardening, not missing core primitives.
 
 
 ---

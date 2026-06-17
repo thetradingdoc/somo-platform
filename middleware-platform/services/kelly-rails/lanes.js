@@ -189,7 +189,7 @@ async function runDeterministicSchedule(state, ctx) {
     state.active_lane === KELLY_LANE.BOOKING &&
     (state.step === 'confirm_visit' || /@|please book|works for me/.test(msg));
 
-  if (wantsBookConfirm && /book|confirm|works|yes|please|email|@/.test(msg)) {
+  if (wantsBookConfirm && /book|confirm|works|yes|please|email|@|sí|si\b|por favor|reservar/.test(msg)) {
     const emailMatch = String(ctx.message || '').match(/[\w.+-]+@[\w.-]+\.\w+/);
     let slotId = argsFromMeta(ctx.sessionId, 'last_slot_id');
     let apptDate = argsFromMeta(ctx.sessionId, 'last_slot_date');
@@ -450,6 +450,56 @@ async function runDeterministicOpqrst(state, ctx) {
   return null;
 }
 
+async function runDeterministicApptLookup(state, ctx) {
+  if (state.active_lane !== KELLY_LANE.RESCHEDULE || state.step !== 'find_booking') return null;
+  if (!state.flags?.appt_lookup_only && state.active_subrail !== 'cancellation') return null;
+
+  const toolsUsed = [];
+  const searchTerm =
+    ctx.patientName ||
+    ctx.callerPhone ||
+    ctx.patientId ||
+    String(ctx.message || '').trim();
+  if (!searchTerm) return null;
+
+  const results = await executeDeterministicTool(
+    KELLY_LANE.RESCHEDULE,
+    'find_booking',
+    'search_appointments',
+    { search_term: searchTerm, clinic_id: ctx.clinicId },
+    ctx
+  );
+  toolsUsed.push('search_appointments');
+
+  const appts = Array.isArray(results?.appointments)
+    ? results.appointments
+    : Array.isArray(results?.results)
+      ? results.results
+      : [];
+  const appt = appts[0];
+  if (appt) {
+    const when = [appt.date || appt.appointment_date, appt.time || appt.appointment_time]
+      .filter(Boolean)
+      .join(' at ');
+    const type = appt.appointment_type || appt.specialty || 'appointment';
+    state.flags.last_appointment_id = appt.id || appt.appointment_id;
+    return {
+      reply: when
+        ? `I found your ${type} scheduled for ${when}. Does that match what you were expecting?`
+        : `I found your upcoming ${type}. Does that match what you were expecting?`,
+      toolsUsed,
+      endCall: false
+    };
+  }
+
+  return {
+    reply:
+      'I could not find an upcoming appointment on file. Can you confirm your name or the phone number we have for you?',
+    toolsUsed,
+    endCall: false
+  };
+}
+
 async function executeLaneStep(state, ctx) {
   const detSafety = await runDeterministicSafety(state, ctx);
   if (detSafety) {
@@ -467,6 +517,12 @@ async function executeLaneStep(state, ctx) {
   if (detPay) {
     advanceAfterStep(state, detPay.toolsUsed);
     return detPay;
+  }
+
+  const detLookup = await runDeterministicApptLookup(state, ctx);
+  if (detLookup?.reply) {
+    advanceAfterStep(state, detLookup.toolsUsed || []);
+    return detLookup;
   }
 
   const detIntro = await runDeterministicClinicalIntro(state, ctx);

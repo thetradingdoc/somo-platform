@@ -350,9 +350,20 @@
   background: #ffffff;
   box-shadow: -16px 0 40px rgba(15, 23, 42, 0.18);
   border-left: 1px solid var(--cal-border);
-  z-index: 30;
+  z-index: 31;
   display: none;
   overflow-y: auto;
+}
+
+.calendar-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 30;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
 }
 
 .details-panel-inner {

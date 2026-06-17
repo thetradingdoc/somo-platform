@@ -299,7 +299,10 @@ Always be polite, patient, and professional. If you don't know something, ask fo
 
       const agentPayload = {
         agent_name: `${clinicData.name} Voice Assistant`,
-        llm_websocket_url: this.llmWebsocketUrl,
+        response_engine: {
+          type: 'custom-llm',
+          llm_websocket_url: this.llmWebsocketUrl
+        },
         voice_id: resolveRetellVoiceId(clinicData.voice_id),
         language: 'en-US',
         enable_transcription: true,

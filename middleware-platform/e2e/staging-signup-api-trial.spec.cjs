@@ -2,7 +2,7 @@
 
 /**
  * Staging SIM trial signup — API-only (no browser).
- * Requires STAGING_EMAIL_CODE + STAGING_SMS_CODE (real Twilio Verify on staging).
+ * Requires STAGING_EMAIL_CODE (real email OTP on staging).
  * Optional: STAGING_DB_PATH after GCS download for post-assert.
  */
 
@@ -16,12 +16,9 @@ const { API_BASE, uniqueStagingEmail, createApiContext } = require('./helpers/st
 const mpRoot = path.join(__dirname, '..');
 
 test.describe('Staging signup API trial', () => {
-  test('S2-S7 API: signup → email → phone → active trial', async ({ playwright }) => {
+  test('S2-S7 API: signup → email → assign-line → active trial', async ({ playwright }) => {
     if (!process.env.STAGING_EMAIL_CODE) {
       test.skip(true, 'Set STAGING_EMAIL_CODE (from inbox or Cloud SQL email_verification_codes)');
-    }
-    if (!process.env.STAGING_SMS_CODE) {
-      test.skip(true, 'Set STAGING_SMS_CODE from Twilio Verify SMS on TRIAL_E2E_PHONE');
     }
     if (!process.env.TRIAL_E2E_PHONE) {
       test.skip(true, 'Set TRIAL_E2E_PHONE');
@@ -52,18 +49,14 @@ test.describe('Staging signup API trial', () => {
       });
       expect(verifyEmail.ok()).toBeTruthy();
 
-      const sendPhone = await api.post('/api/signup/verify-phone/send', {
+      const assignLine = await api.post('/api/signup/assign-line', {
         data: { phone_number: phone }
       });
-      expect(sendPhone.ok()).toBeTruthy();
-
-      const checkPhone = await api.post('/api/signup/verify-phone/check', {
-        data: { phone_number: phone, code: process.env.STAGING_SMS_CODE.replace(/\D/g, '') }
-      });
-      expect(checkPhone.ok()).toBeTruthy();
-      const phoneBody = await checkPhone.json();
-      expect(phoneBody.success).toBe(true);
-      expect(phoneBody.trial_sim_flow).toBe(true);
+      expect(assignLine.ok()).toBeTruthy();
+      const lineBody = await assignLine.json();
+      expect(lineBody.success).toBe(true);
+      expect(lineBody.trial_sim_flow).toBe(true);
+      expect(lineBody.line_assigned).toBe(true);
 
       const acceptTerms = await api.post('/api/signup/accept-terms');
       expect(acceptTerms.ok()).toBeTruthy();

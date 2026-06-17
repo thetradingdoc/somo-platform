@@ -12,7 +12,7 @@ const LOGO_URL =
 const SITE_URL = (process.env.SOMO_EMAIL_SITE_URL || 'https://callsomo.com').replace(/\/$/, '');
 
 const SUPPORT_EMAIL =
-  process.env.SOMO_EMAIL_SUPPORT || process.env.SMTP_FROM_EMAIL || 'info@callsomo.com';
+  process.env.SOMO_EMAIL_SUPPORT || process.env.SMTP_FROM_EMAIL || 'richard@callsomo.com';
 
 const TOKENS = {
   green: '#16a637',

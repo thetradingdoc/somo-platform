@@ -2,7 +2,7 @@
 require('dotenv').config();
 
 // Usage:
-//   DB_PATH=./middleware-dev.db EMAIL=drlittlekids@gmail.com node scripts/send-verification-code.cjs
+//   DB_PATH=./middleware-dev.db EMAIL=richard@callsomo.com node scripts/send-verification-code.cjs
 //
 // This sends a *real* verification email using EmailVerificationService, which:
 // - creates a 6-digit code in DB

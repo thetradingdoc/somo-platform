@@ -6,7 +6,9 @@
  */
 
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+if (process.env.AUDIT_MIDDLEWARE !== '1') {
+  require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+}
 
 if (process.env.AP_Langchain && !process.env.LANGSMITH_API_KEY) {
   process.env.LANGSMITH_API_KEY = process.env.AP_Langchain;

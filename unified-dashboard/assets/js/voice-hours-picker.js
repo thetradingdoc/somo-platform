@@ -215,7 +215,7 @@
 
   function defaultGreeting(companyName) {
     const name = (companyName || 'our office').trim();
-    return `Hi, you've reached ${name}. I'm Kelly, your AI front desk. How can I help you today?`;
+    return `Hi, I'm Kelly, Somo's front desk receptionist. Thank you for calling ${name}. How can I help you today?`;
   }
 
   global.VoiceHoursPicker = {

@@ -1,6 +1,6 @@
 # Agent documentation
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-16
 
 Product-specific voice agents (separate from production Kelly / clinic stack).
 
@@ -10,7 +10,5 @@ Product-specific voice agents (separate from production Kelly / clinic stack).
 | **Kelly** (paying clinics) | [`../voice-agent/README.md`](../voice-agent/README.md) |
 
 Do not mix Somo demo Retell config with Kelly `configure-retell.js`.
-
-Legacy name: [`dodgecall/README.md`](dodgecall/README.md) → `somo-demo/`.
 
 Backlog: [`../../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md`](../../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md).

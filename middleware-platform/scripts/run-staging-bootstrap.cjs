@@ -42,15 +42,17 @@ function run(label, cmd, args, extraEnv = {}) {
 
 async function main() {
   if (!process.env.SOMO_OWNER_EMAIL) {
-    process.env.SOMO_OWNER_EMAIL = 'drlittlekids@gmail.com';
+    process.env.SOMO_OWNER_EMAIL = 'richard@callsomo.com';
   }
 
   await syncDb('download');
 
   run('ensure:somo-owner', process.execPath, ['scripts/ensure-somo-owner-account.cjs']);
 
+  run('seed:operator-customer', process.execPath, ['scripts/seed-operator-customer.cjs']);
+
   const db = require('../database');
-  const email = (process.env.SOMO_OWNER_EMAIL || 'drlittlekids@gmail.com').trim();
+  const email = (process.env.SOMO_OWNER_EMAIL || 'richard@callsomo.com').trim();
   const customer = db.getCustomerByEmail(email);
   if (!customer) {
     console.error('Owner customer missing after ensure');

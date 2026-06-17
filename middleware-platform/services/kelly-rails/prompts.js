@@ -10,10 +10,10 @@ function resolveLocale(state = {}, opts = {}) {
   return 'en';
 }
 
-function laneSystemPrompt(lane, step, state, localeOpt) {
+function laneSystemPrompt(lane, step, state, providerCtx = {}, localeOpt) {
   const locale = localeOpt || resolveLocale(state);
   const mod = locale === 'es' ? es : en;
-  return mod.laneSystemPrompt(lane, step, state);
+  return mod.laneSystemPrompt(lane, step, state, providerCtx);
 }
 
 module.exports = { laneSystemPrompt, resolveLocale };

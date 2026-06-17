@@ -72,8 +72,11 @@ async function getMainGraph() {
         ...state,
         message: ctx.message || state.last_user_message,
         clinicId: ctx.clinicId,
+        customerId: ctx.customerId,
         patientId: ctx.patientId,
-        callerPhone: ctx.callerPhone
+        callerPhone: ctx.callerPhone,
+        db: ctx.db,
+        providerInstructions: ctx.providerInstructions
       });
       return {
         ...nextState,
@@ -107,10 +110,13 @@ async function invokeMainGraph(opts = {}) {
       channel: opts.channel || 'chat',
       message: opts.message,
       clinicId: opts.clinicId,
+      customerId: opts.customerId || null,
       patientId: opts.patientId,
       callerPhone: opts.callerPhone,
       locale: opts.locale || opts.preferredLanguage,
-      preferredLanguage: opts.preferredLanguage || opts.locale
+      preferredLanguage: opts.preferredLanguage || opts.locale,
+      db: opts.db || null,
+      providerInstructions: opts.providerInstructions || null
     });
     return direct;
   }
@@ -141,9 +147,12 @@ async function invokeMainGraph(opts = {}) {
     turn_context: {
       message: opts.message,
       clinicId: opts.clinicId,
+      customerId: opts.customerId || null,
       patientId: opts.patientId,
       callerPhone: opts.callerPhone,
-      locale
+      locale,
+      db: opts.db || null,
+      providerInstructions: opts.providerInstructions || null
     }
   };
 
@@ -161,11 +170,14 @@ async function invokeMainGraph(opts = {}) {
       session_id: sessionId,
       message: opts.message,
       clinicId: opts.clinicId,
+      customerId: opts.customerId || null,
       patientId: opts.patientId,
       callerPhone: opts.callerPhone,
       channel: opts.channel,
       locale: opts.locale || opts.preferredLanguage,
-      preferredLanguage: opts.preferredLanguage || opts.locale
+      preferredLanguage: opts.preferredLanguage || opts.locale,
+      db: opts.db || null,
+      providerInstructions: opts.providerInstructions || null
     });
   }
 }

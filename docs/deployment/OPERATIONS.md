@@ -1,6 +1,6 @@
 # OPERATIONS
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-16
 
 
 ---
@@ -57,7 +57,7 @@ npm run test:prod:smoke --prefix middleware-platform
 
 ## Somo demo secrets
 
-Prefer `SOMO_DEMO_*` in Secret Manager / `.env`. Legacy `DODGECALL_*` values are read via [somo-demo-env.js](../../middleware-platform/lib/somo-demo-env.js).
+Prefer `SOMO_DEMO_*` in Secret Manager / `.env`.
 
 ## Kelly rails (production profile)
 
@@ -262,7 +262,7 @@ If `:4000` is still slow with the light profile, `middleware-dev.db` may be very
 ## Env (middleware)
 
 ```bash
-DODGECALL_DEMO_ENABLED=1
+SOMO_DEMO_ENABLED=1
 API_BASE_URL=http://localhost:4000
 TWILIO_OUTBOUND_WEBHOOK_URL=https://YOUR-SUBDOMAIN.ngrok-free.app  # for real demo calls locally
 ```
@@ -712,9 +712,9 @@ BASE_URL=https://api.callsomo.com
 ## Smoke checklist
 
 - [ ] `GET /health` returns 200
-- [ ] `node scripts/sandbox-trial-signup-report.cjs` — verify-phone not 404, `TRIAL_SIM_FLOW_ENABLED` true
-- [ ] `node scripts/trial-provision-smoke.cjs` — creates customer with `twilio_phone_number` (costs one Twilio number). If Verify SMS 404s locally, set `TWILIO_VERIFY_DEV_MOCK=1` in `.env`, **restart the server**, then re-run smoke (OTP `000000`).
-- [ ] Full signup: `https://callsomo.com/signup?fresh=1` (after `npm run deploy:staging-hosting`) → email → phone OTP → terms → trial activation
+- [ ] `node scripts/sandbox-trial-signup-report.cjs` — assign-line not 404, `TRIAL_SIM_FLOW_ENABLED` true
+- [ ] `node scripts/trial-provision-smoke.cjs` — creates customer with `twilio_phone_number` (costs one Twilio number)
+- [ ] Full signup: `https://callsomo.com/signup?fresh=1` (after `npm run deploy:staging-hosting`) → email → assign line → terms → trial activation
 - [ ] DB: `trial_status=active`, `twilio_phone_number` set, `phone_verified=1`
 - [ ] Inbound call to provisioned number reaches Kelly (not trial-paused TwiML)
 - [ ] Second signup with same phone → `phone_trial_in_use`
@@ -1162,10 +1162,10 @@ Progress bar shows **Step N of M** (M excludes phone step when `TRIAL_SIM_FLOW_E
 ## SaaS happy path (SIM enabled)
 
 ```text
-/signup?utm_source=somo|dodgecall
+/signup?utm_source=somo
   → POST /api/signup
   → POST /api/signup/verify-email
-  → POST /api/signup/verify-phone/send + check → startTrialTenant()
+  → POST /api/signup/assign-line → startTrialTenant()
   → POST /api/signup/accept-terms
   → /business/trial-activation.html
 ```
@@ -1176,10 +1176,10 @@ When `TRIAL_SIM_FLOW_ENABLED` is off, after email verify the wizard skips phone 
 
 | Step | Condition | Redirect |
 |------|-----------|----------|
-| After email verify | SIM on (`trial_sim_flow: true`) | `/signup?step=phone` |
+| After email verify | SIM on (`trial_sim_flow: true`) | `/signup?step=phone` (assign dedicated line) |
 | After email verify | SIM off | `/signup?step=terms` or `/terms` |
-| After phone verify + trial | Trial started | `/signup?step=terms` (inline) |
-| After accept-terms | SIM on, phone not verified | `/signup?step=phone` |
+| After assign-line + trial | Trial started | `/signup?step=terms` (inline) |
+| After accept-terms | SIM on, no `twilio_phone_number` | `/signup?step=phone` |
 | After accept-terms | SIM on, trial active | `/business/trial-activation.html?welcome=1` → `/business/voice-setup.html` |
 | After accept-terms | SIM off, needs subscription | `/business/settings.html?billing=subscribe` |
 | After accept-terms | Card verified (legacy) | `/signup-complete` |
@@ -1196,8 +1196,9 @@ When `TRIAL_SIM_FLOW_ENABLED` is off, after email verify the wizard skips phone 
 | POST | `/api/signup` | Public |
 | POST | `/api/signup/verify-email` | Public (sets `customer_session`) |
 | GET | `/api/signup/session` | `customer_session` |
-| POST | `/api/signup/verify-phone/send` | Session + email verified |
-| POST | `/api/signup/verify-phone/check` | Same |
+| POST | `/api/signup/assign-line` | Session + email verified |
+| POST | `/api/signup/verify-phone/send` | Session + email verified (deprecated; rollback only) |
+| POST | `/api/signup/verify-phone/check` | Same (deprecated) |
 | POST | `/api/signup/accept-terms` | Session |
 | POST | `/api/voice-billing/trial-welcome-dismiss` | Session |
 | GET | `/api/voice-billing/status` | Session |
@@ -1205,7 +1206,7 @@ When `TRIAL_SIM_FLOW_ENABLED` is off, after email verify the wizard skips phone 
 
 ## Portal session (browser)
 
-After verify-email, verify-phone, or accept-terms, the UI hydrates `sessionStorage.customer` via [provider-session.js](../../unified-dashboard/assets/js/provider-session.js).
+After verify-email, assign-line, or accept-terms, the UI hydrates `sessionStorage.customer` via [provider-session.js](../../unified-dashboard/assets/js/provider-session.js).
 
 ## Trial activation page
 
@@ -1272,10 +1273,10 @@ E2E:
 
 | World | Who | Number / agent | Data |
 |-------|-----|----------------|------|
-| **Demo** | Landing visitors | Shared Somo Twilio + Retell | `dodgecall_demo_requests` |
+| **Demo** | Landing visitors | Shared Somo Twilio + Retell | `somo_demo_requests` |
 | **Provider** | Paying / trial customers | Dedicated per `customers` row | `customers`, portal call logs |
 
-Nothing from demo carries over automatically. Signup bridge tracks `utm_source=dodgecall` for onboarding copy only.
+Nothing from demo carries over automatically.
 
 ## Feature flags
 

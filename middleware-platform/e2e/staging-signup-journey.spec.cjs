@@ -7,9 +7,8 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
  * Staging signup journey (callsomo.com + api.callsomo.com).
  *
  * Required env:
- *   TRIAL_E2E_PHONE — handset that receives real Twilio Verify SMS
+ *   TRIAL_E2E_PHONE — mobile collected at signup (area code + trial dedup)
  *   STAGING_DB_PATH — downloaded staging SQLite (email OTP from DB)
- *   STAGING_SMS_CODE — SMS code from phone (or set after manual read)
  *
  * Optional: STAGING_TEST_EMAIL_PREFIX, PW_UI_BASE_URL, PW_API_BASE_URL
  */
@@ -47,7 +46,7 @@ test.describe('Staging signup journey', () => {
       test.skip(true, 'Set STAGING_DB_PATH to staging SQLite for email OTP + DB asserts');
     }
     if (!process.env.TRIAL_E2E_PHONE) {
-      test.skip(true, 'Set TRIAL_E2E_PHONE to a handset that receives staging SMS');
+      test.skip(true, 'Set TRIAL_E2E_PHONE for signup mobile field');
     }
   });
 
@@ -96,22 +95,9 @@ test.describe('Staging signup journey', () => {
       }
       await page.locator('#signupContinueBtn').click();
 
-      await expect(page.getByRole('heading', { name: /confirm your mobile/i })).toBeVisible({
+      await expect(page.getByRole('heading', { name: /assigning your number|your line is live/i })).toBeVisible({
         timeout: 20000
       });
-
-      const smsCode = process.env.STAGING_SMS_CODE;
-      if (!smsCode) {
-        test.info().annotations.push({
-          type: 'note',
-          description:
-            'Set STAGING_SMS_CODE env with SMS from TRIAL_E2E_PHONE, then re-run from phone step or full suite'
-        });
-        test.skip(true, 'STAGING_SMS_CODE not set — enter real Twilio Verify code');
-      }
-
-      await page.locator('#signupPhoneCode').fill(smsCode.replace(/\D/g, ''));
-      await page.locator('#signupContinueBtn').click();
 
       await expect(page.locator('#signupRevealNumber')).toBeVisible({ timeout: 120000 });
       const lineText = await page.locator('#signupRevealNumber').textContent();
@@ -135,7 +121,7 @@ test.describe('Staging signup journey', () => {
     }
   });
 
-  test('S8 duplicate phone rejected on verify-phone/send', async ({ playwright }) => {
+  test('S8 duplicate phone rejected on assign-line', async ({ playwright }) => {
     const phone = process.env.TRIAL_E2E_PHONE?.replace(/\s/g, '');
     if (!phone) test.skip(true, 'TRIAL_E2E_PHONE required');
     if (!stagingDbConfigured()) test.skip(true, 'STAGING_DB_PATH required');
@@ -167,11 +153,11 @@ test.describe('Staging signup journey', () => {
       });
       expect(verifyEmail.ok()).toBeTruthy();
 
-      const sendPhone = await api.post('/api/signup/verify-phone/send', {
+      const assignLine = await api.post('/api/signup/assign-line', {
         data: { phone_number: phone }
       });
-      expect(sendPhone.status()).toBe(409);
-      const body = await sendPhone.json();
+      expect(assignLine.status()).toBe(409);
+      const body = await assignLine.json();
       expect(body.error || body.message).toMatch(/active trial|phone/i);
     } finally {
       await api.dispose();

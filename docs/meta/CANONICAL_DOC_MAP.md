@@ -1,6 +1,6 @@
 # Canonical documentation map
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-16
 
 Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); see [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
 
@@ -18,6 +18,9 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Staging profile** | [`meta/README.md`](./README.md#staging-profile) | [`testing/README.md`](../testing/README.md) |
 | **Somo demo (landing outbound)** | [`agent/somo-demo/RUNBOOK.md`](../agent/somo-demo/RUNBOOK.md#phase-a-go-recovery-runbook) | [`agent/somo-demo/README.md`](../agent/somo-demo/README.md) |
 | **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`kelly-rails/`](../../middleware-platform/services/kelly-rails/) in code |
+| **Conversation mode rails** | [`conversation/CONVERSATION_MODE_MATRIX.md`](../conversation/CONVERSATION_MODE_MATRIX.md) | [`runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md), `services/conversation-mode/*` |
+| **Kelly front-desk UX** | [`product/KELLY_FRONT_DESK_UX.md`](../product/KELLY_FRONT_DESK_UX.md) | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md), `call-opener-resolver.js` |
+| **Tenant portal audit** | [`testing/TESTING.md`](../testing/TESTING.md#tenant-front-desk-audit) | `e2e/tenant-front-desk-audit.spec.cjs`, `test-results/tenant-front-desk-audit.md` |
 | **Kelly Phase C (language + voice)** | [`todos/pending/KELLY_RAILS_PHASE_C_EXECUTION.md`](../../todos/pending/KELLY_RAILS_PHASE_C_EXECUTION.md) | [`KELLY_RAILS_PHASE_C_PENDING.md`](../../todos/pending/KELLY_RAILS_PHASE_C_PENDING.md), [`DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md`](../agent/kelly-rails/DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md), [`KELLY_RAILS_PHASE_C_LANGUAGE.md`](../../todos/pending/KELLY_RAILS_PHASE_C_LANGUAGE.md) |
 | **Payor / provider search** | [`Payor/README.md`](../Payor/README.md) | [`Payor/OPERATIONS.md`](../Payor/OPERATIONS.md) |
 | **RCM** | [`RCM/README.md`](../RCM/README.md) | [`RCM/ARCHITECTURE.md`](../RCM/ARCHITECTURE.md) |
@@ -28,6 +31,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Medical coding** | [`Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) | [`Medical Coding/README.md`](../Medical%20Coding/README.md) |
 | **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
 | **Middleware depth** | [`middleware-platform/README.md`](../middleware-platform/README.md) | TOC anchors — do not duplicate |
+| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
 | **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
 | **Active work** | [`todos/pending/`](../../todos/pending/) | Do not copy long checklists into product docs |
 

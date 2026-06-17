@@ -1,7 +1,7 @@
 # Somo Platform Documentation
-> Last reviewed: 2026-06-14
+> Last reviewed: 2026-06-16
 
-**Last Updated:** 2026-06-14
+**Last Updated:** 2026-06-16
 
 ### Front-desk production (callsomo.com)
 
@@ -118,8 +118,8 @@
 - **[Master TODO](./development/README.md#master-todo-full)** - Full platform roadmap
 
 #### Admin Portal
-- **[Admin Portal Structure](./admin-portal/README.md#admin-portal-structure)** - Admin dashboard structure and URLs
-- **[Admin Portal Testing](./admin-portal/README.md#admin-portal-testing)** - Testing guide
+- **[Admin Portal — Operator CRM](./admin-portal/README.md)** - 4-page CRM (control board, pipeline, lead detail, tenants)
+- **[Admin route smoke test](./admin-portal/README.md#admin-portal-testing)** - `test-admin-routes.js` and local dev
 
 #### API & Integrations
 - **[API Reference](./api/README.md#api-documentation)** - Complete API documentation
@@ -139,7 +139,7 @@
 #### Deployment
 - **[Deployment Guide](./deployment/README.md)** - Main GCP deployment guide
 - **[DNS Configuration](./deployment/README.md#dns-ionos-ionos-dns-setup)** - DNS setup
-- **[SSL Setup](./deployment/README.md#dns-ssl-doclittle-site-ssl-setup)** - SSL certificates
+- **[SSL Setup](./deployment/OPERATIONS.md#gcp-somo-service-cutover)** - SSL and domain mapping on current production stack
 - **[Security](./deployment/README.md#security-production-deployment-api-keys)** - Security setup
 - **[Database Migration](./deployment/README.md#database-postgres-migration)** - Postgres migration
 
@@ -216,7 +216,7 @@ docs/
 - **Generate invoices** → Invoice Workflow (`./user-guides/INVOICE_WORKFLOW.md`)
 - **Set up GCP deploy flow** → [Deployment Guide](./deployment/README.md)
 - **Configure DNS** → [DNS Configuration](./deployment/README.md#dns-ionos-ionos-dns-setup)
-- **Work on the Admin Portal** → [Admin Portal docs](./admin-portal/README.md#readme)
+- **Work on the Admin Portal** → [Admin Portal docs](./admin-portal/README.md)
 - **Ship the routine tracker (pick → Today → photo)** → [User journey](./user-journey/README.md)
 
 ---

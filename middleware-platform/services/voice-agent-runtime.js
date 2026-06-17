@@ -71,8 +71,8 @@ function buildAfterHoursMessage(settings) {
 }
 
 function buildDefaultGreeting(companyName) {
-  const name = (companyName || 'our office').trim();
-  return `Hi, you've reached ${name}. I'm Kelly, your AI front desk. How can I help you today?`;
+  const { buildDefaultInboundGreeting } = require('./call-opener-resolver');
+  return buildDefaultInboundGreeting(companyName, 'warm');
 }
 
 function resolveGreeting(settings, customer) {

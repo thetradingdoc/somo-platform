@@ -38,6 +38,7 @@ const ALLOW_PATH = [
   /check-legacy-hosts\.cjs$/i,
   /guardrail-no-azure-deploy\.cjs$/i,
   /callsomo-operator-sync\.cjs$/i,
+  /gcp-somo-billing-audit\.sh$/i,
   /\.env\.bak/i,
   /LEGACY_DOMAIN_RETIREMENT\.md$/i,
   /STAGING_MYSKINANDCARE\.md$/i,

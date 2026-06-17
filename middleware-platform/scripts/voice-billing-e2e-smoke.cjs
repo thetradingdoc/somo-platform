@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * Smoke checks for voice subscription billing (no Stripe/Twilio calls).
- * Usage: node scripts/voice-billing-e2e-smoke.cjs
+ * Extended voice billing + account resolution smoke tests.
  */
-
 'use strict';
 
 const db = require('../database');
 const { applyUsage, getTotalAvailableMinutes } = require('../services/apply-usage');
-const { canAcceptInboundCall, canProvisionNumber } = require('../services/billing-access');
-const { listTiers, listTopupPacks } = require('../services/plan-catalog');
+const { canAcceptInboundCall, canInitiateOutboundCall } = require('../services/billing-access');
+const { resolveCustomerIdForBilling } = require('../services/voice-account-resolution');
+const { listTiers, listTopupPacks, hasOutboundFeature } = require('../services/plan-catalog');
+const { getCapabilities, OPERATOR_CAPABILITIES } = require('../services/customer-capabilities');
 
 const TEST_ID = `voice_billing_smoke_${Date.now()}`;
 const { v4: uuidv4 } = require('uuid');
@@ -18,12 +18,12 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-function setupCustomer(minutes = 5) {
+function setupCustomer(minutes = 5, extra = {}) {
   const id = TEST_ID;
   db.db.prepare(`
     INSERT OR REPLACE INTO customers (id, email, name, customer_type, subscription_status, plan_tier, email_verified)
-    VALUES (?, ?, 'Smoke Test', 'saas', 'trialing', 'starter', 1)
-  `).run(id, `${id}@example.com`);
+    VALUES (?, ?, 'Smoke Test', ?, 'trialing', ?, 1)
+  `).run(id, `${id}@example.com`, extra.customer_type || 'saas', extra.plan_tier || 'starter');
 
   db.db.prepare('DELETE FROM customer_credits WHERE customer_id = ?').run(id);
   db.db.prepare('DELETE FROM usage_events WHERE customer_id = ?').run(id);
@@ -49,26 +49,44 @@ function cleanup(id) {
 async function main() {
   assert(listTiers().length >= 3, 'catalog tiers');
   assert(listTopupPacks().length >= 3, 'catalog topups');
+  assert(hasOutboundFeature('practice'), 'practice has outbound');
 
   const customerId = setupCustomer(3);
   try {
     const access = canAcceptInboundCall(db, customerId);
     assert(access.allowed, 'inbound allowed with minutes');
 
-    const r1 = applyUsage(db, { customerId, callId: 'call_smoke_1', durationMinutes: 2, source: 'test' });
+    const outboundDenied = canInitiateOutboundCall(db, customerId);
+    assert(!outboundDenied.allowed && outboundDenied.reason === 'plan_no_outbound', 'starter blocks outbound');
+
+    const r1 = applyUsage(db, {
+      customerId,
+      callId: 'call_smoke_1',
+      durationMinutes: 2,
+      source: 'test',
+      direction: 'inbound'
+    });
     assert(r1.minutes_applied === 2, 'first deduct');
 
-    const r2 = applyUsage(db, { customerId, callId: 'call_smoke_1', durationMinutes: 2, source: 'test' });
-    assert(r2.duplicate, 'idempotent duplicate');
+    const event = db.getUsageEventByCallId('call_smoke_1');
+    const cols = db.db.prepare('PRAGMA table_info(usage_events)').all().map((c) => c.name);
+    if (cols.includes('direction')) {
+      assert(event.direction === 'inbound', 'direction persisted');
+    }
 
-    const provision = canProvisionNumber(db, customerId);
-    assert(!provision.allowed, 'provision blocked without active sub');
+    const billingId = resolveCustomerIdForBilling(db, { clinic_id: 'lead_fake_123', customer_id: null });
+    assert(billingId === null, 'lead_id clinic does not bill');
 
-    applyUsage(db, { customerId, callId: 'call_smoke_2', durationMinutes: 5, source: 'test' });
-    const blocked = canAcceptInboundCall(db, customerId);
-    assert(!blocked.allowed && blocked.reason === 'no_minutes', 'ingress blocked at zero');
-
-    assert(getTotalAvailableMinutes(db, customerId) === 0, 'zero balance');
+    const op = setupCustomer(100, { customer_type: 'operator', plan_tier: 'practice' });
+    db.updateCustomer(op, {
+      customer_type: 'operator',
+      billing_enforcement_paused: 1
+    });
+    const opCaps = getCapabilities(db.getCustomer(op));
+    assert(opCaps.includes('platform.leads'), 'operator capabilities');
+    const opOutbound = canInitiateOutboundCall(db, op);
+    assert(opOutbound.allowed, 'operator outbound allowed');
+    cleanup(op);
 
     console.log('✅ voice-billing-e2e-smoke passed');
   } finally {

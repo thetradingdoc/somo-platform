@@ -54,7 +54,9 @@ function applyUsage(db, opts) {
       call_sid: opts.callSid || null,
       minutes_requested: minutesRequested,
       minutes_applied: 0,
-      source: `${source}:paused`
+      source: `${source}:paused`,
+      direction: opts.direction || null,
+      channel: opts.channel || 'voice'
     });
     trackVoiceMinutes(db, customerId, minutesRequested, 0);
     return { success: true, minutes_applied: 0, enforcement_paused: true };
@@ -103,7 +105,9 @@ function applyUsage(db, opts) {
     call_sid: opts.callSid || null,
     minutes_requested: minutesRequested,
     minutes_applied: minutesApplied,
-    source
+    source,
+    direction: opts.direction || null,
+    channel: opts.channel || 'voice'
   });
 
   trackVoiceMinutes(db, customerId, minutesRequested, minutesApplied);

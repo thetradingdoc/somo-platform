@@ -11,7 +11,14 @@ const ProviderService = require('../../services/provider-service');
 const RetellService = require('../../services/retell-service');
 const TwilioPhoneService = require('../../services/twilio-phone-service');
 const { v4: uuidv4 } = require('uuid');
-const { authLimiter: rateLimiter, lenientAuthLimiter } = require('../../middleware/rate-limiter');
+const {
+  authLimiter,
+  apiLimiter,
+  signupFlowLimiter,
+  signupSessionReadLimiter,
+  lenientAuthLimiter,
+  isSignupApiPath
+} = require('../../middleware/rate-limiter');
 const { generateSimplePassword } = require('../../utils/password-generator');
 const { requireCustomerAuth } = require('../../middleware/customer-auth');
 const {
@@ -63,7 +70,10 @@ module.exports = {
   RetellService,
   TwilioPhoneService,
   uuidv4,
-  rateLimiter,
+  authLimiter,
+  apiLimiter,
+  signupFlowLimiter,
+  signupSessionReadLimiter,
   lenientAuthLimiter,
   generateSimplePassword,
   requireCustomerAuth,

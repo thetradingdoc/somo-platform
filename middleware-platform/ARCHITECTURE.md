@@ -1,5 +1,12 @@
 # Middleware platform architecture
 
+Last updated: 2026-06-16
+
+## 2026-06-16 changelog
+
+- Added conversation-mode call-control architecture references and runtime entrypoints.
+- Updated voice/Kelly ownership to include resolver + pivot + mode-dispatch integration.
+
 ## Entry points
 
 | Path | Role |
@@ -37,6 +44,15 @@ HTTP (routes/*.js)
 | Medical coding | `routes/pdf-coding.js`, `routes/rag-search.js`; voice: `webhooks/retell-websocket.js` (`suggest_codes_from_symptoms`) | `knowledge-service` (`getCodeCandidatesDualSource`), `layer2-rag/remote-rag-client`, `semantic-search-service`, `coding-orchestrator`, `medical-coding-service` |
 | Patient portal | `routes/patient-*.js` | `patient-portal-service`, `booking-service` |
 | Catalog / onboarding | `routes/customer-catalog.js` | (inline DB via `db.db`) |
+
+## Conversation-mode control plane (as built)
+
+- **Resolver:** `services/conversation-mode/conversation-mode-resolver.js`
+- **Turn pivots:** `services/conversation-mode/pivot-engine.js`
+- **Session wiring:** `services/conversation-mode/conversation-mode-session.js`
+- **Dispatch:** `services/conversation-mode/conversation-dispatcher.js` + `rails/*` + `subrails/*`
+- **Tool policy:** `services/conversation-mode/mode-tool-firewall.js`
+- **Runtime integration points:** `services/kelly-turn-resolver.js`, `services/kelly-rails/execute-turn.js`, `webhooks/retell-websocket.js`
 
 ## Where to add new code
 

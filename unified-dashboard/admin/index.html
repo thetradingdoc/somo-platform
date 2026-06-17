@@ -1,3102 +1,334 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Somo Admin</title>
-  <link rel="stylesheet" href="../assets/css/global.css">
-  <link rel="stylesheet" href="assets/css/admin-ai-assistant.css">
-  <script src="../assets/js/config.js"></script>
-  <style>
-    :root {
-      --bg: #05060a;
-      --panel: #101422;
-      --panel-2: #0b0f19;
-      --text: #f8fafc;
-      --muted: #8b94a7;
-      --border: #21283a;
-      --accent: #7c5dfa;
-      --accent-green: #22c55e;
-      --accent-blue: #38bdf8;
-      --accent-orange: #fb923c;
-    }
-
-    :root.light {
-      --bg: #f5f7fb;
-      --panel: #ffffff;
-      --panel-2: #eef1f8;
-      --text: #101528;
-      --muted: #54607a;
-      --border: #e2e8f0;
-      --accent: #5c43d0;
-      --accent-green: #16a34a;
-      --accent-blue: #128a2e;
-      --accent-orange: #ea580c;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-
-    .shell {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    aside {
-      width: 72px;
-      background: var(--panel-2);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px 0;
-      gap: 16px;
-    }
-
-    .logo {
-      width: 48px;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      border-radius: 12px;
-      color: white;
-      margin-bottom: 8px;
-    }
-
-    .nav-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--muted);
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 18px;
-    }
-
-    .nav-icon.active {
-      background: linear-gradient(135deg, var(--accent), var(--accent-blue));
-      color: white;
-    }
-
-    .nav-icon:hover:not(.active) {
-      background: var(--panel);
-      color: var(--text);
-    }
-
-    main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .top-bar {
-      padding: 24px 32px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--panel);
-    }
-
-    .tabs {
-      display: flex;
-      gap: 8px;
-      padding: 0 32px;
-      background: var(--panel);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .tab {
-      padding: 12px 20px;
-      background: none;
-      border: none;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
-    }
-
-    .tab.active {
-      color: var(--accent-blue);
-      border-bottom-color: var(--accent-blue);
-    }
-
-    .tab:hover:not(.active) {
-      color: var(--text);
-    }
-
-    .content {
-      flex: 1;
-      padding: 32px;
-      overflow-y: auto;
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      margin-bottom: 24px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
-
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-top: 16px;
-    }
-
-    .stat-card {
-      background: linear-gradient(135deg, var(--panel-2), var(--panel));
-      border: 2px solid var(--border);
-      border-radius: 16px;
-      padding: 28px;
-      text-align: left;
-      transition: all 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: linear-gradient(90deg, var(--accent-blue), var(--accent));
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .stat-card:hover {
-      border-color: var(--accent-blue);
-      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
-      transform: translateY(-2px);
-    }
-
-    .stat-card:hover::before {
-      opacity: 1;
-    }
-
-    .stat-label {
-      font-size: 12px;
-      color: var(--muted);
-      margin-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .stat-value {
-      font-size: 36px;
-      font-weight: 800;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 8px;
-      line-height: 1;
-    }
-
-    .stat-sub {
-      font-size: 13px;
-      color: var(--muted);
-      font-weight: 500;
-    }
-
-    .lead-card {
-      background: var(--panel-2);
-      border: 2px solid var(--border);
-      border-radius: 16px;
-      padding: 20px 24px;
-      margin-bottom: 16px;
-      cursor: pointer;
-      transition: all 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .lead-card::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 4px;
-      background: var(--border);
-      transition: all 0.2s;
-    }
-
-    .lead-card:hover {
-      border-color: var(--accent-blue);
-      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
-      transform: translateY(-2px);
-    }
-
-    .lead-card:hover::before {
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-    }
-
-    .lead-name {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 16px;
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .lead-name::before {
-      content: '🏥';
-      font-size: 24px;
-    }
-
-    .lead-meta {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-      font-size: 14px;
-    }
-
-    .lead-meta span {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      background: var(--panel);
-      border-radius: 10px;
-      font-weight: 500;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      opacity: 0.9;
-    }
-
-    /* Single Line Search Form */
-    .search-form-single-line {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .search-input-group {
-      display: flex;
-      align-items: center;
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .search-input-inline {
-      padding: 12px 16px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 14px;
-      transition: all 0.2s;
-      font-family: inherit;
-      width: 100%;
-    }
-
-    .search-input-inline:focus {
-      outline: none;
-      border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
-    }
-
-    .search-input-inline::placeholder {
-      color: var(--muted);
-    }
-
-    .location-group {
-      flex: 1.5;
-      min-width: 250px;
-    }
-
-    .location-selector-container {
-      position: relative;
-      width: 100%;
-    }
-
-    .location-selector-single {
-      padding: 12px 16px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 14px;
-      height: 44px;
-      width: 100%;
-      transition: all 0.2s;
-      cursor: pointer;
-    }
-
-    .location-selector-single:focus {
-      outline: none;
-      border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
-    }
-
-    .selected-states-below {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-      min-height: 24px;
-    }
-
-    .state-tag-inline {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 8px;
-      background: var(--accent-blue);
-      color: white;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 500;
-      white-space: nowrap;
-    }
-
-    .state-tag-inline button {
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      padding: 0;
-      margin-left: 4px;
-      display: flex;
-      align-items: center;
-      opacity: 0.8;
-      font-size: 14px;
-      line-height: 1;
-    }
-
-    .state-tag-inline button:hover {
-      opacity: 1;
-    }
-
-    .search-actions {
-      display: flex;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
-    .btn-search-primary-inline {
-      padding: 12px 20px;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-    }
-
-    .btn-search-primary-inline:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
-    }
-
-    .btn-search-secondary-inline {
-      padding: 12px 20px;
-      background: var(--accent-green);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-    }
-
-    .btn-search-secondary-inline:hover {
-      background: #22c55e;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
-    }
-
-    .quick-filter-btn {
-      padding: 8px 16px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-
-    .quick-filter-btn:hover {
-      background: var(--panel-2);
-      border-color: var(--accent-blue);
-    }
-
-    .quick-filter-btn.active {
-      background: var(--accent-blue);
-      color: white;
-      border-color: var(--accent-blue);
-    }
-
-    .result-filter-btn.active {
-      opacity: 1;
-      transform: scale(1.05);
-    }
-
-    .result-filter-btn.active[style*="var(--accent-blue)"] {
-      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.5) !important;
-    }
-
-    .result-filter-btn.active[style*="var(--accent-green)"] {
-      box-shadow: 0 4px 16px rgba(34, 197, 94, 0.5) !important;
-    }
-
-    .btn-search-primary {
-      padding: 14px 28px;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent));
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: center;
-      flex: 1;
-      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
-    }
-
-    .btn-search-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(56, 189, 248, 0.4);
-    }
-
-    .btn-search-secondary {
-      padding: 14px 28px;
-      background: var(--accent-green);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: center;
-      flex: 1;
-    }
-
-    .btn-search-secondary:hover {
-      background: #22c55e;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
-    }
-
-    .btn-search-clear {
-      padding: 14px 20px;
-      background: var(--panel);
-      color: var(--text);
-      border: 2px solid var(--border);
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: center;
-    }
-
-    .btn-search-clear:hover {
-      background: var(--panel-2);
-      border-color: var(--accent-orange);
-      color: var(--accent-orange);
-    }
-
-    @media (max-width: 1024px) {
-      .search-form-single-line {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 16px;
-      }
-
-      .search-input-group {
-        min-width: 100%;
-      }
-
-      .location-group {
-        min-width: 100%;
-      }
-
-      .search-actions {
-        width: 100%;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .btn-search-primary-inline,
-      .btn-search-secondary-inline {
-        width: 100%;
-        padding: 14px 20px;
-      }
-
-      .location-selector-multi {
-        min-height: 120px;
-        font-size: 16px;
-        /* Prevents zoom on iOS */
-      }
-
-      .selected-states-inline {
-        position: static;
-        margin-top: 8px;
-        max-height: none;
-        overflow: visible;
-      }
-
-      .state-tag-inline {
-        font-size: 12px;
-        padding: 6px 10px;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .search-form-single-line {
-        gap: 20px;
-      }
-
-      .search-input-inline {
-        padding: 14px 16px;
-        font-size: 16px;
-        /* Prevents zoom on iOS */
-      }
-
-      .location-selector-multi {
-        min-height: 150px;
-        padding: 14px 16px;
-      }
-
-      .btn-search-primary-inline,
-      .btn-search-secondary-inline {
-        padding: 16px 20px;
-        font-size: 16px;
-      }
-
-      /* Header improvements for mobile */
-      .panel[style*="padding:32px"] {
-        padding: 20px 16px !important;
-      }
-
-      div[style*="padding:24px 32px"] {
-        padding: 20px 16px !important;
-      }
-
-      div[style*="padding:32px 32px 24px"] {
-        padding: 20px 16px !important;
-      }
-
-      /* Quick filter buttons on mobile */
-      .quick-filter-btn {
-        padding: 10px 14px;
-        font-size: 12px;
-      }
-
-      /* Better spacing for mobile */
-      .leads-subtabs {
-        padding: 0 16px !important;
-        margin-bottom: 16px !important;
-      }
-
-      .leads-subtab {
-        padding: 10px 14px !important;
-        font-size: 13px !important;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .search-input-inline {
-        padding: 16px;
-      }
-
-      .location-selector-multi {
-        min-height: 180px;
-        padding: 16px;
-      }
-
-      .btn-search-primary-inline,
-      .btn-search-secondary-inline {
-        padding: 18px 20px;
-      }
-
-      .state-tag-inline {
-        font-size: 11px;
-        padding: 5px 8px;
-      }
-
-      /* Stack quick filters on very small screens */
-      div[style*="display:flex;gap:8px;flex-wrap:wrap"] {
-        flex-direction: column;
-        width: 100%;
-      }
-
-      .quick-filter-btn {
-        width: 100%;
-        text-align: center;
-      }
-    }
-
-    .login-panel {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #ffffff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .login-panel.hidden {
-      display: none;
-    }
-
-    .login-card {
-      width: 100%;
-      max-width: 440px;
-      background: #ffffff;
-      border-radius: 24px;
-      padding: 48px 40px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
-      border: 1px solid #e2e8f0;
-    }
-
-    .login-logo {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 32px;
-    }
-
-    .login-logo svg {
-      width: 64px;
-      height: 64px;
-    }
-
-    .login-card h2 {
-      font-size: 32px;
-      font-weight: 700;
-      color: #1e293b;
-      text-align: center;
-      margin: 0 0 8px 0;
-    }
-
-    .login-card p {
-      color: #64748b;
-      font-size: 15px;
-      text-align: center;
-      margin: 0 0 32px 0;
-    }
-
-    .login-form {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .login-form input {
-      padding: 16px 20px;
-      border: 2px solid #e2e8f0;
-      border-radius: 12px;
-      background: #ffffff;
-      color: #1e293b;
-      font-size: 15px;
-      transition: all 0.2s;
-      font-family: inherit;
-    }
-
-    .login-form input:focus {
-      outline: none;
-      border-color: #7c5dfa;
-      box-shadow: 0 0 0 4px rgba(124, 93, 250, 0.1);
-    }
-
-    .login-form input::placeholder {
-      color: #94a3b8;
-    }
-
-    .login-form button {
-      padding: 16px 24px;
-      background: linear-gradient(135deg, #7c5dfa, #38bdf8);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-top: 8px;
-    }
-
-    .login-form button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(124, 93, 250, 0.3);
-    }
-
-    .login-form button:active {
-      transform: translateY(0);
-    }
-
-    #loginError {
-      margin-top: 16px;
-      padding: 12px 16px;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: 10px;
-      color: #dc2626;
-      font-size: 14px;
-      text-align: center;
-    }
-
-    #loginError.hidden {
-      display: none;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    .empty {
-      text-align: center;
-      color: var(--muted);
-      padding: 40px;
-    }
-
-    .leads-subtabs {
-      display: flex;
-      gap: 8px;
-      padding: 0 32px;
-      margin-bottom: 24px;
-      border-bottom: 2px solid var(--border);
-    }
-
-    .leads-subtab {
-      padding: 12px 24px;
-      background: none;
-      border: none;
-      border-bottom: 3px solid transparent;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 600;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      margin-bottom: -2px;
-    }
-
-    .leads-subtab.active {
-      color: var(--accent-blue);
-      border-bottom-color: var(--accent-blue);
-    }
-
-    .leads-subtab:hover:not(.active) {
-      color: var(--text);
-    }
-
-    .leads-subtab-content {
-      display: none;
-    }
-
-    .leads-subtab-content.active {
-      display: block;
-    }
-
-    @media (max-width: 768px) {
-      .search-form {
-        grid-template-columns: 1fr;
-      }
-
-      .stat-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .tabs {
-        overflow-x: auto;
-      }
-
-      /* Mobile header improvements */
-      .search-header-mobile {
-        padding: 20px 16px !important;
-      }
-
-      .search-header-content h2 {
-        font-size: 24px !important;
-      }
-
-      .search-header-content p {
-        font-size: 13px !important;
-      }
-
-      .quick-filters-mobile {
-        width: 100%;
-        margin-top: 12px;
-      }
-
-      .quick-filters-mobile .quick-filter-btn {
-        flex: 1;
-        min-width: 0;
-      }
-
-      /* Better mobile spacing */
-      .panel {
-        padding: 16px !important;
-      }
-
-      .lead-card {
-        padding: 16px !important;
-      }
-
-      .lead-name {
-        font-size: 18px !important;
-      }
-
-      .lead-meta {
-        flex-wrap: wrap;
-        gap: 8px !important;
-      }
-
-      .lead-meta span {
-        font-size: 12px !important;
-        padding: 6px 10px !important;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .search-header-content h2 {
-        font-size: 22px !important;
-      }
-
-      .quick-filters-mobile {
-        flex-direction: column;
-      }
-
-      .quick-filters-mobile .quick-filter-btn {
-        width: 100%;
-      }
-
-      /* Compact mobile cards */
-      .lead-card {
-        padding: 12px !important;
-        margin-bottom: 12px !important;
-      }
-
-      .lead-name {
-        font-size: 16px !important;
-        margin-bottom: 8px !important;
-      }
-
-      .lead-meta {
-        gap: 6px !important;
-      }
-
-      .lead-meta span {
-        font-size: 11px !important;
-        padding: 4px 8px !important;
-      }
-    }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Control board</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/admin-portal.css">
+  <script src="/assets/js/config.js"></script>
 </head>
-
 <body>
-  <div class="shell">
-    <aside>
-      <div class="logo">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="url(#paint0_linear_sidebar)" />
-          <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="white" stroke-width="1.5" stroke-linecap="round"
-            stroke-linejoin="round" />
-          <path d="M2 7L12 12L22 7" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <path d="M12 2V22" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <defs>
-            <linearGradient id="paint0_linear_sidebar" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#7C5DFA" />
-              <stop offset="1" stop-color="#38BDF8" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-      <div class="nav-icon" title="Dashboard" onclick="window.location.href='index.html'">📊</div>
-      <div class="nav-icon" title="Tenants" onclick="window.location.href='index.html?tab=tenants'">🏥</div>
-      <div class="nav-icon" title="Leads" onclick="window.location.href='index.html?tab=leads'">👥</div>
-      <div class="nav-icon" title="Pipeline" onclick="window.location.href='pipeline.html'">📈</div>
-      <div class="nav-icon" title="Workflows" onclick="window.location.href='workflows.html'">⚡</div>
-      <div class="nav-icon" title="Clients" onclick="window.location.href='index.html?tab=clients'">💼</div>
-    </aside>
-    <main>
-      <div class="top-bar">
+  <aside id="admin-sidebar"></aside>
+  <main class="admin-crm-main">
+    <div class="admin-crm-header">
         <div>
-          <p style="margin:0;color:var(--muted);font-size:13px;font-weight:500;">Somo • Admin</p>
-          <h1
-            style="margin:8px 0 0;font-size:28px;font-weight:700;background:linear-gradient(135deg, var(--accent-blue), var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
-            Command Center</h1>
+        <div class="admin-crm-title">Control board</div>
+        <div class="admin-crm-subtitle" id="dateline">Loading...</div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;">
-          <button class="btn" id="themeToggle"
-            style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);padding:10px 16px;border-radius:10px;font-weight:500;transition:all 0.2s;">
-            <span id="themeIcon">🌙</span> <span id="themeText">Dark</span>
-          </button>
-          <button class="btn" id="logoutBtn"
-            style="display:none;background:var(--panel-2);color:var(--text);border:1px solid var(--border);padding:10px 16px;border-radius:10px;font-weight:500;transition:all 0.2s;">
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-              style="display:inline-block;margin-right:6px;vertical-align:middle;">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-            </svg>
-            Sign Out
-          </button>
+      <div class="admin-crm-header-actions">
+        <button class="admin-crm-btn-outline" id="btnEnrich">Enrich contacts</button>
+        <button class="btn btn-primary" id="btnScrape">Scrape new leads</button>
         </div>
       </div>
 
-      <div class="login-panel" id="loginPanel">
-        <div class="login-card">
-          <div class="login-logo">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="url(#paint0_linear_login)" />
-              <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="url(#paint1_linear_login)" stroke-width="1.5"
-                stroke-linecap="round" stroke-linejoin="round" />
-              <path d="M2 7L12 12L22 7" stroke="white" stroke-width="1.5" stroke-linecap="round"
-                stroke-linejoin="round" />
-              <path d="M12 2V22" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              <defs>
-                <linearGradient id="paint0_linear_login" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#7C5DFA" />
-                  <stop offset="1" stop-color="#38BDF8" />
-                </linearGradient>
-                <linearGradient id="paint1_linear_login" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#7C5DFA" />
-                  <stop offset="1" stop-color="#38BDF8" />
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
-          <h2>Welcome Back</h2>
-          <p>Enter your admin secret to access the command center</p>
-          <form class="login-form" id="loginForm">
-            <input type="password" id="adminSecret" placeholder="Enter admin secret" required autofocus />
-            <button type="submit">Sign In</button>
-          </form>
-          <div id="loginError" class="hidden"></div>
+    <div class="admin-crm-status-banner" id="scrapeConfigWarn" style="display:none;background:#faeeda;border-color:#633806;margin-bottom:12px;">
+      <span style="font-size:13px;color:#633806;" id="scrapeConfigText">Job search API not configured on server.</span>
+    </div>
+
+    <div class="admin-crm-status-banner" id="scrapeStatus">
+      <div class="admin-crm-status-banner__primary">
+        <span class="admin-crm-status-dot" id="statusDot"></span>
+        <span id="statusText">Loading job status...</span>
         </div>
+      <span id="lastRunText" style="color:var(--muted);font-size:12px;"></span>
       </div>
 
-      <div id="dashboardShell" class="hidden">
-        <div class="tabs">
-          <button class="tab active" data-tab="dashboard">Dashboard</button>
-          <button class="tab" data-tab="tenants" title="Healthcare clinics using the platform (end users)">Tenants (Clinics)</button>
-          <button class="tab" data-tab="leads">Leads</button>
-          <button class="tab" data-tab="pipeline">Pipeline</button>
-          <button class="tab" data-tab="clients" title="API customers (developers/companies using the API)">Clients (API Customers)</button>
-          <button class="tab" data-tab="workflows" onclick="window.location.href='workflows.html'" title="Workflow Builder">⚡ Workflows</button>
+    <div class="admin-crm-metrics" id="metricsGrid">
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Call-ready leads</div><div class="admin-crm-metric-value" id="mCallReady">—</div><div class="admin-crm-metric-sub">phone verified</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Needs phone</div><div class="admin-crm-metric-value" id="mNeedsPhone">—</div><div class="admin-crm-metric-sub">enrichment pending</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Calls this month</div><div class="admin-crm-metric-value" id="mCalls">—</div><div class="admin-crm-metric-sub" id="mCallsCap">of 250 cap</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Tenant alerts</div><div class="admin-crm-metric-value admin-crm-metric-danger" id="mAlerts">—</div><div class="admin-crm-metric-sub">need attention</div></div>
         </div>
 
-        <div class="content">
-          <!-- Dashboard Tab -->
-          <div class="tab-content active" id="tab-dashboard">
-            <div class="panel">
-              <h2 style="margin:0 0 16px;">Overview</h2>
-              <div class="stat-grid" id="metricGrid">
-                <div class="empty">Loading metrics...</div>
+    <div class="admin-crm-two-col">
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title">Tenant alerts</div>
+        <div id="tenantAlerts"><div class="admin-crm-skeleton" style="height:80px;"></div></div>
+        <a href="/admin/tenants.html" style="display:block;text-align:center;margin-top:12px;font-size:12px;color:var(--accent-green);">View all tenants →</a>
               </div>
-            </div>
-            <div class="panel">
-              <h2 style="margin:0 0 16px;">Recent Leads</h2>
-              <div id="recentLeads">
-                <div class="empty">Loading leads...</div>
-              </div>
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title">Sales funnel</div>
+        <div id="funnelView"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
             </div>
           </div>
 
-          <!-- Leads Tab -->
-          <div class="tab-content" id="tab-leads">
-            <!-- Sub-tabs for Leads -->
-            <div class="leads-subtabs"
-              style="display:flex;gap:8px;padding:0 32px 0;margin-bottom:24px;border-bottom:2px solid var(--border);">
-              <button class="leads-subtab active" data-subtab="search" onclick="switchLeadsSubtab('search')">
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  style="margin-right:6px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-                Search Leads
-              </button>
-              <button class="leads-subtab" data-subtab="saved" onclick="switchLeadsSubtab('saved')">
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  style="margin-right:6px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
-                </svg>
-                Saved Leads
-              </button>
+    <div class="admin-crm-two-col">
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title admin-crm-card-title--split">
+          <span>Top call-ready</span>
+          <a href="/admin/pipeline.html" style="font-size:12px;color:var(--accent-green);font-weight:400;">View queue →</a>
             </div>
-
-            <!-- Search Sub-tab -->
-            <div class="leads-subtab-content active" id="leads-subtab-search">
-              <div class="panel" style="padding:0;background:transparent;border:none;">
-                <!-- Header Section -->
-                <div class="search-header-mobile"
-                  style="padding:32px 32px 24px;background:linear-gradient(135deg, var(--panel-2), var(--panel));border-radius:16px 16px 0 0;border:2px solid var(--border);border-bottom:none;">
-                  <div class="search-header-content" style="display:flex;flex-direction:column;gap:16px;">
-                    <div
-                      style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
-                      <div style="flex:1;min-width:200px;">
-                        <h2
-                          style="margin:0 0 8px;font-size:32px;font-weight:700;background:linear-gradient(135deg, var(--accent-blue), var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
-                          Find Leads</h2>
-                        <p style="margin:0;color:var(--muted);font-size:15px;">Discover medical receptionist job
-                          postings
-                          and extract clinic contact information</p>
+        <div id="callReadyList"><div class="admin-crm-skeleton" style="height:160px;"></div></div>
                       </div>
+      <div class="admin-crm-card">
+        <div class="admin-crm-card-title admin-crm-card-title--split">
+          <span>Demos &amp; follow-ups</span>
+          <a href="/admin/pipeline.html" style="font-size:12px;color:var(--accent-green);font-weight:400;">Full pipeline →</a>
                     </div>
-                    <div class="quick-filters-mobile" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                      <button type="button" class="quick-filter-btn" onclick="setQuickFilter('all')" data-filter="all">
-                        🌎 All US
-                      </button>
-                      <button type="button" class="quick-filter-btn" onclick="setQuickFilter('ny-nj')"
-                        data-filter="ny-nj">
-                        📍 NY & NJ
-                      </button>
-                      <button type="button" class="quick-filter-btn" onclick="setQuickFilter('today')"
-                        data-filter="today">
-                        📅 Today
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Search Form Section -->
-                <div
-                  style="padding:24px 32px;background:var(--panel-2);border:2px solid var(--border);border-top:none;">
-                  <form class="search-form-single-line" id="searchForm">
-                    <div class="search-input-group">
-                      <input type="text" id="searchQuery" class="search-input-inline"
-                        placeholder="Job title or keywords..."
-                        value="Medical receptionist OR dental receptionist OR healthcare receptionist" />
-                    </div>
-
-                    <div class="search-input-group location-group">
-                      <div class="location-selector-container">
-                        <select id="searchLocation" class="location-selector-single">
-                          <option value="">Select a state...</option>
-                          <option value="US">All US States</option>
-                          <option value="US,AL">Alabama</option>
-                          <option value="US,AK">Alaska</option>
-                          <option value="US,AZ">Arizona</option>
-                          <option value="US,AR">Arkansas</option>
-                          <option value="US,CA">California</option>
-                          <option value="US,CO">Colorado</option>
-                          <option value="US,CT">Connecticut</option>
-                          <option value="US,DE">Delaware</option>
-                          <option value="US,FL">Florida</option>
-                          <option value="US,GA">Georgia</option>
-                          <option value="US,HI">Hawaii</option>
-                          <option value="US,ID">Idaho</option>
-                          <option value="US,IL">Illinois</option>
-                          <option value="US,IN">Indiana</option>
-                          <option value="US,IA">Iowa</option>
-                          <option value="US,KS">Kansas</option>
-                          <option value="US,KY">Kentucky</option>
-                          <option value="US,LA">Louisiana</option>
-                          <option value="US,ME">Maine</option>
-                          <option value="US,MD">Maryland</option>
-                          <option value="US,MA">Massachusetts</option>
-                          <option value="US,MI">Michigan</option>
-                          <option value="US,MN">Minnesota</option>
-                          <option value="US,MS">Mississippi</option>
-                          <option value="US,MO">Missouri</option>
-                          <option value="US,MT">Montana</option>
-                          <option value="US,NE">Nebraska</option>
-                          <option value="US,NV">Nevada</option>
-                          <option value="US,NH">New Hampshire</option>
-                          <option value="US,NJ">New Jersey</option>
-                          <option value="US,NM">New Mexico</option>
-                          <option value="US,NY">New York</option>
-                          <option value="US,NC">North Carolina</option>
-                          <option value="US,ND">North Dakota</option>
-                          <option value="US,OH">Ohio</option>
-                          <option value="US,OK">Oklahoma</option>
-                          <option value="US,OR">Oregon</option>
-                          <option value="US,PA">Pennsylvania</option>
-                          <option value="US,RI">Rhode Island</option>
-                          <option value="US,SC">South Carolina</option>
-                          <option value="US,SD">South Dakota</option>
-                          <option value="US,TN">Tennessee</option>
-                          <option value="US,TX">Texas</option>
-                          <option value="US,UT">Utah</option>
-                          <option value="US,VT">Vermont</option>
-                          <option value="US,VA">Virginia</option>
-                          <option value="US,WA">Washington</option>
-                          <option value="US,WV">West Virginia</option>
-                          <option value="US,WI">Wisconsin</option>
-                          <option value="US,WY">Wyoming</option>
-                        </select>
-                      </div>
-                      <div id="selectedStatesInline" class="selected-states-below"></div>
-                    </div>
-
-                    <div class="search-input-group">
-                      <select id="searchDays" class="search-input-inline">
-                        <option value="1" selected>Today</option>
-                        <option value="3">Last 3 days</option>
-                        <option value="7">Last week</option>
-                        <option value="30">Last month</option>
-                      </select>
-                    </div>
-
-                    <div class="search-actions">
-                      <button type="submit" class="btn-search-primary-inline">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                        Search
-                      </button>
-                      <button type="submit" id="autoSaveBtn" class="btn-search-secondary-inline">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
-                          </path>
-                        </svg>
-                        Save All
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                <!-- Results Section -->
-                <div id="searchResults"
-                  style="padding:32px;background:var(--panel);border:2px solid var(--border);border-top:none;border-radius:0 0 16px 16px;min-height:200px;">
-                  <div class="empty" style="text-align:center;padding:60px 20px;">
-                    <svg width="64" height="64" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                      style="margin:0 auto 16px;opacity:0.3;">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                    </svg>
-                    <p style="font-size:16px;color:var(--muted);margin:0;">Ready to search for leads</p>
-                    <p style="font-size:14px;color:var(--muted);margin:8px 0 0;">Enter your criteria above and click
-                      "Search Leads"</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Saved Leads Sub-tab -->
-            <div class="leads-subtab-content" id="leads-subtab-saved">
-              <!-- Activity Feed Section (can be toggled) -->
-              <div id="activityFeedSection" style="display:none;margin-bottom:24px;" class="panel">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                  <h2 style="margin:0;font-size:24px;font-weight:700;">📊 Activity Feed</h2>
-                  <button onclick="hideActivityFeed()" style="padding:8px 16px;background:var(--panel);border:2px solid var(--border);color:var(--text);border-radius:8px;cursor:pointer;">Close</button>
-                </div>
-                <div id="activityFeedContent" style="max-height:600px;overflow-y:auto;">
-                  <div class="empty">Loading activities...</div>
-                </div>
-              </div>
-              <div class="panel">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
-                  <h2 style="margin:0;font-size:24px;font-weight:700;">Leads Inbox</h2>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <button onclick="showTemplatesSection()" style="padding:10px 16px;background:var(--accent);color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;">📧 Templates</button>
-                    <button onclick="showActivityTimeline()" style="padding:10px 16px;background:var(--panel);border:2px solid var(--border);color:var(--text);border-radius:8px;font-weight:600;cursor:pointer;">📊 Timeline</button>
-                </div>
-              </div>
-                
-                <!-- Bulk Action Toolbar -->
-                <div id="bulkActionToolbar" style="display:none;background:var(--accent-blue);color:white;padding:12px 16px;border-radius:8px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap;">
-                  <span id="selectedCount" style="font-weight:600;">0 selected</span>
-                  <button onclick="bulkSendEmail()" style="padding:6px 12px;background:white;color:var(--accent-blue);border:none;border-radius:6px;font-weight:600;cursor:pointer;">📧 Email</button>
-                  <button onclick="bulkScheduleCall()" style="padding:6px 12px;background:white;color:var(--accent-blue);border:none;border-radius:6px;font-weight:600;cursor:pointer;">📞 Call</button>
-                  <button onclick="clearSelection()" style="margin-left:auto;padding:6px 12px;background:transparent;border:1px solid white;color:white;border-radius:6px;cursor:pointer;">✕ Clear</button>
-                </div>
-
-                <!-- Smart Filters -->
-                <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <button onclick="applySmartFilter('hot')" id="filterHot" class="smart-filter-btn" style="padding:8px 16px;border:2px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;">🔥 Hot Leads</button>
-                    <button onclick="applySmartFilter('needs_attention')" id="filterNeedsAttention" class="smart-filter-btn" style="padding:8px 16px;border:2px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;">⚠️ Needs Attention</button>
-                    <button onclick="applySmartFilter('ready_to_close')" id="filterReadyToClose" class="smart-filter-btn" style="padding:8px 16px;border:2px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;">✅ Ready to Close</button>
-                    <button onclick="applySmartFilter('at_risk')" id="filterAtRisk" class="smart-filter-btn" style="padding:8px 16px;border:2px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;">🚨 At Risk</button>
-                    <button onclick="applySmartFilter('new_today')" id="filterNewToday" class="smart-filter-btn" style="padding:8px 16px;border:2px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;">🆕 New Today</button>
-                    <button onclick="applySmartFilter('all')" id="filterAll" class="smart-filter-btn active" style="padding:8px 16px;border:2px solid var(--accent-blue);border-radius:8px;background:var(--accent-blue);color:white;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;">All Leads</button>
-                  </div>
-                  <select id="filterSource" style="padding:8px 12px;border:2px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:14px;margin-left:auto;" onchange="loadLeads()">
-                    <option value="all">All Sources</option>
-                    <option value="google_search">Google Search</option>
-                    <option value="job_search">Job Search</option>
-                  </select>
-                </div>
-
-                <!-- Table View -->
-                <div style="overflow-x:auto;">
-                  <table style="width:100%;border-collapse:collapse;font-size:14px;">
-                    <thead>
-                      <tr style="background:var(--panel-2);border-bottom:2px solid var(--border);">
-                        <th style="padding:12px;text-align:left;font-weight:600;width:40px;"><input type="checkbox" id="selectAllLeads" onchange="toggleSelectAllLeads(this)"></th>
-                        <th style="padding:12px;text-align:left;font-weight:600;">Title</th>
-                        <th style="padding:12px;text-align:left;font-weight:600;width:80px;">Score</th>
-                        <th style="padding:12px;text-align:left;font-weight:600;">Next Activity</th>
-                        <th style="padding:12px;text-align:left;font-weight:600;">Source</th>
-                        <th style="padding:12px;text-align:left;font-weight:600;">Labels</th>
-                        <th style="padding:12px;text-align:left;font-weight:600;">Created</th>
-                        <th style="padding:12px;text-align:left;font-weight:600;width:100px;">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="savedLeads">
-                    <tr><td colspan="7" style="padding:40px;text-align:center;color:var(--muted);">Loading...</td></tr>
-                  </tbody>
-                </table>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Pipeline Tab -->
-          <div class="tab-content" id="tab-pipeline">
-            <div class="panel">
-              <h2 style="margin:0 0 16px;">Sales Pipeline</h2>
-              <div class="stat-grid" id="pipelineStats">
-                <div class="empty">Loading pipeline...</div>
-              </div>
-            </div>
-            <div class="panel">
-              <h2 style="margin:0 0 16px;">All Leads</h2>
-              <div id="allLeads">
-                <div class="empty">Loading leads...</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tenants Tab -->
-          <div class="tab-content" id="tab-tenants">
-            <div class="panel">
-              <h2 style="margin:0 0 8px;">Tenants & Usage Monitoring</h2>
-              <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">Healthcare clinics using the platform (end users)</p>
-              <div class="stat-grid" id="tenantsStats">
-                <div class="stat-card">
-                  <div class="stat-label">Total Tenants</div>
-                  <div class="stat-value" id="totalTenants">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Active Tenants</div>
-                  <div class="stat-value" id="activeTenants">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Total Credits</div>
-                  <div class="stat-value" id="totalCredits">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Total Minutes Used</div>
-                  <div class="stat-value" id="totalMinutes">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Total Calls</div>
-                  <div class="stat-value" id="totalCalls">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Total Cost</div>
-                  <div class="stat-value" id="totalCost">$0.00</div>
-                </div>
-              </div>
-              <div class="panel" style="padding:0;overflow:hidden;margin-top:24px;">
-                <div style="overflow-x:auto;">
-                  <table style="width:100%;border-collapse:collapse;">
-                    <thead>
-                      <tr style="background:var(--panel-2);border-bottom:2px solid var(--border);">
-                        <th style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">Tenant</th>
-                        <th style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">Agent Status</th>
-                        <th style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">Credits</th>
-                        <th style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">Usage (7d)</th>
-                        <th style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">Total Usage</th>
-                        <th style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">Cost</th>
-                        <th style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="tenantsTable">
-                      <tr>
-                        <td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="tab-content" id="tab-clients">
-            <div class="panel">
-              <h2 style="margin:0 0 8px;">Clients & Credits Management</h2>
-              <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">API customers (developers/companies using the Somo API)</p>
-              <div class="stat-grid" id="clientsStats">
-                <div class="stat-card">
-                  <div class="stat-label">Total Clients</div>
-                  <div class="stat-value" id="totalClients">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Active Credits</div>
-                  <div class="stat-value" id="totalCreditsClients">0</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">Low Credits (< 50)</div>
-                      <div class="stat-value" id="lowCredits">0</div>
-                  </div>
-                  <div class="stat-card">
-                    <div class="stat-label">Incomplete Signups</div>
-                    <div class="stat-value" id="incompleteSignups">0</div>
-                  </div>
-                </div>
-              </div>
-              <div class="panel" style="padding:0;overflow:hidden;">
-                <div style="overflow-x:auto;">
-                  <table style="width:100%;border-collapse:collapse;">
-                    <thead>
-                      <tr style="background:var(--panel-2);border-bottom:2px solid var(--border);">
-                        <th
-                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
-                          Customer</th>
-                        <th
-                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
-                          Email</th>
-                        <th
-                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
-                          Type</th>
-                        <th
-                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
-                          Credits</th>
-                        <th
-                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
-                          Free Used</th>
-                        <th
-                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
-                          Status</th>
-                        <th
-                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
-                          Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="clientsTable">
-                      <tr>
-                        <td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+        <div id="demoList"><div class="admin-crm-skeleton" style="height:160px;"></div></div>
           </div>
         </div>
     </main>
-  </div>
 
-  <!-- Credit Allocation Modal -->
-  <div id="creditModal"
-    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
-    <div
-      style="background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:400px;width:90%;">
-      <h2 style="margin:0 0 24px;font-size:24px;font-weight:700;">Allocate Credits</h2>
-      <div style="margin-bottom:16px;">
-        <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--muted);">Customer</label>
-        <input type="text" id="modalCustomerName" readonly
-          style="width:100%;padding:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-      </div>
-      <div style="margin-bottom:24px;">
-        <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--muted);">Credits to Allocate</label>
-        <input type="number" id="modalCredits" min="1" value="100"
-          style="width:100%;padding:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);">
-      </div>
-      <div style="display:flex;gap:12px;justify-content:flex-end;">
-        <button onclick="closeCreditModal()"
-          style="padding:10px 20px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-weight:500;">Cancel</button>
-        <button onclick="allocateCredits()"
-          style="padding:10px 20px;background:var(--accent);border:none;border-radius:8px;color:white;cursor:pointer;font-weight:500;">Allocate</button>
+  <div class="admin-crm-modal-overlay" id="scrapeModal">
+    <div class="admin-crm-modal">
+      <div class="admin-crm-title" id="modalTitle" style="margin-bottom:16px;font-size:16px;">Scraping new leads...</div>
+      <div class="admin-crm-progress-log" id="progressLog"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div id="modalResult" style="font-size:13px;color:var(--muted);"></div>
+        <button class="admin-crm-btn-outline" id="modalClose" disabled>Close</button>
       </div>
     </div>
   </div>
 
+  <script src="/admin/assets/js/admin-shell.js"></script>
   <script>
-    const API_BASE = window.location.hostname === 'localhost'
-      ? 'http://localhost:4000'
-      : window.location.origin;
+    const { apiFetch, esc, init } = AdminShell;
+    const API = () => window.API_BASE || '';
 
-    // Theme toggle
-    const themeToggle = document.getElementById('themeToggle');
-    const themeIcon = document.getElementById('themeIcon');
-    const themeText = document.getElementById('themeText');
-    const isLight = localStorage.getItem('theme') === 'light';
-    if (isLight) document.documentElement.classList.add('light');
+    init('board');
 
-    themeToggle.addEventListener('click', () => {
-      document.documentElement.classList.toggle('light');
-      const isLightNow = document.documentElement.classList.contains('light');
-      localStorage.setItem('theme', isLightNow ? 'light' : 'dark');
-      themeIcon.textContent = isLightNow ? '☀️' : '🌙';
-      themeText.textContent = isLightNow ? 'Light' : 'Dark';
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('dateline').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      document.getElementById('btnScrape').onclick = openScrapeModal;
+      document.getElementById('btnEnrich').onclick = triggerEnrich;
+      document.getElementById('modalClose').onclick = closeScrapeModal;
+      loadAll();
     });
-    if (isLight) {
-      themeIcon.textContent = '☀️';
-      themeText.textContent = 'Light';
+
+    async function loadAll() {
+      await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline()]);
     }
 
-    // Tab switching
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        // Handle workflows tab redirect (has onclick handler)
-        if (tab.dataset.tab === 'workflows') {
-          return; // onclick handler will handle navigation
-        }
-        
-        // Handle pipeline tab redirect to standalone page
-        if (tab.dataset.tab === 'pipeline') {
-          window.location.href = 'pipeline.html';
-          return;
-        }
-        
-        tab.classList.add('active');
-        const tabContent = document.getElementById(`tab-${tab.dataset.tab}`);
-        if (tabContent) {
-          tabContent.classList.add('active');
-        }
-        if (tab.dataset.tab === 'dashboard') loadDashboard();
-        if (tab.dataset.tab === 'leads') {
-          switchLeadsSubtab('search'); // Default to search tab
-        }
-        if (tab.dataset.tab === 'tenants') loadTenants();
-        if (tab.dataset.tab === 'clients') loadClients();
-        
-        // Update sidebar active state when tab changes
-        if (typeof setActiveSidebarIcon === 'function') {
-          setActiveSidebarIcon();
-        }
-      });
-    });
-
-    // Login
-    const loginPanel = document.getElementById('loginPanel');
-    const dashboardShell = document.getElementById('dashboardShell');
-    const loginForm = document.getElementById('loginForm');
-    const loginError = document.getElementById('loginError');
-    const logoutBtn = document.getElementById('logoutBtn');
-
-    async function checkSession() {
+    async function loadStatus() {
       try {
-        const res = await fetch(`${API_BASE}/api/admin/session`, { credentials: 'include' });
-        const data = await res.json();
-        if (data.success) {
-          loginPanel.classList.add('hidden');
-          dashboardShell.classList.remove('hidden');
-          // Initialize email composer only after successful authentication
-          if (!window.LeadEmailComposer) {
-            window.LeadEmailComposer = new LeadEmailComposer();
-          }
-          loadDashboard();
-          
-          // Check for tab parameter in URL
-          const urlParams = new URLSearchParams(window.location.search);
-          const tabParam = urlParams.get('tab');
-          if (tabParam) {
-            const tabButton = document.querySelector(`[data-tab="${tabParam}"]`);
-            if (tabButton) {
-              tabButton.click();
-            }
-          }
-          
-          // Set active state for sidebar icons
-          setActiveSidebarIcon();
+        const r = await apiFetch('/api/admin/scrape/status');
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        const lastRun = document.getElementById('lastRunText');
+        const configWarn = document.getElementById('scrapeConfigWarn');
+        if (!r.scrape_configured) {
+          configWarn.style.display = 'flex';
+          document.getElementById('scrapeConfigText').textContent =
+            r.setup_hint || 'Set JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY on the API server to enable scraping.';
+          dot.className = 'admin-crm-status-dot';
+          text.textContent = 'Scrape disabled — job search API not configured';
         } else {
-          loginPanel.classList.remove('hidden');
-          dashboardShell.classList.add('hidden');
-        }
-      } catch (error) {
-        loginPanel.classList.remove('hidden');
-        dashboardShell.classList.add('hidden');
-      }
-    }
-
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      loginError.classList.add('hidden');
-      const secret = document.getElementById('adminSecret').value.trim();
-      try {
-        const res = await fetch(`${API_BASE}/api/admin/session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ secret })
-        });
-        const data = await res.json();
-        if (data.success) {
-          loginPanel.classList.add('hidden');
-          dashboardShell.classList.remove('hidden');
-          // Initialize email composer only after successful authentication
-          if (!window.LeadEmailComposer) {
-            window.LeadEmailComposer = new LeadEmailComposer();
-          }
-          loadDashboard();
-        } else {
-          loginError.textContent = data.error || 'Invalid credentials';
-          loginError.classList.remove('hidden');
-        }
-      } catch (error) {
-        loginError.textContent = 'Unable to reach server';
-        loginError.classList.remove('hidden');
-      }
-    });
-
-    logoutBtn.addEventListener('click', async () => {
-      try {
-        await fetch(`${API_BASE}/api/admin/session`, { method: 'DELETE', credentials: 'include' });
-        loginPanel.classList.remove('hidden');
-        dashboardShell.classList.add('hidden');
-        document.getElementById('adminSecret').value = ''; // Clear password field
-        loginError.classList.add('hidden');
-      } catch (error) {
-        console.error('Logout error:', error);
-        // Still show login panel even if logout request fails
-        loginPanel.classList.remove('hidden');
-        dashboardShell.classList.add('hidden');
-      }
-    });
-
-    // Load functions
-    async function fetchJSON(path) {
-      const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
-      return res.json();
-    }
-
-    async function loadDashboard() {
-      try {
-        // First, auto-search and save today's jobs from all US
-        let newJobsCount = 0;
-        try {
-          console.log('🔍 Auto-searching for today\'s jobs (all US states)...');
-          const searchRes = await fetchJSON('/api/admin/leads/insights/medical-receptionist?days=1&location=US&auto_save=true');
-          if (searchRes.success && searchRes.leads) {
-            newJobsCount = searchRes.saved_count || 0;
-            console.log(`✅ Found ${searchRes.total_found || searchRes.leads.length} jobs, saved ${newJobsCount} new leads`);
-          }
-        } catch (searchError) {
-          console.warn('⚠️ Auto-search failed:', searchError.message);
-        }
-
-        const [statsRes, leadsRes] = await Promise.all([
-          fetchJSON('/api/admin/leads/pipeline/stats').catch(() => ({ success: false, total: 0, qualified: 0, closed_won: 0 })),
-          fetchJSON('/api/admin/leads?limit=50&has_contact=true').catch(() => ({ success: false, leads: [] }))
-        ]);
-
-        const stats = statsRes.success ? statsRes : { total: 0, qualified: 0, closed_won: 0 };
-        const leads = leadsRes.success ? leadsRes : { leads: [] };
-
-        const usage = await fetchJSON('/api/admin/leads/stats/usage').catch(() => ({ calls_used: 0, limit: 250 }));
-
-        document.getElementById('metricGrid').innerHTML = `
-          <div class="stat-card" style="cursor:pointer;" onclick="document.querySelector('[data-tab=leads]').click();">
-            <div class="stat-label">Total Leads</div>
-            <div class="stat-value">${stats.total || 0}</div>
-            <div class="stat-sub">Click to view all</div>
-          </div>
-          <div class="stat-card" style="cursor:pointer;" onclick="document.querySelector('[data-tab=leads]').click();">
-            <div class="stat-label">Qualified</div>
-            <div class="stat-value">${stats.qualified || 0}</div>
-            <div class="stat-sub">Ready to call</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Calls This Month</div>
-            <div class="stat-value">${usage.calls_used || 0}/${usage.limit || 250}</div>
-            <div class="stat-sub">Voice agent usage</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Closed Won</div>
-            <div class="stat-value">${stats.closed_won || 0}</div>
-            <div class="stat-sub">Converted</div>
-          </div>
-        `;
-
-        if (leads.leads && leads.leads.length > 0) {
-          // Filter to only show leads with phone OR email
-          const contactableLeads = leads.leads.filter(lead => {
-            const hasPhone = lead.clinic_phone && lead.clinic_phone.trim() !== '';
-            const hasEmail = lead.clinic_email && lead.clinic_email.trim() !== '';
-            return hasPhone || hasEmail;
-          });
-
-          // Sort by newest first
-          const sorted = contactableLeads.sort((a, b) => {
-            const dateA = new Date(a.created_at || 0);
-            const dateB = new Date(b.created_at || 0);
-            return dateB - dateA;
-          });
-
-          document.getElementById('recentLeads').innerHTML = sorted.length
-            ? (newJobsCount > 0 ? `<div style="margin-bottom:16px;padding:16px;background:linear-gradient(135deg, var(--accent-green), var(--accent-blue));color:white;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(34,197,94,0.3);">
-                ✅ Just loaded ${newJobsCount} new contactable leads from today
-              </div>` : '') +
-            `<div style="margin-bottom:16px;padding:14px 18px;background:var(--panel-2);border:2px solid var(--border);border-radius:12px;font-size:14px;color:var(--text);font-weight:600;display:flex;align-items:center;gap:8px;">
-                <span style="font-size:18px;">📋</span>
-                Showing <strong style="color:var(--accent-blue);margin:0 4px;">${sorted.length}</strong> contactable leads (with phone or email)
-              </div>` +
-            sorted.map(lead => {
-              const hasPhone = lead.clinic_phone && lead.clinic_phone.trim() !== '';
-              const hasEmail = lead.clinic_email && lead.clinic_email.trim() !== '';
-              const salary = lead.salary || null;
-
-              // Detect specialty from clinic name if not set
-              function detectSpecialtyFromName(name) {
-                if (!name) return null;
-                const nameLower = name.toLowerCase();
-                if (nameLower.includes('wellness') || nameLower.includes('wellbeing')) return 'Wellness';
-                if (nameLower.includes('dental') || nameLower.includes('dentist') || nameLower.includes('dentistry') || nameLower.match(/\bdmd\b/) || nameLower.match(/\bdds\b/)) return 'Dental';
-                if (nameLower.includes('physical therapy') || nameLower.includes('physiotherapy') || nameLower.includes('sportscare')) return 'Physical Therapy';
-                if (nameLower.includes('urgent care') || nameLower.includes('urgentcare') || nameLower.includes('wellnow')) return 'Urgent Care';
-                if (nameLower.includes('therapy') || nameLower.includes('therapist')) return 'Therapy';
-                if (nameLower.includes('cardiology') || nameLower.includes('cardiac')) return 'Cardiology';
-                if (nameLower.includes('dermatology')) return 'Dermatology';
-                if (nameLower.includes('pediatric')) return 'Pediatrics';
-                if (nameLower.includes('orthopedic')) return 'Orthopedics';
-                if (nameLower.includes('primary care') || nameLower.includes('family practice')) return 'Primary Care';
-                if (nameLower.includes('allergy') || nameLower.includes('asthma') || nameLower.includes('sinus')) return 'Allergy & Immunology';
-                if (nameLower.includes('healogics') || nameLower.includes('wound care')) return 'Wound Care';
-                return null;
-              }
-
-              const specialty = lead.specialty || detectSpecialtyFromName(lead.clinic_name) || 'General';
-              const specialtyColor = specialty === 'General' ? 'var(--muted)' : 'var(--accent-blue)';
-
-              return `
-              <div class="lead-card" style="border-left:4px solid var(--accent-green);">
-                <div class="lead-name">${lead.clinic_name}</div>
-                <div class="lead-meta">
-                  <span style="${hasPhone ? 'border-color:var(--accent-green);color:var(--accent-green);' : 'opacity:0.6;'}">
-                    📞 ${lead.clinic_phone || 'No phone'}
-                  </span>
-                  <span style="${hasEmail ? 'border-color:var(--accent-green);color:var(--accent-green);' : 'opacity:0.6;'}">
-                    ✉️ ${lead.clinic_email || 'No email'}
-                  </span>
-                  <span>📍 ${lead.location || 'N/A'}</span>
-                  <span style="background:var(--panel);border:1px solid var(--border);color:${specialtyColor};font-weight:600;">🏥 ${specialty}</span>
-                  ${salary ? `<span style="background:var(--accent);color:white;font-weight:600;border:none;">💰 ${salary}</span>` : ''}
-                  <span style="background:linear-gradient(135deg, var(--accent-green), var(--accent-blue));color:white;font-weight:600;border:none;">
-                    ✅ Ready to call
-                  </span>
-                </div>
-              </div>
-            `;
-            }).join('')
-            : '<div class="empty">No contactable leads yet. Searching for today\'s jobs...</div>';
-        }
-      } catch (error) {
-        console.error('Dashboard load error', error);
-        document.getElementById('recentLeads').innerHTML = '<div class="empty">Error loading leads</div>';
-      }
-    }
-
-    function switchLeadsSubtab(subtab) {
-      // Hide all sub-tab contents
-      document.querySelectorAll('.leads-subtab-content').forEach(content => {
-        content.classList.remove('active');
-      });
-      // Remove active from all sub-tabs
-      document.querySelectorAll('.leads-subtab').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      // Show selected sub-tab content
-      document.getElementById(`leads-subtab-${subtab}`).classList.add('active');
-      // Activate selected sub-tab button
-      document.querySelector(`[data-subtab="${subtab}"]`).classList.add('active');
-
-      // Load data if switching to saved leads
-      if (subtab === 'saved') {
-        loadLeads();
-      } else if (subtab === 'search') {
-        updateSelectedStates();
-      }
-    }
-
-    // Store selected states array
-    window.selectedStates = [];
-
-    // Initialize with default states if needed
-    function initializeSelectedStates() {
-      // Start with NY and NJ if you want defaults
-      window.selectedStates = [
-        { value: 'US,NJ', text: 'New Jersey' },
-        { value: 'US,NY', text: 'New York' }
-      ];
-      updateSelectedStates();
-    }
-
-    // Update selected states display
-    function updateSelectedStates() {
-      const display = document.getElementById('selectedStatesInline');
-      if (!display) return;
-
-      if (window.selectedStates.length === 0) {
-        display.innerHTML = '';
-        return;
-      }
-
-      // Check if "All US" is selected
-      const hasAllUS = window.selectedStates.some(s => s.value === 'US');
-      if (hasAllUS) {
-        display.innerHTML = '<span class="state-tag-inline">🌎 All US</span>';
-        return;
-      }
-
-      // Display all selected states as tags
-      display.innerHTML = window.selectedStates.map(state => {
-        return `<span class="state-tag-inline">
-          ${state.text}
-          <button type="button" onclick="removeState('${state.value}')" title="Remove ${state.text}">×</button>
-        </span>`;
-      }).join('');
-    }
-
-    // Add state when selected from dropdown
-    function addState() {
-      const select = document.getElementById('searchLocation');
-      const selectedValue = select.value;
-
-      if (!selectedValue || selectedValue === '') return;
-
-      // Find the option text
-      const option = select.options[select.selectedIndex];
-      const stateText = option.text;
-
-      // Check if already selected
-      if (window.selectedStates.some(s => s.value === selectedValue)) {
-        // Reset dropdown
-        select.value = '';
-        return;
-      }
-
-      // If "All US" is selected, clear others and add only All US
-      if (selectedValue === 'US') {
-        window.selectedStates = [{ value: 'US', text: 'All US States' }];
-      } else {
-        // Remove "All US" if it exists (can't have both)
-        window.selectedStates = window.selectedStates.filter(s => s.value !== 'US');
-        // Add the new state
-        window.selectedStates.push({ value: selectedValue, text: stateText });
-      }
-
-      // Reset dropdown to placeholder
-      select.value = '';
-
-      updateSelectedStates();
-    }
-
-    // Remove a state from selection
-    function removeState(value) {
-      window.selectedStates = window.selectedStates.filter(s => s.value !== value);
-      updateSelectedStates();
-    }
-
-    // Quick filter buttons
-    function setQuickFilter(filter) {
-      const daysSelect = document.getElementById('searchDays');
-
-      // Update active button
-      document.querySelectorAll('.quick-filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-      });
-      document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
-
-      switch (filter) {
-        case 'all':
-          // Select all US states
-          window.selectedStates = [{ value: 'US', text: 'All US States' }];
-          daysSelect.value = '1';
-          break;
-        case 'ny-nj':
-          // Select NY and NJ
-          window.selectedStates = [
-            { value: 'US,NJ', text: 'New Jersey' },
-            { value: 'US,NY', text: 'New York' }
-          ];
-          daysSelect.value = '1';
-          break;
-        case 'today':
-          // Keep current selection, set to today
-          daysSelect.value = '1';
-          break;
-      }
-      updateSelectedStates();
-    }
-
-    // Clear search form
-    function clearSearchForm() {
-      document.getElementById('searchQuery').value = '';
-      const select = document.getElementById('searchLocation');
-      select.value = '';
-      window.selectedStates = [
-        { value: 'US,NJ', text: 'New Jersey' },
-        { value: 'US,NY', text: 'New York' }
-      ];
-      document.getElementById('searchDays').value = '1';
-      updateSelectedStates();
-      document.getElementById('searchResults').innerHTML = `
-        <div class="empty" style="text-align:center;padding:60px 20px;">
-          <svg width="64" height="64" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin:0 auto 16px;opacity:0.3;">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
-          <p style="font-size:16px;color:var(--muted);margin:0;">Ready to search for leads</p>
-          <p style="font-size:14px;color:var(--muted);margin:8px 0 0;">Enter your criteria above and click "Search Leads"</p>
-        </div>
-      `;
-    }
-
-    // Initialize state display on page load
-    if (document.getElementById('searchLocation')) {
-      const select = document.getElementById('searchLocation');
-      select.addEventListener('change', addState);
-      initializeSelectedStates();
-
-      // Also update when switching to search tab
-      const searchTab = document.querySelector('[data-subtab="search"]');
-      if (searchTab) {
-        searchTab.addEventListener('click', () => {
-          setTimeout(updateSelectedStates, 100);
-        });
-      }
-    }
-
-    // Selected leads for bulk actions
-    window.selectedLeads = new Set();
-
-    async function loadLeads() {
-      const saved = await fetchJSON('/api/admin/leads?has_contact=true').catch(() => ({ success: false }));
-      const tbody = document.getElementById('savedLeads');
-      
-      if (saved.success && saved.leads && saved.leads.length > 0) {
-        tbody.innerHTML = saved.leads.map(lead => {
-          const hasPhone = lead.clinic_phone && lead.clinic_phone.trim() !== '';
-          const hasEmail = lead.clinic_email && lead.clinic_email.trim() !== '';
-          
-          // Get labels and score badge
-          const score = lead.lead_score || 0;
-          let scoreBadge = '';
-          let scoreColor = 'var(--muted)';
-          if (score >= 80) {
-            scoreBadge = '<span style="background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">' + score + '</span>';
-            scoreColor = '#991b1b';
-          } else if (score >= 60) {
-            scoreBadge = '<span style="background:#fed7aa;color:#9a3412;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">' + score + '</span>';
-            scoreColor = '#9a3412';
-          } else if (score >= 40) {
-            scoreBadge = '<span style="background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">' + score + '</span>';
-            scoreColor = '#92400e';
+          configWarn.style.display = 'none';
+          if (r.scheduler.is_running) {
+            dot.className = 'admin-crm-status-dot running';
+            text.textContent = 'Scrape job running...';
           } else {
-            scoreBadge = '<span style="background:var(--panel-2);color:var(--muted);padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">' + score + '</span>';
+            dot.className = 'admin-crm-status-dot';
+            text.textContent = 'Ready — nightly scrape runs at 2 AM ET';
           }
-          
-          let labels = [];
-          if (score >= 70) labels.push('<span style="background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;margin-right:4px;">HOT</span>');
-          else if (score >= 40) labels.push('<span style="background:#fed7aa;color:#9a3412;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;margin-right:4px;">WARM</span>');
-          if (lead.is_qualified) labels.push('<span style="background:#d1fae5;color:#065f46;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:600;margin-right:4px;">QUALIFIED</span>');
-
-          // Get next activity
-          const followUpDate = lead.follow_up_date ? new Date(lead.follow_up_date) : null;
-          let nextActivity = { icon: '⚠️', text: 'No activity', class: 'opacity:0.6' };
-          if (followUpDate) {
-            const now = new Date();
-            const diffDays = Math.ceil((followUpDate - now) / (1000 * 60 * 60 * 24));
-            if (diffDays < 0) nextActivity = { icon: '⚠️', text: 'Overdue', class: 'color:var(--accent-orange)' };
-            else if (diffDays === 0) nextActivity = { icon: '📞', text: 'Today', class: 'color:var(--accent-green)' };
-            else if (diffDays <= 7) nextActivity = { icon: '📞', text: followUpDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), class: 'color:var(--accent-blue)' };
-            else nextActivity = { icon: '📞', text: followUpDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), class: 'color:var(--muted)' };
-          }
-
-          // Format source
-          const source = lead.source === 'google_search' ? 'Google Search' : lead.source === 'job_search' ? 'Job Search' : lead.source || 'Unknown';
-          
-          // Format created date
-          const created = lead.created_at ? formatRelativeDate(lead.created_at) : 'Unknown';
-          const createdDate = lead.created_at ? new Date(lead.created_at).toISOString() : '';
-
-          return `
-            <tr style="border-bottom:1px solid var(--border);" data-lead-id="${lead.id}" data-score="${score}" data-qualified="${lead.is_qualified || 0}" data-has-followup="${followUpDate ? '1' : '0'}" data-created="${createdDate}" onmouseover="this.style.background='var(--panel-2)'" onmouseout="this.style.background='transparent'">
-              <td style="padding:12px;"><input type="checkbox" class="lead-checkbox" value="${lead.id}" onchange="toggleLeadSelection('${lead.id}', this.checked)"></td>
-              <td style="padding:12px;">
-                <div style="font-weight:600;color:var(--text);">${lead.clinic_name || 'Unknown'}</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:4px;">${lead.location || 'No location'}</div>
-              </td>
-              <td style="padding:12px;">
-                ${scoreBadge}
-              </td>
-              <td style="padding:12px;">
-                <div style="display:flex;align-items:center;gap:6px;font-size:13px;${nextActivity.class}">
-                  ${nextActivity.icon} ${nextActivity.text}
-              </div>
-              </td>
-              <td style="padding:12px;">
-                <span style="font-size:12px;color:var(--muted);">${source}</span>
-              </td>
-              <td style="padding:12px;">
-                ${labels.join('') || '<span style="color:var(--muted);font-size:12px;">No labels</span>'}
-              </td>
-              <td style="padding:12px;">
-                <span style="color:var(--muted);font-size:13px;">${created}</span>
-              </td>
-              <td style="padding:12px;">
-                <button onclick="showLeadActions('${lead.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:4px 8px;" title="Actions">⋯</button>
-              </td>
-            </tr>
-          `;
-        }).join('');
-      } else {
-        tbody.innerHTML = '<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--muted);">No saved leads yet</td></tr>';
-      }
-    }
-
-    // Smart filter function
-    window.currentFilter = 'all';
-    function applySmartFilter(filterType) {
-      window.currentFilter = filterType;
-      
-      // Update button states
-      document.querySelectorAll('.smart-filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-        btn.style.border = '2px solid var(--border)';
-        btn.style.background = 'var(--panel)';
-        btn.style.color = 'var(--text)';
-      });
-      
-      const activeBtn = document.getElementById(`filter${filterType.charAt(0).toUpperCase() + filterType.slice(1).replace('_', '')}`);
-      if (activeBtn) {
-        activeBtn.classList.add('active');
-        activeBtn.style.border = '2px solid var(--accent-blue)';
-        activeBtn.style.background = 'var(--accent-blue)';
-        activeBtn.style.color = 'white';
-      } else {
-        // All button
-        const allBtn = document.getElementById('filterAll');
-        allBtn.classList.add('active');
-        allBtn.style.border = '2px solid var(--accent-blue)';
-        allBtn.style.background = 'var(--accent-blue)';
-        allBtn.style.color = 'white';
-      }
-      
-      // Filter rows
-      const rows = document.querySelectorAll('#savedLeads tr[data-lead-id]');
-      rows.forEach(row => {
-        const score = parseInt(row.dataset.score || '0');
-        const qualified = row.dataset.qualified === '1';
-        const hasFollowup = row.dataset.hasFollowup === '1';
-        const createdDateStr = row.dataset.created;
-        let isToday = false;
-        if (createdDateStr) {
-          const createdDate = new Date(createdDateStr);
-          const now = new Date();
-          isToday = createdDate.toDateString() === now.toDateString();
         }
-        
-        let show = false;
-        switch(filterType) {
-          case 'hot':
-            show = score >= 80 && qualified;
-            break;
-          case 'needs_attention':
-            show = (score < 40 || (!qualified && score < 60) || (!hasFollowup && score > 60));
-            break;
-          case 'ready_to_close':
-            show = qualified && score >= 70 && hasFollowup;
-            break;
-          case 'at_risk':
-            show = qualified && score < 60;
-            break;
-          case 'new_today':
-            show = isToday;
-            break;
-          case 'all':
-          default:
-            show = true;
+        if (r.scheduler.last_run_at) {
+          const d = new Date(r.scheduler.last_run_at);
+          lastRun.textContent = `Last run: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
         }
-        
-        row.style.display = show ? '' : 'none';
-      });
+        const l = r.leads || {};
+        document.getElementById('mCallReady').textContent = l.verified || 0;
+        document.getElementById('mNeedsPhone').textContent = l.needs_phone || 0;
+        document.getElementById('mCalls').textContent = r.calls_this_month || 0;
+        document.getElementById('mCallsCap').textContent = `of ${r.calls_cap || 250} cap`;
+      } catch (e) { console.error(e); }
     }
 
-    function formatRelativeDate(dateString) {
-      if (!dateString) return 'Unknown';
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-      if (diffDays === 0) return 'Today';
-      if (diffDays === 1) return 'Yesterday';
-      if (diffDays < 7) return `${diffDays} days ago`;
-      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-
-    function toggleSelectAllLeads(checkbox) {
-      document.querySelectorAll('.lead-checkbox').forEach(cb => {
-        cb.checked = checkbox.checked;
-        toggleLeadSelection(cb.value, checkbox.checked);
-      });
-    }
-
-    function toggleLeadSelection(leadId, isSelected) {
-      if (isSelected) {
-        window.selectedLeads.add(leadId);
-      } else {
-        window.selectedLeads.delete(leadId);
-      }
-      updateBulkActionToolbar();
-    }
-
-    function updateBulkActionToolbar() {
-      const toolbar = document.getElementById('bulkActionToolbar');
-      const countEl = document.getElementById('selectedCount');
-      if (window.selectedLeads.size > 0) {
-        toolbar.style.display = 'flex';
-        countEl.textContent = `${window.selectedLeads.size} selected`;
-      } else {
-        toolbar.style.display = 'none';
-      }
-    }
-
-    function clearSelection() {
-      window.selectedLeads.clear();
-      document.querySelectorAll('.lead-checkbox').forEach(cb => cb.checked = false);
-      document.getElementById('selectAllLeads').checked = false;
-      updateBulkActionToolbar();
-    }
-
-    async function bulkSendEmail() {
-      if (window.selectedLeads.size === 0) return;
-      const leadIds = Array.from(window.selectedLeads);
-      // Open email composer with bulk mode
-      if (window.LeadEmailComposer) {
-        const firstLead = await fetchJSON(`/api/admin/leads/${leadIds[0]}`);
-        window.LeadEmailComposer.openBulk({
-          leadIds: leadIds,
-          lead: firstLead.lead,
-          recipient: `${leadIds.length} leads`
-        });
-      } else {
-        alert(`Send email to ${leadIds.length} leads - Email composer not loaded`);
-      }
-    }
-
-    async function bulkScheduleCall() {
-      if (window.selectedLeads.size === 0) return;
-      alert(`Schedule call for ${window.selectedLeads.size} leads - Coming soon`);
-    }
-
-    function showLeadDetails(leadId) {
-      // Switch to leads tab and filter to this lead
-      document.querySelector('[data-tab="leads"]').click();
-      setTimeout(() => {
-        // Scroll to lead in table
-        const leadRow = document.querySelector(`tr[data-lead-id="${leadId}"]`);
-        if (leadRow) {
-          leadRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          // Highlight briefly
-          leadRow.style.background = 'var(--accent-blue)';
-          leadRow.style.opacity = '0.8';
-          setTimeout(() => {
-            leadRow.style.background = '';
-            leadRow.style.opacity = '1';
-          }, 2000);
-        }
-        // Also load activities for this lead
-        loadActivityFeed(leadId);
-        showActivityTimeline();
-      }, 100);
-    }
-
-    function showLeadActions(leadId) {
-      // Simple action menu
-      const actions = [
-        { label: 'Send Email', action: () => emailClinic(leadId) },
-        { label: 'Schedule Call', action: () => scheduleCall(leadId) },
-        { label: 'View Activities', action: () => { showActivityTimeline(); loadActivityFeed(leadId); } },
-        { label: 'View Details', action: () => showLeadDetails(leadId) }
-      ];
-      const choice = prompt(`Actions:\n\n${actions.map((a, i) => `${i+1}. ${a.label}`).join('\n')}\n\nEnter number:`);
-      const index = parseInt(choice) - 1;
-      if (index >= 0 && index < actions.length) {
-        actions[index].action();
-      }
-    }
-
-    async function emailClinic(leadId) {
-      const lead = await fetchJSON(`/api/admin/leads/${leadId}`);
-      if (lead.success && lead.lead && lead.lead.clinic_email) {
-        if (window.LeadEmailComposer) {
-          window.LeadEmailComposer.open({
-            leadId: leadId,
-            lead: lead.lead,
-            recipient: lead.lead.clinic_email
-          });
-        } else {
-          alert('Email composer not loaded');
-        }
-      } else {
-        alert('Email not available for this lead');
-      }
-    }
-
-    async function scheduleCall(leadId) {
-      const scheduleType = prompt('Schedule call:\n\nEnter "weekly" or "monthly", or a date (YYYY-MM-DD):');
-      if (!scheduleType) return;
-      alert(`Schedule call for lead ${leadId} - Coming soon`);
-    }
-
-    function showTemplatesSection() {
-      alert('Templates management - Coming soon! You can access it from the email composer.');
-    }
-
-    function showLeadDetails(leadId) {
-      // Switch to leads tab and filter to this lead
-      document.querySelector('[data-tab="leads"]').click();
-      setTimeout(() => {
-        // Scroll to lead in table
-        const leadRow = document.querySelector(`tr[data-lead-id="${leadId}"]`);
-        if (leadRow) {
-          leadRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          // Highlight briefly
-          const originalBg = leadRow.style.background;
-          leadRow.style.background = 'var(--accent-blue)';
-          leadRow.style.opacity = '0.8';
-          setTimeout(() => {
-            leadRow.style.background = originalBg;
-            leadRow.style.opacity = '1';
-          }, 2000);
-        }
-        // Also load activities for this lead
-        loadActivityFeed(leadId);
-        showActivityTimeline();
-      }, 100);
-    }
-
-    async function showActivityTimeline() {
-      // Show activity feed section
-      document.getElementById('activityFeedSection').style.display = 'block';
-      document.getElementById('activityFeedSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      
-      // Load all activities
-      await loadActivityFeed();
-      
-      // Auto-refresh every 30 seconds
-      if (window.activityFeedInterval) {
-        clearInterval(window.activityFeedInterval);
-      }
-      window.activityFeedInterval = setInterval(() => {
-        if (document.getElementById('activityFeedSection').style.display !== 'none') {
-          loadActivityFeed();
-        }
-      }, 30000); // Refresh every 30 seconds
-    }
-
-    function hideActivityFeed() {
-      document.getElementById('activityFeedSection').style.display = 'none';
-      if (window.activityFeedInterval) {
-        clearInterval(window.activityFeedInterval);
-        window.activityFeedInterval = null;
-      }
-    }
-
-    async function loadActivityFeed(leadId = null) {
-      const contentDiv = document.getElementById('activityFeedContent');
-      contentDiv.innerHTML = '<div class="empty">Loading activities...</div>';
-
+    async function loadAlerts() {
       try {
-        let activities = [];
-        
-        if (leadId) {
-          // Load activities for specific lead
-          const res = await fetchJSON(`/api/admin/leads/${leadId}/activities`);
-          if (res.success) {
-            activities = res.activities || [];
-          }
-        } else {
-          // Use the new endpoint to get all activities efficiently
-          const res = await fetchJSON('/api/admin/leads/activities/all?limit=100');
-          if (res.success) {
-            activities = res.activities || [];
-          }
-        }
-
-        if (activities.length === 0) {
-          contentDiv.innerHTML = '<div class="empty">No activities yet. Activities will appear here as you interact with leads.</div>';
+        const r = await apiFetch('/api/admin/tenants/alerts');
+        const container = document.getElementById('tenantAlerts');
+        const alerts = r.alerts || [];
+        document.getElementById('mAlerts').textContent = alerts.length;
+        if (!alerts.length) {
+          container.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">All tenants healthy</p>';
           return;
         }
-
-        // Render activities
-        contentDiv.innerHTML = activities.map(activity => {
-          const activityDate = new Date(activity.activity_date || activity.created_at);
-          const timeAgo = formatRelativeDate(activity.activity_date || activity.created_at);
-          
-          let icon = '📝';
-          let color = 'var(--muted)';
-          if (activity.activity_type === 'call') {
-            icon = '📞';
-            color = 'var(--accent-blue)';
-          } else if (activity.activity_type === 'email') {
-            icon = '✉️';
-            color = 'var(--accent-green)';
-          } else if (activity.activity_type === 'sms') {
-            icon = '💬';
-            color = 'var(--accent-orange)';
-          }
-
-          // Parse metadata if it's a string
-          let metadata = {};
-          if (activity.metadata) {
-            try {
-              metadata = typeof activity.metadata === 'string' ? JSON.parse(activity.metadata) : activity.metadata;
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-
-          // Generate AI insight if available
-          let insight = '';
-          if (activity.activity_type === 'call' && metadata.call_duration_seconds) {
-            const minutes = Math.floor(metadata.call_duration_seconds / 60);
-            if (minutes > 5) {
-              insight = '<div style="margin-top:8px;padding:8px;background:var(--panel-2);border-radius:6px;font-size:12px;color:var(--accent-green);">✅ Long conversation (' + minutes + ' min) - Lead engaged</div>';
-            } else if (minutes < 1) {
-              insight = '<div style="margin-top:8px;padding:8px;background:var(--panel-2);border-radius:6px;font-size:12px;color:var(--accent-orange);">⚠️ Short call - May need follow-up</div>';
-            }
-          } else if (activity.activity_type === 'email' && metadata.status) {
-            if (metadata.status === 'opened') {
-              insight = '<div style="margin-top:8px;padding:8px;background:var(--panel-2);border-radius:6px;font-size:12px;color:var(--accent-green);">✅ Email opened - Lead is engaged</div>';
-            }
-          }
-
-          const leadLink = activity.lead_id 
-            ? `<a href="javascript:void(0)" onclick="showLeadDetails('${activity.lead_id}')" style="color:var(--accent-blue);text-decoration:none;font-weight:600;">${activity.lead_name || 'Lead'}</a>`
-            : (activity.lead_name || '');
-
-          return `
-            <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;gap:12px;transition:background 0.2s;" onmouseover="this.style.background='var(--panel-2)'" onmouseout="this.style.background='transparent'">
-              <div style="font-size:24px;color:${color};">${icon}</div>
-              <div style="flex:1;">
-                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:4px;">
-                  <div>
-                    <strong style="color:var(--text);">${activity.activity_subject || activity.activity_type || 'Activity'}</strong>
-                    ${activity.lead_name ? `<span style="color:var(--muted);font-size:12px;margin-left:8px;">for ${leadLink}${activity.lead_location ? ' (' + activity.lead_location + ')' : ''}</span>` : ''}
-                  </div>
-                  <span style="color:var(--muted);font-size:12px;">${timeAgo}</span>
-                </div>
-                <div style="color:var(--muted);font-size:13px;margin-top:4px;">${activity.activity_description || ''}</div>
-                ${insight}
-              </div>
-            </div>
-          `;
-        }).join('');
-      } catch (error) {
-        console.error('Error loading activity feed:', error);
-        contentDiv.innerHTML = '<div class="empty" style="color:#ef4444;">Error loading activities</div>';
+        container.innerHTML = alerts.slice(0, 4).map(a => `
+          <div class="admin-crm-row" onclick="location.href='/admin/tenants.html'">
+            <div>
+              <div class="admin-crm-row-name" style="font-weight:600;">${esc(a.company_name)}</div>
+              <div style="font-size:12px;color:var(--muted);">${esc(a.reason || a.minutes_remaining + ' min remaining')}</div>
+          </div>
+            <span class="admin-crm-badge admin-crm-badge-${a.severity === 'critical' ? 'danger' : a.severity === 'info' ? 'info' : 'warning'}">${esc(a.severity)}</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        document.getElementById('tenantAlerts').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load alerts</p>';
       }
     }
 
-    document.getElementById('searchForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const query = document.getElementById('searchQuery').value;
-
-      // Get location from selected states array
-      const location = window.selectedStates.length > 0
-        ? window.selectedStates.map(s => s.value).join(',')
-        : 'US';
-
-      const days = document.getElementById('searchDays').value;
-      const autoSave = e.submitter?.id === 'autoSaveBtn';
-      window.autoSaveMode = autoSave;
-
-      document.getElementById('searchResults').innerHTML = '<div class="empty">Searching all US states and extracting contacts... This may take 1-2 minutes.</div>';
-
+    async function loadCallReady() {
       try {
-        const url = `/api/admin/leads/insights/medical-receptionist?query=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}&days=${days}${autoSave ? '&auto_save=true' : ''}`;
-        const res = await fetchJSON(url);
-        if (res.success && res.leads) {
-          // Show ALL leads, not just contactable ones
-          const hasContact = (lead) => (lead.clinic_phone && lead.clinic_phone.trim()) || (lead.clinic_email && lead.clinic_email.trim());
-
-          if (autoSave && res.auto_saved_count) {
-            alert(`✅ Auto-saved ${res.auto_saved_count} new leads!`);
-            loadLeads(); // Refresh saved leads list
-            loadDashboard(); // Refresh dashboard
-          }
-
-          // Store leads for filtering
-          window.currentSearchResults = res.leads;
-          window.currentFilter = null; // 'all', 'processed', 'contactable'
-
-          document.getElementById('searchResults').innerHTML = res.leads.length
-            ? `<div style="margin-bottom:24px;padding:20px;background:linear-gradient(135deg, var(--panel-2), var(--panel));border:2px solid var(--border);border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-                <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:12px;">
-                  <div style="font-size:18px;font-weight:700;color:var(--text);">
-                    📊 Search Results
-                  </div>
-                  <button onclick="filterResults('all')" class="result-filter-btn ${window.currentFilter === 'all' || !window.currentFilter ? 'active' : ''}" style="padding:8px 16px;background:var(--accent-blue);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(56,189,248,0.3);" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(56,189,248,0.4)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 8px rgba(56,189,248,0.3)'">
-                    ${res.leads.length} jobs found
-                  </button>
-                  <button onclick="filterResults('processed')" class="result-filter-btn ${window.currentFilter === 'processed' ? 'active' : ''}" style="padding:8px 16px;background:var(--panel);border:2px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='var(--panel-2)';this.style.borderColor='var(--accent-blue)'" onmouseout="this.style.background='var(--panel)';this.style.borderColor='var(--border)'">
-                    ${res.leads.length} processed
-                  </button>
-                  <button onclick="filterResults('contactable')" class="result-filter-btn ${window.currentFilter === 'contactable' ? 'active' : ''}" style="padding:8px 16px;background:var(--accent-green);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(34,197,94,0.3);" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(34,197,94,0.4)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 8px rgba(34,197,94,0.3)'">
-                    ${res.leads.filter(hasContact).length} contactable
-                  </button>
-                  ${autoSave && res.auto_saved_count ? `<div style="padding:8px 16px;background:var(--accent);color:white;border-radius:8px;font-size:13px;font-weight:600;">${res.auto_saved_count} saved</div>` : ''}
-                </div>
-                <div style="display:flex;gap:16px;font-size:13px;color:var(--muted);flex-wrap:wrap;">
-                  <span>📍 <strong>${res.location || 'All US'}</strong></span>
-                  <span>📅 <strong>${res.days === 1 ? 'Today' : `Last ${res.days} days`}</strong></span>
-                  <span>🔍 <strong>${res.query || 'Medical receptionist'}</strong></span>
-                </div>
-              </div>
-              <div id="filteredResults">` +
-            res.leads.map(lead => {
-              const contactable = hasContact(lead);
-              const hasPhone = lead.clinic_phone && lead.clinic_phone.trim() !== '';
-              const hasEmail = lead.clinic_email && lead.clinic_email.trim() !== '';
-              const salary = lead.salary || null;
-
-              // Detect specialty from clinic name if not set
-              function detectSpecialtyFromName(name) {
-                if (!name) return null;
-                const nameLower = name.toLowerCase();
-                if (nameLower.includes('wellness') || nameLower.includes('wellbeing')) return 'Wellness';
-                if (nameLower.includes('dental') || nameLower.includes('dentist') || nameLower.includes('dentistry') || nameLower.match(/\bdmd\b/) || nameLower.match(/\bdds\b/)) return 'Dental';
-                if (nameLower.includes('physical therapy') || nameLower.includes('physiotherapy') || nameLower.includes('sportscare')) return 'Physical Therapy';
-                if (nameLower.includes('urgent care') || nameLower.includes('urgentcare') || nameLower.includes('wellnow')) return 'Urgent Care';
-                if (nameLower.includes('therapy') || nameLower.includes('therapist')) return 'Therapy';
-                if (nameLower.includes('cardiology') || nameLower.includes('cardiac')) return 'Cardiology';
-                if (nameLower.includes('dermatology')) return 'Dermatology';
-                if (nameLower.includes('pediatric')) return 'Pediatrics';
-                if (nameLower.includes('orthopedic')) return 'Orthopedics';
-                if (nameLower.includes('primary care') || nameLower.includes('family practice')) return 'Primary Care';
-                if (nameLower.includes('allergy') || nameLower.includes('asthma') || nameLower.includes('sinus')) return 'Allergy & Immunology';
-                if (nameLower.includes('healogics') || nameLower.includes('wound care')) return 'Wound Care';
-                return null;
-              }
-
-              const specialty = lead.specialty || detectSpecialtyFromName(lead.clinic_name) || 'General';
-              const specialtyColor = specialty === 'General' ? 'var(--muted)' : 'var(--accent-blue)';
-
-              return `
-              <div class="lead-card" style="${contactable ? 'border-left:4px solid var(--accent-green);' : 'opacity:0.7;border-left:4px solid var(--accent-orange);'}">
-                <div class="lead-name">${lead.clinic_name}</div>
-                <div class="lead-meta">
-                  <span style="${hasPhone ? 'border-color:var(--accent-green);color:var(--accent-green);' : 'opacity:0.6;'}">
-                    📞 ${lead.clinic_phone || 'No phone'}
-                  </span>
-                  <span style="${hasEmail ? 'border-color:var(--accent-green);color:var(--accent-green);' : 'opacity:0.6;'}">
-                    ✉️ ${lead.clinic_email || 'No email'}
-                  </span>
-                    <span>📍 ${lead.location || 'N/A'}</span>
-                    <span style="background:var(--panel);border:1px solid var(--border);color:${specialtyColor};font-weight:600;">🏥 ${specialty}</span>
-                    ${salary ? `<span style="background:var(--accent);color:white;font-weight:600;border:none;">💰 ${salary}</span>` : ''}
-                  ${contactable
-                  ? '<span style="background:linear-gradient(135deg, var(--accent-green), var(--accent-blue));color:white;font-weight:600;border:none;">✅ Ready to call</span>'
-                  : '<span style="background:var(--accent-orange);color:white;font-weight:600;border:none;">⚠️ Needs contact</span>'}
-                  ${lead.qualifies_from_description ? '<span style="background:var(--accent);color:white;font-weight:600;border:none;">⭐ Qualified</span>' : ''}
-                </div>
-                ${!contactable ? '<div style="margin-top:12px;padding:10px;background:var(--panel);border-radius:8px;color:var(--accent-orange);font-size:13px;font-weight:500;">⚠️ Contact extraction needed - will be attempted automatically</div>' : ''}
-                ${!autoSave ? `<button class="btn btn-primary" style="margin-top:16px;width:100%;" onclick='saveLead(${JSON.stringify(lead).replace(/'/g, "\\'")})'>
-                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display:inline-block;margin-right:6px;vertical-align:middle;">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                  </svg>
-                  Save Lead
-                </button>` : ''}
-              </div>
-            `;
-            }).join('') + '</div>'
-            : '<div class="empty">No leads found</div>';
-
-          // Initial render
-          renderFilteredResults();
-        }
-      } catch (error) {
-        document.getElementById('searchResults').innerHTML = `<div class="empty">Search failed: ${error.message}</div>`;
-      }
-    });
-
-    // Filter results function
-    function filterResults(filterType) {
-      window.currentFilter = filterType;
-
-      // Update button active states
-      document.querySelectorAll('.result-filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-      });
-      event.target.classList.add('active');
-
-      renderFilteredResults();
-    }
-
-    // Render filtered results
-    function renderFilteredResults() {
-      if (!window.currentSearchResults) return;
-
-      const hasContact = (lead) => (lead.clinic_phone && lead.clinic_phone.trim()) || (lead.clinic_email && lead.clinic_email.trim());
-
-      let filtered = window.currentSearchResults;
-
-      if (window.currentFilter === 'contactable') {
-        filtered = filtered.filter(hasContact);
-      } else if (window.currentFilter === 'processed') {
-        // Show all processed (all results are processed)
-        filtered = filtered;
-      } else {
-        // Show all
-        filtered = filtered;
-      }
-
-      const container = document.getElementById('filteredResults');
-      if (!container) return;
-
-      if (filtered.length === 0) {
-        container.innerHTML = '<div class="empty">No leads match this filter</div>';
+        const r = await apiFetch('/api/admin/scrape/leads/call-ready?limit=4');
+        const container = document.getElementById('callReadyList');
+        const leads = r.leads || [];
+        if (!leads.length) {
+          container.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">No call-ready leads yet</p>';
         return;
       }
-
-      container.innerHTML = filtered.map(lead => {
-        const contactable = hasContact(lead);
-        const hasPhone = lead.clinic_phone && lead.clinic_phone.trim() !== '';
-        const hasEmail = lead.clinic_email && lead.clinic_email.trim() !== '';
-        const salary = lead.salary || null;
-
-        // Detect specialty from clinic name if not set
-        function detectSpecialtyFromName(name) {
-          if (!name) return null;
-          const nameLower = name.toLowerCase();
-          if (nameLower.includes('wellness') || nameLower.includes('wellbeing')) return 'Wellness';
-          if (nameLower.includes('dental') || nameLower.includes('dentist') || nameLower.includes('dentistry') || nameLower.match(/\bdmd\b/) || nameLower.match(/\bdds\b/)) return 'Dental';
-          if (nameLower.includes('physical therapy') || nameLower.includes('physiotherapy') || nameLower.includes('sportscare')) return 'Physical Therapy';
-          if (nameLower.includes('urgent care') || nameLower.includes('urgentcare') || nameLower.includes('wellnow')) return 'Urgent Care';
-          if (nameLower.includes('therapy') || nameLower.includes('therapist')) return 'Therapy';
-          if (nameLower.includes('cardiology') || nameLower.includes('cardiac')) return 'Cardiology';
-          if (nameLower.includes('dermatology')) return 'Dermatology';
-          if (nameLower.includes('pediatric')) return 'Pediatrics';
-          if (nameLower.includes('orthopedic')) return 'Orthopedics';
-          if (nameLower.includes('primary care') || nameLower.includes('family practice')) return 'Primary Care';
-          if (nameLower.includes('allergy') || nameLower.includes('asthma') || nameLower.includes('sinus')) return 'Allergy & Immunology';
-          if (nameLower.includes('healogics') || nameLower.includes('wound care')) return 'Wound Care';
-          return null;
-        }
-
-        const specialty = lead.specialty || detectSpecialtyFromName(lead.clinic_name) || 'General';
-        const specialtyColor = specialty === 'General' ? 'var(--muted)' : 'var(--accent-blue)';
-
-        return `
-        <div class="lead-card" style="${contactable ? 'border-left:4px solid var(--accent-green);' : 'opacity:0.7;border-left:4px solid var(--accent-orange);'}">
-          <div class="lead-name">${lead.clinic_name}</div>
-          <div class="lead-meta">
-            <span style="${hasPhone ? 'border-color:var(--accent-green);color:var(--accent-green);' : 'opacity:0.6;'}">
-              📞 ${lead.clinic_phone || 'No phone'}
-            </span>
-            <span style="${hasEmail ? 'border-color:var(--accent-green);color:var(--accent-green);' : 'opacity:0.6;'}">
-              ✉️ ${lead.clinic_email || 'No email'}
-            </span>
-              <span>📍 ${lead.location || 'N/A'}</span>
-              <span style="background:var(--panel);border:1px solid var(--border);color:${specialtyColor};font-weight:600;">🏥 ${specialty}</span>
-              ${salary ? `<span style="background:var(--accent);color:white;font-weight:600;border:none;">💰 ${salary}</span>` : ''}
-            ${contactable
-            ? '<span style="background:linear-gradient(135deg, var(--accent-green), var(--accent-blue));color:white;font-weight:600;border:none;">✅ Ready to call</span>'
-            : '<span style="background:var(--accent-orange);color:white;font-weight:600;border:none;">⚠️ Needs contact</span>'}
-            ${lead.qualifies_from_description ? '<span style="background:var(--accent);color:white;font-weight:600;border:none;">⭐ Qualified</span>' : ''}
-          </div>
-          ${!contactable ? '<div style="margin-top:12px;padding:10px;background:var(--panel);border-radius:8px;color:var(--accent-orange);font-size:13px;font-weight:500;">⚠️ Contact extraction needed - will be attempted automatically</div>' : ''}
-          ${!window.autoSaveMode ? `<button class="btn btn-primary" style="margin-top:16px;width:100%;" onclick='saveLead(${JSON.stringify(lead).replace(/'/g, "\\'")})'>
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display:inline-block;margin-right:6px;vertical-align:middle;">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>
-            Save Lead
-          </button>` : ''}
-        </div>
-      `;
-      }).join('');
-    }
-
-    async function saveLead(leadData) {
-      try {
-        const res = await fetch(`${API_BASE}/api/admin/leads/save`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(leadData)
-        });
-        const data = await res.json();
-        if (data.success) {
-          alert('Lead saved!');
-          loadLeads();
-          // Refresh search results to remove saved lead
-          document.getElementById('searchForm').dispatchEvent(new Event('submit'));
-        } else {
-          alert(data.error || 'Failed to save lead');
-        }
-      } catch (error) {
-        alert('Failed to save lead: ' + error.message);
+        container.innerHTML = leads.map(l => rowLead(l, true)).join('');
+      } catch (e) {
+        document.getElementById('callReadyList').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load leads</p>';
       }
     }
 
     async function loadPipeline() {
       try {
-        const [stats, leads] = await Promise.all([
-          fetchJSON('/api/admin/leads/pipeline/stats'),
-          fetchJSON('/api/admin/leads?has_contact=true')
-        ]);
-
-        if (stats.success) {
-          document.getElementById('pipelineStats').innerHTML = `
-            <div class="stat-card">
-              <div class="stat-label">Total</div>
-              <div class="stat-value">${stats.total || 0}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Qualified</div>
-              <div class="stat-value">${stats.qualified || 0}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">New</div>
-              <div class="stat-value">${stats.new || 0}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">In Progress</div>
-              <div class="stat-value">${stats.in_progress || 0}</div>
-            </div>
-          `;
-        }
-
-        if (leads.success && leads.leads) {
-          document.getElementById('allLeads').innerHTML = leads.leads.map(lead => `
-            <div class="lead-card">
-              <div class="lead-name">${lead.clinic_name}</div>
-              <div class="lead-meta">
-                <span>📞 ${lead.clinic_phone || 'No phone'}</span>
-                <span>✉️ ${lead.clinic_email || 'No email'}</span>
-                <span>📍 ${lead.location || 'N/A'}</span>
-                <span>📊 ${lead.pipeline_stage || 'new'}</span>
+        const r = await apiFetch('/api/admin/scrape/leads/pipeline');
+        const counts = r.counts || {};
+        const cards = r.cards || {};
+        const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+        const stages = [
+          { key: 'new', label: 'New', color: '#888780' },
+          { key: 'contacted', label: 'Contacted', color: '#378ADD' },
+          { key: 'demo', label: 'Demo', color: '#238108' },
+          { key: 'won', label: 'Won', color: '#639922' },
+        ];
+        document.getElementById('funnelView').innerHTML = stages.map(s => {
+          const n = counts[s.key] || 0;
+          const pct = Math.round((n / total) * 100);
+          return `
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;">
+              <span>${s.label}</span><span style="font-weight:600;color:var(--text);">${n}</span>
               </div>
-            </div>
-          `).join('');
+            <div style="height:6px;border-radius:3px;background:var(--border);margin-bottom:12px;overflow:hidden;">
+              <div style="height:100%;width:${pct}%;background:${s.color};border-radius:3px;"></div>
+            </div>`;
+        }).join('');
+
+        const demoLeads = [...(cards.demo || []), ...(cards.contacted || [])].slice(0, 4);
+        const demoEl = document.getElementById('demoList');
+        if (!demoLeads.length) {
+          demoEl.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">No demos yet</p>';
+          return;
         }
-      } catch (error) {
-        console.error('Pipeline load error', error);
-      }
-    }
-
-    // Clients management
-    async function loadClients() {
-      try {
-        // Fetch all customers
-        const customersRes = await fetch(`${API_BASE}/api/admin/customers`);
-        if (!customersRes.ok) throw new Error('Failed to load customers');
-        const customers = await customersRes.json();
-
-        // Fetch incomplete signups
-        const incompleteRes = await fetch(`${API_BASE}/api/admin/incomplete-signups`);
-        const incomplete = incompleteRes.ok ? await incompleteRes.json() : { incomplete_signups: [] };
-
-        // Update stats
-        document.getElementById('totalClients').textContent = customers.customers?.length || 0;
-        document.getElementById('incompleteSignups').textContent = incomplete.incomplete_signups?.length || 0;
-
-        // Load credit balances for each customer
-        const clientsWithCredits = await Promise.all(
-          (customers.customers || []).map(async (customer) => {
-            try {
-              const creditsRes = await fetch(`${API_BASE}/api/usage-monitor/credits?customer_id=${customer.id}`);
-              if (creditsRes.ok) {
-                const creditsData = await creditsRes.json();
-                return { ...customer, credits: creditsData.credits || { balance: 0 } };
-              }
+        demoEl.innerHTML = demoLeads.map(l => rowLead(l, false)).join('');
             } catch (e) {
-              console.error(`Failed to load credits for ${customer.id}:`, e);
-            }
-            return { ...customer, credits: { balance: 0 } };
-          })
-        );
+        document.getElementById('funnelView').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load pipeline</p>';
+      }
+    }
 
-        // Calculate stats
-        const totalCredits = clientsWithCredits.reduce((sum, c) => sum + (c.credits.balance || 0), 0);
-        const lowCredits = clientsWithCredits.filter(c => (c.credits.balance || 0) < 50).length;
-
-        document.getElementById('totalCredits').textContent = totalCredits;
-        document.getElementById('lowCredits').textContent = lowCredits;
-
-        // Render table
-        const tbody = document.getElementById('clientsTable');
-        if (clientsWithCredits.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">No clients found</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = clientsWithCredits.map(customer => {
-          const credits = customer.credits || {};
-          const balance = credits.balance || 0;
-          const freeUsed = credits.free_used || 0;
-          const freeAllocated = credits.free_allocated || 0;
-          const statusBadge = balance < 50
-            ? '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#ef4444;color:white;">Low</span>'
-            : balance < 100
-              ? '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#fbbf24;color:white;">Medium</span>'
-              : '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#22c55e;color:white;">Good</span>';
-
-          const customerName = escapeHtml(customer.name || customer.company_name || 'N/A');
-          const customerEmail = escapeHtml(customer.email || 'No email');
-          const customerType = escapeHtml(customer.customer_type || 'saas');
-          const escapedName = (customer.name || customer.company_name || '').replace(/'/g, "\\'");
-
+    function rowLead(l, withCall) {
+      const scoreCls = l.lead_score >= 70 ? ' high' : '';
+      const langTag = (l.language_labels && l.language_labels.length)
+        ? `<span class="admin-crm-badge admin-crm-badge-info" style="font-size:10px;">${esc(l.language_labels[0])}</span>`
+        : '';
+      const callBtn = withCall ? `<button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();callLead(${l.id},'${esc(l.clinic_name)}')">Call</button>` : '';
           return `
-            <tr style="border-top:1px solid var(--border);">
-              <td style="padding:16px;">${customerName}</td>
-              <td style="padding:16px;">${customerEmail}</td>
-              <td style="padding:16px;">${customerType}</td>
-              <td style="padding:16px;"><strong>${balance}</strong> min</td>
-              <td style="padding:16px;">${freeUsed}/${freeAllocated}</td>
-              <td style="padding:16px;">${statusBadge}</td>
-              <td style="padding:16px;">
-                <button onclick="openCreditModal('${customer.id}', '${escapedName}')" style="padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:white;cursor:pointer;font-size:13px;font-weight:500;">
-                  Allocate Credits
-                </button>
-              </td>
-            </tr>
-          `;
-        }).join('');
-      } catch (error) {
-        console.error('Error loading clients:', error);
-        document.getElementById('clientsTable').innerHTML =
-          '<tr><td colspan="7" style="text-align:center;padding:40px;color:#ef4444;">Error loading clients</td></tr>';
-      }
+        <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${l.id}'">
+                  <div>
+            <div class="admin-crm-row-name" style="font-weight:600;">${esc(l.clinic_name)}</div>
+            <div style="font-size:12px;color:var(--muted);">${esc(l.location)} · ${esc(l.specialty || '')} ${langTag}</div>
+                  </div>
+          <div class="admin-crm-row-actions">
+            <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
+            ${callBtn}
+                </div>
+        </div>`;
     }
 
-    // Credit allocation state
-    let currentCustomerId = null;
-    let currentTenantId = null;
-    let currentAllocationType = 'customer'; // 'customer' or 'tenant'
-
-    function openCreditModal(customerId, customerName) {
-      currentCustomerId = customerId;
-      currentTenantId = null;
-      currentAllocationType = 'customer';
-      document.getElementById('modalCustomerName').value = customerName;
-      document.getElementById('modalCredits').value = 100;
-      document.getElementById('creditModal').style.display = 'flex';
+    function openScrapeModal() {
+      document.getElementById('scrapeModal').classList.add('open');
+      document.getElementById('progressLog').innerHTML = '';
+      document.getElementById('modalTitle').textContent = 'Scraping new leads...';
+      document.getElementById('modalResult').textContent = '';
+      document.getElementById('modalClose').disabled = true;
+      runScrapeJob();
     }
 
-    function openTenantCreditModal(clinicId, tenantName) {
-      currentTenantId = clinicId;
-      currentCustomerId = null;
-      currentAllocationType = 'tenant';
-      document.getElementById('modalCustomerName').value = tenantName;
-      document.getElementById('modalCredits').value = 100;
-      document.getElementById('creditModal').style.display = 'flex';
+    function closeScrapeModal() {
+      document.getElementById('scrapeModal').classList.remove('open');
+      loadAll();
     }
 
-    function closeCreditModal() {
-      document.getElementById('creditModal').style.display = 'none';
-      currentCustomerId = null;
-      currentTenantId = null;
-      currentAllocationType = 'customer';
-    }
-
-    async function allocateCredits() {
-      const credits = parseInt(document.getElementById('modalCredits').value);
-      if (!credits || credits < 1) {
-        alert('Please enter a valid number of credits');
-        return;
-      }
-
+    async function runScrapeJob() {
+      const log = document.getElementById('progressLog');
+      const addLine = (text, cls = '') => {
+        const d = document.createElement('div');
+        d.className = cls;
+        d.textContent = text;
+        log.appendChild(d);
+        log.scrollTop = log.scrollHeight;
+      };
       try {
-        let res;
-        if (currentAllocationType === 'tenant' && currentTenantId) {
-          // Allocate to tenant
-          res = await fetch(`${API_BASE}/api/admin/tenants/${currentTenantId}/credits`, {
+        const resp = await fetch(`${API()}/api/admin/scrape/run`, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ credits, type: 'free' })
-          });
-        } else if (currentCustomerId) {
-          // Allocate to customer
-          res = await fetch(`${API_BASE}/api/admin/customers/${currentCustomerId}/credits`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-          body: JSON.stringify({ credits })
+          body: JSON.stringify({ sources: ['google_jobs', 'craigslist', 'jsearch'] }),
         });
-        } else {
-          throw new Error('No customer or tenant selected');
-        }
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error || 'Failed to allocate credits');
-        }
-
-        const data = await res.json();
-        alert(`Successfully allocated ${credits} credits!`);
-        closeCreditModal();
-        
-        // Reload appropriate list
-        if (currentAllocationType === 'tenant') {
-          loadTenants();
-        } else {
-        loadClients();
-        }
-      } catch (error) {
-        console.error('Error allocating credits:', error);
-        alert('Failed to allocate credits: ' + error.message);
+        await consumeSse(resp, addLine, (evt) => {
+          if (evt.type === 'done') {
+            document.getElementById('modalTitle').textContent = 'Scrape complete';
+            document.getElementById('modalResult').textContent = [
+              `${evt.result.saved} saved with phone`,
+              evt.result.skipped_no_phone ? `${evt.result.skipped_no_phone} skipped (no phone)` : '',
+            ].filter(Boolean).join(' · ');
+            document.getElementById('modalClose').disabled = false;
+          }
+          if (evt.type === 'error') document.getElementById('modalClose').disabled = false;
+        });
+            } catch (e) {
+        addLine('Network error: ' + e.message);
+        document.getElementById('modalClose').disabled = false;
       }
     }
 
-    // Load tenants with usage and credits
-    async function loadTenants() {
+    async function triggerEnrich() {
+      if (!confirm('Run contact enrichment on all unprocessed leads?')) return;
+      openScrapeModal();
+      document.getElementById('modalTitle').textContent = 'Enriching contacts...';
+      const log = document.getElementById('progressLog');
       try {
-        const data = await fetchJSON('/api/admin/tenants');
-        
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to load tenants');
-        }
-
-        const { summary, tenants } = data;
-
-        // Update summary stats
-        document.getElementById('totalTenants').textContent = summary.total_tenants || 0;
-        document.getElementById('activeTenants').textContent = summary.active_tenants || 0;
-        document.getElementById('totalCredits').textContent = summary.total_credits_remaining || 0;
-        document.getElementById('totalMinutes').textContent = Math.round(summary.total_minutes || 0);
-        document.getElementById('totalCalls').textContent = summary.total_calls || 0;
-        document.getElementById('totalCost').textContent = `$${(summary.total_cost_usd || 0).toFixed(2)}`;
-
-        // Render tenants table
-        const tbody = document.getElementById('tenantsTable');
-        if (tenants.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">No tenants found</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = tenants.map(tenant => {
-          const credits = tenant.credits || {};
-          const usage = tenant.usage || {};
-          const costs = tenant.costs || {};
-          const agent = tenant.agent || {};
-
-          // Agent status badge
-          let agentStatus = '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#6b7280;color:white;">No Agent</span>';
-          if (agent.has_agent) {
-            if (agent.status === 'active') {
-              agentStatus = '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#22c55e;color:white;">Active</span>';
-            } else {
-              agentStatus = '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#fbbf24;color:white;">' + (agent.status || 'Pending') + '</span>';
-            }
-          }
-
-          // Credits display
-          const creditsBalance = credits.balance_minutes || 0;
-          const creditsDisplay = `${creditsBalance} min`;
-          const creditsStatus = creditsBalance < 50
-            ? 'style="color:#ef4444;font-weight:600;"'
-            : creditsBalance < 100
-              ? 'style="color:#fbbf24;font-weight:600;"'
-              : 'style="color:#22c55e;font-weight:600;"';
-
-          // Usage display
-          const recentUsage = `${usage.recent_7d_calls || 0} calls, ${Math.round(usage.recent_7d_minutes || 0)} min`;
-          const totalUsage = `${usage.total_calls || 0} calls, ${Math.round(usage.total_minutes || 0)} min`;
-
-          // Cost display
-          const costDisplay = `$${(costs.total_cost_usd || 0).toFixed(2)}`;
-
-          return `
-            <tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="viewTenantDetails('${tenant.clinic_id}')">
-              <td style="padding:16px;">
-                <div style="font-weight:600;color:var(--text);margin-bottom:4px;">${tenant.name || 'Unnamed Tenant'}</div>
-                <div style="font-size:12px;color:var(--muted);">${tenant.slug || tenant.clinic_id}</div>
-                ${tenant.phone_numbers && tenant.phone_numbers.length > 0 
-                  ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">📞 ${tenant.phone_numbers[0]}</div>` 
-                  : ''}
-              </td>
-              <td style="padding:16px;">${agentStatus}</td>
-              <td style="padding:16px;" ${creditsStatus}>${creditsDisplay}</td>
-              <td style="padding:16px;font-size:13px;color:var(--text);">${recentUsage}</td>
-              <td style="padding:16px;font-size:13px;color:var(--text);">${totalUsage}</td>
-              <td style="padding:16px;font-size:13px;color:var(--text);">${costDisplay}</td>
-              <td style="padding:16px;">
-                <button onclick="event.stopPropagation();openTenantCreditModal('${tenant.clinic_id}', '${(tenant.name || '').replace(/'/g, "\\'")}')" 
-                  style="padding:6px 12px;background:var(--accent);border:none;border-radius:6px;color:white;cursor:pointer;font-size:12px;font-weight:500;margin-right:8px;">
-                  Add Credits
-                </button>
-                <button onclick="event.stopPropagation();viewTenantDetails('${tenant.clinic_id}')" 
-                  style="padding:6px 12px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:12px;font-weight:500;">
-                  Details
-                </button>
-              </td>
-            </tr>
-          `;
-        }).join('');
-
-      } catch (error) {
-        console.error('Error loading tenants:', error);
-        document.getElementById('tenantsTable').innerHTML =
-          '<tr><td colspan="7" style="text-align:center;padding:40px;color:#ef4444;">Error loading tenants: ' + error.message + '</td></tr>';
+        const resp = await fetch(`${API()}/api/admin/enrich/batch`, { method: 'POST', credentials: 'include' });
+        await consumeSse(resp, (text) => {
+          const d = document.createElement('div');
+          d.textContent = text;
+          log.appendChild(d);
+          log.scrollTop = log.scrollHeight;
+        }, (evt) => {
+          if (evt.type === 'done' || evt.type === 'error') document.getElementById('modalClose').disabled = false;
+        });
+      } catch (e) {
+        document.getElementById('modalClose').disabled = false;
       }
     }
 
-    // View tenant details (opens modal or navigates)
-    function viewTenantDetails(clinicId) {
-      // For now, just show alert with link to detailed endpoint
-      // In future, can open modal or navigate to detail page
-      window.open(`${API_BASE}/api/admin/tenants/${clinicId}`, '_blank');
-    }
-
-    // Lead Email Composer
-    class LeadEmailComposer {
-      constructor() {
-        this.modal = null;
-        this.currentLead = null;
-        this.isBulkMode = false;
-        this.bulkLeadIds = null;
-        this.leadId = null;
-        this.init();
-      }
-
-      init() {
-        this.createModal();
-      }
-
-      createModal() {
-        const modal = document.createElement('div');
-        modal.id = 'lead-email-composer-modal';
-        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:10000;display:none;align-items:center;justify-content:center;';
-        modal.innerHTML = `
-          <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);" onclick="window.LeadEmailComposer.close()"></div>
-          <div style="position:relative;background:var(--panel);border-radius:12px;width:90%;max-width:700px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);z-index:10001;">
-            <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-              <h2 id="emailComposerTitle" style="margin:0;font-size:20px;font-weight:600;">📧 Compose Email</h2>
-              <button onclick="window.LeadEmailComposer.close()" style="background:none;border:none;font-size:28px;color:var(--muted);cursor:pointer;">×</button>
-            </div>
-            <div style="padding:24px;overflow-y:auto;flex:1;">
-              <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:8px;font-weight:500;color:var(--text);">To:</label>
-                <input type="email" id="lead-email-to" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);" readonly>
-              </div>
-              <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:8px;font-weight:500;color:var(--text);">Subject:</label>
-                <input type="text" id="lead-email-subject" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);" placeholder="Email subject" required>
-              </div>
-              <div style="margin-bottom:20px;">
-                <label style="display:block;margin-bottom:8px;font-weight:500;color:var(--text);">Message:</label>
-                <textarea id="lead-email-content" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);min-height:200px;resize:vertical;" placeholder="Email content" required></textarea>
-              </div>
-              <div style="padding:12px;background:var(--panel-2);border-radius:6px;color:var(--muted);font-size:12px;">
-                <strong>Variables:</strong> {{clinic_name}}, {{location}}, {{clinic_phone}}, {{clinic_email}}
-              </div>
-            </div>
-            <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:12px;">
-              <button onclick="window.LeadEmailComposer.close()" style="padding:10px 20px;background:var(--panel-2);color:var(--text);border:none;border-radius:8px;font-weight:600;cursor:pointer;">Cancel</button>
-              <button onclick="window.LeadEmailComposer.sendEmail()" style="padding:10px 20px;background:var(--accent-blue);color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Send Email</button>
-            </div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-        this.modal = modal;
-      }
-
-      open(options = {}) {
-        this.currentLead = options.lead;
-        this.isBulkMode = false;
-        this.bulkLeadIds = null;
-        this.leadId = options.leadId;
-        
-        document.getElementById('emailComposerTitle').textContent = '📧 Compose Email to Lead';
-        document.getElementById('lead-email-to').value = options.recipient || '';
-        document.getElementById('lead-email-to').readOnly = false;
-        document.getElementById('lead-email-subject').value = options.lead ? `Somo Medical Billing Software - Quick Demo Request` : '';
-        document.getElementById('lead-email-content').value = options.lead ? `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from Somo. We provide AI-powered medical billing software.\n\nWould you be interested in a quick demo?\n\nBest regards,\nSomo Team` : '';
-        
-        this.modal.style.display = 'flex';
-      }
-
-      openBulk(options = {}) {
-        this.currentLead = options.lead;
-        this.isBulkMode = true;
-        this.bulkLeadIds = options.leadIds || [];
-        this.leadId = null;
-        
-        document.getElementById('emailComposerTitle').textContent = `📧 Compose Email to ${this.bulkLeadIds.length} Leads`;
-        document.getElementById('lead-email-to').value = options.recipient || `${this.bulkLeadIds.length} leads`;
-        document.getElementById('lead-email-to').readOnly = true;
-        document.getElementById('lead-email-subject').value = 'Somo Medical Billing Software - Quick Demo Request';
-        document.getElementById('lead-email-content').value = `Hi,\n\nI'm reaching out from Somo. We provide AI-powered medical billing software.\n\nWould you be interested in a quick demo?\n\nBest regards,\nSomo Team`;
-        
-        this.modal.style.display = 'flex';
-      }
-
-      close() {
-        this.modal.style.display = 'none';
-        this.currentLead = null;
-        this.leadId = null;
-        this.isBulkMode = false;
-        this.bulkLeadIds = null;
-      }
-
-      replaceVariables(text, lead) {
-        if (!text || !lead) return text;
-        return text
-          .replace(/\{\{clinic_name\}\}/g, lead.clinic_name || 'Clinic')
-          .replace(/\{\{location\}\}/g, lead.location || 'Location')
-          .replace(/\{\{clinic_phone\}\}/g, lead.clinic_phone || 'Phone')
-          .replace(/\{\{clinic_email\}\}/g, lead.clinic_email || 'Email');
-      }
-
-      async sendEmail() {
-        const subject = document.getElementById('lead-email-subject').value.trim();
-        const content = document.getElementById('lead-email-content').value.trim();
-
-        if (!subject || !content) {
-          alert('Please fill in all fields');
-          return;
-        }
-
-        if (this.isBulkMode && this.bulkLeadIds && this.bulkLeadIds.length > 0) {
-          let successCount = 0;
-          let failCount = 0;
-          
-          for (const leadId of this.bulkLeadIds) {
-            try {
-              const leadRes = await fetchJSON(`/api/admin/leads/${leadId}`);
-              if (!leadRes.success || !leadRes.lead || !leadRes.lead.clinic_email) {
-                failCount++;
-                continue;
-              }
-              
-              const leadSubject = this.replaceVariables(subject, leadRes.lead);
-              const leadContent = this.replaceVariables(content, leadRes.lead);
-              
-              const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/send-email`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ subject: leadSubject, content: leadContent })
-              });
-              
-              const data = await response.json();
-              if (data.success) successCount++;
-              else failCount++;
-            } catch (error) {
-              failCount++;
-            }
-          }
-          
-          alert(`✅ Sent to ${successCount} leads\n❌ Failed: ${failCount}`);
-          this.close();
-          clearSelection();
-          loadLeads();
-          return;
-        }
-
-        if (!this.leadId) {
-          alert('No lead selected');
-          return;
-        }
-
-        try {
-          const response = await fetch(`${API_BASE}/api/admin/leads/${this.leadId}/send-email`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ subject, content })
-          });
-
-          const data = await response.json();
-          if (data.success) {
-            alert('✅ Email sent successfully!');
-            this.close();
-            loadLeads();
-          } else {
-            alert(`❌ Failed: ${data.error || data.message}`);
-          }
-        } catch (error) {
-          alert(`❌ Error: ${error.message}`);
+    async function consumeSse(resp, addLine, onEvt) {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === 'start') addLine('Job started');
+            else if (evt.type === 'done') addLine(`Done — saved ${evt.result?.saved ?? evt.enriched ?? 0}`);
+            else if (evt.type === 'error') addLine('Error: ' + evt.error);
+            else if (evt.msg) addLine(evt.msg);
+            else if (evt.type === 'progress') addLine(`Lead ${evt.id}: ${evt.status}`);
+            onEvt?.(evt);
+          } catch { /* skip */ }
         }
       }
     }
 
-    // Don't initialize email composer until after authentication
-    // It will be initialized in checkSession() after successful login
-    checkSession();
+    async function callLead(id, name) {
+      if (!confirm(`Place outbound sales call to ${name}?`)) return;
+      try {
+        const r = await apiFetch(`/api/admin/leads/${id}/call`, { method: 'POST' });
+        alert(r.message || 'Call initiated');
+      } catch (e) { alert('Call failed: ' + e.message); }
+    }
   </script>
-  <script src="assets/js/admin-ai-assistant.js"></script>
 </body>
-
 </html>

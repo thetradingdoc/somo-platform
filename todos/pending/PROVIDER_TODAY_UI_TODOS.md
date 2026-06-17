@@ -26,12 +26,32 @@ Canonical doc: [`docs/design/PROVIDER_TODAY_PAGE.md`](../../docs/design/PROVIDER
 - [ ] Real unread counts from patient inbox API
 - [ ] Sidebar brand wordmark (skipped — icon-only per product choice)
 
+## UI readiness punch list (2026-06-16)
+
+### Must-fix before prod
+
+- [ ] Remove remaining inline style-heavy modal markup from `business/calendar.html` into shared CSS classes for maintainability.
+- [ ] Replace legacy inline `onclick` handlers in provider pages with delegated JS listeners for safer auditing and testability.
+- [x] Validate keyboard focus order and ESC-close behavior across `calendar.html` modal stack (Escape + backdrop dismiss, `closeTopCalendarPanel()`).
+
+### Should-fix soon
+
+- [ ] Normalize topbar action labels and icon semantics across `today.html`, `calendar.html`, and `agent.html`.
+- [ ] Add explicit empty-state actions for calls/messages panels in `today.html` (not only passive text).
+- [ ] Convert repeated hardcoded button colors in `calendar.html` to Somo token-backed classes.
+
+### Nice-to-have
+
+- [ ] Add compact loading skeleton variants for mobile in provider dashboard panels.
+- [ ] Add lightweight aria-live success status region for settings saves in `agent.html`.
+
 ## Verify
 
 ```bash
 cd middleware-platform
 npx playwright install
 npx playwright test e2e/provider-today-portal.spec.cjs --config=playwright.config.cjs
+npm run test:e2e:tenant-audit:safe   # full portal control inventory
 ```
 
 Browser: `http://localhost:4000/business/today.html`

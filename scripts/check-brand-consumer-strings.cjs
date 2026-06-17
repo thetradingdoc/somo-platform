@@ -23,6 +23,8 @@ const SCAN_ROOTS = [
   path.join(ROOT, 'middleware-platform/configure-retell.js'),
   path.join(ROOT, 'docs/voice-agent'),
   path.join(ROOT, 'patient-app'),
+  path.join(ROOT, 'unified-dashboard/admin'),
+  path.join(ROOT, 'unified-dashboard/assets/css/admin-portal.css'),
 ];
 
 const ENV_FILES = [
@@ -31,13 +33,19 @@ const ENV_FILES = [
 ];
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'test-results', 'playwright-report', '_archive']);
-const EXT = new Set(['.js', '.cjs', '.mjs', '.ts', '.tsx', '.md', '.yaml', '.yml']);
+const EXT = new Set(['.js', '.cjs', '.mjs', '.ts', '.tsx', '.md', '.yaml', '.yml', '.html', '.css']);
 
 const BANNED = [
   { re: /\bdodgecall\b/i, label: 'dodgecall' },
   { re: /\bdoclittle\b/i, label: 'doclittle' },
   { re: /\bmyskinandcare\b/i, label: 'myskinandcare' },
-  { re: /drlittlekids@gmail\.com/i, label: 'drlittlekids@gmail.com' },
+  { re: /drlittlekids@gmail\.com/i, label: 'drlittlekids@gmail.com (legacy — use richard@callsomo.com)' },
+];
+
+const ADMIN_BANNED = [
+  { re: /#7[cC]5[dD][fF][aA]/, label: 'legacy admin purple #7c5dfa' },
+  { re: /#38[bB][dD][fF]8/, label: 'legacy admin blue #38bdf8' },
+  { re: /font-family:\s*["']?Inter["']?/i, label: 'Inter font (use League Spartan / --font-brand)' },
 ];
 
 const ALLOW_PATH = [
@@ -116,7 +124,8 @@ for (const file of files) {
   const lines = text.split('\n');
   lines.forEach((line, i) => {
     if (isAllowedLine(line)) return;
-    for (const { re, label } of BANNED) {
+    const bannedList = /[/\\]admin[/\\]/.test(rel) || rel.includes('admin-portal.css') ? [...BANNED, ...ADMIN_BANNED] : BANNED;
+    for (const { re, label } of bannedList) {
       if (re.test(line)) {
         violations.push({ file: rel, line: i + 1, label, snippet: line.trim().slice(0, 100) });
       }

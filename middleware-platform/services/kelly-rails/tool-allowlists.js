@@ -72,7 +72,7 @@ const ALLOWLISTS = {
   }
 };
 
-function getAllowedToolNames(lane, step, flags = {}) {
+function getAllowedToolNames(lane, step, flags = {}, profileAllowedTools = null) {
   const laneMap = ALLOWLISTS[lane];
   if (!laneMap) return ['get_triage_session'];
   let names = [...(laneMap[step] || laneMap[Object.keys(laneMap)[0]] || ['get_triage_session'])];
@@ -83,6 +83,13 @@ function getAllowedToolNames(lane, step, flags = {}) {
 
   if (lane === 'education' && !flags.routine_intake_active) {
     names = names.filter((n) => !SKINCARE_ROUTINE_TOOLS.has(n));
+  }
+
+  if (Array.isArray(profileAllowedTools) && profileAllowedTools.length > 0) {
+    const profileSet = new Set(profileAllowedTools);
+    const ALWAYS_ALLOWED = new Set(['get_triage_session', 'end_call', 'transfer_call']);
+    names = names.filter((n) => ALWAYS_ALLOWED.has(n) || profileSet.has(n));
+    if (names.length === 0) names = ['get_triage_session'];
   }
 
   return names;

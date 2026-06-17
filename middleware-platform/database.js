@@ -4001,6 +4001,16 @@ function migrateLeadsPipeline() {
       `).run();
     }
 
+    if (!columnNames.includes('required_languages')) {
+      console.log('🔄 Migrating: Adding required_languages column to leads table');
+      db.prepare('ALTER TABLE leads ADD COLUMN required_languages TEXT').run();
+    }
+
+    if (!columnNames.includes('preferred_language')) {
+      console.log('🔄 Migrating: Adding preferred_language column to leads table');
+      db.prepare('ALTER TABLE leads ADD COLUMN preferred_language TEXT').run();
+    }
+
     db.pragma('foreign_keys = ON');
     console.log('✅ Migration complete: pipeline columns added to leads');
   } catch (error) {
@@ -4842,6 +4852,56 @@ function migrateVoiceAgentUx() {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN caller_phone TEXT');
       console.log('✅ Migration complete: voice_call_log.caller_phone added');
     }
+    if (!callCols.some((c) => c.name === 'direction')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN direction TEXT');
+      console.log('✅ Migration complete: voice_call_log.direction added');
+    }
+    if (!callCols.some((c) => c.name === 'opener_used')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN opener_used TEXT');
+      console.log('✅ Migration complete: voice_call_log.opener_used added');
+    }
+    if (!customerCols.includes('onboarding_state')) {
+      db.prepare('ALTER TABLE customers ADD COLUMN onboarding_state TEXT').run();
+      console.log('✅ Migration complete: customers.onboarding_state added');
+    }
+    if (!customerCols.includes('onboarding_state_updated_at')) {
+      db.prepare('ALTER TABLE customers ADD COLUMN onboarding_state_updated_at DATETIME').run();
+      console.log('✅ Migration complete: customers.onboarding_state_updated_at added');
+    }
+    if (!customerCols.includes('onboarding_meta_json')) {
+      db.prepare('ALTER TABLE customers ADD COLUMN onboarding_meta_json TEXT').run();
+      console.log('✅ Migration complete: customers.onboarding_meta_json added');
+    }
+    const vasColNames = vasCols.map((c) => c.name);
+    const vasMigrations = [
+      ['outbound_opener', 'TEXT'],
+      ['outbound_enabled', 'INTEGER DEFAULT 0'],
+      ['outbound_quiet_hours', 'TEXT'],
+      ['outbound_allowed_types', 'TEXT'],
+      ['settings_version', 'INTEGER DEFAULT 1'],
+      ['sync_status', "TEXT DEFAULT 'synced'"],
+      ['synced_at', 'DATETIME'],
+      ['last_sync_error', 'TEXT'],
+      ['tone_preset', 'TEXT']
+    ];
+    for (const [col, type] of vasMigrations) {
+      if (!vasColNames.includes(col)) {
+        db.exec(`ALTER TABLE voice_agent_settings ADD COLUMN ${col} ${type}`);
+        console.log(`✅ Migration complete: voice_agent_settings.${col} added`);
+      }
+    }
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS voice_settings_audit (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT,
+        merchant_id TEXT,
+        actor_type TEXT,
+        actor_id TEXT,
+        change_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_voice_settings_audit_customer ON voice_settings_audit(customer_id, created_at DESC);
+    `);
   } catch (e) {
     console.warn('⚠️  voice agent UX migration failed:', e.message);
   }
@@ -9917,11 +9977,52 @@ module.exports = {
     const payload = {
       retell_agent_id: settings.retell_agent_id || null,
       enabled: settings.enabled !== undefined ? (settings.enabled ? 1 : 0) : 1,
-      greeting: settings.greeting || null,
+      greeting: settings.greeting ?? settings.inbound_greeting ?? null,
       after_hours_message: settings.after_hours_message || null,
       business_hours: settings.business_hours ? JSON.stringify(settings.business_hours) : null,
-      customer_id: customerId || settings.customer_id || null
+      customer_id: customerId || settings.customer_id || null,
+      outbound_opener: settings.outbound_opener ?? null,
+      outbound_enabled:
+        settings.outbound_enabled !== undefined ? (settings.outbound_enabled ? 1 : 0) : undefined,
+      outbound_quiet_hours: settings.outbound_quiet_hours
+        ? JSON.stringify(settings.outbound_quiet_hours)
+        : undefined,
+      outbound_allowed_types: settings.outbound_allowed_types
+        ? JSON.stringify(settings.outbound_allowed_types)
+        : undefined,
+      settings_version: settings.settings_version ?? undefined,
+      sync_status: settings.sync_status ?? undefined,
+      synced_at: settings.synced_at ?? undefined,
+      last_sync_error: settings.last_sync_error ?? undefined,
+      tone_preset: settings.tone_preset ?? undefined
     };
+
+    const sqliteSets = [];
+    const sqliteVals = [
+      resolvedMerchantId,
+      payload.customer_id,
+      payload.retell_agent_id,
+      payload.enabled,
+      payload.greeting,
+      payload.after_hours_message,
+      payload.business_hours
+    ];
+    const optionalCols = [
+      'outbound_opener',
+      'outbound_enabled',
+      'outbound_quiet_hours',
+      'outbound_allowed_types',
+      'settings_version',
+      'sync_status',
+      'synced_at',
+      'last_sync_error',
+      'tone_preset'
+    ];
+    for (const col of optionalCols) {
+      if (payload[col] !== undefined) {
+        sqliteSets.push(`${col} = excluded.${col}`);
+      }
+    }
 
     if (usePostgres && pgPool) {
       return pgPool`
@@ -9948,27 +10049,49 @@ module.exports = {
       `;
     }
 
-    return db.prepare(`
-      INSERT INTO voice_agent_settings (
-        merchant_id, customer_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(merchant_id) DO UPDATE SET
-        customer_id = COALESCE(excluded.customer_id, voice_agent_settings.customer_id),
-        retell_agent_id = excluded.retell_agent_id,
-        enabled = excluded.enabled,
-        greeting = excluded.greeting,
-        after_hours_message = excluded.after_hours_message,
-        business_hours = excluded.business_hours,
-        updated_at = CURRENT_TIMESTAMP
-    `).run(
+    const extraInsertCols = optionalCols.filter((c) => payload[c] !== undefined);
+    const allInsertCols = [
+      'merchant_id',
+      'customer_id',
+      'retell_agent_id',
+      'enabled',
+      'greeting',
+      'after_hours_message',
+      'business_hours',
+      ...extraInsertCols,
+      'updated_at'
+    ];
+    const allInsertVals = [
       resolvedMerchantId,
       payload.customer_id,
       payload.retell_agent_id,
       payload.enabled,
       payload.greeting,
       payload.after_hours_message,
-      payload.business_hours
-    );
+      payload.business_hours,
+      ...extraInsertCols.map((c) => payload[c]),
+      'CURRENT_TIMESTAMP'
+    ];
+    const placeholders = allInsertCols
+      .map((c) => (c === 'updated_at' ? 'CURRENT_TIMESTAMP' : '?'))
+      .join(', ');
+    const updateSets = [
+      'customer_id = COALESCE(excluded.customer_id, voice_agent_settings.customer_id)',
+      'retell_agent_id = excluded.retell_agent_id',
+      'enabled = excluded.enabled',
+      'greeting = excluded.greeting',
+      'after_hours_message = excluded.after_hours_message',
+      'business_hours = excluded.business_hours',
+      ...sqliteSets,
+      'updated_at = CURRENT_TIMESTAMP'
+    ];
+
+    return db.prepare(`
+      INSERT INTO voice_agent_settings (${allInsertCols.join(', ')})
+      VALUES (${placeholders})
+      ON CONFLICT(merchant_id) DO UPDATE SET
+        ${updateSets.join(', ')}
+    `).run(...allInsertVals.filter((v) => v !== 'CURRENT_TIMESTAMP'));
   },
 
   // ============================================
@@ -10371,6 +10494,24 @@ module.exports = {
       ...row,
       resource_data: JSON.parse(row.resource_data)
     };
+  },
+
+  /** Resolve patient by resource_id, Patient/ prefix, or numeric PK when unambiguous. */
+  resolveFHIRPatient(patientId) {
+    if (patientId == null || patientId === '') return null;
+    let id = String(patientId).trim();
+    if (!id) return null;
+    if (id.startsWith('Patient/')) id = id.slice('Patient/'.length);
+    const direct = this.getFHIRPatient(id);
+    if (direct) return direct;
+    if (/^\d+$/.test(id)) {
+      const pk = parseInt(id, 10);
+      const row = db.prepare('SELECT * FROM fhir_patients WHERE id = ? AND is_deleted = 0').get(pk);
+      if (row) {
+        return { ...row, resource_data: JSON.parse(row.resource_data) };
+      }
+    }
+    return null;
   },
 
   // Get FHIR Patient by Phone
@@ -14891,42 +15032,22 @@ module.exports = {
       return { changes: 1, lastInsertRowid: callId };
     } else {
       // SQLite path
-      const hasClinicCol = db.prepare(`PRAGMA table_info(voice_call_log)`).all().some((c) => c.name === 'clinic_id');
-      const result = hasClinicCol
-        ? db.prepare(`
-        INSERT INTO voice_call_log 
-        (id, customer_id, clinic_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
-         credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
-         total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        callId,
-        call.customer_id || null,
-        call.clinic_id || null,
-        call.call_id,
-        call.twilio_call_sid || null,
-        call.call_duration_seconds || null,
-        call.call_duration_minutes || null,
-        call.credits_deducted || 0,
-        call.function_calls_count || 0,
-        call.status || 'active',
-        call.twilio_cost_usd || null,
-        call.retell_cost_usd || null,
-        call.total_cost_usd || null,
-        call.twilio_cost_calculated_usd || null,
-        call.retell_cost_calculated_usd || null,
-        call.cost_source || null,
-        call.cost_updated_at || null
-      )
-        : db.prepare(`
-        INSERT INTO voice_call_log 
-        (id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
-         credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
-         total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        callId,
-        call.customer_id || null,
+      const colInfo = db.prepare(`PRAGMA table_info(voice_call_log)`).all();
+      const hasClinicCol = colInfo.some((c) => c.name === 'clinic_id');
+      const hasDirectionCol = colInfo.some((c) => c.name === 'direction');
+      const baseCols = ['id', 'customer_id'];
+      const baseVals = [callId, call.customer_id || null];
+      if (hasClinicCol) {
+        baseCols.push('clinic_id');
+        baseVals.push(call.clinic_id || null);
+      }
+      baseCols.push(
+        'call_id', 'twilio_call_sid', 'call_duration_seconds', 'call_duration_minutes',
+        'credits_deducted', 'function_calls_count', 'status',
+        'twilio_cost_usd', 'retell_cost_usd', 'total_cost_usd',
+        'twilio_cost_calculated_usd', 'retell_cost_calculated_usd', 'cost_source', 'cost_updated_at'
+      );
+      baseVals.push(
         call.call_id,
         call.twilio_call_sid || null,
         call.call_duration_seconds || null,
@@ -14942,6 +15063,15 @@ module.exports = {
         call.cost_source || null,
         call.cost_updated_at || null
       );
+      if (hasDirectionCol) {
+        baseCols.push('direction');
+        baseVals.push(call.direction || null);
+      }
+      const placeholders = baseCols.map(() => '?').join(', ');
+      const result = db.prepare(`
+        INSERT INTO voice_call_log (${baseCols.join(', ')})
+        VALUES (${placeholders})
+      `).run(...baseVals);
       return result;
     }
   },
@@ -15745,37 +15875,40 @@ module.exports = {
     return id;
   },
 
-  insertLlmUsageLog({ call_id, clinic_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score }) {
+  insertLlmUsageLog({ call_id, clinic_id, customer_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score }) {
     const id = require('crypto').randomBytes(16).toString('hex');
     try {
       const info = db.prepare('PRAGMA table_info(llm_usage_log)').all();
-      const hasClinicId = info.some(c => c.name === 'clinic_id');
-      const hasConfidence = info.some(c => c.name === 'confidence_score');
-      if (hasClinicId && hasConfidence) {
-        db.prepare(`
-          INSERT INTO llm_usage_log (id, call_id, clinic_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          id, call_id || null, clinic_id || null, operation || 'unknown', model || '',
-          tokens_in ?? null, tokens_out ?? null, cost_usd ?? null, latency_ms ?? null, confidence_score ?? null
-        );
-      } else if (hasConfidence) {
-        db.prepare(`
-          INSERT INTO llm_usage_log (id, call_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          id, call_id || null, operation || 'unknown', model || '', tokens_in ?? null, tokens_out ?? null,
-          cost_usd ?? null, latency_ms ?? null, confidence_score ?? null
-        );
-      } else {
-        db.prepare(`
-          INSERT INTO llm_usage_log (id, call_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          id, call_id || null, operation || 'unknown', model || '', tokens_in ?? null, tokens_out ?? null,
-          cost_usd ?? null, latency_ms ?? null
-        );
+      const colNames = new Set(info.map((c) => c.name));
+      const hasClinicId = colNames.has('clinic_id');
+      const hasCustomerId = colNames.has('customer_id');
+      const hasConfidence = colNames.has('confidence_score');
+
+      const fields = ['id', 'call_id'];
+      const values = [id, call_id || null];
+      if (hasClinicId) {
+        fields.push('clinic_id');
+        values.push(clinic_id || null);
       }
+      if (hasCustomerId) {
+        fields.push('customer_id');
+        values.push(customer_id || null);
+      }
+      fields.push('operation', 'model', 'tokens_in', 'tokens_out', 'cost_usd', 'latency_ms');
+      values.push(
+        operation || 'unknown',
+        model || '',
+        tokens_in ?? null,
+        tokens_out ?? null,
+        cost_usd ?? null,
+        latency_ms ?? null
+      );
+      if (hasConfidence) {
+        fields.push('confidence_score');
+        values.push(confidence_score ?? null);
+      }
+      const placeholders = fields.map(() => '?').join(', ');
+      db.prepare(`INSERT INTO llm_usage_log (${fields.join(', ')}) VALUES (${placeholders})`).run(...values);
       if (clinic_id && (cost_usd > 0 || tokens_in > 0 || tokens_out > 0)) {
         try {
           const ym = new Date().toISOString().slice(0, 7);
@@ -16923,6 +17056,35 @@ module.exports = {
 
   insertUsageEvent(row) {
     const { v4: uuidv4 } = require('uuid');
+    const cols = db.prepare('PRAGMA table_info(usage_events)').all().map((c) => c.name);
+    const hasDirection = cols.includes('direction');
+    const hasChannel = cols.includes('channel');
+
+    if (hasDirection || hasChannel) {
+      const fields = ['id', 'customer_id', 'call_id', 'call_sid', 'minutes_requested', 'minutes_applied', 'source'];
+      const values = [
+        row.id || uuidv4(),
+        row.customer_id,
+        row.call_id,
+        row.call_sid || null,
+        row.minutes_requested,
+        row.minutes_applied,
+        row.source || null
+      ];
+      if (hasDirection) {
+        fields.push('direction');
+        values.push(row.direction || 'inbound');
+      }
+      if (hasChannel) {
+        fields.push('channel');
+        values.push(row.channel || 'voice');
+      }
+      const placeholders = fields.map(() => '?').join(', ');
+      return db.prepare(
+        `INSERT INTO usage_events (${fields.join(', ')}) VALUES (${placeholders})`
+      ).run(...values);
+    }
+
     return db.prepare(`
       INSERT INTO usage_events (id, customer_id, call_id, call_sid, minutes_requested, minutes_applied, source)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -17585,6 +17747,18 @@ module.exports = {
       }
     }
 
+    if (!columnNames.includes('required_languages')) {
+      try {
+        db.prepare('ALTER TABLE leads ADD COLUMN required_languages TEXT').run();
+      } catch (err) { /* ignore */ }
+    }
+
+    if (!columnNames.includes('preferred_language')) {
+      try {
+        db.prepare('ALTER TABLE leads ADD COLUMN preferred_language TEXT').run();
+      } catch (err) { /* ignore */ }
+    }
+
     // Detect specialty from job description (prioritize description)
     function detectSpecialtyFromDescription(desc) {
       if (!desc || desc.trim().length < 10) return null;
@@ -17749,8 +17923,8 @@ module.exports = {
     const result = db.prepare(`
       INSERT INTO leads (
         id, external_id, title, clinic_name, clinic_phone, clinic_email, opening_hours,
-        location, source_url, status, pipeline_stage, is_qualified, priority, lead_score, source, posted_at, notes, description, salary, specialty, follow_up_date, next_action, estimated_value, owner_id, is_test, lead_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        location, source_url, status, pipeline_stage, is_qualified, priority, lead_score, source, posted_at, notes, description, salary, specialty, required_languages, preferred_language, follow_up_date, next_action, estimated_value, owner_id, is_test, lead_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       leadData.external_id || null,
@@ -17772,6 +17946,8 @@ module.exports = {
       leadData.description || null,
       leadData.salary || null,
       specialty,
+      leadData.required_languages || null,
+      leadData.preferred_language || null,
       leadData.follow_up_date || null,
       leadData.next_action || null,
       leadData.estimated_value || null,

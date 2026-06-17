@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "somo-4ddf6",
     "public": "hosting-dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "headers": [
@@ -30,12 +31,18 @@
       {
         "source": "/business/**",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/admin/**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ],
     "rewrites": [
       { "source": "/signup", "destination": "/signup.html" },
       { "source": "/login", "destination": "/login.html" },
       { "source": "/terms", "destination": "/terms.html" },
+      { "source": "/admin", "destination": "/admin/index.html" },
+      { "source": "/admin/**", "destination": "/admin/:splat" },
       { "source": "**", "destination": "/index.html" }
     ]
   }

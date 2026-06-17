@@ -37,27 +37,46 @@
 
   const ADMIN_NAV_ITEMS = [
     { section: 'Admin' },
+    { id: 'leads', label: 'Leads', icon: 'phone', href: 'leads.html', capability: 'platform.leads' },
+    { id: 'tenants', label: 'Tenants', icon: 'building-office', href: 'tenants.html', capability: 'platform.tenants' },
     { id: 'payor-review', label: 'Payor Review', icon: 'clipboard-document-list', href: 'payor-review.html' },
     { id: 'merge-review', label: 'Merge Review', icon: 'document-text', href: 'merge-review.html' },
-    { id: 'feature-flags', label: 'Feature Flags', icon: 'cube', href: 'feature-flags.html' }
+    { id: 'feature-flags', label: 'Feature Flags', icon: 'cube', href: 'feature-flags.html', capability: 'platform.feature_flags' }
   ];
 
+  function hasCapability(cap) {
+    const customer = getCustomer();
+    const caps = customer?.capabilities;
+    if (Array.isArray(caps)) return caps.includes(cap);
+    return false;
+  }
+
+  /**
+   * @deprecated — break-glass admin portal only (__admin_session marker).
+   */
   function isAdminUser() {
     try {
       const user = JSON.parse(sessionStorage.getItem('user') || '{}');
       const customer = getCustomer();
-      const role = String(user.role || customer.role || '').toLowerCase();
-      const email = String(user.email || customer.email || '').toLowerCase();
-      if (role.includes('admin') || role === 'insurer_admin') return true;
-      if (email === 'admin@demo.local' || email === 'insurer@demo.local') return true;
+      return user.__admin_session === true || customer.__admin_session === true;
     } catch (_) { /* ignore */ }
     return false;
   }
 
   function getPortalNav() {
     const file = (window.location.pathname.split('/').pop() || '').split('?')[0];
-    const isAdminPage = ['payor-review.html', 'merge-review.html', 'feature-flags.html'].includes(file);
-    if (isAdminPage && isAdminUser()) return PORTAL_NAV_BASE.concat(ADMIN_NAV_ITEMS);
+    const isAdminPage = ['payor-review.html', 'merge-review.html', 'feature-flags.html', 'leads.html', 'tenants.html'].includes(file);
+    if (isAdminPage && (hasCapability('platform.leads') || hasCapability('platform.tenants') || hasCapability('platform.feature_flags'))) {
+      const gated = ADMIN_NAV_ITEMS.filter((item) => {
+        if (!item.capability) return true;
+        return hasCapability(item.capability);
+      });
+      return PORTAL_NAV_BASE.concat(gated);
+    }
+    if (hasCapability('platform.leads') || hasCapability('platform.tenants')) {
+      const gated = ADMIN_NAV_ITEMS.filter((item) => !item.capability || hasCapability(item.capability));
+      return PORTAL_NAV_BASE.concat(gated);
+    }
     return PORTAL_NAV_BASE;
   }
 
@@ -562,8 +581,18 @@
       if (!user) return;
     }
     const file = (window.location.pathname.split('/').pop() || '').split('?')[0];
-    const adminPages = ['payor-review.html', 'merge-review.html', 'feature-flags.html'];
-    if (adminPages.includes(file) && !isAdminUser()) {
+    const PAGE_CAPABILITY_MAP = {
+      'payor-review.html': 'platform.leads',
+      'merge-review.html': 'platform.leads',
+      'feature-flags.html': 'platform.feature_flags',
+      'leads.html': 'platform.leads',
+      'tenants.html': 'platform.tenants',
+      'admin-billing.html': 'platform.tenants'
+    };
+
+    const requiredCap = PAGE_CAPABILITY_MAP[file];
+    if (requiredCap && !hasCapability(requiredCap)) {
+      console.warn(`[shell] Access denied to ${file}: missing capability ${requiredCap}`);
       window.location.replace(resolveHref('today.html'));
       return;
     }
@@ -1109,4 +1138,11 @@
       });
     }, 200);
   };
+
+  window.hasCapability = hasCapability;
+  window.isAdminUser = isAdminUser;
+
+  if (typeof window.hydrateProviderSession === 'function') {
+    window.hydrateProviderSession(API_BASE());
+  }
 })();

@@ -1,106 +1,62 @@
 /**
- * Outbound Call API
- * Tenant-scoped outbound call endpoint
+ * Outbound Call API — tenant-scoped outbound with billing gates.
  */
 
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
-const twilio = require('twilio');
+const { canInitiateOutboundCall } = require('../services/billing-access');
+const { initiateOutboundCall } = require('../services/outbound-call-service');
+const {
+  resolveVoiceMerchantId,
+  resolveOutboundCallTypeForCustomer
+} = require('../services/operator-tenant-bootstrap');
 
 /**
  * POST /api/voice/outbound/call
- * Initiate an outbound call
  */
 router.post('/call', requireCustomerAuth, async (req, res) => {
   try {
-    const { phone_number, customer_id } = req.body;
-    const merchantId = req.customer?.merchant_id;
+    const { phone_number } = req.body;
+    const customer = req.customer;
+    const customerId = customer.id;
+    const merchantId = resolveVoiceMerchantId(db, customer);
 
     if (!phone_number) {
-      return res.status(400).json({
-        error: 'Phone number is required'
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    const access = canInitiateOutboundCall(db, customerId);
+    if (!access.allowed) {
+      return res.status(403).json({
+        error: 'Outbound not allowed',
+        reason: access.reason,
+        message: access.message
       });
     }
 
     if (!merchantId) {
-      return res.status(400).json({
-        error: 'Merchant context is required'
-      });
+      return res.status(400).json({ error: 'Merchant context is required' });
     }
 
-    // Validate phone number
-    const phoneRegex = /^\+?[\d\s\-\(\)]{10,}$/;
-    if (!phoneRegex.test(phone_number)) {
-      return res.status(400).json({
-        error: 'Invalid phone number format'
-      });
-    }
-
-    // Get merchant
-    const merchant = db.getMerchant(merchantId);
-    if (!merchant) {
-      return res.status(404).json({
-        error: 'Merchant not found'
-      });
-    }
-
-    // Get Retell agent ID from merchant/clinic
-    const clinic = db.getClinicBySlug(merchant.subdomain || '');
-    const retellAgentId = clinic?.retell_agent_id || process.env.RETELL_AGENT_ID;
-
-    if (!retellAgentId) {
-      return res.status(400).json({
-        error: 'Voice agent not configured. Please configure your voice agent settings.'
-      });
-    }
-
-    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-    if (!fromNumber) {
-      return res.status(400).json({
-        error: 'Twilio phone number not configured. Please configure TWILIO_PHONE_NUMBER.'
-      });
-    }
-
-    // Primary path: Twilio direct outbound to our existing /voice/incoming webhook.
-    // This avoids Retell custom-telephony permission errors while preserving the same voice flow.
-    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    const apiBase = process.env.API_BASE_URL || process.env.BASE_URL;
-    if (!apiBase) {
-      return res.status(400).json({
-        error: 'API base URL not configured. Please set API_BASE_URL or BASE_URL.'
-      });
-    }
-
-    const webhookUrl = new URL(`${String(apiBase).replace(/\/+$/, '')}/voice/incoming`);
-    webhookUrl.searchParams.set('call_type', 'sales_outbound');
-    webhookUrl.searchParams.set('agent_id', retellAgentId);
-    if (merchantId) webhookUrl.searchParams.set('merchant_id', String(merchantId));
-    if (customer_id) webhookUrl.searchParams.set('customer_id', String(customer_id));
-
-    const twilioCall = await twilioClient.calls.create({
-      from: fromNumber,
-      to: phone_number,
-      url: webhookUrl.toString(),
-      statusCallback: `${String(apiBase).replace(/\/+$/, '')}/voice/status-callback`,
-      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed']
+    const result = await initiateOutboundCall({
+      phone_number,
+      merchantId,
+      customer_id: customerId,
+      call_type: resolveOutboundCallTypeForCustomer(customer)
     });
 
     res.json({
       success: true,
-      call_id: twilioCall.sid,
-      provider: 'twilio_direct',
-      phone_number: phone_number,
+      ...result,
       message: 'Call initiated successfully'
     });
   } catch (error) {
     console.error('Outbound call error:', error);
-    res.status(500).json({
-      error: `Failed to initiate call: ${error.message}`
-    });
+    const status = error.code === 'outbound_disabled' ? 403 : 500;
+    res.status(status).json({ error: `Failed to initiate call: ${error.message}` });
   }
 });
 
 module.exports = router;
-

@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const { resolveUseCaseTemplate } = require('./prompt-profile-templates');
 
 function slugify(name) {
   return String(name || 'clinic')
@@ -19,6 +20,44 @@ function uniqueClinicSlug(db, baseSlug) {
     slug = `${slugify(baseSlug)}-${n++}`;
   }
   return slug;
+}
+
+function seedPromptProfile(dbModule, { clinicId, customerId, useCase, clinicName }) {
+  try {
+    const template = resolveUseCaseTemplate(useCase);
+    const existing = dbModule.getClinicPromptProfile?.(clinicId, customerId);
+    if (existing) {
+      console.log(`[provision] prompt_profile already exists for clinic ${clinicId}`);
+      return existing.id;
+    }
+
+    const profileId = uuidv4();
+    const metadata = JSON.stringify({
+      use_case: useCase || 'healthcare_clinic',
+      tenant_policy: template.policy || {}
+    });
+    dbModule.db.prepare(`
+      INSERT INTO prompt_profiles (
+        id, clinic_id, customer_id, name, specialty,
+        system_prompt, allowed_tools, version, status, metadata, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'v1', 'active', ?, datetime('now'), datetime('now'))
+    `).run(
+      profileId,
+      clinicId,
+      customerId,
+      `${clinicName || 'Practice'} — ${template.specialty}`,
+      template.specialty,
+      template.system_prompt,
+      JSON.stringify(template.allowed_tools),
+      metadata
+    );
+
+    console.log(`✅ [provision] Seeded prompt_profile ${profileId} for clinic ${clinicId} (${useCase || 'healthcare_clinic'})`);
+    return profileId;
+  } catch (err) {
+    console.warn('⚠️  [provision] Failed to seed prompt_profile:', err.message);
+    return null;
+  }
 }
 
 /**
@@ -125,7 +164,78 @@ function provisionSaasTenant(dbModule, options = {}) {
     dbModule.migrateVoiceAgentSettingsToMerchant(customerId, merchantId);
   }
 
-  return { merchantId, clinicId };
+  const profileId = seedPromptProfile(dbModule, {
+    clinicId,
+    customerId,
+    useCase: options.useCase || options.use_case || customer.use_case || 'healthcare_clinic',
+    clinicName: displayName
+  });
+
+  if (!customerId || !clinicId || !profileId) {
+    throw new Error('Voice enablement blocked: tenant must have customer + clinic + prompt_profile');
+  }
+
+  seedVoiceAgentSettings(dbModule, {
+    customerId,
+    merchantId,
+    customer: dbModule.getCustomer(customerId),
+    clinicName: displayName
+  });
+
+  return { merchantId, clinicId, promptProfileId: profileId };
 }
 
-module.exports = { provisionSaasTenant, slugify, uniqueClinicSlug };
+function seedVoiceAgentSettings(dbModule, { customerId, merchantId, customer, clinicName }) {
+  if (!dbModule.upsertVoiceAgentSettings || !customerId) return null;
+  try {
+    const existing = dbModule.getVoiceAgentSettingsForProvider({
+      merchantId: merchantId || dbModule.customerVoiceSettingsMerchantKey(customerId),
+      customerId
+    });
+    if (existing?.greeting && existing?.outbound_opener) return existing;
+
+    const VoiceAgentRuntime = require('./voice-agent-runtime');
+    const {
+      resolvePracticeDisplayName,
+      buildDefaultInboundGreeting,
+      buildDefaultOutboundOpener
+    } = require('./call-opener-resolver');
+    const company = resolvePracticeDisplayName(dbModule, {
+      customerId,
+      customer: customer || dbModule.getCustomer(customerId)
+    });
+    const effectiveMerchantId =
+      merchantId || customer?.merchant_id || dbModule.customerVoiceSettingsMerchantKey(customerId);
+    const seedSettings = {
+      retell_agent_id: customer?.retell_agent_id || null,
+      enabled: true,
+      greeting: existing?.greeting || buildDefaultInboundGreeting(company, 'warm'),
+      outbound_opener: existing?.outbound_opener || buildDefaultOutboundOpener(company, 'warm'),
+      outbound_enabled: existing?.outbound_enabled ?? 0,
+      after_hours_message: existing?.after_hours_message || VoiceAgentRuntime.buildAfterHoursMessage({}),
+      business_hours: existing?.business_hours || {
+        mon: '09:00-17:00',
+        tue: '09:00-17:00',
+        wed: '09:00-17:00',
+        thu: '09:00-17:00',
+        fri: '09:00-17:00'
+      },
+      tone_preset: 'warm',
+      sync_status: 'synced'
+    };
+    dbModule.upsertVoiceAgentSettings(effectiveMerchantId, seedSettings, customerId);
+    console.log(`✅ [provision] Seeded voice_agent_settings for ${customerId}`);
+    return seedSettings;
+  } catch (err) {
+    console.warn('⚠️  [provision] Failed to seed voice_agent_settings:', err.message);
+    return null;
+  }
+}
+
+module.exports = {
+  provisionSaasTenant,
+  seedPromptProfile,
+  seedVoiceAgentSettings,
+  slugify,
+  uniqueClinicSlug
+};

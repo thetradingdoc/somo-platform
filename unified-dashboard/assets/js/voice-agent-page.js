@@ -59,7 +59,7 @@
 
   async function saveVoiceSettings(payload) {
     const res = await fetch(`${API_BASE()}/api/voice-agent/settings`, {
-      method: 'POST',
+      method: 'PATCH',
       credentials: 'include',
       headers: getAuthHeaders(),
       body: JSON.stringify(payload)
@@ -132,11 +132,40 @@
     return map[String(outcome || '').toLowerCase()] || 'Call';
   }
 
+  async function fetchOnboarding() {
+    const res = await fetch(`${API_BASE()}/api/voice-agent/onboarding`, {
+      credentials: 'include'
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.success ? json : null;
+  }
+
   function shouldRedirectToSetup(customer) {
     if (!customer) return false;
     if (customer.voice_setup_completed_at) return false;
+    const state = customer.onboarding_state;
+    if (state === 'voice_setup_complete' || state === 'live') return false;
+    if (state === 'voice_setup_incomplete' || state === 'activation_shown' || state === 'terms_accepted') {
+      return true;
+    }
     const trial = String(customer.trial_status || '').toLowerCase();
     return trial === 'active';
+  }
+
+  async function resolveOnboardingRedirect() {
+    const data = await fetchOnboarding();
+    if (!data?.destination?.path) return null;
+    const state = data.onboarding_state;
+    if (state === 'voice_setup_complete' || state === 'live') return null;
+    if (
+      state === 'voice_setup_incomplete' ||
+      state === 'activation_shown' ||
+      state === 'terms_accepted'
+    ) {
+      return data.destination.path;
+    }
+    return null;
   }
 
   function formatPromptSyncedAt(iso) {
@@ -164,6 +193,8 @@
     outcomeBadgeClass,
     outcomeLabel,
     formatPromptSyncedAt,
+    fetchOnboarding,
+    resolveOnboardingRedirect,
     shouldRedirectToSetup
   };
 })(typeof window !== 'undefined' ? window : global);

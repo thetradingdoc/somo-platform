@@ -5,7 +5,8 @@ try {
   const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
   const isProduction = nodeEnv === 'production' || nodeEnv === 'prod';
   // In local/dev test runs, prefer .env values over inherited shell exports.
-  require('dotenv').config({ override: !isProduction });
+  const dotenvPath = process.env.AUDIT_MIDDLEWARE === '1' ? '.env.audit' : undefined;
+  require('dotenv').config({ path: dotenvPath, override: !isProduction });
 } catch (e) {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
 }
@@ -2608,6 +2609,12 @@ app.use('/api/onboarding', onboardingRoutes);
 const adminLeadsRoutes = require('./routes/admin-leads');
 app.use('/api/admin/leads', adminLeadsRoutes);
 
+const adminScrapeRoutes = require('./routes/admin-scrape');
+app.use('/api/admin/scrape', adminScrapeRoutes);
+
+const adminEnrichRoutes = require('./routes/admin-enrich');
+app.use('/api/admin/enrich', adminEnrichRoutes);
+
 // Sequences (Phase 2)
 const sequencesRoutes = require('./routes/sequences');
 app.use('/api/sequences', sequencesRoutes);
@@ -3318,12 +3325,19 @@ app.post(
               if (voiceCall.customer_id && callStatus === 'completed' && callDurationMinutes > 0) {
                 try {
                   const { applyUsage } = require('./services/apply-usage');
+                  const _twilioDir = String(req.body?.Direction || '').toLowerCase();
+                  const _callDirection =
+                    voiceCall.direction ||
+                    (_twilioDir === 'outbound-api' ? 'outbound' : null) ||
+                    'inbound';
                   const usageResult = applyUsage(db, {
                     customerId: voiceCall.customer_id,
                     callId: voiceCall.call_id,
                     callSid,
                     durationMinutes: callDurationMinutes,
-                    source: 'twilio_status'
+                    source: 'twilio_status',
+                    direction: _callDirection,
+                    channel: 'voice'
                   });
                   const applied = usageResult.minutes_applied ?? 0;
                   db.db.prepare(`
@@ -4858,6 +4872,9 @@ app.use('/api/admin/payment-ops', paymentOpsRoutes);
 
 const adminKellyCallsRoutes = require('./routes/admin-kelly-calls');
 app.use('/api/admin/kelly', adminKellyCallsRoutes);
+
+const adminVoiceOnboardingRoutes = require('./routes/admin-voice-onboarding');
+app.use('/api/admin/voice-onboarding', adminVoiceOnboardingRoutes);
 
 // Visit pricing admin (Task 16)
 
@@ -9212,34 +9229,29 @@ app.get('/api/ehr/epic/status', async (req, res) => {
 app.get('/health', healthCheckHandler);
 app.get('/health/ready', readinessCheck);
 app.get('/health/live', livenessCheck);
-app.get('/health/voice-deps', async (req, res) => {
+app.get('/health/voice-operator', async (req, res) => {
   try {
-    const twilioPhone = process.env.TWILIO_PHONE_NUMBER || null;
-    const retellAgentId = process.env.RETELL_AGENT_ID || null;
-    const defaultSubdomain = constants.TENANTS?.DEFAULT_SUBDOMAIN || 'akin-dunbar';
-
-    const clinicPhone = twilioPhone ? db.getClinicPhoneNumber(twilioPhone) : null;
-    const defaultMerchant = db.getMerchantBySubdomain ? db.getMerchantBySubdomain(defaultSubdomain) : null;
-
-    const checks = {
-      retell_api_key_present: !!process.env.RETELL_API_KEY,
-      retell_agent_id_present: !!retellAgentId,
-      twilio_phone_present: !!twilioPhone,
-      twilio_phone_mapped_to_clinic: !!clinicPhone?.clinic_id,
-      default_tenant_exists: !!defaultMerchant?.id
-    };
-
-    const ok = Object.values(checks).every(Boolean);
+    const { assessVoiceOperatorReadiness } = require('./services/voice-operator-readiness');
+    const assessment = assessVoiceOperatorReadiness(db);
+    const ok = assessment.ready;
     return res.status(ok ? 200 : 503).json({
       success: ok,
-      checks,
-      details: {
-        twilio_phone_number: twilioPhone,
-        mapped_clinic_id: clinicPhone?.clinic_id || null,
-        mapped_clinic_name: clinicPhone?.clinic_name || null,
-        default_subdomain: defaultSubdomain,
-        default_merchant_id: defaultMerchant?.id || null
-      },
+      ...assessment,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/health/email', (req, res) => {
+  try {
+    const EmailService = require('./services/email-service');
+    const health = EmailService.getEmailHealth();
+    const ok = health.provider_configured !== 'none';
+    return res.status(ok ? 200 : 503).json({
+      success: ok,
+      ...health,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -9713,6 +9725,10 @@ function assertProdPayorReadinessOrExit() {
 }
 
 assertProdPayorReadinessOrExit();
+
+const { assertVoiceOperatorReadinessOrExit } = require('./services/voice-operator-readiness');
+assertVoiceOperatorReadinessOrExit(db);
+
 bootLog(`calling app.listen host=${HOST} port=${PORT}`);
 function onServerListening() {
   bootLog('app.listen callback reached');

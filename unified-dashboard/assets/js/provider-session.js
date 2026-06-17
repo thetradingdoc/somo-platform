@@ -25,14 +25,39 @@
     const base = (apiBase || global.location?.origin || '').replace(/\/$/, '');
     if (!base) return null;
     try {
-      const res = await fetch(`${base}/api/signup/session`, {
+      let customer = null;
+      const sessionRes = await fetch(`${base}/api/signup/session`, {
         method: 'GET',
         credentials: 'include'
       });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success && data.customer) {
-        persistProviderCustomer(data.customer);
-        return data.customer;
+      const sessionData = await sessionRes.json().catch(() => ({}));
+      if (
+        sessionRes.status === 401 &&
+        (sessionData.error === 'orphaned_session' || sessionData.error === 'Invalid session')
+      ) {
+        document.cookie = 'customer_session=; Max-Age=0; path=/';
+        return null;
+      }
+      if (sessionRes.ok && sessionData.success && sessionData.customer) {
+        customer = sessionData.customer;
+      }
+      const meRes = await fetch(`${base}/api/customers/me`, { credentials: 'include' });
+      if (meRes.ok) {
+        const meData = await meRes.json().catch(() => ({}));
+        if (meData.success && meData.customer) {
+          const merged = { ...(customer || {}), ...meData.customer };
+          if (!Array.isArray(merged.capabilities) || merged.capabilities.length === 0) {
+            console.warn(
+              '[session] /api/customers/me returned no capabilities — admin pages will be hidden. ' +
+              'Ensure customer-capabilities.js getCapabilities() returns a non-empty array for this account.'
+            );
+          }
+          customer = merged;
+        }
+      }
+      if (customer) {
+        persistProviderCustomer(customer);
+        return customer;
       }
     } catch (e) {
       console.warn('[provider-session] hydrate failed:', e.message);

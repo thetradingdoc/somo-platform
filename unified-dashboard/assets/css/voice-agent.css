@@ -1,4 +1,101 @@
 /* Voice Agent control center */
+.va-preview-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .va-preview-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.va-preview-card {
+  background: #f8fafc;
+  border: 1px solid var(--gray-200, #e2e8f0);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.va-preview-text {
+  margin: 8px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #0f172a;
+}
+
+.va-preview-sync-warn {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #b45309;
+}
+
+.va-wizard-progress {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.va-wizard-dot {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.va-wizard-dot--active,
+.va-wizard-dot--done {
+  background: var(--somo-green, #16a637);
+}
+
+.va-dual-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 900px) {
+  .va-dual-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.va-sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.va-sync-chip.pending {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.va-sync-chip.failed {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.va-skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: va-shimmer 1.2s infinite;
+  border-radius: 8px;
+  min-height: 48px;
+}
+
+@keyframes va-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .va-zone {
   background: #fff;
   border: 1px solid var(--gray-200, #e2e8f0);

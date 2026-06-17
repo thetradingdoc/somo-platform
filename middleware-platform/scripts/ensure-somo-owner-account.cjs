@@ -131,6 +131,7 @@ See local/README.md
       console.log(`  retell_agent_id: ${updated.retell_agent_id}`);
     }
     console.log(`\nSign in: ${process.env.BASE_URL || 'http://localhost:4000'}/login`);
+    console.log('\nNext: node scripts/seed-operator-customer.cjs');
     return;
   }
 

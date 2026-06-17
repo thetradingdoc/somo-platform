@@ -1,0 +1,32 @@
+[
+  {
+    "id": "voice_golden_001",
+    "reference": "I would like to schedule an appointment for next Tuesday",
+    "hypothesis": "I would like to schedule an appointment for next Tuesday",
+    "locale": "en"
+  },
+  {
+    "id": "voice_golden_002",
+    "reference": "My name is Sarah and I have a rash on my arm",
+    "hypothesis": "My name is Sarah and I have a rash on my arm",
+    "locale": "en"
+  },
+  {
+    "id": "voice_golden_003",
+    "reference": "Can you tell me your office hours",
+    "hypothesis": "Can you tell me your office ours",
+    "locale": "en"
+  },
+  {
+    "id": "voice_golden_004",
+    "reference": "I need to refill my prescription please",
+    "hypothesis": "I need to refill my prescription",
+    "locale": "en"
+  },
+  {
+    "id": "voice_golden_005",
+    "reference": "What insurance do you accept",
+    "hypothesis": "What insurance do you except",
+    "locale": "en"
+  }
+]

@@ -15,8 +15,6 @@ const {
   RetellService,
   TwilioPhoneService,
   uuidv4,
-  rateLimiter,
-  lenientAuthLimiter,
   generateSimplePassword,
   requireCustomerAuth,
   ensureClaimSessionTables,
@@ -29,7 +27,7 @@ const {
 } = shared;
 
 
-router.post('/customers/me/api-keys', rateLimiter, async (req, res) => {
+router.post('/customers/me/api-keys', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -106,7 +104,7 @@ router.post('/customers/me/api-keys', rateLimiter, async (req, res) => {
  * GET /api/customers/me/api-keys
  * List customer's API keys (masked)
  */
-router.get('/customers/me/api-keys', rateLimiter, async (req, res) => {
+router.get('/customers/me/api-keys', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -167,7 +165,7 @@ router.get('/customers/me/api-keys', rateLimiter, async (req, res) => {
  * GET /api/customers/me/availability-status
  * Get current provider's online/offline status (session-based)
  */
-router.get('/customers/me/availability-status', rateLimiter, async (req, res) => {
+router.get('/customers/me/availability-status', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -196,7 +194,7 @@ router.get('/customers/me/availability-status', rateLimiter, async (req, res) =>
  * GET /api/customers/me/availability-blocks
  * List availability blocks for the session provider
  */
-router.get('/customers/me/availability-blocks', rateLimiter, async (req, res) => {
+router.get('/customers/me/availability-blocks', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -224,7 +222,7 @@ router.get('/customers/me/availability-blocks', rateLimiter, async (req, res) =>
  * POST /api/customers/me/availability-blocks
  * Create availability block (available or out_of_office)
  */
-router.post('/customers/me/availability-blocks', rateLimiter, async (req, res) => {
+router.post('/customers/me/availability-blocks', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -263,7 +261,7 @@ router.post('/customers/me/availability-blocks', rateLimiter, async (req, res) =
  * DELETE /api/customers/me/availability-blocks/:id
  * Delete availability block
  */
-router.delete('/customers/me/availability-blocks/:id', rateLimiter, async (req, res) => {
+router.delete('/customers/me/availability-blocks/:id', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -292,7 +290,7 @@ router.delete('/customers/me/availability-blocks/:id', rateLimiter, async (req, 
  * PATCH /api/customers/me/availability-status
  * Set provider online/offline (session-based)
  */
-router.patch('/customers/me/availability-status', rateLimiter, async (req, res) => {
+router.patch('/customers/me/availability-status', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -322,7 +320,7 @@ router.patch('/customers/me/availability-status', rateLimiter, async (req, res) 
  * GET /api/customers/me
  * Get current customer information
  */
-router.get('/customers/me', rateLimiter, async (req, res) => {
+router.get('/customers/me', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -401,6 +399,7 @@ router.get('/customers/me', rateLimiter, async (req, res) => {
         api_features: apiFeatures,
         provider_profile: providerProfile || null,
         plan_tier: customer.plan_tier,
+        customer_type: customer.customer_type || 'saas',
         status: customer.status,
         email_verified: customer.email_verified === 1,
         retell_agent_id: customer.retell_agent_id,
@@ -408,7 +407,12 @@ router.get('/customers/me', rateLimiter, async (req, res) => {
         stripe_customer_id: customer.stripe_customer_id || null,
         merchant_id: customer.merchant_id || null,
         password_updated_at: customer.password_updated_at || null,
-        created_at: customer.created_at
+        created_at: customer.created_at,
+        capabilities: require('../services/customer-capabilities').getCapabilities(customer),
+        feature_flags: {
+          outbound: require('../services/plan-catalog').hasOutboundFeature(customer.plan_tier) ||
+            require('../services/customer-capabilities').hasCapability(customer, 'voice.outbound')
+        }
       }
     });
   } catch (error) {
@@ -425,7 +429,7 @@ router.get('/customers/me', rateLimiter, async (req, res) => {
  * PATCH /api/customers/me/profile
  * Update editable profile fields for current customer.
  */
-router.patch('/customers/me/profile', rateLimiter, async (req, res) => {
+router.patch('/customers/me/profile', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -514,7 +518,7 @@ router.patch('/customers/me/profile', rateLimiter, async (req, res) => {
   }
 });
 
-router.get('/customers/me/notification-settings', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.get('/customers/me/notification-settings', requireCustomerAuth, async (req, res) => {
   try {
     const customerId = req.customer.id;
     const row = db.db.prepare(`
@@ -538,7 +542,7 @@ router.get('/customers/me/notification-settings', rateLimiter, requireCustomerAu
   }
 });
 
-router.patch('/customers/me/notification-settings', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.patch('/customers/me/notification-settings', requireCustomerAuth, async (req, res) => {
   try {
     const customerId = req.customer.id;
     const body = req.body || {};
@@ -583,7 +587,7 @@ router.patch('/customers/me/notification-settings', rateLimiter, requireCustomer
   }
 });
 
-router.get('/customers/me/sessions', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.get('/customers/me/sessions', requireCustomerAuth, async (req, res) => {
   try {
     const customerId = req.customer.id;
     const currentSession = req.cookies?.customer_session || null;
@@ -603,7 +607,7 @@ router.get('/customers/me/sessions', rateLimiter, requireCustomerAuth, async (re
   }
 });
 
-router.delete('/customers/me/sessions/:id', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.delete('/customers/me/sessions/:id', requireCustomerAuth, async (req, res) => {
   try {
     const customerId = req.customer.id;
     const sessionId = String(req.params.id || '').trim();
@@ -617,7 +621,7 @@ router.delete('/customers/me/sessions/:id', rateLimiter, requireCustomerAuth, as
   }
 });
 
-router.post('/customers/me/sessions/revoke-others', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.post('/customers/me/sessions/revoke-others', requireCustomerAuth, async (req, res) => {
   try {
     const customerId = req.customer.id;
     const currentSession = req.cookies?.customer_session || '';
@@ -631,7 +635,7 @@ router.post('/customers/me/sessions/revoke-others', rateLimiter, requireCustomer
   }
 });
 
-router.post('/customers/me/email-change/request', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.post('/customers/me/email-change/request', requireCustomerAuth, async (req, res) => {
   try {
     const customer = req.customer;
     const newEmail = String(req.body?.new_email || '').trim().toLowerCase();
@@ -661,7 +665,7 @@ router.post('/customers/me/email-change/request', rateLimiter, requireCustomerAu
   }
 });
 
-router.post('/customers/me/email-change/confirm', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.post('/customers/me/email-change/confirm', requireCustomerAuth, async (req, res) => {
   try {
     const customer = req.customer;
     const newEmail = String(req.body?.new_email || '').trim().toLowerCase();
@@ -701,7 +705,7 @@ router.post('/customers/me/email-change/confirm', rateLimiter, requireCustomerAu
   }
 });
 
-router.get('/customers/me/services-status', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.get('/customers/me/services-status', requireCustomerAuth, async (req, res) => {
   try {
     const customer = req.customer;
     const merchant = customer?.merchant_id ? db.getMerchant(customer.merchant_id) : null;
@@ -729,7 +733,7 @@ router.get('/customers/me/services-status', rateLimiter, requireCustomerAuth, as
  * POST /api/customers/me/export
  * Request a data export (returns JSON summary of account data)
  */
-router.post('/customers/me/export', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.post('/customers/me/export', requireCustomerAuth, async (req, res) => {
   try {
     const customer = req.customer;
     const customerId = customer.id;
@@ -781,7 +785,7 @@ router.post('/customers/me/export', rateLimiter, requireCustomerAuth, async (req
  * POST /api/customers/me/close-account
  * Soft-close account (sets status to closed, revokes all sessions)
  */
-router.post('/customers/me/close-account', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.post('/customers/me/close-account', requireCustomerAuth, async (req, res) => {
   try {
     const customer = req.customer;
     const { confirm_phrase } = req.body || {};
@@ -824,7 +828,7 @@ router.post('/customers/me/close-account', rateLimiter, requireCustomerAuth, asy
  * GET /api/customers/me/feature-requests
  * Get customer's feature request history
  */
-router.get('/customers/me/feature-requests', rateLimiter, async (req, res) => {
+router.get('/customers/me/feature-requests', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -879,7 +883,7 @@ router.get('/customers/me/feature-requests', rateLimiter, async (req, res) => {
  * POST /api/customers/me/feature-requests
  * Create new feature requests
  */
-router.post('/customers/me/feature-requests', rateLimiter, async (req, res) => {
+router.post('/customers/me/feature-requests', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -996,7 +1000,7 @@ router.post('/customers/me/feature-requests', rateLimiter, async (req, res) => {
   }
 });
 
-router.get('/customers/me/payment-method', rateLimiter, async (req, res) => {
+router.get('/customers/me/payment-method', async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
     if (!sessionId) {
@@ -1048,7 +1052,7 @@ router.get('/customers/me/payment-method', rateLimiter, async (req, res) => {
   }
 });
 
-router.post('/customer/landing/claim-session', rateLimiter, requireCustomerAuth, express.json(), async (req, res) => {
+router.post('/customer/landing/claim-session', requireCustomerAuth, express.json(), async (req, res) => {
   try {
     ensureClaimSessionTables();
     const landingSessionId = String(req.body?.landing_session_id || '').trim();
@@ -1085,7 +1089,7 @@ router.post('/customer/landing/claim-session', rateLimiter, requireCustomerAuth,
  * GET /api/customer/products
  * Minimal claimed scan shelf list for authenticated customer.
  */
-router.get('/customer/products', rateLimiter, requireCustomerAuth, async (req, res) => {
+router.get('/customer/products', requireCustomerAuth, async (req, res) => {
   try {
     ensureClaimSessionTables();
     const products = listCustomerProducts({

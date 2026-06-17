@@ -1,6 +1,6 @@
 # Front-desk production — callsomo.com
 
-**Last updated:** 2026-06-15
+**Last updated:** 2026-06-16
 
 Single operator entry point for the Somo **front-desk voice agent** (Kelly rails) on production.
 
@@ -87,7 +87,7 @@ npm run callsomo:deploy-api
 
 ## Troubleshooting
 
-### `callsomo.com` still shows Skin&Care / skincare tracker
+### `callsomo.com` still shows old branding
 
 Firebase is serving a **stale hosting release**. The repo builds Somo correctly; push the new bundle:
 
@@ -176,6 +176,47 @@ Rebuild hosting bundle locally:
 npm run build:staging-hosting
 ```
 
+## What to deploy (2026-06-16 branch)
+
+Uncommitted work on `feat/signup-assign-line-and-portal-hardening` spans **two surfaces**. Push to GitHub first, then deploy from a clean checkout of that branch.
+
+| Surface | Paths | Deploy command | Production host |
+|---------|-------|----------------|-----------------|
+| **Provider portal UI** | `unified-dashboard/business/*`, `unified-dashboard/assets/*` | `npm run callsomo:deploy-ui` | `https://callsomo.com/business/*` (Firebase `hosting-dist`) |
+| **Middleware API + voice** | `middleware-platform/services/*`, `webhooks/retell-websocket.js`, `routes/case-report.js`, etc. | `npm run callsomo:deploy-api` | `https://api.callsomo.com` (Cloud Run `somo-middleware`) |
+
+**API-only changes** (Kelly rails, conversation-mode, Retell WSS, case-report ID normalization): Cloud Run redeploy is required; Firebase UI deploy is optional unless portal HTML/JS/CSS also changed.
+
+**UI-only changes** (calendar Escape/backdrop, patient-case deep links, revenue Send UX, voice-setup/agent): Firebase UI deploy is required; API redeploy is optional unless matching API routes changed.
+
+**Recommended staged voice rollout** after API deploy (do not flip global enforce on day one):
+
+```bash
+# See docs/runbooks/CONVERSATION_MODE_ROLLOUT.md
+CONVERSATION_MODE_ROUTING=shadow
+CONVERSATION_MODE_ENFORCE_OPERATOR_OUTBOUND=1
+CONVERSATION_MODE_ENFORCE_OUTBOUND_SALES=1
+CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=0   # enable after 48h clean shadow
+```
+
+Post-deploy DB scripts (production, one-time):
+
+```bash
+cd middleware-platform
+node scripts/fix-operator-voice-openers.cjs
+node scripts/rollout-voice-outbound-opener.cjs --apply-db
+```
+
+**Pre-deploy verification** (local):
+
+```bash
+cd middleware-platform
+npm run test:kelly:rails:golden
+npx jest --testPathPattern='conversation-mode'
+npm run test:rails:conversation-sandbox
+npm run test:e2e:tenant-audit:safe
+```
+
 ## Smoke and acceptance
 
 ```bash
@@ -198,7 +239,7 @@ cd middleware-platform && node scripts/make-outbound-call.js <E.164>
 
 ## Legacy domains
 
-Retire **myskinandcare.com** → **callsomo.com** (301 at registrar). Remove stale `api.callsomo.com` mapping from GCP project `doctor-little-c688d` if present. Details: [`docs/runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#legacy-domain-retirement).
+Legacy domains are retired; keep all production traffic on `callsomo.com` and `api.callsomo.com`. Remove stale non-production domain mappings if still present. Details: [`docs/runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#legacy-domain-retirement).
 
 ## Related docs
 

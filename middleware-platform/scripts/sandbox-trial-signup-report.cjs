@@ -80,11 +80,13 @@ async function main() {
     trial_lifecycle: fileExists('services/trial-lifecycle.js'),
     twilio_verify_service: fileExists('services/twilio-verify-service.js'),
     verify_phone_routes: false,
+    assign_line_route: false,
     signup_session_route: false
   };
   try {
-    const signup = fs.readFileSync(path.join(MP, 'routes/signup.js'), 'utf8');
+    const signup = fs.readFileSync(path.join(MP, 'routes/signup-trial.js'), 'utf8');
     report.onCurrentTree.verify_phone_routes = signup.includes('/signup/verify-phone/send');
+    report.onCurrentTree.assign_line_route = signup.includes('/signup/assign-line');
     report.onCurrentTree.signup_session_route = signup.includes("router.get('/signup/session'");
   } catch (_) {}
 
@@ -92,13 +94,15 @@ async function main() {
     trial_lifecycle: fs.existsSync(path.join(WIP, 'services/trial-lifecycle.js')),
     twilio_verify_service: fs.existsSync(path.join(WIP, 'services/twilio-verify-service.js')),
     verify_phone_routes: false,
+    assign_line_route: false,
     phone_step_signup_html: false
   };
   try {
-    const signupWip = fs.readFileSync(path.join(WIP, 'routes/signup.js'), 'utf8');
+    const signupWip = fs.readFileSync(path.join(WIP, 'routes/signup-trial.js'), 'utf8');
     report.onWipTree.verify_phone_routes = signupWip.includes('/signup/verify-phone/send');
+    report.onWipTree.assign_line_route = signupWip.includes('/signup/assign-line');
     const html = fs.readFileSync(path.join(WIP, '../unified-dashboard/signup.html'), 'utf8');
-    report.onWipTree.phone_step_signup_html = html.includes('step-phone');
+    report.onWipTree.phone_step_signup_html = html.includes('signupAssignLoading');
   } catch (_) {}
 
   report.env = {
@@ -121,10 +125,29 @@ async function main() {
   report.runtime = {
     signupGet,
     sessionGet,
-    verifyPhoneOnRunningServer: null
+    verifyPhoneOnRunningServer: null,
+    assignLineOnRunningServer: null
   };
 
   const postOpts = {
+    hostname: '127.0.0.1',
+    port: 4000,
+    path: '/api/signup/assign-line',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  };
+  report.runtime.assignLineOnRunningServer = await new Promise((resolve) => {
+    const req = http.request(postOpts, (res) => {
+      let body = '';
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => resolve({ status: res.statusCode, body: body.slice(0, 120) }));
+    });
+    req.on('error', (e) => resolve({ error: e.message }));
+    req.write(JSON.stringify({ phone_number: '+15555550123' }));
+    req.end();
+  });
+
+  const legacyPostOpts = {
     hostname: '127.0.0.1',
     port: 4000,
     path: '/api/signup/verify-phone/send',
@@ -132,7 +155,7 @@ async function main() {
     headers: { 'Content-Type': 'application/json' }
   };
   report.runtime.verifyPhoneOnRunningServer = await new Promise((resolve) => {
-    const req = http.request(postOpts, (res) => {
+    const req = http.request(legacyPostOpts, (res) => {
       let body = '';
       res.on('data', (c) => { body += c; });
       res.on('end', () => resolve({ status: res.statusCode, body: body.slice(0, 120) }));
@@ -159,10 +182,10 @@ async function main() {
     report.verdict = 'SIM trial pipeline incomplete on current tree — merge feat/voice-billing-dodgecall-trial.';
   }
 
-  if (report.runtime.verifyPhoneOnRunningServer?.status === 404) {
-    report.verdict += ' Running server returns 404 on verify-phone — restart server on current branch.';
-  } else if (report.runtime.verifyPhoneOnRunningServer?.status === 401) {
-    report.verdict += ' verify-phone route exists (401 without session is expected).';
+  if (report.runtime.assignLineOnRunningServer?.status === 404) {
+    report.verdict += ' Running server returns 404 on assign-line — restart server on current branch.';
+  } else if (report.runtime.assignLineOnRunningServer?.status === 401) {
+    report.verdict += ' assign-line route exists (401 without session is expected).';
   }
 
   agentLog('C', 'sandbox-trial-signup-report.cjs', 'verdict', { verdict: report.verdict });

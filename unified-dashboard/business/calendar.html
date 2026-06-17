@@ -75,6 +75,8 @@
       </div>
   </main>
 
+  <div id="calendarPanelBackdrop" class="calendar-panel-backdrop" hidden aria-hidden="true"></div>
+
   <!-- Create Appointment Modal -->
   <div id="createApptModal" class="details-panel" style="display:none;">
     <div class="details-panel-inner">
@@ -314,6 +316,68 @@
         extendedProps: { isAvailabilityBlock: true, blockId: b.id, blockType: b.block_type, title: b.title }
       }));
     }
+    const CALENDAR_PANEL_IDS = ['createApptModal', 'availabilityModal', 'detailsModal'];
+
+    function isCalendarPanelVisible(el) {
+      if (!el) return false;
+      const s = window.getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden';
+    }
+
+    function showCalendarBackdrop() {
+      const backdrop = document.getElementById('calendarPanelBackdrop');
+      if (!backdrop) return;
+      backdrop.hidden = false;
+      backdrop.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideCalendarBackdrop() {
+      const backdrop = document.getElementById('calendarPanelBackdrop');
+      if (!backdrop) return;
+      backdrop.hidden = true;
+      backdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    function syncCalendarBackdrop() {
+      const anyOpen = CALENDAR_PANEL_IDS.some((id) => isCalendarPanelVisible(document.getElementById(id)));
+      if (anyOpen) showCalendarBackdrop();
+      else hideCalendarBackdrop();
+    }
+
+    function setCalendarPanelOpen(panelEl, open) {
+      if (!panelEl) return;
+      if (open) {
+        panelEl.style.display = 'block';
+        panelEl.setAttribute('role', 'dialog');
+        panelEl.setAttribute('aria-modal', 'true');
+        showCalendarBackdrop();
+      } else {
+        panelEl.style.display = 'none';
+        panelEl.removeAttribute('role');
+        panelEl.removeAttribute('aria-modal');
+        syncCalendarBackdrop();
+      }
+    }
+
+    function closeTopCalendarPanel() {
+      for (const id of CALENDAR_PANEL_IDS) {
+        const el = document.getElementById(id);
+        if (!isCalendarPanelVisible(el)) continue;
+        if (id === 'createApptModal') closeCreateModal();
+        else if (id === 'availabilityModal') closeAvailabilityModal();
+        else closeModal();
+        return true;
+      }
+      return false;
+    }
+
+    document.getElementById('calendarPanelBackdrop')?.addEventListener('click', () => {
+      closeTopCalendarPanel();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeTopCalendarPanel();
+    }, true);
+
     function openAvailabilityModal(blockType) {
       availabilityBlockType = blockType;
       const modal = document.getElementById('availabilityModal');
@@ -329,10 +393,10 @@
       document.getElementById('avbStartTime').value = '09:00';
       document.getElementById('avbEndTime').value = '17:00';
       document.getElementById('avbError').style.display = 'none';
-      modal.style.display = 'block';
+      setCalendarPanelOpen(modal, true);
     }
     function closeAvailabilityModal() {
-      document.getElementById('availabilityModal').style.display = 'none';
+      setCalendarPanelOpen(document.getElementById('availabilityModal'), false);
     }
     async function saveAvailabilityBlock() {
       const startDate = document.getElementById('avbStartDate').value;
@@ -869,7 +933,7 @@
 
       const patientId = prep.appointment?.patient_id || '';
       const profileHref = patientId
-        ? `patients.html?patient_id=${encodeURIComponent(patientId)}&patientId=${encodeURIComponent(patientId)}`
+        ? `patient-case.html?patient_id=${encodeURIComponent(patientId)}`
         : 'patients.html';
 
       target.innerHTML = `
@@ -1064,7 +1128,7 @@
       showFullTriage = false;
       document.getElementById('modalContent').innerHTML = contentHtml;
       const modal = document.getElementById('detailsModal');
-      modal.style.display = 'block';
+      setCalendarPanelOpen(modal, true);
 
       // Enable/disable action buttons based on status
       const btnConfirm = document.getElementById('btnConfirm');
@@ -1199,12 +1263,12 @@
         sub.innerHTML = '';
         sub.style.display = 'none';
       }
-      document.getElementById('detailsModal').style.display = 'none';
+      setCalendarPanelOpen(document.getElementById('detailsModal'), false);
     }
 
     function openCreateModal() {
       const modal = document.getElementById('createApptModal');
-      modal.style.display = 'block';
+      setCalendarPanelOpen(modal, true);
       const today = new Date();
       document.getElementById('createApptDate').value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
       const nextHour = new Date();
@@ -1218,7 +1282,7 @@
     }
 
     function closeCreateModal() {
-      document.getElementById('createApptModal').style.display = 'none';
+      setCalendarPanelOpen(document.getElementById('createApptModal'), false);
       document.getElementById('createApptError').style.display = 'none';
     }
 

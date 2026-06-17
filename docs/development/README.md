@@ -621,7 +621,7 @@ pm2 start ecosystem.config.js
 pm2 monit
 
 # View logs
-pm2 logs doclittle-api
+pm2 logs somo-api
 ```
 
 ### 3. Health Monitoring
@@ -651,11 +651,11 @@ pm2 logs doclittle-api
 #### Configuration:
 ```bash
 # Set health check path
-az webapp config set --name doclittle --resource-group doclittle \
+az webapp config set --name somo-middleware --resource-group somo-callsomo \
   --generic-configurations '{"healthCheckPath": "/health"}'
 
 # Enable always on
-az webapp config set --name doclittle --resource-group doclittle \
+az webapp config set --name somo-middleware --resource-group somo-callsomo \
   --always-on true
 ```
 
@@ -710,13 +710,13 @@ az webapp config set --name doclittle --resource-group doclittle \
 ### Setup Application Insights:
 ```bash
 az monitor app-insights component create \
-  --app doclittle-insights \
+  --app somo-insights \
   --location westus2 \
-  --resource-group doclittle
+  --resource-group somo-callsomo
 
 az webapp config appsettings set \
-  --name doclittle \
-  --resource-group doclittle \
+  --name somo-middleware \
+  --resource-group somo-callsomo \
   --settings APPINSIGHTS_INSTRUMENTATIONKEY="<key>"
 ```
 
@@ -763,10 +763,10 @@ curl "https://api.callsomo.com/health?detailed=true"
 
 ### If API Crashes:
 1. Azure will auto-restart (within 30s)
-2. Check logs: `az webapp log tail --name doclittle`
+2. Check logs: `gcloud logs tail --project somo-callsomo`
 3. Review error logs in database
 4. Check health endpoint
-5. Scale up if needed: `az webapp scale --name doclittle --instance-count 2`
+5. Scale up if needed: update Cloud Run min/max instances.
 
 ### If Database Issues:
 1. App continues with degraded functionality

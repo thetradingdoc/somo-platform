@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * End-to-end smoke: signup → email → phone OTP → Twilio number on customer row.
+ * End-to-end smoke: signup → email → assign-line → Twilio number on customer row.
  * Requires: middleware on :4000, TRIAL_SIM_FLOW_ENABLED=1, same DB_PATH as server.
  *
  * Usage:
@@ -92,11 +92,6 @@ async function main() {
   console.log('Email:', email);
   console.log('Mobile:', phone);
   console.log('Live Twilio purchase:', LIVE ? 'yes' : 'yes (default — uses real Twilio if configured)');
-  if (process.env.TWILIO_VERIFY_DEV_MOCK !== '1' && process.env.TWILIO_VERIFY_DEV_MOCK !== 'true') {
-    console.log(
-      'Tip: add TWILIO_VERIFY_DEV_MOCK=1 to .env and restart the server if Verify SMS returns 404'
-    );
-  }
 
   let health;
   try {
@@ -184,34 +179,9 @@ async function main() {
   }
   cookie = verifyEmail.cookie || cookie;
 
-  const sendPhone = await request('POST', '/api/signup/verify-phone/send', { phone_number: phone }, cookie);
-  if (!sendPhone.json?.success) {
-    console.error('Phone send failed:', sendPhone.status, sendPhone.json);
-    if (String(sendPhone.json?.error || '').includes('404')) {
-      console.error(
-        '\nFix: set TWILIO_VERIFY_DEV_MOCK=1 in middleware-platform/.env, restart npm start, re-run smoke.\n' +
-          'Or fix TWILIO_VERIFY_SERVICE_SID in https://console.twilio.com/us1/develop/verify/services'
-      );
-    }
-    process.exit(1);
-  }
-
-  const smsCode =
-    process.env.STAGING_SMS_CODE ||
-    (IS_REMOTE_STAGING ? '' : '000000');
-  if (!smsCode) {
-    console.error('Remote staging: set STAGING_SMS_CODE from Twilio Verify SMS on TRIAL_E2E_PHONE');
-    process.exit(1);
-  }
-
-  const checkPhone = await request(
-    'POST',
-    '/api/signup/verify-phone/check',
-    { phone_number: phone, code: smsCode.replace(/\D/g, '') },
-    cookie
-  );
-  if (!checkPhone.json?.success) {
-    console.error('Phone check failed:', checkPhone.status, checkPhone.json);
+  const assignLine = await request('POST', '/api/signup/assign-line', { phone_number: phone }, cookie);
+  if (!assignLine.json?.success) {
+    console.error('Assign line failed:', assignLine.status, assignLine.json);
     process.exit(1);
   }
 

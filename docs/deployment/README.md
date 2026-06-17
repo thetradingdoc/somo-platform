@@ -2,7 +2,7 @@
 
 > **Production (front-desk):** Start with **[`FRONT_DESK_PRODUCTION.md`](./FRONT_DESK_PRODUCTION.md)** — Firebase UI + Cloud Run API deploy, DNS order, smoke.
 >
-> **Historical:** Sections below may reference Azure App Service or legacy `myskin-middleware` paths. **Do not follow them for current production.**
+> **Historical:** Sections below may reference Azure App Service or other retired infra paths. **Do not follow them for current production.**
 
 **Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-06-14
 

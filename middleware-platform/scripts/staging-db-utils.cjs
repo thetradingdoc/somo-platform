@@ -153,6 +153,59 @@ function assertTrialCustomer(customer, { label = 'customer' } = {}) {
   return errors;
 }
 
+function dbFingerprint() {
+  const sqlite = openReadonlyDb();
+  try {
+    const customer_count = sqlite.prepare('SELECT COUNT(*) AS n FROM customers').get().n;
+    const latest_migration =
+      sqlite.prepare('SELECT MAX(applied_at) AS m FROM schema_migrations').get().m || null;
+    const voice_call_count = sqlite.prepare('SELECT COUNT(*) AS n FROM voice_call_log').get().n;
+    return {
+      customer_count,
+      latest_migration,
+      voice_call_count,
+      database_path: resolveDbPath()
+    };
+  } finally {
+    sqlite.close();
+  }
+}
+
+function listOperators() {
+  const sqlite = openReadonlyDb();
+  try {
+    return sqlite
+      .prepare(`SELECT id, email, customer_type FROM customers WHERE customer_type = 'operator'`)
+      .all();
+  } finally {
+    sqlite.close();
+  }
+}
+
+function duplicateEmailGroups() {
+  const sqlite = openReadonlyDb();
+  try {
+    return sqlite
+      .prepare(
+        `SELECT email, COUNT(*) AS cnt FROM customers GROUP BY email HAVING COUNT(*) > 1`
+      )
+      .all();
+  } finally {
+    sqlite.close();
+  }
+}
+
+function foreignKeyCheck() {
+  const sqlite = openReadonlyDb();
+  try {
+    return sqlite.prepare('PRAGMA foreign_key_check').all();
+  } catch (err) {
+    return { error: err.message };
+  } finally {
+    sqlite.close();
+  }
+}
+
 function latestVoiceCallForCustomer(customerId, withinMinutes = 30) {
   const sqlite = openReadonlyDb();
   try {
@@ -182,5 +235,9 @@ module.exports = {
   findActiveTrialByPhone,
   getOwnerCustomer,
   assertTrialCustomer,
-  latestVoiceCallForCustomer
+  latestVoiceCallForCustomer,
+  dbFingerprint,
+  listOperators,
+  duplicateEmailGroups,
+  foreignKeyCheck
 };

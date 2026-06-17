@@ -21,6 +21,13 @@ const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
 const somoDemoHandler = require('./somo-demo-handler');
 const VoiceAgentRuntime = require('../services/voice-agent-runtime');
+const {
+    resolveCallOpeners,
+    resolvePracticeDisplayName,
+    isOutboundCallType
+} = require('../services/call-opener-resolver');
+const { normalizeSettingsRow } = require('../services/voice-settings-sync');
+const { resolveCustomerIdForBilling } = require('../services/voice-account-resolution');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -144,21 +151,28 @@ class RetellWebSocketHandler {
 
             // Deduct credits when call ends
             const activeConnection = this.activeConnections.get(callId);
-            if (activeConnection && activeConnection.clinic_id) {
+            const customerIdForCredits = activeConnection
+              ? resolveCustomerIdForBilling(this.db, activeConnection)
+              : null;
+
+            if (activeConnection && customerIdForCredits) {
                 try {
                     const callDuration = Date.now() - activeConnection.startTime;
                     const callDurationSeconds = Math.floor(callDuration / 1000);
                     const callDurationMinutes = Math.ceil(callDurationSeconds / 60); // Round up to nearest minute
 
-                    // R-1: Map clinic to customer for credits (clinic.merchant_id -> customer)
-                    const customerIdForCredits = this.db.getCustomerIdForClinic?.(activeConnection.clinic_id) || activeConnection.clinic_id;
-                    
+                    const callDirection =
+                        activeConnection.callMetadata?.metadata?.direction ||
+                        activeConnection.callMetadata?.dynamic_variables?.direction ||
+                        'inbound';
+
                     const { applyUsage } = require('../services/apply-usage');
                     const usageResult = applyUsage(this.db, {
                         customerId: customerIdForCredits,
                         callId,
                         durationMinutes: callDurationMinutes,
-                        source: 'retell_ws'
+                        source: 'retell_ws',
+                        direction: callDirection
                     });
                     const applied = usageResult.minutes_applied ?? 0;
 
@@ -195,6 +209,10 @@ class RetellWebSocketHandler {
                         if (colNames.includes('caller_phone')) {
                             sets.push('caller_phone = COALESCE(caller_phone, ?)');
                             vals.push(callerPhone);
+                        }
+                        if (colNames.includes('direction')) {
+                            sets.push('direction = COALESCE(direction, ?)');
+                            vals.push(callDirection);
                         }
                         vals.push(callId);
                         this.db.db.prepare(`
@@ -264,6 +282,10 @@ class RetellWebSocketHandler {
                 } catch (creditsError) {
                     console.error('❌ Failed to deduct credits:', creditsError);
                 }
+            } else if (activeConnection) {
+                console.warn(
+                    `⚠️  Skipping applyUsage for call ${callId}: no valid customer_id (clinic_id=${activeConnection.clinic_id || 'none'})`
+                );
             }
 
             // Save final state snapshot (medical coding agent)
@@ -346,23 +368,28 @@ class RetellWebSocketHandler {
                 connection.twilio_call_sid = callMeta.metadata.twilio_call_sid;
             }
 
-            // Extract clinic_id from various sources
-            // Priority: dynamic_variables > metadata > agent_id lookup > phone number lookup
-            // NOTE: We use clinic_id as the primary tenant identifier
+            // Extract customer_id and clinic_id separately (do not conflate lead_id with clinic_id)
+            if (callMeta.dynamic_variables && callMeta.dynamic_variables.customer_id) {
+                connection.customer_id = String(callMeta.dynamic_variables.customer_id);
+                console.log(`✅ Extracted customer_id from dynamic variables: ${connection.customer_id}`);
+            } else if (callMeta.metadata && callMeta.metadata.customer_id) {
+                connection.customer_id = String(callMeta.metadata.customer_id);
+                console.log(`✅ Extracted customer_id from metadata: ${connection.customer_id}`);
+            }
+
             if (callMeta.dynamic_variables && callMeta.dynamic_variables.clinic_id) {
                 connection.clinic_id = callMeta.dynamic_variables.clinic_id;
                 console.log(`✅ Extracted clinic_id from dynamic variables: ${connection.clinic_id}`);
             } else if (callMeta.metadata && callMeta.metadata.clinic_id) {
                 connection.clinic_id = callMeta.metadata.clinic_id;
                 console.log(`✅ Extracted clinic_id from metadata: ${connection.clinic_id}`);
-            } else if (callMeta.dynamic_variables && callMeta.dynamic_variables.customer_id) {
-                // Legacy: customer_id support (may be clinic_id in disguise)
-                connection.clinic_id = callMeta.dynamic_variables.customer_id;
-                console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
-            } else if (callMeta.metadata && callMeta.metadata.customer_id) {
-                // Legacy: customer_id support (may be clinic_id in disguise)
-                connection.clinic_id = callMeta.metadata.customer_id;
-                console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
+            } else if (connection.customer_id && !connection.clinic_id) {
+                const clinicRow = this.db.db
+                    .prepare('SELECT clinic_id FROM clinics WHERE merchant_id = (SELECT merchant_id FROM customers WHERE id = ? LIMIT 1) LIMIT 1')
+                    .get(connection.customer_id);
+                if (clinicRow?.clinic_id) {
+                    connection.clinic_id = clinicRow.clinic_id;
+                }
             } else if (callMeta.agent_id) {
                 // Look up clinic by Retell agent_id (check clinics table first, then customers for backward compatibility)
                 const clinic = this.db.db.prepare('SELECT * FROM clinics WHERE retell_agent_id = ?').get(callMeta.agent_id);
@@ -371,12 +398,19 @@ class RetellWebSocketHandler {
                     console.log(`✅ Looked up clinic_id from agent_id: ${connection.clinic_id}`);
                 } else {
                     // Fallback: check customers table (legacy support)
-                const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(callMeta.agent_id);
-                if (customer) {
-                        // R-1: Use customer's first clinic when agent maps to customer (legacy)
+                    const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(callMeta.agent_id);
+                    if (customer) {
+                        if (!connection.customer_id) {
+                            connection.customer_id = customer.id;
+                            console.log(`✅ Resolved customer_id from agent_id lookup: ${connection.customer_id}`);
+                        }
                         const clinicRow = this.db.db.prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1').get(customer.merchant_id);
-                        connection.clinic_id = clinicRow?.clinic_id || customer.id;
-                        console.log(`⚠️  Looked up clinic_id from customer agent_id (legacy): ${connection.clinic_id}`);
+                        if (clinicRow?.clinic_id) {
+                            connection.clinic_id = clinicRow.clinic_id;
+                            console.log(`✅ Looked up clinic_id from customer agent_id: ${connection.clinic_id}`);
+                        } else {
+                            console.warn(`⚠️  No clinic found for merchant_id=${customer.merchant_id} (agent_id lookup) — clinic_id left unset`);
+                        }
                     }
                 }
             }
@@ -424,6 +458,54 @@ class RetellWebSocketHandler {
             if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
                 connection.awaitingName = false;
                 connection._demoCallType = 'somo_demo';
+            }
+
+            const callTypeMeta =
+                callMeta.metadata?.call_type ||
+                dv?.call_type ||
+                connection._demoCallType ||
+                null;
+            const directionMeta =
+                callMeta.metadata?.direction ||
+                dv?.direction ||
+                (callTypeMeta === 'sales_outbound' || callTypeMeta === 'operator_outbound' ? 'outbound' : 'inbound');
+            connection.call_type = callTypeMeta;
+            connection.direction = directionMeta;
+
+            if (callTypeMeta === 'sales_outbound' || callTypeMeta === 'operator_outbound') {
+                connection.awaitingName = false;
+            }
+
+            try {
+                const { seedModeAtCallStart } = require('../services/conversation-mode/conversation-mode-session');
+                const tenantResolved = !!(connection.clinic_id || connection.customer_id);
+                const seeded = seedModeAtCallStart({
+                    sessionId: callId,
+                    db: this.db,
+                    clinicId: connection.clinic_id,
+                    customerId: connection.customer_id,
+                    call_type: callTypeMeta,
+                    direction: directionMeta,
+                    tenantResolved
+                });
+                connection.conversation_mode = seeded.resolved.mode;
+                connection.active_subrail = seeded.resolved.subrail;
+                connection.conversation_fail_closed = !!seeded.resolved.fail_closed;
+                this.db.insertKellyCallEvent?.({
+                    session_id: callId,
+                    call_id: callId,
+                    event_type: 'mode_resolved',
+                    payload_json: {
+                        conversation_mode: seeded.resolved.mode,
+                        active_subrail: seeded.resolved.subrail,
+                        reason: seeded.resolved.reason,
+                        call_type: callTypeMeta,
+                        direction: directionMeta,
+                        shadow_only: process.env.CONVERSATION_MODE_ROUTING !== 'enforce'
+                    }
+                });
+            } catch (e) {
+                console.warn('⚠️  conversation mode seed failed:', e.message);
             }
 
             // Skincare / routine intake: Retell dynamic_variables.kelly_flow (or routine_intake_active)
@@ -731,12 +813,22 @@ class RetellWebSocketHandler {
             try {
                 const callerPhone = connection?.customerPhone || connection?.callMetadata?.from_number || null;
                 const resolvedPatientId = connection?.patientId || null;
-                const { evaluateAsr } = require('../services/kelly-asr-gate');
-                const { emitLanguageMismatch } = require('../services/kelly-language-telemetry');
+                const { evaluateAsr, extractAsrTiming } = require('../services/kelly-asr-gate');
+const { emitLanguageMismatch } = require('../services/kelly-language-telemetry');
                 const dbLang =
                     this.db?.getKellySessionLanguage?.(callId) ||
                     connection?.preferred_language ||
                     'en';
+                const turnReceivedAt = Date.now();
+                const priorTurnAt = connection._lastTranscriptAt || connection.startTime || turnReceivedAt;
+                const fallbackLatencyMs = Math.max(0, turnReceivedAt - priorTurnAt);
+                connection._lastTranscriptAt = turnReceivedAt;
+                const asrTiming = extractAsrTiming(message, {
+                    fallbackLatencyMs,
+                    fallbackAudioDurationMs: userSaid
+                        ? Math.max(500, Math.round(String(userSaid).split(/\s+/).length * 320))
+                        : null
+                });
                 if (process.env.KELLY_ASR_DEBUG === '1' && message && typeof message === 'object') {
                     const meta = message;
                     const keys = Object.keys(meta).filter((k) => k !== 'transcript' && k !== 'content');
@@ -747,10 +839,15 @@ class RetellWebSocketHandler {
                         meta.stt_confidence ??
                         null;
                     console.log(
-                        `[Kelly ASR debug] call=${callId} keys=${keys.join(',')} confidence=${conf}`
+                        `[Kelly ASR debug] call=${callId} keys=${keys.join(',')} confidence=${conf} latency=${asrTiming.latencyMs}`
                     );
                 }
-                const asrEval = evaluateAsr(userSaid, message, { locale: dbLang });
+                const asrEval = evaluateAsr(userSaid, message, {
+                    locale: dbLang,
+                    callId,
+                    latencyMs: asrTiming.latencyMs,
+                    audioDurationMs: asrTiming.audioDurationMs
+                });
                 if (!asrEval.allow) {
                     connection._asrLowStreak = (connection._asrLowStreak || 0) + 1;
                     emitLanguageMismatch(this.db, {
@@ -799,7 +896,10 @@ class RetellWebSocketHandler {
                     patientName: connection?.customerName || connection?.initialName || null,
                     providerInstructions: connection?.voiceRuntime?.customPrompt || null,
                     turnReceivedAt: Date.now(),
-                    callId
+                    callId,
+                    call_type: connection?.call_type || connection?.callMetadata?.metadata?.call_type || null,
+                    direction: connection?.direction || connection?.callMetadata?.metadata?.direction || null,
+                    opener_delivered: !!connection?.opener_delivered
                 };
                 const fillerMs = parseInt(process.env.KELLY_VOICE_FILLER_MS || '1200', 10) || 1200;
                 const voiceLocaleForFiller =
@@ -971,6 +1071,20 @@ class RetellWebSocketHandler {
         }
     }
 
+    resolveClinicId(connection, functionArgs = {}, message = {}) {
+        let clinicId = connection.clinic_id || null;
+        if (!clinicId && functionArgs.clinic_id) clinicId = functionArgs.clinic_id;
+        if (!clinicId && message.dynamic_variables && message.dynamic_variables.clinic_id) {
+            clinicId = message.dynamic_variables.clinic_id;
+        }
+        // Legacy compatibility: some payloads still use customer_id as clinic identifier.
+        if (!clinicId && functionArgs.customer_id) {
+            clinicId = functionArgs.customer_id;
+            console.log(`⚠️  Using customer_id as clinic_id (legacy): ${clinicId}`);
+        }
+        return clinicId;
+    }
+
     // Handle function calls from Retell LLM
     async handleFunctionCall(callId, message) {
         const connection = this.activeConnections.get(callId);
@@ -986,27 +1100,29 @@ class RetellWebSocketHandler {
         const functionArgs = functionCall.parameters || functionCall.arguments || {};
         const startTime = Date.now();
 
+        try {
+            const { isToolAllowedForMode, logModeViolation } = require('../services/conversation-mode/mode-tool-firewall');
+            const modeCtx = {
+                conversation_mode: connection.conversation_mode,
+                active_subrail: connection.active_subrail,
+                sessionId: callId,
+                callId
+            };
+            if (connection.conversation_mode && !isToolAllowedForMode(functionName, modeCtx)) {
+                logModeViolation(this.db, { ...modeCtx, toolName: functionName });
+                this.sendToRetell(connection.ws, {
+                    type: 'function_call_response',
+                    function_call_id: functionCall.id || functionCall.function_call_id,
+                    result: { success: false, error: `Tool ${functionName} not allowed in current conversation mode` }
+                });
+                return;
+            }
+        } catch (_) {}
+
         console.log(`\n🔧 FUNCTION CALL: ${functionName}`);
         console.log('   Args:', JSON.stringify(functionArgs, null, 2));
 
-        // Get clinic_id from connection metadata (primary tenant identifier)
-        let clinicId = connection.clinic_id || null;
-
-        // Try to extract from function args if available
-        if (!clinicId && functionArgs.clinic_id) {
-            clinicId = functionArgs.clinic_id;
-        }
-
-        // Try to extract from dynamic variables in message
-        if (!clinicId && message.dynamic_variables && message.dynamic_variables.clinic_id) {
-            clinicId = message.dynamic_variables.clinic_id;
-        }
-        
-        // Legacy: Also check customer_id (may be clinic_id in disguise)
-        if (!clinicId && functionArgs.customer_id) {
-            clinicId = functionArgs.customer_id;
-            console.log(`⚠️  Using customer_id as clinic_id (legacy): ${clinicId}`);
-        }
+        const clinicId = this.resolveClinicId(connection, functionArgs, message);
 
         try {
             let result;
@@ -1244,11 +1360,12 @@ class RetellWebSocketHandler {
                 }
             }
 
-            // Log function call to database
-            // NOTE: Using clinic_id as customer_id for database (schema limitation)
+            // Log function call to database — valid customers.id only (FK to customers)
+            const _customerIdForLog = resolveCustomerIdForBilling(this.db, connection) || null;
+
             await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
+                customer_id: _customerIdForLog,
                 call_id: callId,
                 function_name: functionName,
                 parameters: functionArgs,
@@ -1284,11 +1401,11 @@ class RetellWebSocketHandler {
                 }
             }
 
-            // Log error
-            // NOTE: Using clinic_id as customer_id for database (schema limitation)
+            const _customerIdForError = resolveCustomerIdForBilling(this.db, connection) || null;
+
             this.db.logError({
                 id: `error-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
+                customer_id: _customerIdForError,
                 error_type: 'FunctionCallError',
                 error_message: error.message,
                 stack_trace: error.stack,
@@ -1298,10 +1415,9 @@ class RetellWebSocketHandler {
                 severity: 'high'
             });
 
-            // Log failed function call
             await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
+                customer_id: _customerIdForError,
                 call_id: callId,
                 function_name: functionName,
                 parameters: functionArgs,
@@ -2399,6 +2515,52 @@ class RetellWebSocketHandler {
     }
 
     /**
+     * Resolve call type/direction for opener selection (metadata → connection → voice_call_log).
+     */
+    resolveCallTypeDirection(connection, callMeta, callId) {
+        const dv =
+            callMeta?.dynamic_variables ||
+            callMeta?.retell_llm_dynamic_variables ||
+            callMeta?.metadata?.dynamic_variables ||
+            null;
+        let callType =
+            connection?.call_type ||
+            callMeta?.metadata?.call_type ||
+            dv?.call_type ||
+            callMeta?.call_type ||
+            null;
+        let direction =
+            connection?.direction ||
+            callMeta?.metadata?.direction ||
+            dv?.direction ||
+            callMeta?.direction ||
+            null;
+
+        if ((!callType || !direction) && callId && this.db?.db) {
+            try {
+                const row = this.db.db
+                    .prepare(
+                        'SELECT direction FROM voice_call_log WHERE call_id = ? OR twilio_call_sid = ? ORDER BY created_at DESC LIMIT 1'
+                    )
+                    .get(callId, connection?.twilio_call_sid || '');
+                if (row?.direction === 'outbound') {
+                    direction = direction || 'outbound';
+                    callType = callType || 'operator_outbound';
+                }
+            } catch (_) {}
+        }
+
+        if (!direction && isOutboundCallType(callType)) {
+            direction = 'outbound';
+        }
+        if (!callType && String(direction || '').toLowerCase() === 'outbound') {
+            callType = 'operator_outbound';
+        }
+
+        return { callType, direction };
+    }
+
+    /**
      * Load per-provider voice settings after call_details; enforce enabled/hours; send opener.
      */
     applyProviderRuntime(callId, connection, callMeta, responseId = null) {
@@ -2437,16 +2599,53 @@ class RetellWebSocketHandler {
 
             connection.providerGreeting = admission.greeting;
             connection.agentBlocked = false;
-            if (!connection.sentInitialGreeting && admission.greeting) {
+
+            const { callType, direction } = this.resolveCallTypeDirection(connection, callMeta, callId);
+            const isOutbound =
+                isOutboundCallType(callType) || String(direction || '').toLowerCase() === 'outbound';
+
+            let settingsRow = null;
+            if (tenant.merchantId || tenant.customerId) {
+                settingsRow = normalizeSettingsRow(
+                    this.db.getVoiceAgentSettingsForProvider({
+                        merchantId: tenant.merchantId,
+                        customerId: tenant.customerId
+                    })
+                );
+            }
+            const practiceName = resolvePracticeDisplayName(this.db, {
+                customerId: tenant.customerId,
+                merchantId: tenant.merchantId,
+                clinicId: tenant.clinicId,
+                customer: tenant.customer
+            });
+            const openerBundle = resolveCallOpeners({
+                settings: settingsRow || { greeting: admission.greeting },
+                customer: tenant.customer,
+                practiceName,
+                callType,
+                direction
+            });
+            connection._lastOpenerBundle = openerBundle;
+            connection.providerGreeting = isOutbound
+                ? openerBundle.outbound.text
+                : openerBundle.inbound.afterHoursMessage && !openerBundle.inbound.withinHours
+                  ? openerBundle.inbound.afterHoursMessage
+                  : openerBundle.inbound.text;
+
+            if (!connection.sentInitialGreeting && connection.providerGreeting && !isOutbound) {
                 connection.awaitingName = false;
-                this.sendRetellResponse(connection.ws, admission.greeting, responseId);
+                this.sendRetellResponse(connection.ws, connection.providerGreeting, responseId);
                 connection.sentInitialGreeting = true;
                 connection.conversationHistory.push({
                     role: 'assistant',
-                    content: admission.greeting,
+                    content: connection.providerGreeting,
                     timestamp: Date.now()
                 });
+                this.logCallOpenerUsed(callId, connection, openerBundle.activeOpener);
                 console.log(`👋 Provider greeting sent for ${callId}`);
+            } else if (isOutbound) {
+                connection.awaitingName = false;
             }
             console.log(`✅ Provider runtime loaded for ${callId} (merchant ${tenant.merchantId || 'n/a'})`);
         } catch (e) {
@@ -2524,6 +2723,28 @@ class RetellWebSocketHandler {
         });
     }
 
+    logCallOpenerUsed(callId, connection, activeOpener) {
+        if (!activeOpener?.text) return;
+        try {
+            if (typeof this.db.insertKellyCallEvent === 'function') {
+                this.db.insertKellyCallEvent({
+                    session_id: callId,
+                    call_id: callId,
+                    event_type: 'call_opener_used',
+                    payload_json: JSON.stringify({
+                        opener_text: activeOpener.text,
+                        opener_source: activeOpener.source,
+                        direction: activeOpener.direction,
+                        customer_id: connection?.customer_id || null
+                    }),
+                    clinic_id: connection?.clinic_id || null
+                });
+            }
+        } catch (e) {
+            console.warn('⚠️  logCallOpenerUsed failed:', e.message);
+        }
+    }
+
     // Helper: build and send one-time initial greeting
     sendInitialGreeting(callId, connection, callMeta, responseId = null) {
         if (!connection || connection.sentInitialGreeting) return;
@@ -2537,27 +2758,89 @@ class RetellWebSocketHandler {
             );
             return;
         }
-        const isOutboundSales = callMeta?.metadata?.call_type === 'sales_outbound';
-        const patientName = callMeta?.dynamic_variables?.patient_name || connection.customerName || null;
-        let opening = connection.providerGreeting || null;
-        if (opening) {
-            connection.awaitingName = false;
-        }
-        if (!opening) {
-            opening = isOutboundSales
-                ? "Hi, this is Alex from Somo. Is now still a good time to talk?"
-                : (patientName
-                    ? `Hi ${patientName}, this is Kelly from Somo. How can I help you today?`
-                    : 'Hi, this is Kelly from Somo. How can I help you today?');
+
+        const { callType, direction } = this.resolveCallTypeDirection(connection, callMeta, callId);
+        const isOutbound =
+            isOutboundCallType(callType) || String(direction || '').toLowerCase() === 'outbound';
+
+        let opening = null;
+        if (connection._lastOpenerBundle?.activeOpener?.text && !connection.sentInitialGreeting) {
+            opening = connection._lastOpenerBundle.activeOpener.text;
         }
 
+        if (!opening) {
+            const tenant = VoiceAgentRuntime.resolveTenantFromCallMeta(this.db, callMeta);
+            const settingsRow = normalizeSettingsRow(
+                this.db.getVoiceAgentSettingsForProvider({
+                    merchantId: tenant.merchantId || connection.merchant_id,
+                    customerId: tenant.customerId || connection.customer_id
+                })
+            );
+            const practiceName = resolvePracticeDisplayName(this.db, {
+                customerId: tenant.customerId || connection.customer_id,
+                merchantId: tenant.merchantId || connection.merchant_id,
+                clinicId: tenant.clinicId || connection.clinic_id,
+                customer: tenant.customer
+            });
+            const openerBundle = resolveCallOpeners({
+                settings: settingsRow || {},
+                customer: tenant.customer,
+                practiceName,
+                callType,
+                direction
+            });
+            connection._lastOpenerBundle = openerBundle;
+            if (isOutbound) {
+                opening = openerBundle.outbound.enabled ? openerBundle.outbound.text : null;
+            } else if (!openerBundle.inbound.withinHours && openerBundle.inbound.afterHoursMessage) {
+                opening = openerBundle.inbound.afterHoursMessage;
+            } else {
+                opening = openerBundle.inbound.text;
+            }
+        }
+
+        if (!opening) {
+            if (connection.conversation_fail_closed) {
+                opening =
+                    'Thanks for calling. I am having trouble loading your account details. Let me connect you with support.';
+            } else if (isOutbound) {
+                opening = 'Hi, I am Kelly calling from Somo. Do you have a moment?';
+            } else {
+                opening = connection.providerGreeting || 'Hi, I am Kelly from Somo. How can I help you today?';
+            }
+        }
+
+        connection.awaitingName = false;
         this.sendRetellResponse(connection.ws, opening, responseId);
         connection.sentInitialGreeting = true;
+        connection.opener_delivered = true;
+        try {
+            const { loadConversationSession, saveConversationSession } = require('../services/conversation-mode/conversation-mode-session');
+            const fields = loadConversationSession(callId, this.db);
+            saveConversationSession(callId, { ...fields, opener_delivered: true });
+        } catch (_) {}
         connection.conversationHistory.push({
             role: 'assistant',
             content: opening,
             timestamp: Date.now()
         });
+        const openerMeta = {
+            text: opening,
+            source: connection._lastOpenerBundle?.activeOpener?.source || 'runtime_fallback',
+            direction: isOutbound ? 'outbound' : 'inbound'
+        };
+        this.logCallOpenerUsed(callId, connection, openerMeta);
+        console.log(
+            JSON.stringify({
+                event: 'voice_opener_sent',
+                callId,
+                callType,
+                direction,
+                openerSource: openerMeta.source,
+                openerPreview: String(opening || '').slice(0, 120),
+                isOutbound
+            })
+        );
         console.log(`👋 Sent initial greeting for call ${callId}`);
     }
 

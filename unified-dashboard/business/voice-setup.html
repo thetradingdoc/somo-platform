@@ -11,6 +11,7 @@
   <script src="/assets/js/config.js"></script>
   <script src="/unified-dashboard/assets/js/provider-session.js"></script>
   <script src="/unified-dashboard/assets/js/voice-hours-picker.js"></script>
+  <script src="/unified-dashboard/assets/js/voice-preview.js"></script>
 </head>
 <body class="signup-wizard-body">
   <div class="activation-wrap" style="max-width:520px">
@@ -18,39 +19,65 @@
       <img class="signup-logo-img" src="/unified-dashboard/assets/brand/somo-logo.png" alt="Somo" width="160" height="54" />
     </a>
 
-    <p class="signup-eyebrow" style="margin-top:20px" id="setupEyebrow">Step 1 of 3</p>
-    <h1 class="signup-title" id="setupTitle">Your greeting</h1>
-    <p class="signup-sub" id="setupSub">This is the first thing callers hear when they dial your line.</p>
+    <p class="signup-eyebrow" style="margin-top:20px" id="setupEyebrow">Step 1 of 5</p>
+    <h1 class="signup-title" id="setupTitle">Your practice</h1>
+    <p class="signup-sub" id="setupSub">Confirm how Kelly introduces your office.</p>
+    <div class="va-wizard-progress" id="setupProgress" aria-hidden="true"></div>
 
     <div id="step1" class="setup-step">
-      <textarea id="setupGreeting" class="va-textarea" rows="4" style="width:100%;margin-top:12px"></textarea>
+      <label class="va-field-label" for="setupPracticeName">Practice name</label>
+      <input id="setupPracticeName" class="va-textarea" style="width:100%;padding:10px;margin-top:8px" />
+      <label class="va-field-label" style="margin-top:12px;display:block">Tone</label>
+      <select id="setupTone" class="va-textarea" style="width:100%;padding:10px">
+        <option value="warm">Warm</option>
+        <option value="professional">Professional</option>
+        <option value="concise">Concise</option>
+      </select>
       <button type="button" class="signup-btn signup-btn-primary" id="setupNext1" style="margin-top:16px;width:100%">Continue</button>
     </div>
 
     <div id="step2" class="setup-step hidden">
-      <div id="setupHoursPicker" style="margin-top:12px"></div>
-      <label class="va-field-label" style="margin-top:12px;display:block">After-hours message</label>
-      <textarea id="setupAfterHours" class="va-textarea" rows="2" style="width:100%"></textarea>
+      <label class="va-field-label" for="setupGreeting">Inbound greeting</label>
+      <textarea id="setupGreeting" class="va-textarea" rows="4" style="width:100%;margin-top:8px" aria-describedby="setupPreview"></textarea>
+      <div id="setupPreview" style="margin-top:12px"></div>
       <button type="button" class="signup-btn signup-btn-primary" id="setupNext2" style="margin-top:16px;width:100%">Continue</button>
     </div>
 
     <div id="step3" class="setup-step hidden">
+      <div id="setupHoursPicker" style="margin-top:12px"></div>
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupAfterHours">After-hours message</label>
+      <textarea id="setupAfterHours" class="va-textarea" rows="2" style="width:100%"></textarea>
+      <button type="button" class="signup-btn signup-btn-primary" id="setupNext3" style="margin-top:16px;width:100%">Continue</button>
+    </div>
+
+    <div id="step4" class="setup-step hidden">
+      <label class="va-field-label">
+        <input type="checkbox" id="setupOutboundEnabled" /> Enable outbound calls
+      </label>
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupOutboundOpener">Outbound opener</label>
+      <textarea id="setupOutboundOpener" class="va-textarea" rows="3" style="width:100%"></textarea>
+      <div id="setupOutboundPreview" style="margin-top:12px"></div>
+      <button type="button" class="signup-btn signup-btn-primary" id="setupNext4" style="margin-top:16px;width:100%">Continue</button>
+    </div>
+
+    <div id="step5" class="setup-step hidden">
       <p style="font-size:0.95rem;color:var(--signup-muted);margin:12px 0">
-        Call your Somo number now. You will hear exactly what patients hear — including your greeting.
+        Call your Somo number to hear the inbound greeting. Outbound can be tested from Voice Agent after setup.
       </p>
       <div class="signup-reveal" style="margin-top:12px">
         <p class="signup-reveal-label">Your Somo number</p>
         <p class="signup-reveal-number" id="setupPhone">Loading…</p>
         <div class="signup-reveal-actions">
-          <a class="signup-btn signup-btn-primary" id="setupCall" href="#">Call my line</a>
-          <button type="button" class="signup-btn signup-btn-ghost" id="setupCopy">Copy</button>
+          <a class="signup-btn signup-btn-primary" id="setupCall" href="#" aria-label="Test inbound call">Call my line</a>
+          <button type="button" class="signup-btn signup-btn-ghost" id="setupCopy" aria-label="Copy phone number">Copy</button>
         </div>
       </div>
       <button type="button" class="signup-btn signup-btn-primary" id="setupFinish" style="margin-top:20px;width:100%">Done — open voice agent</button>
       <button type="button" class="signup-btn signup-btn-ghost" id="setupSkip" style="margin-top:8px;width:100%">Skip for now</button>
     </div>
 
-    <div class="signup-toast error hidden" id="setupError"></div>
+    <div class="signup-toast error hidden" id="setupError" role="alert" aria-live="polite"></div>
+    <div class="signup-toast hidden" id="setupSuccess" role="status" aria-live="polite"></div>
   </div>
 
   <script src="/unified-dashboard/assets/js/voice-agent-page.js"></script>

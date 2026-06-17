@@ -96,6 +96,9 @@ function main() {
   console.log('  business portal HTML');
   copyDir(path.join(UD, 'business'), path.join(OUT, 'business'));
 
+  console.log('  admin portal HTML');
+  copyDir(path.join(UD, 'admin'), path.join(OUT, 'admin'));
+
   const portalPages = ['signup.html', 'login.html', 'signup-complete.html', 'reset-password.html'];
   for (const page of portalPages) {
     const src = path.join(UD, page);

@@ -1,6 +1,6 @@
 # Brand documentation index
 
-> **Last reviewed:** 2026-06-02
+> **Last reviewed:** 2026-06-16
 
 ## Canonical brand guide
 
@@ -26,14 +26,14 @@
 
 *Merged from `docs/Brand/GITHUB_MIGRATION.md` on 2026-06-02.*
 
-# GitHub migration: doclittle-platform → somo-platform
+# GitHub migration: legacy repo → somo-platform
 
 **Status:** Repository cutover complete (2026-05-29).
 
 | Item | Value |
 |------|--------|
 | New remote | `https://github.com/richiejeremiah/somo-platform` (private) |
-| Legacy remote | `doclittle-old` → `richiejeremiah/doclittle-platform` (archive after smoke) |
+| Legacy remote | archived legacy repository (archive after smoke) |
 | Production hosts | `callsomo.com` / `api.callsomo.com` (unchanged until somopay.ai) |
 
 ## Manual follow-up
@@ -64,7 +64,7 @@
 
 5. **Firebase Hosting** — `npm run deploy:staging-hosting` (full `hosting-dist` bundle).
 
-6. **Archive old repo** — After green CI on `somo-platform` `main`, archive `doclittle-platform`.
+6. **Archive old repo** — After green CI on `somo-platform` `main`, archive the legacy repository.
 
 ## Clone
 
@@ -94,7 +94,7 @@ User-facing product name: **Somo**. Production hosts:
 | GCP API project | `somo-callsomo` |
 | Cloud Run service | `somo-middleware` (`us-central1`) |
 
-Legacy domains `myskinandcare.com` / `doclittle.site` are retired in application code; DNS 301s are operator-owned ([`../runbooks/LEGACY_DOMAIN_RETIREMENT.md`](../runbooks/LEGACY_DOMAIN_RETIREMENT.md)).
+Legacy domains are retired in application code; DNS redirects are operator-owned ([`../runbooks/LEGACY_DOMAIN_RETIREMENT.md`](../runbooks/LEGACY_DOMAIN_RETIREMENT.md)).
 
 ## Internal code names (not consumer brand)
 
@@ -127,7 +127,7 @@ DB_PATH=./middleware-staging.db node middleware-platform/scripts/backfill-fhir-c
 
 ## Guardrails
 
-- `npm run check:legacy-hosts` — fails on `doclittle.site`, `myskinandcare.com`, `doctor-little-c688d` in active code.
+- `npm run check:legacy-hosts` — fails on retired legacy host strings in active code.
 - `npm run check:brand-consumer-strings` — bans legacy consumer strings in services/routes.
 - `npm run guardrail:no-azure-deploy` — fails if Azure deploy scripts are reintroduced.
 

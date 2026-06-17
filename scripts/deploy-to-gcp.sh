@@ -59,6 +59,7 @@ DEPLOY_ARGS=(
   --allow-unauthenticated
   --no-invoker-iam-check
   --min-instances "${CLOUDRUN_MIN_INSTANCES:-1}"
+  --max-instances "${CLOUDRUN_MAX_INSTANCES:-1}"
   --concurrency "${CLOUDRUN_CONCURRENCY:-30}"
   --memory "${CLOUDRUN_MEMORY:-2Gi}"
   --cpu "${CLOUDRUN_CPU:-2}"

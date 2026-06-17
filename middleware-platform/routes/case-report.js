@@ -26,23 +26,28 @@ router.get('/api/patient/:patientId/case-report', async (req, res) => {
       return res.status(400).json({ success: false, error: 'patientId is required' });
     }
 
-    const patientRow = db.getFHIRPatient ? db.getFHIRPatient(patientId) : null;
+    const patientRow = db.resolveFHIRPatient
+      ? db.resolveFHIRPatient(patientId)
+      : db.getFHIRPatient
+        ? db.getFHIRPatient(patientId)
+        : null;
     if (!patientRow) {
       return res.status(404).json({ success: false, error: 'Patient not found' });
     }
+    const canonicalPatientId = patientRow.resource_id || patientId;
 
     const patientResource = patientRow.resource_data;
     const encounters = db.getFHIRPatientEncounters
-      ? db.getFHIRPatientEncounters(patientId)
+      ? db.getFHIRPatientEncounters(canonicalPatientId)
       : [];
     const appointments = db.getAppointmentsByPatientIds
-      ? db.getAppointmentsByPatientIds([patientId])
+      ? db.getAppointmentsByPatientIds([canonicalPatientId])
       : [];
-    const claims = db.getClaimsByPatient ? db.getClaimsByPatient(patientId) : [];
+    const claims = db.getClaimsByPatient ? db.getClaimsByPatient(canonicalPatientId) : [];
     const eligibility = db.getEligibilityChecksByPatient
-      ? db.getEligibilityChecksByPatient(patientId)
+      ? db.getEligibilityChecksByPatient(canonicalPatientId)
       : [];
-    const documents = db.getPatientDocuments ? db.getPatientDocuments(patientId) : [];
+    const documents = db.getPatientDocuments ? db.getPatientDocuments(canonicalPatientId) : [];
 
     // Coding decisions may be linked via call_id or patient_id in state_data; for now, return recent rows
     let codingDecisions = [];
@@ -52,7 +57,7 @@ router.get('/api/patient/:patientId/case-report', async (req, res) => {
         WHERE patient_id = ? OR patient_id IS NULL
         ORDER BY created_at DESC
         LIMIT 200
-      `).all(patientId);
+      `).all(canonicalPatientId);
     } catch (_) {
       codingDecisions = [];
     }
@@ -64,7 +69,7 @@ router.get('/api/patient/:patientId/case-report', async (req, res) => {
         SELECT * FROM invoices
         WHERE patient_id = ?
         ORDER BY created_at DESC
-      `).all(patientId);
+      `).all(canonicalPatientId);
     } catch (_) {
       invoices = [];
     }
@@ -82,19 +87,19 @@ router.get('/api/patient/:patientId/case-report', async (req, res) => {
     let cardTx = [];
     try {
       if (db.getWalletTransactionsByPatientId) {
-        walletTx = db.getWalletTransactionsByPatientId(patientId) || [];
+        walletTx = db.getWalletTransactionsByPatientId(canonicalPatientId) || [];
       }
     } catch (_) {}
     try {
       if (db.getCardTransactionsByPatientId) {
-        cardTx = db.getCardTransactionsByPatientId(patientId) || [];
+        cardTx = db.getCardTransactionsByPatientId(canonicalPatientId) || [];
       }
     } catch (_) {}
 
     const result = {
       success: true,
       patient: {
-        id: patientId,
+        id: canonicalPatientId,
         resource: patientResource
       },
       encounters,

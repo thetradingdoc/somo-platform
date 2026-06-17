@@ -13,6 +13,34 @@ const VIDEO_CONSULT_MAX_COST = parseFloat(process.env.VIDEO_CONSULT_MAX_COST_PER
 
 const callTokens = new Map();
 const videoConsultCosts = new Map();
+const PERSIST_PATH = process.env.TOKEN_BUDGET_PERSIST_PATH || '';
+
+function loadPersistedTokens() {
+  if (!PERSIST_PATH) return;
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(PERSIST_PATH)) return;
+    const raw = JSON.parse(fs.readFileSync(PERSIST_PATH, 'utf8'));
+    if (raw && typeof raw === 'object') {
+      for (const [k, v] of Object.entries(raw)) callTokens.set(k, Number(v) || 0);
+    }
+  } catch (e) {
+    console.warn('[token-budget] load persist failed:', e.message);
+  }
+}
+
+function persistTokens() {
+  if (!PERSIST_PATH) return;
+  try {
+    const fs = require('fs');
+    const obj = Object.fromEntries(callTokens.entries());
+    fs.writeFileSync(PERSIST_PATH, JSON.stringify(obj));
+  } catch (e) {
+    console.warn('[token-budget] persist failed:', e.message);
+  }
+}
+
+loadPersistedTokens();
 
 /**
  * Rough token estimate: ~4 chars per token for LLMs
@@ -33,6 +61,7 @@ function addTokens(callId, usage) {
   const current = callTokens.get(key) || 0;
   const next = current + total;
   callTokens.set(key, next);
+  persistTokens();
   if (next > ABUSE_THRESHOLD) {
     console.warn(`⚠️  Token abuse alert: call ${key} used ${next} tokens (threshold: ${ABUSE_THRESHOLD})`);
   }
@@ -60,6 +89,7 @@ function canProceed(callId, estimatedTokens) {
 function reset(callId) {
   if (callId) callTokens.delete(callId);
   callTokens.delete('standalone');
+  persistTokens();
 }
 
 /**

@@ -7,6 +7,7 @@
 const express = require('express');
 const db = require('../database');
 const constants = require('../utils/constants');
+const { getEffectiveTenantPolicy } = require('../services/prompt-profile-templates');
 
 const router = express.Router();
 
@@ -147,6 +148,16 @@ router.get('/config', (req, res) => {
     
     const featureFlags = require('../utils/feature-flags');
     const flagsConfig = featureFlags.getConfig ? featureFlags.getConfig() : {};
+    let effectivePolicy = null;
+    try {
+      if (clinic?.clinic_id || merchant?.id) {
+        const profile = db.getClinicPromptProfile?.(clinic?.clinic_id || null, merchant?.id || null);
+        if (profile) {
+          effectivePolicy = getEffectiveTenantPolicy(profile);
+        }
+      }
+    } catch (_) {}
+
     res.json({
       success: true,
       hostname,
@@ -158,7 +169,8 @@ router.get('/config', (req, res) => {
         : "Doctor's Portal",
       merchant_id: merchant?.id || null,
       clinic_id: clinic?.clinic_id || null,
-      feature_flags: flagsConfig
+      feature_flags: flagsConfig,
+      effective_policy: effectivePolicy
     });
   } catch (error) {
     console.error('❌ Error getting tenant config:', error);

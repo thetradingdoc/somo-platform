@@ -259,6 +259,16 @@
 
                 <div class="setting-row">
                     <div class="setting-info">
+                        <h4>Outbound opener</h4>
+                        <p class="setting-description" id="vaSettingsOutboundSummary">—</p>
+                    </div>
+                    <div class="setting-action">
+                        <a class="btn btn-secondary btn-sm" href="agent.html#zoneOutbound">Edit opener</a>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
                         <h4>Kelly prompt</h4>
                         <p class="setting-description">Advanced behavior instructions for live calls.</p>
                     </div>
@@ -834,6 +844,7 @@
         async function loadVoiceAgentSettingsSummary() {
             const statusEl = document.getElementById('vaSettingsStatusSummary');
             const greetEl = document.getElementById('vaSettingsGreetingSummary');
+            const outboundEl = document.getElementById('vaSettingsOutboundSummary');
             const hoursEl = document.getElementById('vaSettingsHoursSummary');
             try {
                 const [settingsRes, kellyRes] = await Promise.all([
@@ -853,6 +864,11 @@
                     greetEl.textContent = s?.greeting
                         ? (s.greeting.length > 120 ? s.greeting.slice(0, 120) + '…' : s.greeting)
                         : 'Default greeting (edit on Voice Agent page)';
+                }
+                if (outboundEl) {
+                    outboundEl.textContent = s?.outbound_opener
+                        ? (s.outbound_opener.length > 120 ? s.outbound_opener.slice(0, 120) + '…' : s.outbound_opener)
+                        : 'Default outbound opener (edit on Voice Agent page)';
                 }
                 if (hoursEl && window.VoiceHoursPicker) {
                     hoursEl.textContent = VoiceHoursPicker.formatHoursSummary(s?.business_hours);

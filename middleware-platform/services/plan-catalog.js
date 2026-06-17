@@ -68,6 +68,10 @@ function getMaxRequestsPerMinute(tierId) {
   return getTier(tierId).max_requests_per_minute ?? 150;
 }
 
+function hasOutboundFeature(tierId) {
+  return getTier(tierId).feature_flags?.outbound === true;
+}
+
 module.exports = {
   loadPlanCatalog,
   getTier,
@@ -81,5 +85,6 @@ module.exports = {
   getTrialDurationDays,
   getTrialInactivityReleaseDays,
   getMaxRequestsPerMinute,
+  hasOutboundFeature,
   catalogPath
 };

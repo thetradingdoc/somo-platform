@@ -99,8 +99,9 @@
 }
 
 .admin-ai-message-user {
-  background: var(--accent-blue);
-  color: white;
+  background: var(--somo-lizard-10, var(--panel-2));
+  color: var(--somo-msu);
+  border: 1px solid var(--somo-cap-border, var(--border));
   align-self: flex-end;
   border-bottom-right-radius: 4px;
 }
@@ -134,7 +135,7 @@
 }
 
 .admin-ai-input:focus {
-  border-color: var(--accent-blue);
+  border-color: var(--somo-lizard);
 }
 
 .admin-ai-input:disabled {
@@ -144,8 +145,8 @@
 
 .admin-ai-send {
   padding: 10px 20px;
-  background: var(--accent-blue);
-  color: white;
+  background: var(--admin-cta, var(--somo-lizard));
+  color: var(--somo-msu);
   border: none;
   border-radius: 8px;
   font-weight: 600;
@@ -154,7 +155,7 @@
 }
 
 .admin-ai-send:hover:not(:disabled) {
-  background: #128a2e;
+  background: var(--admin-cta-hover, var(--somo-lizard-hover));
 }
 
 .admin-ai-send:disabled {

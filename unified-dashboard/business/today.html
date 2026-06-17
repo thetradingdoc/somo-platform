@@ -107,9 +107,9 @@
                 <a class="pp-btn pp-btn-link" href="calendar.html">View all</a>
               </div>
               <div class="pp-panel-tabs" id="scheduleTabs" role="tablist" aria-label="Appointment lists">
-                <button type="button" class="pp-ptab act" data-filter="today" role="tab" aria-selected="true">Today's Appointments</button>
-                <button type="button" class="pp-ptab" data-filter="upcoming" role="tab" aria-selected="false">Upcoming Appointments</button>
-                <button type="button" class="pp-ptab" data-filter="recent" role="tab" aria-selected="false">Recent Appointments</button>
+                <button type="button" class="pp-ptab act" data-filter="today" role="tab" aria-selected="true" aria-controls="scheduleList">Today's Appointments</button>
+                <button type="button" class="pp-ptab" data-filter="upcoming" role="tab" aria-selected="false" aria-controls="scheduleList">Upcoming Appointments</button>
+                <button type="button" class="pp-ptab" data-filter="recent" role="tab" aria-selected="false" aria-controls="scheduleList">Recent Appointments</button>
               </div>
               <div class="pp-panel-body" id="scheduleList">
                 <div class="pp-skeleton"></div>
@@ -724,12 +724,32 @@
       if (el && typeof window.ppGreetingName === 'function') el.textContent = window.ppGreetingName();
     }
 
+    async function loadOnboardingNudge() {
+      const strip = document.getElementById('ppAlertStrip');
+      if (!strip) return;
+      try {
+        const API_BASE = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+        const res = await fetch(`${API_BASE}/api/voice-agent/onboarding`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const state = data.onboarding_state;
+        if (!state || state === 'voice_setup_complete' || state === 'live') {
+          strip.hidden = true;
+          return;
+        }
+        strip.hidden = false;
+        strip.innerHTML = `<span>Finish setting up Kelly front desk — greeting, hours, and outbound policy.</span>
+          <a class="pp-btn pp-btn-primary pp-btn-sm" href="voice-setup.html" style="margin-left:12px">Continue setup</a>`;
+      } catch (_) {}
+    }
+
     (async function init() {
       if (typeof window.requireAuth === 'function') window.requireAuth();
       await new Promise((r) => setTimeout(r, 150));
       window.initProviderShell({ activeId: 'today', useGreeting: false });
       renderHeroGreeting();
       wireTopbarIcons();
+      loadOnboardingNudge();
       loadDashboard();
       if (typeof window.ppOnPaymentRefresh === 'function') {
         window.ppOnPaymentRefresh(() => loadDashboard().catch(() => {}));

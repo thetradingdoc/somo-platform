@@ -31,7 +31,7 @@ test.describe('Provider SIM trial signup (API)', () => {
     }
   });
 
-  test('signup → email → phone (dev OTP) → session snapshot', async ({ playwright }) => {
+  test('signup → email → assign-line (dev) → session snapshot', async ({ playwright }) => {
     const ctx = await playwright.request.newContext({ baseURL: API_BASE });
     const email = uniqueEmail();
     const phone =
@@ -65,18 +65,6 @@ test.describe('Provider SIM trial signup (API)', () => {
     expect(emailBody.success).toBe(true);
     expect(emailBody.customer?.email).toBe(email);
 
-    const acceptTerms = await ctx.post('/api/signup/accept-terms');
-    expect(acceptTerms.ok()).toBeTruthy();
-    const termsBody = await acceptTerms.json();
-    expect(termsBody.success).toBe(true);
-
-    let customerAfterTerms = db.getCustomer(signupBody.customer_id);
-    expect(customerAfterTerms.merchant_id).toBeTruthy();
-    const clinicRow = db.db
-      .prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1')
-      .get(customerAfterTerms.merchant_id);
-    expect(clinicRow?.clinic_id).toBeTruthy();
-
     const session = await ctx.get('/api/signup/session');
     if (session.status() === 404) {
       await ctx.dispose();
@@ -91,39 +79,47 @@ test.describe('Provider SIM trial signup (API)', () => {
       await ctx.dispose();
       test.info().annotations.push({
         type: 'note',
-        description: 'TRIAL_SIM_FLOW_ENABLED not set on server — phone/trial steps skipped'
+        description: 'TRIAL_SIM_FLOW_ENABLED not set on server — assign-line/trial steps skipped'
       });
       return;
     }
 
-    const sendPhone = await ctx.post('/api/signup/verify-phone/send', {
+    const assignLine = await ctx.post('/api/signup/assign-line', {
       data: { phone_number: phone }
     });
-    expect(sendPhone.ok()).toBeTruthy();
-
-    const checkPhone = await ctx.post('/api/signup/verify-phone/check', {
-      data: { phone_number: phone, code: '000000' }
-    });
-    const phoneBody = await checkPhone.json();
-    if (!checkPhone.ok()) {
+    const lineBody = await assignLine.json();
+    if (!assignLine.ok()) {
       test.info().annotations.push({
         type: 'note',
-        description: `verify-phone/check ${checkPhone.status()}: ${phoneBody?.error || 'failed'}`
+        description: `assign-line ${assignLine.status()}: ${lineBody?.error || 'failed'}`
       });
     }
-    expect(checkPhone.ok()).toBeTruthy();
-    expect(phoneBody.success).toBe(true);
-    expect(phoneBody.phone_verified).toBe(true);
-    expect(phoneBody.trial_sim_flow).toBe(true);
+    expect(assignLine.ok()).toBeTruthy();
+    expect(lineBody.success).toBe(true);
+    expect(lineBody.phone_verified).toBe(true);
+    expect(lineBody.trial_sim_flow).toBe(true);
+    expect(lineBody.line_assigned).toBe(true);
 
     const customer = db.getCustomer(signupBody.customer_id);
     expect(customer.phone_verified).toBe(1);
     expect(customer.trial_status).toBe('active');
     expect(customer.trial_expires_at).toBeTruthy();
-    expect(phoneBody.trial?.twilio_phone_number || customer.twilio_phone_number).toMatch(
+    expect(lineBody.twilio_phone_number || lineBody.trial?.twilio_phone_number || customer.twilio_phone_number).toMatch(
       /^\+1\d{10}$/
     );
     expect(customer.twilio_phone_sid).toBeTruthy();
+
+    const acceptTerms = await ctx.post('/api/signup/accept-terms');
+    expect(acceptTerms.ok()).toBeTruthy();
+    const termsBody = await acceptTerms.json();
+    expect(termsBody.success).toBe(true);
+
+    let customerAfterTerms = db.getCustomer(signupBody.customer_id);
+    expect(customerAfterTerms.merchant_id).toBeTruthy();
+    const clinicRow = db.db
+      .prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1')
+      .get(customerAfterTerms.merchant_id);
+    expect(clinicRow?.clinic_id).toBeTruthy();
 
     await ctx.dispose();
   });

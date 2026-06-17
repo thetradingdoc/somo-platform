@@ -329,15 +329,28 @@ async function startTrialTenant(db, customerId, options = {}) {
     try {
       const VoiceAgentRuntime = require('./voice-agent-runtime');
       const VoicePromptTemplates = require('./voice-prompt-templates');
-      const company = final.company_name || final.name || 'our office';
+      const {
+        resolvePracticeDisplayName,
+        buildDefaultInboundGreeting,
+        buildDefaultOutboundOpener
+      } = require('./call-opener-resolver');
+      const company = resolvePracticeDisplayName(db, { customerId: final.id, customer: final });
       const seedSettings = {
         retell_agent_id: final.retell_agent_id || null,
         enabled: true,
-        greeting: VoiceAgentRuntime.buildDefaultGreeting(company),
+        greeting: buildDefaultInboundGreeting(company, 'warm'),
+        outbound_opener: buildDefaultOutboundOpener(company, 'warm'),
+        outbound_enabled: 0,
         after_hours_message: VoiceAgentRuntime.buildAfterHoursMessage({}),
-        business_hours: { mon: '09:00-17:00', tue: '09:00-17:00', wed: '09:00-17:00', thu: '09:00-17:00', fri: '09:00-17:00' }
+        business_hours: { mon: '09:00-17:00', tue: '09:00-17:00', wed: '09:00-17:00', thu: '09:00-17:00', fri: '09:00-17:00' },
+        tone_preset: 'warm',
+        sync_status: 'synced'
       };
-      db.upsertVoiceAgentSettings(final.merchant_id || null, seedSettings, final.id);
+      db.upsertVoiceAgentSettings(
+        final.merchant_id || db.customerVoiceSettingsMerchantKey(final.id),
+        seedSettings,
+        final.id
+      );
       const defaultPrompt = VoicePromptTemplates.getDefaultCustomPrompt(final);
       if (defaultPrompt && !final.custom_prompt) {
         db.updateCustomer(final.id, { custom_prompt: defaultPrompt });

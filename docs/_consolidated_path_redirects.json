@@ -199,7 +199,6 @@
   "docs/ARCHITECTURE.md": "docs/architecture/LIVE.md#patient-timeline-routine-and-billing",
   "docs/user-journey/08-growth-backlog.md": "docs/user-journey/11-growth-backlog.md",
   "docs/deployment/GCP_DEPLOY_ROLLBACK.md": "docs/deployment/OPERATIONS.md#gcp-deploy-rollback",
-  "docs/deployment/STAGING_MYSKINANDCARE.md": "docs/deployment/OPERATIONS.md#staging-myskinandcare",
   "docs/deployment/RETELL_AGENT_INVENTORY.md": "docs/deployment/OPERATIONS.md#retell-agent-inventory",
   "docs/Brand/GUIDELINES.md": "docs/Brand/SOMO_GUIDELINES.md",
   "docs/agent/somo-demo/ARCHITECTURE.md": "docs/agent/somo-demo/README.md#architecture",
