@@ -20,6 +20,8 @@ Browse by anchor above. Each section notes the former file path.
 
 ## Admin Portal Fixes - Complete Summary
 
+**Superseded (2026-06):** The tabbed admin dashboard described below was replaced by the 4-page operator CRM. See [`docs/admin-portal/README.md`](../admin-portal/README.md).
+
 *Former path: `docs/archive/ADMIN_PORTAL_FIXES_COMPLETE.md`*
 
 

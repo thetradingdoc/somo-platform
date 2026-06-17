@@ -206,19 +206,7 @@ function migrateAiAssistant() {
 }
 
 migrateIndex();
-for (const f of [
-  'leads.html',
-  'pipeline.html',
-  'clients.html',
-  'workflows.html',
-  'crm.html',
-  'crm-lead.html',
-  'deliveries.html'
-]) {
-  const extra =
-    f === 'leads.html'
-      ? '\n  <link rel="stylesheet" href="../assets/css/email-composer.css" />'
-      : '';
-  migrateStandalone(f, extra);
+for (const f of ['index.html', 'pipeline.html', 'lead.html', 'tenants.html']) {
+  migrateStandalone(f, '');
 }
 migrateAiAssistant();
