@@ -60,7 +60,9 @@ async function handleTurn(opts = {}) {
     kelly_rails: {
       active_lane: out.state?.active_lane,
       step: out.state?.step,
-      flags: out.state?.flags
+      flags: out.state?.flags,
+      gate_matched: out.gate_matched || out.state?.gate_matched || null,
+      gate_outcome: out.gate_outcome || out.state?.gate_outcome || null
     }
   };
 }

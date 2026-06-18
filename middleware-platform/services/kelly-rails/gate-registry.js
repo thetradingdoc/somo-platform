@@ -3,6 +3,12 @@
 const { KELLY_LANE } = require('./state-schema');
 const { getDeterministicReply } = require('./prompts/deterministic');
 
+function gateAllowedByTurnPlan(gate, state) {
+  const plan = state.flags?._turn_plan;
+  if (!plan || plan.owner !== 'gate' || !plan.gateId) return true;
+  return gate.id === plan.gateId;
+}
+
 /**
  * Gate registry — explicit priority ordering for deterministic L4 gates.
  * Schedule (90) runs before conflict (80) when both could match.
@@ -75,9 +81,10 @@ async function runPreBookingGates(registry, state, ctx, advanceAfterStep) {
   const sorted = sortGatesByPriority(registry).filter((g) => preIds.has(g.id));
 
   for (const gate of sorted) {
+    if (!gateAllowedByTurnPlan(gate, state)) continue;
     const result = await gate.run(state, ctx);
     if (gate.owns(result)) {
-      advanceAfterStep(state, result.toolsUsed || []);
+      advanceAfterStep(state, { outcome: result.outcome, toolsUsed: result.toolsUsed || [] });
       return { gateId: gate.id, result };
     }
   }
@@ -91,27 +98,27 @@ async function runBookingGates(registry, state, ctx, advanceAfterStep) {
   const scheduleGate = registry.find((g) => g.id === 'schedule');
   const conflictGate = registry.find((g) => g.id === 'conflict');
 
-  if (scheduleGate) {
+  if (scheduleGate && gateAllowedByTurnPlan(scheduleGate, state)) {
     const detSched = await scheduleGate.run(state, ctx);
     if (scheduleGate.owns(detSched)) {
-      advanceAfterStep(state, detSched.toolsUsed || []);
+      advanceAfterStep(state, { outcome: detSched.outcome, toolsUsed: detSched.toolsUsed || [] });
       return { gateId: 'schedule', result: detSched };
     }
   }
 
   const conflictPending = conflictGate?.predicate?.(state);
-  if (conflictPending && conflictGate) {
+  if (conflictPending && conflictGate && gateAllowedByTurnPlan(conflictGate, state)) {
     const detConflict = await conflictGate.run(state, ctx);
     if (conflictGate.owns(detConflict)) {
-      advanceAfterStep(state, detConflict.toolsUsed || []);
+      advanceAfterStep(state, { outcome: detConflict.outcome, toolsUsed: detConflict.toolsUsed || [] });
       return { gateId: 'conflict', result: detConflict };
     }
   }
 
-  if (conflictGate) {
+  if (conflictGate && gateAllowedByTurnPlan(conflictGate, state)) {
     const detConflictRetry = await conflictGate.run(state, ctx);
     if (conflictGate.owns(detConflictRetry)) {
-      advanceAfterStep(state, detConflictRetry.toolsUsed || []);
+      advanceAfterStep(state, { outcome: detConflictRetry.outcome, toolsUsed: detConflictRetry.toolsUsed || [] });
       return { gateId: 'conflict', result: detConflictRetry };
     }
   }
@@ -160,5 +167,6 @@ module.exports = {
   runPreBookingGates,
   runBookingGates,
   shouldSkipLlm,
-  skipLlmReply
+  skipLlmReply,
+  gateAllowedByTurnPlan
 };

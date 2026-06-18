@@ -435,6 +435,78 @@ function createVoiceIncomingHandler(deps) {
       callId = retellRegisterResp.data.call_id;
       console.log('✅ Call registered! Call ID:', callId);
 
+      if (callId && (customerId || clinicId)) {
+        setImmediate(() => {
+          try {
+            const { seedModeAtCallStart } = require('./conversation-mode/conversation-mode-session');
+            const firstUtterance = req.query.first_utterance
+              ? decodeURIComponent(String(req.query.first_utterance))
+              : req.query.opening_intent
+                ? decodeURIComponent(String(req.query.opening_intent))
+                : '';
+            const callDirection = isOutboundSales ? 'outbound' : 'inbound';
+            const callTypeForMode = isSomoDemoDemo
+              ? 'somo_demo'
+              : isOutboundSales
+                ? resolvedCallType
+                : 'tenant';
+            seedModeAtCallStart({
+              sessionId: callId,
+              db,
+              clinicId,
+              customerId,
+              call_type: callTypeForMode,
+              direction: callDirection,
+              tenantResolved: !!(clinicId || customerId),
+              appointmentId: appointmentIdFromQuery,
+              outbound_purpose: outboundPurposeFromQuery,
+              firstUtterance
+            });
+
+            if (isOutboundSales && customerId) {
+              const {
+                resolveCallOpeners,
+                resolvePracticeDisplayName,
+                buildDefaultOutboundOpener
+              } = require('./call-opener-resolver');
+              const practiceName = resolvePracticeDisplayName(db, {
+                customerId,
+                clinicId,
+                customer: matchedCustomer
+              });
+              const settingsRow = db.getVoiceAgentSettingsForProvider?.({
+                merchantId: merchantId || matchedCustomer?.merchant_id,
+                customerId
+              });
+              const openerBundle = resolveCallOpeners({
+                settings: settingsRow || {},
+                practiceName,
+                callType: resolvedCallType,
+                direction: 'outbound',
+                fallbackOutbound: buildDefaultOutboundOpener(practiceName, 'warm')
+              });
+              const activeOpener = openerBundle?.activeOpener;
+              if (activeOpener?.text) {
+                db.insertKellyCallEvent?.({
+                  session_id: callId,
+                  call_id: callId,
+                  clinic_id: clinicId,
+                  event_type: 'call_opener_used',
+                  payload_json: JSON.stringify({
+                    opener_text: activeOpener.text,
+                    opener_source: activeOpener.source || 'outbound',
+                    direction: 'outbound',
+                    customer_id: customerId
+                  })
+                });
+              }
+            }
+          } catch (seedErr) {
+            console.warn('⚠️  voice-incoming mode/opener seed failed:', seedErr.message);
+          }
+        });
+      }
+
       // Log call to database (async, don't block response)
       // For outbound sales calls, also log to lead_calls
       if (isOutboundSales && leadId) {

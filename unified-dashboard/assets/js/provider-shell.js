@@ -8,6 +8,7 @@
     { section: 'Workspace' },
     { id: 'today', label: 'Today', icon: 'home', href: 'today.html', badgeKey: 'today' },
     { id: 'calendar', label: 'Schedule', icon: 'calendar-days', href: 'calendar.html' },
+    { id: 'calls', label: 'Calls', icon: 'phone', href: 'calls.html' },
     { id: 'patients', label: 'Patients', icon: 'user-group', href: 'patients.html' },
     { section: 'Revenue' },
     { id: 'revenue', label: 'Revenue', icon: 'chart-bar', href: 'revenue.html', badgeKey: 'revenue' },
@@ -85,6 +86,7 @@
   window.PORTAL_BADGES = { today: 0, revenue: 0, claims: 0, priorAuth: 0, exceptions: 0, payments: 0 };
   const paymentRefreshHandlers = new Set();
   let paymentPollTimer = null;
+  let appointmentPollTimer = null;
 
   function resolveHref(href) {
     if (typeof window.resolveBusinessPath === 'function') {
@@ -313,7 +315,7 @@
       const isActive = item.id === activeId;
       const href = resolveHref(item.href);
       html += `
-        <a href="${href}" class="pp-nav-item${isActive ? ' active' : ''}" data-nav-id="${item.id}">
+        <a href="${href}" class="pp-nav-item${isActive ? ' active' : ''}" data-nav-id="${item.id}" data-testid="pp-nav-${item.id}">
           <span class="pp-nav-icon">${icon(item.icon)}</span>
           <span>${item.label}</span>
           ${item.badgeKey ? badgeHtml(item.badgeKey) : ''}
@@ -575,6 +577,29 @@
     paymentPollTimer = null;
   };
 
+  window.ppStartAppointmentPoll = function (intervalMs) {
+    const page = document.body?.dataset?.page;
+    if (page !== 'today' && page !== 'calendar') return;
+    if (appointmentPollTimer) return;
+    const ms = Math.max(15000, Number(intervalMs) || 30000);
+    const tick = () => {
+      const activePage = document.body?.dataset?.page;
+      if (activePage === 'today' && typeof window.ppRefreshAppointments === 'function') {
+        window.ppRefreshAppointments().catch(() => {});
+      }
+      if (activePage === 'calendar' && typeof window.calendarRefresh === 'function') {
+        window.calendarRefresh().catch(() => {});
+      }
+    };
+    tick();
+    appointmentPollTimer = setInterval(tick, ms);
+  };
+
+  window.ppStopAppointmentPoll = function () {
+    if (appointmentPollTimer) clearInterval(appointmentPollTimer);
+    appointmentPollTimer = null;
+  };
+
   function initProviderShell(options = {}) {
     if (typeof window.requireAuth === 'function') {
       const user = window.requireAuth(options.loginPath || '../login.html');
@@ -691,6 +716,7 @@
     }
     normalizeEmojiUi();
     if (options.paymentPoll !== false) window.ppStartPaymentPoll(options.paymentPollMs || 15000);
+    if (options.appointmentPoll !== false) window.ppStartAppointmentPoll(options.appointmentPollMs || 30000);
   }
 
   function initProviderPage(options = {}) {

@@ -8,6 +8,20 @@ const {
 const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
 const { canViewClinicalPhi } = require('../lib/clinical-phi-access');
 
+function _maskEmail(email) {
+  const e = String(email || '').trim();
+  if (!e || !e.includes('@')) return '';
+  return e.replace(/(^.).+(@.+$)/, '$1***$2');
+}
+
+function _maskPhone(phone) {
+  const p = String(phone || '').trim();
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.length < 4) return '***';
+  return `(***) ***-${digits.slice(-4)}`;
+}
+
 function registerAdminPlatformRoutes(app, deps) {
   const {
     apiLimiter,
@@ -3218,6 +3232,7 @@ app.put('/api/admin/patients/:id/external-ids', async (req, res) => {
 });
 
 app.post('/api/admin/appointments/create', async (req, res) => {
+    const BookingService = require('../services/booking-service');
   try {
     const {
       patient_name,

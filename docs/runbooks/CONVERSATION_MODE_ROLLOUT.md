@@ -39,6 +39,32 @@ node scripts/rollout-voice-outbound-opener.cjs --apply-db
 node scripts/rollout-voice-outbound-opener.cjs --test-call 8622307479
 ```
 
+## Rollback (<15 min) — CR-065
+
+To reverse enforce routing without redeploying code:
+
+```bash
+gcloud run services update somo-middleware --region us-central1 --project somo-callsomo \
+  --update-env-vars CONVERSATION_MODE_ROUTING=shadow
+```
+
+Verify rollback:
+
+```bash
+cd middleware-platform && GCP_PROJECT=somo-callsomo npm run verify:kelly-rails-cloudrun
+# Expect CONVERSATION_MODE_ROUTING=shadow (intentional during rollback)
+```
+
+Re-enable enforce when ready:
+
+```bash
+gcloud run services update somo-middleware --region us-central1 --project somo-callsomo \
+  --update-env-vars CONVERSATION_MODE_ROUTING=enforce
+npm run verify:kelly-rails-cloudrun --prefix middleware-platform
+```
+
+Target: complete rollback + re-verify in **<15 minutes**.
+
 ## Rollout steps (R1–R7)
 
 1. Deploy middleware (opener + `call_type` in Retell dynamic variables).

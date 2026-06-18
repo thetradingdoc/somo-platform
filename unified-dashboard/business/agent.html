@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/assets/css/voice-agent.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-session.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
@@ -66,11 +67,12 @@
                             </div>
             <div class="gap" style="flex:1"></div>
             <span class="va-badge va-badge-active" id="vaStatusBadge">Active</span>
-            <button type="button" class="va-toggle on" id="vaToggle" aria-label="Toggle agent on/off"></button>
+            <button type="button" class="va-toggle on" id="vaToggle" data-testid="agent-toggle" aria-label="Toggle agent on/off"></button>
                         </div>
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
             <a class="pp-btn pp-btn-primary pp-btn-sm" id="vaCallLink" href="#">Call my line</a>
             <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaCopyPhone">Copy number</button>
+            <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaTestPayment" data-testid="agent-test-payment">Test payment link</button>
                     </div>
         </section>
 
@@ -138,7 +140,7 @@
         </section>
 
         <!-- Zone 3: Calls -->
-        <section class="va-zone" id="zoneCalls">
+        <section class="va-zone" id="zoneCalls" data-testid="agent-recent-calls">
           <div class="va-kpi-row">
             <div class="va-kpi">
               <div class="va-kpi-label">Calls today</div>
@@ -281,6 +283,10 @@
         document.getElementById('vaOutboundEnabled')?.addEventListener('change', schedulePreview);
         document.getElementById('vaToggle').addEventListener('click', onToggle);
         document.getElementById('vaCopyPhone').addEventListener('click', copyPhone);
+        document.getElementById('vaTestPayment')?.addEventListener('click', testPaymentLink);
+        if (window.location.hash === '#test-payment') {
+          document.getElementById('vaTestPayment')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
 
         await refreshAll();
         updateOutboundHelp(customer);
@@ -594,6 +600,28 @@
           hint.textContent = e.message;
           hint.classList.remove('ok');
           if (!fromAutosave) showRetellSyncFailure(e);
+        }
+      }
+
+      async function testPaymentLink() {
+        const btn = document.getElementById('vaTestPayment');
+        const clinicId = typeof window.ppGetClinicId === 'function' ? window.ppGetClinicId() : 'clinic-default';
+        if (btn) btn.disabled = true;
+        try {
+          const res = await fetch(`${API_BASE}/api/rcm/payments/request?clinic_id=${encodeURIComponent(clinicId)}`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', ...(window.ppGetAuthHeaders?.() || {}) },
+            body: JSON.stringify({ clinic_id: clinicId, amount: 1, description: 'Kelly test payment link' })
+          });
+          const json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Request failed');
+          showVaToast('Test payment link created — check Revenue → Patient pay', 'success');
+          if (typeof window.ppToast === 'function') window.ppToast('Test payment link ready', 'success');
+        } catch (e) {
+          showVaToast(e.message || 'Could not create test payment link', 'error');
+        } finally {
+          if (btn) btn.disabled = false;
         }
       }
 

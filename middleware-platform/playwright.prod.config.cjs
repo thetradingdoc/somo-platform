@@ -39,6 +39,17 @@ module.exports = defineConfig({
         viewport: { width: 390, height: 844 },
         serviceWorkers: 'block'
       }
+    },
+    {
+      name: 'provider-journey-prod',
+      testDir: './e2e/provider',
+      testMatch: '**/provider-portal-journey-prod.spec.cjs',
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_PROD_UI_BASE_URL || 'https://callsomo.com').replace(/\/$/, ''),
+        serviceWorkers: 'block'
+      }
     }
   ],
   grepInvert: process.env.PW_INCLUDE_BROWSER === '1' ? undefined : /Somo demo landing/

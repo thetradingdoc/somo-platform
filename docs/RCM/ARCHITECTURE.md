@@ -62,7 +62,7 @@ Doctors see Kelly work and next actions without digging into logs:
 | Collection | `POST /api/rcm/collection-queue/:id/resend` | Resend via Kelly + `recordAgentAction` |
 | **Revenue hub** | `revenue.html?tab=` | Single sidebar entry; tabs: pipeline, claims, payments, work |
 
-**Revenue hub URL contract:** `revenue.html?tab=pipeline|claims|payments|work`. Legacy pages (`rcm.html`, `billing.html?section=*`, `patient-payments.html`, `claims.html`) redirect to matching tabs. `STAGE_CTA_HREF` in `provider-shell.js` targets these URLs.
+**Revenue hub URL contract:** `revenue.html?tab=pipeline|claims|payments|work`. Legacy pages (`rcm.html`, `billing.html?section=*`, `patient-payments.html`, `claims.html`) redirect to matching tabs. Firebase Hosting rewrites `/business/billing.html` to `/business/revenue.html?tab=payments` (see `unified-dashboard/firebase.json`); `billing.html` remains as a client redirect stub for direct file opens. `STAGE_CTA_HREF` in `provider-shell.js` targets these URLs.
 
 Badge counts: `GET /api/rcm/metrics/health` → `metrics.revenue_badges` (sidebar aggregate + per-tab).
 

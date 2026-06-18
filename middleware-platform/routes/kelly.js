@@ -42,6 +42,15 @@ function buildStatus(customer) {
   };
 }
 
+function parsePayload(row) {
+  if (!row?.payload_json) return {};
+  try {
+    return typeof row.payload_json === 'string' ? JSON.parse(row.payload_json) : row.payload_json;
+  } catch (_) {
+    return {};
+  }
+}
+
 router.get('/status', requireCustomerAuth, async (req, res) => {
   try {
     const customer = db.getCustomer(req.customer.id);
@@ -68,6 +77,81 @@ router.get('/activity', requireCustomerAuth, async (req, res) => {
   } catch (error) {
     console.error('❌ Kelly activity error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load Kelly activity', message: error.message });
+  }
+});
+
+/**
+ * GET /api/kelly/calls/:sessionId — aggregated call forensics for provider portal.
+ */
+router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
+  try {
+    const sessionId = String(req.params.sessionId || '').trim();
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'session_id is required' });
+    }
+
+    const events = db.listKellyCallEvents
+      ? db.listKellyCallEvents({ session_id: sessionId, limit: 200 })
+      : [];
+
+    const tools = [];
+    let bookingOutcome = null;
+    let orchestration = [];
+
+    for (const row of events) {
+      const payload = parsePayload(row);
+      if (row.event_type === 'tool_invoked' || row.event_type === 'tool_completed') {
+        tools.push({
+          at: row.created_at,
+          type: row.event_type,
+          tool: payload.tool_name || payload.tool || null,
+          success: payload.success !== false
+        });
+      }
+      if (row.event_type === 'booking_outcome') {
+        bookingOutcome = { at: row.created_at, ...payload };
+      }
+      if (row.event_type === 'orchestration_trace') {
+        orchestration.push({
+          at: row.created_at,
+          lane: payload.lane || payload.active_lane,
+          step: payload.step,
+          gate_matched: payload.gate_matched,
+          gate_outcome: payload.gate_outcome
+        });
+      }
+    }
+
+    let appointment = null;
+    if (db.db) {
+      try {
+        appointment = db.db
+          .prepare(
+            `SELECT id, status, appointment_date, appointment_time, patient_name, triage_session_id
+             FROM appointments WHERE triage_session_id = ? ORDER BY datetime(created_at) DESC LIMIT 1`
+          )
+          .get(sessionId);
+      } catch (_) {}
+    }
+
+    return res.json({
+      success: true,
+      session_id: sessionId,
+      event_count: events.length,
+      events: events.map((e) => ({
+        id: e.id,
+        event_type: e.event_type,
+        at: e.created_at,
+        payload: parsePayload(e)
+      })),
+      tools,
+      booking_outcome: bookingOutcome,
+      orchestration_trace: orchestration,
+      appointment
+    });
+  } catch (error) {
+    console.error('❌ Kelly call detail error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load call detail', message: error.message });
   }
 });
 

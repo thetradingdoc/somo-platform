@@ -2735,6 +2735,43 @@ body.billing--sidebar-nav #billingSectionTabs {
   .pp-content--revenue {
     padding: 16px;
   }
+
+  .pp-revenue-composer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .pp-revenue-composer .pp-input,
+  .pp-revenue-composer .pp-btn {
+    width: 100%;
+    max-width: none;
+  }
+
+  .pp-revenue-panel .pp-panel-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pp-content--revenue .pp-table-wrap {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .pp-revenue-tabs {
+    gap: 4px;
+  }
+
+  .pp-revenue-tab {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .pp-content--revenue .pp-kpi-row-4 {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* RCM journey detail */

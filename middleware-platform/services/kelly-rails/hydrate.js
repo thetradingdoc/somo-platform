@@ -106,4 +106,52 @@ function hydrateFlagsFromDb(sessionId, patientId) {
   return flags;
 }
 
-module.exports = { hydrateFlagsFromDb, hydrateConversationFieldsFromProjection, metaBool };
+/**
+ * Single read path at turn start: projection + meta_kv + triage_sessions row.
+ */
+function hydrateSessionForTurn(sessionId, { patientId, activeLane } = {}) {
+  const sid = String(sessionId || '').trim();
+  const projection = sid ? getRailsSessionProjection(sid) : null;
+  const lane = activeLane || projection?.active_lane || null;
+  const flags = hydrateFlagsFromDb(sid, patientId);
+  const conv = hydrateConversationFieldsFromProjection(projection, lane);
+  Object.assign(flags, conv);
+
+  const sessionRow = db.getTriageSession ? db.getTriageSession(sid) : null;
+  if (sessionRow) {
+    flags.triage_complete = !!(
+      sessionRow.triage_complete === 1 || sessionRow.triage_complete === true
+    );
+    flags.has_rag = !!(sessionRow.rag_result_id || flags.has_rag);
+    if (sessionRow.target_specialty) flags.target_specialty = sessionRow.target_specialty;
+    if (sessionRow.detected_language && !flags.preferred_language) {
+      flags.preferred_language = sessionRow.detected_language;
+    }
+    if (sessionRow.quality || sessionRow.region || sessionRow.onset) {
+      flags.opqrst_from_triage = {
+        quality: sessionRow.quality || null,
+        region: sessionRow.region || sessionRow.body_site || null,
+        onset: sessionRow.onset || sessionRow.timing || null,
+        severity: sessionRow.severity ?? null
+      };
+    }
+  }
+
+  const preferred = KellyToolExecutor._getSessionMeta(sid, 'kelly_session_locale');
+  if (preferred) flags.preferred_language = preferred;
+
+  return {
+    flags,
+    projection,
+    triage: sessionRow,
+    active_lane: lane,
+    step: projection?.step || null
+  };
+}
+
+module.exports = {
+  hydrateFlagsFromDb,
+  hydrateConversationFieldsFromProjection,
+  hydrateSessionForTurn,
+  metaBool
+};

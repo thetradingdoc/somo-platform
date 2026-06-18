@@ -53,8 +53,10 @@ function applyClinicalOpqrstVoiceLine(reply, state = {}) {
 }
 
 function formatVoiceReply(reply, state = {}) {
-  let text = applyClinicalOpqrstVoiceLine(reply, state);
-  text = clampVoiceReply(text, state.locale || 'en');
+  const stickyLocale = state.flags?.preferred_language || state.preferred_language;
+  const effectiveState = stickyLocale ? { ...state, locale: stickyLocale } : state;
+  let text = applyClinicalOpqrstVoiceLine(reply, effectiveState);
+  text = clampVoiceReply(text, effectiveState.locale || 'en');
   return text;
 }
 

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Per-turn orchestration trace — mode, lane, tools, TCR hints (not speech metrics).
+ * Per-turn orchestration trace — mode, lane, step, gate, tools, TCR hints.
  */
 
 function emitOrchestrationTrace(db, opts = {}) {
@@ -19,6 +19,8 @@ function emitOrchestrationTrace(db, opts = {}) {
         handoff: opts.handoff || null,
         lane: opts.lane || opts.active_lane || null,
         step: opts.step || null,
+        gate_matched: opts.gate_matched || null,
+        gate_outcome: opts.gate_outcome || null,
         tools_executed: opts.tools_executed || opts.toolsUsed || [],
         runtime: opts.runtime || 'kelly_rails_v2',
         latency_ms: opts.latency_ms ?? null

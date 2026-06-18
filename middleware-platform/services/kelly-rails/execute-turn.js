@@ -1,17 +1,12 @@
 'use strict';
 
 const KellyToolExecutor = require('../kelly-tool-executor');
-const { KELLY_LANE, normalizeState, routeOrchestratorLane, paymentGateOpen, PAYMENT_SIGNALS, LANE_FIRST_STEP } = require('./state-schema');
-const { hydrateFlagsFromDb } = require('./hydrate');
+const { KELLY_LANE, normalizeState, routeOrchestratorLane, paymentGateOpen, PAYMENT_SIGNALS } = require('./state-schema');
+const { hydrateSessionForTurn } = require('./hydrate');
 const { executeLaneStep } = require('./lanes');
-const { persistRailsSessionState } = require('./session-ssot');
-const { KELLY_LANE: LANE } = require('./state-schema');
+const { persistRailsSessionState, getRailsSessionProjection } = require('./session-ssot');
 const { shouldEnforceMode } = require('../conversation-mode/config');
-const {
-  detectBookingIntents,
-  applyBookingIntentsToFlags,
-  planTurnOwner
-} = require('./turn-planner');
+const { applyLaneStepFromL2Handoff } = require('./lane-handoff-mapper');
 
 function shouldReroute(state, message) {
   const msg = String(message || '').toLowerCase();
@@ -125,8 +120,13 @@ async function executeTurn(input = {}) {
     locale = db.getKellySessionLanguage?.(sid);
   }
   const state = normalizeState({ ...input, locale: locale || 'en' });
-  const { getRailsSessionProjection } = require('./session-ssot');
-  const projection = sid ? getRailsSessionProjection(sid) : null;
+  const hydrated = sid
+    ? hydrateSessionForTurn(sid, {
+        patientId: input.patientId || state.patient_id,
+        activeLane: input.active_lane || state.active_lane
+      })
+    : null;
+  const projection = hydrated?.projection || (sid ? getRailsSessionProjection(sid) : null);
   if (projection?.active_lane) {
     const fromInput = input.active_lane;
     if (!fromInput || fromInput === KELLY_LANE.ROUTER) {
@@ -149,12 +149,31 @@ async function executeTurn(input = {}) {
   };
 
   if (!state.v2_hydrated) {
-    state.flags = { ...state.flags, ...hydrateFlagsFromDb(ctx.sessionId, ctx.patientId) };
+    if (hydrated?.flags) {
+      state.flags = { ...state.flags, ...hydrated.flags };
+      if (hydrated.active_lane && !input.active_lane) {
+        state.active_lane = hydrated.active_lane;
+      }
+      if (hydrated.step && !input.step) {
+        state.step = hydrated.step;
+      }
+    } else {
+      const { hydrateFlagsFromDb } = require('./hydrate');
+      state.flags = { ...state.flags, ...hydrateFlagsFromDb(ctx.sessionId, ctx.patientId) };
+    }
     state.v2_hydrated = true;
   }
 
   if (input.conversation_session) {
     Object.assign(state.flags, input.conversation_session);
+  }
+  if (projection?.flags_json) {
+    try {
+      const projFlags = JSON.parse(projection.flags_json);
+      if (projFlags.lookup_complete) state.flags.lookup_complete = true;
+      if (projFlags.last_appointment_id) state.flags.last_appointment_id = projFlags.last_appointment_id;
+      if (projFlags.reschedule_pending) state.flags.reschedule_pending = true;
+    } catch (_) {}
   }
 
   state.conversation_mode =
@@ -172,120 +191,17 @@ async function executeTurn(input = {}) {
   if (state.active_subrail_step) state.flags.active_subrail_step = state.active_subrail_step;
 
   const enforceMode = state.conversation_mode && shouldEnforceMode(state.conversation_mode);
-  if (enforceMode && input.kelly_lane_hint) {
-    state.active_lane = input.kelly_lane_hint;
-    state.step = LANE_FIRST_STEP[input.kelly_lane_hint] || state.step;
-  }
 
-  const subrailStep = state.active_subrail_step;
-  const activeSubrail = state.active_subrail || state.flags?.active_subrail;
-
-  if (activeSubrail === 'booking' || state.flags?.rebook_after_cancel) {
-    state.conversation_mode = 'tenant_inbound_admin';
-    state.flags.conversation_mode = 'tenant_inbound_admin';
-  }
-
-  if (activeSubrail === 'booking' || state.flags?.active_subrail === 'booking') {
-    state.active_lane = KELLY_LANE.BOOKING;
-    const intents =
-      state.flags.booking_intents?.length > 0
-        ? state.flags.booking_intents
-        : detectBookingIntents(ctx.message, subrailStep);
-    applyBookingIntentsToFlags(state.flags, intents);
-    state.flags._turn_plan = planTurnOwner({ subrail: 'booking', flags: state.flags, intents });
-
-    const hasBookableSlot =
-      !!(state.flags.current_booking_slot?.date && state.flags.current_booking_slot?.time) ||
-      !!state.flags._slot_selected_time ||
-      !!(
-        KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_date') &&
-        KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_time')
-      );
-    if (
-      ['contact_confirm', 'schedule', 'confirm'].includes(subrailStep) &&
-      hasBookableSlot &&
-      !state.flags?.no_provider_availability
-    ) {
-      state.step = 'confirm_visit';
-    } else if (['slot_lookup', 'slot_select'].includes(subrailStep)) {
-      state.step = 'schedule_visit';
-    }
-  }
-
-  if (state.flags?.appt_lookup_only) {
-    state.active_lane = KELLY_LANE.RESCHEDULE;
-    state.step = 'find_booking';
-    state.active_subrail = state.active_subrail || 'cancellation';
-  } else if (
-    activeSubrail === 'cancellation' &&
-    !state.flags?.reschedule_pending &&
-    (subrailStep === 'cancel_execute' || state.flags?.cancel_pending || state.flags?.cancel_confirmed)
-  ) {
-    state.active_lane = KELLY_LANE.RESCHEDULE;
-    state.step = 'move_or_cancel';
-    state.flags.cancel_pending = true;
-  } else if (activeSubrail === 'cancellation' && subrailStep === 'find_booking') {
-    state.active_lane = KELLY_LANE.RESCHEDULE;
-    state.step = 'find_booking';
-    state.flags.cancel_find_pending = true;
-  }
-
-  if (state.flags?.reschedule_pending) {
-    const msg = String(ctx.message || '').toLowerCase();
-    const hasExplicitSlot =
-      /\d{4}-\d{2}-\d{2}/.test(msg) ||
-      /\b\d{1,2}:\d{2}\b/.test(msg) ||
-      !!(state.flags.current_booking_slot?.date && state.flags.current_booking_slot?.time);
-    if (state.flags.lookup_complete || hasExplicitSlot) {
-      state.active_lane = KELLY_LANE.RESCHEDULE;
-      state.step = 'move_or_cancel';
-    } else {
-      state.active_lane = KELLY_LANE.RESCHEDULE;
-      state.step = 'find_booking';
-      state.flags.cancel_find_pending = true;
-    }
-  }
-
-  if (
-    state.conversation_mode === 'tenant_records' ||
-    input.kelly_lane_hint === 'records' ||
-    state.flags?.conversation_mode === 'tenant_records'
-  ) {
-    state.active_lane = KELLY_LANE.RECORDS;
-    state.step = 'records_qa';
-  }
-
-  if (state.conversation_mode === 'tenant_billing' && enforceMode) {
-    state.active_lane = KELLY_LANE.PAYMENT;
-    state.step = 'pay_invoice';
-  }
-
-  if (state.flags?.rebook_after_cancel && state.flags?.cancel_complete) {
-    state.active_lane = KELLY_LANE.BOOKING;
-    state.step = 'schedule_visit';
-    state.active_subrail = 'booking';
-    state.active_subrail_step = 'slot_lookup';
-    state.conversation_mode = 'tenant_inbound_admin';
-    state.flags.conversation_mode = 'tenant_inbound_admin';
-    state.flags.cancel_pending = false;
-    state.flags.cancel_find_pending = false;
-    state.flags.reschedule_pending = false;
-  }
-
-  if (state.flags?.rebook_after_cancel && !state.flags?.cancel_complete && activeSubrail === 'booking') {
-    state.active_lane = KELLY_LANE.BOOKING;
-    state.step = 'schedule_visit';
-    state.conversation_mode = 'tenant_inbound_admin';
-  }
+  const { skipLegacyRouting, payIntentNow, onRecordsRail } = applyLaneStepFromL2Handoff(
+    state,
+    ctx,
+    input,
+    { enforceMode }
+  );
 
   state.last_user_message = ctx.message;
-  const normalizedMessage = String(ctx.message || '').toLowerCase();
-  const payIntentNow = PAYMENT_SIGNALS.some((s) => normalizedMessage.includes(s));
-  const onRecordsRail = state.active_lane === LANE.RECORDS;
 
-  const skipLegacyReroute = enforceMode && !!state.conversation_mode;
-
-  if (!skipLegacyReroute && shouldReroute(state, ctx.message) && !(onRecordsRail && payIntentNow)) {
+  if (!skipLegacyRouting && shouldReroute(state, ctx.message) && !(onRecordsRail && payIntentNow)) {
     const route = routeOrchestratorLane(state);
     state.active_lane = route.lane;
     state.step = route.step;
@@ -301,7 +217,7 @@ async function executeTurn(input = {}) {
     }
   }
 
-  if (!skipLegacyReroute && state.active_lane === KELLY_LANE.ROUTER) {
+  if (!skipLegacyRouting && state.active_lane === KELLY_LANE.ROUTER) {
     const route = routeOrchestratorLane(state);
     state.active_lane = route.lane;
     state.step = route.step;
@@ -311,7 +227,9 @@ async function executeTurn(input = {}) {
     }
   }
 
-  await promoteBookingWhenReady(state, ctx);
+  if (!skipLegacyRouting) {
+    await promoteBookingWhenReady(state, ctx);
+  }
 
   if (payIntentNow) {
     if (state.flags.copay_amount == null) {
@@ -337,17 +255,14 @@ async function executeTurn(input = {}) {
   }
 
   state.flags._lane_export = state.active_lane;
-  syncMetaFromFlags(ctx.sessionId, state.flags, state.active_lane);
-  KellyToolExecutor._setSessionMeta(ctx.sessionId, 'kelly_graph_branch', state.active_lane);
-  KellyToolExecutor._setSessionMeta(ctx.sessionId, 'kelly_graph_step', state.step);
-  if (state.conversation_mode) {
-    KellyToolExecutor._setSessionMeta(ctx.sessionId, 'conversation_mode', state.conversation_mode);
-  }
-  if (state.active_subrail) {
-    KellyToolExecutor._setSessionMeta(ctx.sessionId, 'active_subrail', state.active_subrail);
-  }
+  // meta_kv mirrors projection via persistRailsSessionState → mirrorMetaFromPayload (single write path)
 
-  const { reply, toolsUsed, endCall } = await executeLaneStep(state, ctx);
+  const laneOut = await executeLaneStep(state, ctx);
+  const { reply, toolsUsed, endCall, gate_matched, gate_outcome } = laneOut;
+  state.gate_matched = gate_matched;
+  state.gate_outcome = gate_outcome;
+  if (gate_matched) state.flags.gate_matched = gate_matched;
+  if (gate_outcome) state.flags.gate_outcome = gate_outcome;
 
   if (state.active_lane === KELLY_LANE.BOOKING) {
     state.active_subrail = state.active_subrail || 'booking';
@@ -373,6 +288,8 @@ async function executeTurn(input = {}) {
     ...state,
     active_lane: state.active_lane,
     step: state.step,
+    gate_matched: state.gate_matched,
+    gate_outcome: state.gate_outcome,
     active_subrail_step: state.active_subrail_step || state.flags?.active_subrail_step,
     flags: {
       ...state.flags,
@@ -405,7 +322,14 @@ async function executeTurn(input = {}) {
     }
   }
 
-  return { state, reply, toolsUsed: toolsUsed || [], endCall: !!endCall };
+  return {
+    state,
+    reply,
+    toolsUsed: toolsUsed || [],
+    endCall: !!endCall,
+    gate_matched: state.gate_matched || null,
+    gate_outcome: state.gate_outcome || null
+  };
 }
 
 module.exports = { executeTurn, shouldReroute };

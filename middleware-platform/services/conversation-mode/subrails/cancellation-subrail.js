@@ -27,7 +27,6 @@ async function handleCancellationSubrail(ctx = {}) {
 
   const stateUpdates = {
     active_subrail: 'cancellation',
-    current_booking_slot: null,
     opqrst_frozen: true
   };
 

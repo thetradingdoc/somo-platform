@@ -75,6 +75,7 @@ async function dispatchConversationTurn(mode, ctx = {}) {
     if (subrailOut) {
       return {
         ...subrailOut,
+        toolsUsed: Array.isArray(subrailOut.toolsUsed) ? subrailOut.toolsUsed : [],
         conversation_mode: mode,
         enforced,
         handoff: subrailOut.handoff || Handoff.KELLY_OPTIONAL,

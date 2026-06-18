@@ -19680,6 +19680,12 @@ module.exports.updateMediaAiAnalysis = function updateMediaAiAnalysis(id, aiAnal
 
 module.exports.upsertTriageSession = function upsertTriageSession(session) {
   const { v4: uuidv4 } = require('uuid');
+  if (session?.session_id) {
+    try {
+      const { ensureUniqueTriageSessionId } = require('./services/kelly-rails/session-ssot');
+      ensureUniqueTriageSessionId(session.session_id);
+    } catch (_) {}
+  }
   const existing = db.prepare(`SELECT id FROM triage_sessions WHERE session_id = ? LIMIT 1`).get(session.session_id);
   const id = existing?.id || session.id || `triage-${uuidv4()}`;
 

@@ -25,15 +25,18 @@ function subrailPromptBlock(state = {}) {
   const step = state.active_subrail_step || state.flags?.active_subrail_step;
   if (!subrail) return '';
   const objective = getStepObjective(subrail, step);
+  const localeBlock = localePromptBlock(state.locale, state);
   return (
     `\nSubrail: ${subrail}, step: ${step || 'unknown'}.\n` +
     `Objective: ${objective}\n` +
-    'Do NOT ask questions outside this step. Do NOT mention unrelated services.'
+    'Do NOT ask questions outside this step. Do NOT mention unrelated services.' +
+    localeBlock
   );
 }
 
-function localePromptBlock(locale) {
-  const loc = String(locale || 'en').slice(0, 2);
+function localePromptBlock(locale, state = {}) {
+  const sticky = state.flags?.preferred_language || state.preferred_language;
+  const loc = String(sticky || locale || 'en').slice(0, 2);
   if (loc === 'en') return '';
   const names = { es: 'Spanish', zh: 'Chinese', pt: 'Portuguese', fr: 'French' };
   const label = names[loc] || loc;

@@ -385,5 +385,6 @@ module.exports = {
   RECORDS_SIGNALS,
   CLINICAL_SIGNALS,
   isEmergencyUtterance,
-  isPostVisitUtterance
+  isPostVisitUtterance,
+  ...require('./phase-enums')
 };

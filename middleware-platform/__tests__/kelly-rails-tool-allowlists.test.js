@@ -7,12 +7,20 @@ function allSteps(lane) {
 }
 
 describe('kelly-rails tool allowlists — positive', () => {
-  test('payment pay_invoice includes request_patient_payment', () => {
-    expect(getAllowedToolNames('payment', 'pay_invoice')).toContain('request_patient_payment');
+  test('payment pay_invoice excludes request_patient_payment (gate-owned)', () => {
+    expect(getAllowedToolNames('payment', 'pay_invoice')).not.toContain('request_patient_payment');
+    expect(getAllowedToolNames('payment', 'pay_invoice')).toContain('get_patient_claims');
   });
 
-  test('booking confirm_visit includes schedule_appointment', () => {
-    expect(getAllowedToolNames('booking', 'confirm_visit')).toContain('schedule_appointment');
+  test('booking confirm_visit is read-only triage session', () => {
+    expect(getAllowedToolNames('booking', 'confirm_visit')).toEqual(['get_triage_session']);
+  });
+
+  test('reschedule move_or_cancel with cancel_pending is lookup-only', () => {
+    const allowed = getAllowedToolNames('reschedule', 'move_or_cancel', { cancel_pending: true });
+    expect(allowed).toContain('search_appointments');
+    expect(allowed).not.toContain('cancel_appointment');
+    expect(allowed).not.toContain('reschedule_appointment');
   });
 });
 

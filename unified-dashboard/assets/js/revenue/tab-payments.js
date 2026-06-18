@@ -5,6 +5,7 @@
   const UI = () => window.RevenueUI;
   const clinicId = () => (window.ppGetClinicId ? window.ppGetClinicId() : 'clinic-default');
   let allPayments = [];
+  let voiceCheckouts = [];
   let collectionQueue = [];
   let statusFilter = '';
   let selectedBalance = null;
@@ -85,6 +86,34 @@
     });
   }
 
+  function renderVoiceCheckoutsTable(root) {
+    const ui = UI();
+    const listEl = root.querySelector('#revVoiceCheckoutList');
+    if (!listEl) return;
+    if (!voiceCheckouts.length) {
+      listEl.innerHTML = ui.renderEmptyState(
+        'credit-card',
+        'No Kelly voice checkouts yet for this clinic.'
+      );
+      return;
+    }
+    const tableRows = voiceCheckouts.slice(0, 40).map((c) => {
+      const who = c.customer_email || c.customer_phone || c.appointment_id || 'Checkout';
+      const when = c.created_at ? new Date(c.created_at).toLocaleString() : '—';
+      return [
+        `<span style="font-weight:600">${ui.escapeHtml(who)}</span>`,
+        `<span class="pp-table-amount">$${Number(c.amount || 0).toFixed(2)}</span>`,
+        statusPill(c.status || 'pending'),
+        `<span class="pp-muted" style="font-size:12px">${ui.escapeHtml(when)}</span>`,
+      ];
+    });
+    listEl.innerHTML = ui.renderTable({
+      colsClass: 'pp-table-cols-claims',
+      columns: ['Patient / checkout', 'Amount', 'Status', 'Created'],
+      rows: tableRows,
+    });
+  }
+
   function renderPaymentsTable(root) {
     const ui = UI();
     const rows = allPayments.filter(
@@ -156,15 +185,20 @@
       listUrl.searchParams.set('clinic_id', clinicId());
       const cqUrl = new URL(`${window.API_BASE || ''}/api/rcm/collection-queue`);
       cqUrl.searchParams.set('clinic_id', clinicId());
-      const [sumRes, listRes, cqRes] = await Promise.all([
+      const vcUrl = new URL(`${window.API_BASE || ''}/api/rcm/voice-checkouts`);
+      vcUrl.searchParams.set('clinic_id', clinicId());
+      const [sumRes, listRes, cqRes, vcRes] = await Promise.all([
         fetch(summaryUrl.toString(), { credentials: 'include', headers }),
         fetch(listUrl.toString(), { credentials: 'include', headers }),
         fetch(cqUrl.toString(), { credentials: 'include', headers }),
+        fetch(vcUrl.toString(), { credentials: 'include', headers }),
       ]);
       const sumData = await sumRes.json();
       const listData = await listRes.json();
       const cqData = await cqRes.json().catch(() => ({}));
+      const vcData = await vcRes.json().catch(() => ({}));
       allPayments = listData.payments || [];
+      voiceCheckouts = vcData.checkouts || [];
       collectionQueue = cqData.collection_queue || [];
       selectedBalance = null;
       const ui = UI();
@@ -174,15 +208,17 @@
       const pending = allPayments.filter((p) =>
         ['requested', 'sent', 'pending'].includes(String(p.status).toLowerCase())
       ).length;
+      const voicePaid = voiceCheckouts.filter((c) => String(c.status).toLowerCase() === 'completed').length;
 
       root.innerHTML = `
         ${ui.renderKpiRow(
           [
-            { label: 'Recent requests', value: String(recent) },
-            { label: 'Paid', value: String(paid), tone: 'success' },
-            { label: 'Pending', value: String(pending), tone: 'warn' },
+            { label: 'RCM requests', value: String(recent) },
+            { label: 'Voice checkouts', value: String(voiceCheckouts.length) },
+            { label: 'Paid (RCM)', value: String(paid), tone: 'success' },
+            { label: 'Voice paid', value: String(voicePaid), tone: 'success' },
           ],
-          3
+          4
         )}
         <div class="pp-revenue-composer">
           <span class="pp-revenue-composer-label">Request payment from patient</span>
@@ -196,7 +232,9 @@
         <p id="revPaySendHint" class="pp-muted" style="font-size:13px;margin:-4px 0 16px">Select an open balance row below or enter Patient ID and amount.</p>
         ${ui.renderSectionLabel('Open balances')}
         <div id="revPayBalanceList"></div>
-        ${ui.renderSectionLabel('Recent requests')}
+        ${ui.renderSectionLabel('Kelly voice checkouts')}
+        <div id="revVoiceCheckoutList"></div>
+        ${ui.renderSectionLabel('RCM payment requests')}
         <div class="pp-panel-tabs" id="revPayFilters" style="margin-bottom:12px;border-bottom:1px solid var(--border)">
           <button type="button" class="pp-ptab act" data-status="">All</button>
           <button type="button" class="pp-ptab" data-status="requested">Requested</button>
@@ -250,6 +288,7 @@
       });
 
       renderBalanceQueue(root);
+      renderVoiceCheckoutsTable(root);
       renderPaymentsTable(root);
       updateSendButtonState(root);
     } catch (e) {

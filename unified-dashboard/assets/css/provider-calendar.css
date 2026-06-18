@@ -391,6 +391,18 @@
   margin-top: 4px;
 }
 
+.today-pinned-title .pp-chip {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.cal-kelly-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
 @media (max-width: 768px) {
   .provider-portal--calendar .pp-toolbar {
     flex-direction: column;
@@ -465,6 +477,19 @@
   .fc .fc-list-event-title a {
     white-space: normal;
     word-break: break-word;
+  }
+
+  .cal-kelly-badge {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 10px;
+    vertical-align: middle;
+  }
+
+  .details-panel,
+  .details-panel-inner {
+    max-width: 100%;
+    width: 100%;
   }
 }
 

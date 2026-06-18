@@ -1,0 +1,64 @@
+name: Kelly Rails Prod Nightly
+
+on:
+  schedule:
+    # 07:00 UTC daily
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  verify-kelly-rails-prod-runtime:
+    name: Verify Kelly Rails prod runtime
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: middleware-platform/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./middleware-platform
+        run: npm ci
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+        continue-on-error: true
+
+      - name: Download production DB snapshot
+        working-directory: ./middleware-platform
+        env:
+          GCS_DB_BUCKET: ${{ secrets.GCS_DB_BUCKET }}
+          GCS_DB_OBJECT: ${{ secrets.GCS_DB_OBJECT || 'middleware-staging.db' }}
+          DB_PATH: ./tmp/nightly-prod.db
+        run: |
+          mkdir -p tmp
+          node scripts/cloudrun-db-sync.cjs download || echo "DB download skipped (set GCP_SA_KEY + GCS_DB_BUCKET)"
+
+      - name: Verify production env gates
+        working-directory: ./middleware-platform
+        env:
+          CLOUDRUN_PROFILE: production
+          CONVERSATION_MODE_ROUTING: enforce
+          KELLY_ALLOW_HYBRID_GRAPH: '0'
+        run: npm run verify:env-gates
+
+      - name: Verify Kelly Rails prod runtime
+        working-directory: ./middleware-platform
+        env:
+          DB_PATH: ./tmp/nightly-prod.db
+          KELLY_RUNTIME_CHECK_HOURS: 24
+        run: |
+          if [ -f "$DB_PATH" ]; then
+            npm run verify:kelly-rails-prod-runtime
+            npm run verify:orchestration-trace
+          else
+            echo "No DB snapshot available — runtime DB check skipped"
+          fi

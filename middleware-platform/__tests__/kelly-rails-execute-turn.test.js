@@ -81,6 +81,40 @@ describe('kelly-rails executeTurn pay-before-book', () => {
   });
 });
 
+describe('kelly-rails executeTurn enforce drain', () => {
+  const prevRouting = process.env.CONVERSATION_MODE_ROUTING;
+
+  beforeAll(() => {
+    process.env.CONVERSATION_MODE_ROUTING = 'enforce';
+    process.env.KELLY_RAILS_V2 = '1';
+  });
+
+  afterAll(() => {
+    process.env.CONVERSATION_MODE_ROUTING = prevRouting;
+  });
+
+  test('under enforce, booking subrail is not rerouted by keyword sniffing', async () => {
+    const { state } = await executeTurn({
+      sessionId: 'sess-enforce-drain',
+      message: 'I want to book an appointment tomorrow at noon',
+      conversation_mode: 'tenant_inbound_admin',
+      active_subrail: 'booking',
+      active_subrail_step: 'slot_lookup',
+      active_lane: KELLY_LANE.BOOKING,
+      step: 'schedule_visit',
+      flags: {
+        conversation_mode: 'tenant_inbound_admin',
+        active_subrail: 'booking',
+        booking_intents: ['schedule']
+      },
+      v2_hydrated: true
+    });
+
+    expect(state.active_lane).toBe(KELLY_LANE.BOOKING);
+    expect(state.step).toBe('schedule_visit');
+  });
+});
+
 describe('kelly-rails executeTurn safety', () => {
   test('chest pain triggers emergency handoff reply', async () => {
     const { state, reply, endCall } = await executeTurn({

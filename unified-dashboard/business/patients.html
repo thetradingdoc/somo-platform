@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/assets/css/provider-patients.css?v=7">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
 </head>
@@ -92,14 +93,14 @@
             <div class="pp-patients-search">
               <div class="pp-patients-search-wrap">
                 <span class="pp-search-icon" aria-hidden="true">&#128269;</span>
-                <input type="search" id="searchInput" class="pp-input" placeholder="Search by name, phone, or email…" autocomplete="off" />
+                <input type="search" id="searchInput" class="pp-input" data-testid="pp-patient-search" placeholder="Search by name, phone, or email…" autocomplete="off" />
               </div>
             </div>
             <div id="patientsOpenCaseBanner" class="pp-patients-open-case-banner" hidden>
               <span>Patient highlighted from your link.</span>
               <a class="pp-btn pp-btn-primary pp-btn-sm" href="patient-case.html">Open case</a>
             </div>
-            <div class="pp-patients-grid" id="patientsRosterGrid" data-roster-mount>
+            <div class="pp-patients-grid" id="patientsRosterGrid" data-testid="pp-patients-list" data-roster-mount>
               <div class="pp-patients-empty" id="patientsRosterLoading">
                 <div class="pp-patients-empty-title">Loading patients</div>
                 <p>Fetching roster from your clinic…</p>
@@ -259,6 +260,7 @@
             if (legacy) {
                 legacy.classList.add('pp-patients-grid');
                 legacy.id = 'patientsRosterGrid';
+                legacy.setAttribute('data-testid', 'pp-patients-list');
                 legacy.setAttribute('data-roster-mount', '');
                 removeOrphanRosterPlaceholders(panelBody, legacy);
                 patientsDbg('mount:legacy-customersList', { className: legacy.className }, 'warn');
@@ -270,6 +272,7 @@
                 grid = document.createElement('div');
                 grid.className = 'pp-patients-grid';
                 grid.id = 'patientsRosterGrid';
+                grid.setAttribute('data-testid', 'pp-patients-list');
                 grid.setAttribute('data-roster-mount', '');
                 while (oldRoster.firstChild) grid.appendChild(oldRoster.firstChild);
                 oldRoster.parentElement.replaceChild(grid, oldRoster);
@@ -283,6 +286,7 @@
             grid.className = 'pp-patients-grid';
             grid.id = 'patientsRosterGrid';
             grid.setAttribute('data-roster-mount', '');
+            grid.setAttribute('data-testid', 'pp-patients-list');
             grid.innerHTML = `
                 <div class="pp-patients-empty" id="patientsRosterLoading">
                     <div class="pp-patients-empty-title">Loading patients</div>
@@ -851,7 +855,7 @@
             }
 
             return `
-                <div class="pp-patient-card pp-patient-card--compact" data-patient-id="${pidAttr}" data-case-href="${escapeHtml(caseHref)}">
+                <div class="pp-patient-card pp-patient-card--compact" data-testid="pp-patient-row" data-patient-id="${pidAttr}" data-case-href="${escapeHtml(caseHref)}">
                     <div class="pp-patient-card__row">
                         <div class="pp-patient-avatar">${escapeHtml(initials)}</div>
                         <div class="pp-patient-card__info">

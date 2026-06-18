@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { resolveUseCaseTemplate } = require('./prompt-profile-templates');
+const { FALLBACKS, DEFAULT_FALLBACK, getPricingFallback } = require('../config/pricing-fallbacks');
 
 function slugify(name) {
   return String(name || 'clinic')
@@ -56,6 +57,52 @@ function seedPromptProfile(dbModule, { clinicId, customerId, useCase, clinicName
     return profileId;
   } catch (err) {
     console.warn('⚠️  [provision] Failed to seed prompt_profile:', err.message);
+    return null;
+  }
+}
+
+const SPECIALTY_PRICING_TYPES = {
+  'General Medicine': ['General Consult', 'Mental Health Consultation'],
+  Dermatology: ['General Consult'],
+  'Mental Health': ['Therapy', 'Mental Health Consultation', 'Psychiatry Initial', 'Psychiatry Follow-up'],
+  'General Business': ['General Consult']
+};
+
+function seedVisitPricingForClinic(dbModule, clinicId, useCase) {
+  if (!dbModule?.db || !clinicId) return;
+  try {
+    const template = resolveUseCaseTemplate(useCase);
+    const types = SPECIALTY_PRICING_TYPES[template.specialty] || ['General Consult'];
+    const seed = dbModule.db.prepare(`
+      INSERT OR IGNORE INTO visit_pricing (clinic_id, appointment_type, base_price, surge_multiplier)
+      VALUES (?, ?, ?, 1.0)
+    `);
+    for (const appointmentType of types) {
+      const basePrice = getPricingFallback(appointmentType) || DEFAULT_FALLBACK;
+      seed.run(clinicId, appointmentType, basePrice);
+    }
+    const specialtyPrice = FALLBACKS[template.specialty] || DEFAULT_FALLBACK;
+    if (template.specialty && !types.includes(template.specialty)) {
+      seed.run(clinicId, template.specialty, specialtyPrice);
+    }
+    console.log(`✅ [provision] Seeded visit_pricing for clinic ${clinicId} (${useCase || 'healthcare_clinic'})`);
+  } catch (err) {
+    console.warn('⚠️  [provision] Failed to seed visit_pricing:', err.message);
+  }
+}
+
+async function ensureStripeMerchantReady(dbModule, customerId) {
+  if (!customerId) return null;
+  if (process.env.NODE_ENV === 'test' && !process.env.STRIPE_SECRET_KEY) {
+    return null;
+  }
+  try {
+    const customer = dbModule.getCustomer(customerId);
+    if (!customer) return null;
+    const { ensureStripeCustomer } = require('./voice-billing-stripe');
+    return await ensureStripeCustomer(customer);
+  } catch (err) {
+    console.warn('⚠️  [provision] Stripe merchant ready skipped:', err.message);
     return null;
   }
 }
@@ -182,6 +229,14 @@ function provisionSaasTenant(dbModule, options = {}) {
     clinicName: displayName
   });
 
+  seedVisitPricingForClinic(
+    dbModule,
+    clinicId,
+    options.useCase || options.use_case || customer.use_case || 'healthcare_clinic'
+  );
+
+  ensureStripeMerchantReady(dbModule, customerId).catch(() => {});
+
   return { merchantId, clinicId, promptProfileId: profileId };
 }
 
@@ -236,6 +291,8 @@ module.exports = {
   provisionSaasTenant,
   seedPromptProfile,
   seedVoiceAgentSettings,
+  seedVisitPricingForClinic,
+  ensureStripeMerchantReady,
   slugify,
   uniqueClinicSlug
 };

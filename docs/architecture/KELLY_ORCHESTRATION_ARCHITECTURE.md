@@ -1,8 +1,14 @@
 # Kelly Agentic Orchestration Architecture
 
-**Last updated:** 2026-06-17  
-**Status:** As-built — P0 gates shipped; enforce-routing rollout pending  
+**Last updated:** 2026-06-18  
+**Status:** As-built — P0 gates shipped; enforce-routing on production (`api.callsomo.com`)  
 **Code:** [`middleware-platform/services/conversation-mode/`](../../middleware-platform/services/conversation-mode/), [`middleware-platform/services/kelly-rails/`](../../middleware-platform/services/kelly-rails/)
+
+**Deep-dive docs (narrative):**
+
+- [`KELLY_SOLUTION_ARCHITECTURE_AS_BUILT.md`](./KELLY_SOLUTION_ARCHITECTURE_AS_BUILT.md) — system context, planes, modes, completeness
+- [`KELLY_CONVERSATION_LOOP.md`](./KELLY_CONVERSATION_LOOP.md) — one-turn loop, code review friction
+- [`KELLY_PRODUCTION_VS_FRAMEWORK.md`](./KELLY_PRODUCTION_VS_FRAMEWORK.md) — vs generic framework diagram
 
 ---
 

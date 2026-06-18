@@ -82,6 +82,23 @@ case "$cmd" in
     "$ROOT/scripts/deploy-to-gcp-production.sh"
     ensure_api_domain_mapping
     "$ROOT/scripts/ensure-cloudrun-public-invoker.sh"
+    echo "Verifying Kelly Rails Cloud Run env (KELLY_RAILS_V2, CONVERSATION_MODE_ROUTING)..."
+    npm run verify:kelly-rails-cloudrun --prefix "$ROOT/middleware-platform" || {
+      echo "ERROR: Kelly Rails env verification failed — fix Cloud Run env before accepting deploy."
+      exit 1
+    }
+    if [[ "${SKIP_LIVE_CALL_VERIFY:-}" == "1" ]]; then
+      echo "SKIP_LIVE_CALL_VERIFY=1 — skipping verify:live-booking-call"
+    elif [[ -n "${SESSION_ID:-}${CALL_ID:-}" && -n "${DB_PATH:-}" ]]; then
+      echo "Verifying live booking call telemetry (SESSION_ID=${SESSION_ID:-$CALL_ID})..."
+      SESSION_ID="${SESSION_ID:-$CALL_ID}" DB_PATH="$DB_PATH" \
+        npm run verify:live-booking-call --prefix "$ROOT/middleware-platform" || {
+        echo "ERROR: Live booking call verification failed."
+        exit 1
+      }
+    else
+      echo "NOTE: Set SESSION_ID=<call_id> and DB_PATH=<sqlite> to run verify:live-booking-call after deploy (or SKIP_LIVE_CALL_VERIFY=1)."
+    fi
     ;;
   deploy-ui)
     VITE_API_BASE="$MIDDLEWARE_API_BASE" npm run build:staging-hosting --prefix "$ROOT"

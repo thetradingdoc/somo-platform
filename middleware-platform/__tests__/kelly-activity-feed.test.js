@@ -16,7 +16,7 @@ describe('kelly-activity-feed-service', () => {
       }),
     });
     expect(row.headline).toContain('James Rivera');
-    expect(row.href).toContain('patient-case.html');
+    expect(row.href).toContain('calls.html');
     expect(row.icon).toBe('calendar-days');
   });
 
@@ -46,8 +46,22 @@ describe('kelly-activity-feed-service', () => {
         patient_id: 'Patient/x',
       }),
     });
-    expect(row).toBeTruthy();
-    expect(row.headline).toContain('Kelly booked');
+    expect(row).toBeNull();
+  });
+
+  test('formatActivityRow maps tool_completed schedule_appointment', () => {
+    const row = formatActivityRow({
+      id: 'e4',
+      event_type: 'tool_completed',
+      created_at: '2026-06-01T12:11:00Z',
+      payload_json: JSON.stringify({
+        tool_name: 'schedule_appointment',
+        patient_name: 'Alex Kim',
+        appointment_type: 'Dermatology',
+      }),
+    });
+    expect(row.headline).toContain('Alex Kim');
+    expect(row.icon).toBe('calendar-days');
   });
 
   test('listActivityForClinic returns array for unknown clinic', () => {

@@ -1,12 +1,21 @@
 'use strict';
 
 const axios = require('axios');
+const db = require('../database');
 
 // Prevent duplicate checkout creation when multiple scheduling flows converge
 // on the same appointment around the same time.
 const inFlightByAppointment = new Map();
 const recentResultByAppointment = new Map();
 const RECENT_RESULT_TTL_MS = 2 * 60 * 1000;
+
+function isAutoCheckoutEnabled({ customer_type } = {}) {
+  const env = process.env.AUTO_CHECKOUT_AFTER_SCHEDULE;
+  if (env === '0' || env === 'false') return false;
+  if (env === '1' || env === 'true') return true;
+  const type = String(customer_type || 'saas').toLowerCase();
+  return type === 'saas';
+}
 
 function keyFor(appointmentId, clinicId) {
   return `${clinicId || 'unknown'}:${appointmentId || 'unknown'}`;
@@ -51,10 +60,12 @@ async function autoCheckoutAfterSchedule(params) {
     clinic_id,
     appointment_type,
     triage_session_id = null,
+    customer_type = null,
     timeoutMs = Number(process.env.AUTO_CHECKOUT_TIMEOUT_MS || 45000)
   } = params;
 
   if (!appointmentId || !clinic_id) return null;
+  if (!isAutoCheckoutEnabled({ customer_type })) return null;
 
   // DB guard: if checkout already exists for this appointment, do not create another.
   try {
@@ -137,4 +148,4 @@ async function autoCheckoutAfterSchedule(params) {
   }
 }
 
-module.exports = { autoCheckoutAfterSchedule };
+module.exports = { autoCheckoutAfterSchedule, isAutoCheckoutEnabled };

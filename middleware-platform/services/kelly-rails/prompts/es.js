@@ -51,8 +51,8 @@ function laneSystemPrompt(lane, step, state, providerCtx = {}) {
 
   const identityBlock = identityParts.length ? identityParts.join(' ') + '\n\n' : '';
 
-  const locale = state.locale || state.flags?.locale || 'es';
-  return `${identityBlock}${BASE}\n\n${hint}${subrailPromptBlock(state)}${localePromptBlock(locale)}\nSesión: ${state.session_id || ''}`;
+  const locale = state.flags?.preferred_language || state.locale || state.flags?.locale || 'es';
+  return `${identityBlock}${BASE}\n\n${hint}${subrailPromptBlock(state)}${localePromptBlock(locale, state)}\nSesión: ${state.session_id || ''}`;
 }
 
 module.exports = { laneSystemPrompt, BASE, LANE_HINTS };

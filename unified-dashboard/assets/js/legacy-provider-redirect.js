@@ -39,6 +39,7 @@
     'rcm.html': 'revenue.html?tab=pipeline',
     'patient-payments.html': 'revenue.html?tab=payments',
     'claims.html': 'revenue.html?tab=work',
+    'billing.html': 'revenue.html?tab=payments',
   };
   const target = TARGETS[file];
   if (target) {
