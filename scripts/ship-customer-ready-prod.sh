@@ -6,19 +6,35 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "==> 1. Auth (if needed)"
-gcloud auth login
-gcloud config set project somo-callsomo
-firebase login --reauth
+SKIP_TESTS="${SKIP_TESTS:-0}"
+SKIP_AUTH="${SKIP_AUTH:-0}"
+
+if [[ "$SKIP_AUTH" != "1" ]]; then
+  echo "==> 1. Auth (skip with SKIP_AUTH=1 if already logged in)"
+  if ! gcloud auth print-access-token >/dev/null 2>&1; then
+    gcloud auth login
+  fi
+  gcloud config set project somo-callsomo
+  if ! firebase projects:list >/dev/null 2>&1; then
+    firebase login --reauth
+  fi
+else
+  echo "==> 1. Auth skipped (SKIP_AUTH=1)"
+  gcloud config set project somo-callsomo 2>/dev/null || true
+fi
 
 echo "==> 2. Pull latest main"
 git checkout main && git pull origin main
 
-echo "==> 3. Pre-deploy tests"
-cd middleware-platform
-npm test -- --testPathPattern="booking-confirm|saas-tenant-provision|kelly-rails-tool-allowlists|kelly-activity-feed"
-npm run test:e2e:provider-journey
-cd "$ROOT"
+if [[ "$SKIP_TESTS" != "1" ]]; then
+  echo "==> 3. Pre-deploy tests"
+  cd middleware-platform
+  npm test -- --testPathPattern="booking-confirm|saas-tenant-provision|kelly-rails-tool-allowlists|kelly-activity-feed"
+  npm run test:e2e:provider-journey
+  cd "$ROOT"
+else
+  echo "==> 3. Pre-deploy tests skipped (SKIP_TESTS=1)"
+fi
 
 echo "==> 4. Deploy API (Cloud Run + Kelly env verify)"
 npm run callsomo:deploy-api
