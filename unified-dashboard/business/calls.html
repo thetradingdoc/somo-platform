@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Somo Provider - Calls</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/provider-portal.css">
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-api.js"></script>
+  <script src="/assets/js/provider-shell.js"></script>
+  <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
+  <style>
+    .pp-calls-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .pp-calls-layout { grid-template-columns: 1fr; } }
+    .pp-call-row { padding: 12px; border-bottom: 1px solid var(--gray-200, #e2e8f0); cursor: pointer; }
+    .pp-call-row:hover, .pp-call-row.is-active { background: #f0fdf4; }
+    .pp-call-detail { font-size: 13px; line-height: 1.5; }
+    .pp-call-detail h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; color: var(--muted2); }
+    .pp-event-line { padding: 6px 8px; border-radius: 8px; background: #f8fafc; margin-bottom: 4px; font-size: 12px; }
+  </style>
+</head>
+<body class="provider-portal provider-portal--scroll" data-page="calls">
+  <div class="pp-app" id="ppAppMount"></div>
+  <script>
+    const API_BASE = window.API_BASE || window.location.origin;
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function formatWhen(iso) {
+      if (!iso) return '—';
+      try { return new Date(iso).toLocaleString(); } catch (_) { return iso; }
+    }
+
+    async function loadCalls() {
+      const listEl = document.getElementById('ppCallsList');
+      listEl.innerHTML = '<div class="pp-skeleton"></div>';
+      try {
+        const json = await (window.ppApi?.get('/api/customer/dashboard/calls?limit=50') ||
+          fetch(`${API_BASE}/api/customer/dashboard/calls?limit=50`, { credentials: 'include' }).then(r => r.json()));
+        const calls = json.calls || [];
+        if (!calls.length) {
+          listEl.innerHTML = '<div class="pp-empty">No calls yet. When Kelly answers your line, calls appear here.</div>';
+          return;
+        }
+        listEl.innerHTML = calls.map((c) => {
+          const sid = c.call_id || c.id;
+          return `<div class="pp-call-row" data-session-id="${escapeHtml(sid)}" role="button" tabindex="0">
+            <div style="font-weight:600">${escapeHtml(c.direction || 'inbound')} · ${escapeHtml(c.status || 'completed')}</div>
+            <div style="font-size:12px;color:var(--muted)">${formatWhen(c.created_at)}</div>
+          </div>`;
+        }).join('');
+        listEl.querySelectorAll('.pp-call-row').forEach((row) => {
+          row.addEventListener('click', () => selectCall(row.dataset.sessionId, row));
+        });
+        const deep = new URLSearchParams(location.search).get('session');
+        if (deep) {
+          const row = listEl.querySelector(`[data-session-id="${CSS.escape(deep)}"]`);
+          selectCall(deep, row);
+        }
+      } catch (e) {
+        listEl.innerHTML = `<div class="pp-provision-banner error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function selectCall(sessionId, rowEl) {
+      document.querySelectorAll('.pp-call-row').forEach((r) => r.classList.remove('is-active'));
+      if (rowEl) rowEl.classList.add('is-active');
+      const detail = document.getElementById('ppCallDetail');
+      detail.innerHTML = '<div class="pp-skeleton"></div>';
+      try {
+        const json = await (window.ppApi?.get(`/api/kelly/calls/${encodeURIComponent(sessionId)}`) ||
+          fetch(`${API_BASE}/api/kelly/calls/${encodeURIComponent(sessionId)}`, { credentials: 'include' }).then(r => r.json()));
+        let html = `<div class="pp-call-detail" data-testid="pp-call-detail">
+          <p><strong>Session</strong> ${escapeHtml(sessionId)}</p>
+          <p><strong>Events</strong> ${json.event_count || 0}</p>`;
+        if (json.appointment) {
+          html += `<p><a class="pp-btn pp-btn-link" href="calendar.html?id=${encodeURIComponent(json.appointment.id)}">Open appointment</a></p>`;
+        }
+        if (json.tools?.length) {
+          html += '<h4>Tools</h4>' + json.tools.map((t) =>
+            `<div class="pp-event-line">${escapeHtml(t.tool || '—')} · ${escapeHtml(t.type)}</div>`
+          ).join('');
+        }
+        if (json.booking_outcome) {
+          html += `<h4>Booking</h4><div class="pp-event-line">${escapeHtml(JSON.stringify(json.booking_outcome))}</div>`;
+        }
+        if (json.orchestration_trace?.length) {
+          html += '<h4>Orchestration</h4>' + json.orchestration_trace.slice(-8).map((t) =>
+            `<div class="pp-event-line">${escapeHtml(t.gate_matched || t.lane || '—')} → ${escapeHtml(t.gate_outcome || '')}</div>`
+          ).join('');
+        }
+        html += '</div>';
+        detail.innerHTML = html;
+      } catch (e) {
+        detail.innerHTML = `<div class="pp-provision-banner error">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof window.requireAuth === 'function') window.requireAuth();
+      mountProviderPage({
+        activeId: 'calls',
+        eyebrow: 'Voice',
+        title: 'Call log',
+        subtitle: 'Kelly calls, tools used, and booking outcomes'
+      });
+      const main = document.getElementById('ppMainContent');
+      main.innerHTML = `
+        <div class="pp-calls-layout">
+          <section class="pp-panel">
+            <div class="pp-panel-head"><div class="pp-panel-title">Recent calls</div></div>
+            <div class="pp-panel-body" id="ppCallsList" data-testid="pp-calls-list"></div>
+          </section>
+          <section class="pp-panel">
+            <div class="pp-panel-head"><div class="pp-panel-title">Call detail</div></div>
+            <div class="pp-panel-body" id="ppCallDetail"><div class="pp-empty">Select a call to see Kelly activity.</div></div>
+          </section>
+        </div>`;
+      loadCalls();
+    });
+  </script>
+</body>
+</html>

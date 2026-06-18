@@ -52,11 +52,25 @@ jobs:
         run: |
           npm run verify:kelly-rails-env
           KELLY_RAILS_ENV_PROFILE=staging KELLY_RAILS_V2=1 KELLY_ALLOW_HYBRID_GRAPH=0 npm run verify:kelly-rails-env
+          CLOUDRUN_PROFILE=production CONVERSATION_MODE_ROUTING=enforce KELLY_ALLOW_HYBRID_GRAPH=0 npm run verify:env-gates
+          if CLOUDRUN_PROFILE=production CONVERSATION_MODE_ROUTING=shadow npm run verify:env-gates 2>/dev/null; then echo "verify:env-gates must fail on shadow prod profile"; exit 1; fi
           npm run test:kelly:rails:golden
           npm run test:kelly:rails:language
           npm run test:e2e:kelly:golden-conversations
           npm run test:e2e:kelly:golden-conversations:es
           npm run test:voice:slo-smoke
+
+      - name: Kelly Rails orchestration TCR sandbox
+        if: matrix.node-version == '20.x'
+        working-directory: ./middleware-platform
+        env:
+          NODE_ENV: test
+          DB_PATH: ./middleware-test.db
+          SKIP_STARTUP_MIGRATIONS: "1"
+          ALLOW_DEMO_SEED: "1"
+        run: |
+          node scripts/seed-demo-accounts.js || true
+          npm run test:rails:orchestration
 
       - name: Install and build somo-landing
         if: matrix.node-version == '20.x'

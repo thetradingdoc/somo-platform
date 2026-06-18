@@ -342,5 +342,6 @@ module.exports = {
   provisionCustomerPhone,
   getBillingStatus,
   priceIdForTier,
-  priceIdForTopup
+  priceIdForTopup,
+  ensureStripeCustomer
 };

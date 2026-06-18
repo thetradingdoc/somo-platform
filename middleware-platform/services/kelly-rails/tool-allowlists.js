@@ -17,6 +17,15 @@ const PAYMENT_AND_SCHEDULE_TOOLS = new Set([
   'collect_insurance'
 ]);
 
+/** Tools owned by L4 gates — stripped from LLM allowlists on gate-owned steps. */
+const TRANSACTIONAL_GATE_TOOLS = new Set([
+  'schedule_appointment',
+  'create_appointment_checkout',
+  'request_patient_payment',
+  'cancel_appointment',
+  'reschedule_appointment'
+]);
+
 const ALLOWLISTS = {
   basic_intake: {
     identity: ['get_triage_session'],
@@ -32,10 +41,10 @@ const ALLOWLISTS = {
   },
   booking: {
     schedule_visit: ['get_available_slots', 'get_triage_session'],
-    confirm_visit: ['schedule_appointment', 'create_appointment_checkout', 'get_triage_session']
+    confirm_visit: ['get_triage_session']
   },
   payment: {
-    pay_invoice: ['request_patient_payment', 'collect_insurance', 'get_patient_claims'],
+    pay_invoice: ['get_triage_session', 'get_patient_claims'],
     insurance: ['collect_insurance', 'get_patient_claims'],
     receipt_logic: ['get_patient_claims', 'request_patient_payment']
   },
@@ -72,10 +81,25 @@ const ALLOWLISTS = {
   }
 };
 
+function isGateOwnedTransactionalStep(lane, step, flags = {}) {
+  if (lane === 'booking' && step === 'confirm_visit') return true;
+  if (lane === 'payment' && step === 'pay_invoice') return true;
+  if (lane === 'reschedule' && step === 'move_or_cancel' && flags.cancel_pending) return true;
+  return false;
+}
+
 function getAllowedToolNames(lane, step, flags = {}, profileAllowedTools = null) {
   const laneMap = ALLOWLISTS[lane];
   if (!laneMap) return ['get_triage_session'];
   let names = [...(laneMap[step] || laneMap[Object.keys(laneMap)[0]] || ['get_triage_session'])];
+
+  if (lane === 'reschedule' && step === 'move_or_cancel' && flags.cancel_pending) {
+    names = names.filter((n) => n === 'search_appointments' || n === 'get_triage_session');
+  }
+
+  if (isGateOwnedTransactionalStep(lane, step, flags)) {
+    names = names.filter((n) => !TRANSACTIONAL_GATE_TOOLS.has(n));
+  }
 
   if (lane === 'records') {
     names = names.filter((n) => !PAYMENT_AND_SCHEDULE_TOOLS.has(n));
@@ -99,5 +123,7 @@ module.exports = {
   ALLOWLISTS,
   SKINCARE_ROUTINE_TOOLS,
   PAYMENT_AND_SCHEDULE_TOOLS,
+  TRANSACTIONAL_GATE_TOOLS,
+  isGateOwnedTransactionalStep,
   getAllowedToolNames
 };

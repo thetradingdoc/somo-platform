@@ -33,6 +33,13 @@
     .activation-tips strong {
       color: var(--signup-text);
     }
+
+    .signup-btn-disabled,
+    a.signup-btn-disabled {
+      opacity: 0.45;
+      pointer-events: none;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 
@@ -56,7 +63,7 @@
 
     <div class="signup-reveal" id="activationReveal" style="margin-top: 20px;">
       <p class="signup-reveal-label">Your Somo number</p>
-      <p class="signup-reveal-number" id="activationNumber">Loading…</p>
+      <p class="signup-reveal-number" id="activationNumber" data-testid="activation-number">Loading…</p>
       <p class="signup-reveal-trial" id="activationTrialMeta">60 free minutes · 7-day trial</p>
       <div class="signup-reveal-actions">
         <a class="signup-btn signup-btn-primary" id="activationCall" href="#">Call my Somo line</a>
@@ -74,6 +81,11 @@
     </div>
 
     <div class="signup-toast error hidden" id="activationError"></div>
+    <div id="activationProvisionRetry" hidden style="margin-top:12px;text-align:center;">
+      <p style="font-size:0.95rem;color:var(--signup-muted);margin:0 0 10px;">We could not assign your phone line yet. Your account is active — retry provisioning or contact support.</p>
+      <button type="button" class="signup-btn signup-btn-primary" id="activationRetryProvision">Retry line setup</button>
+      <a class="signup-btn signup-btn-ghost" href="mailto:support@callsomo.com" style="display:inline-block;margin-top:8px;text-decoration:none;">Contact support</a>
+    </div>
 
     <a class="signup-btn signup-btn-primary" id="activationAgent" href="voice-setup.html"
       style="text-decoration: none; margin-top: 8px;">Set up your AI front desk</a>
@@ -129,11 +141,37 @@
         const numEl = document.getElementById('activationNumber');
         const callEl = document.getElementById('activationCall');
 
+        async function syncCallButton(phone, kellyReady) {
+          const digits = String(phone || '').replace(/\D/g, '');
+          const hasRealPhone = digits.length >= 10 && !/provisioning|loading/i.test(String(phone || ''));
+          const enabled = !!kellyReady && hasRealPhone;
+          callEl.classList.toggle('signup-btn-disabled', !enabled);
+          callEl.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+          if (enabled) {
+            callEl.href = 'tel:' + String(phone).replace(/\s/g, '');
+            callEl.removeAttribute('tabindex');
+          } else {
+            callEl.removeAttribute('href');
+            callEl.setAttribute('tabindex', '-1');
+          }
+        }
+
+        let kellyReady = false;
+        try {
+          const kellyRes = await fetch(API_BASE + '/api/kelly/status', { credentials: 'include' });
+          if (kellyRes.ok) {
+            const kelly = await kellyRes.json();
+            kellyReady = String(kelly.status || 'active').toLowerCase() !== 'paused';
+          }
+        } catch (_) {}
+
         if (line) {
           numEl.textContent = line;
-          callEl.href = 'tel:' + line.replace(/\s/g, '');
+          await syncCallButton(line, kellyReady);
         } else {
           numEl.textContent = 'Provisioning your number…';
+          document.getElementById('activationProvisionRetry').hidden = false;
+          await syncCallButton(null, false);
         }
 
         let attr = {};
@@ -167,7 +205,13 @@
             }
             if (!line && b.twilio_phone_number) {
               numEl.textContent = b.twilio_phone_number;
-              callEl.href = 'tel:' + b.twilio_phone_number.replace(/\s/g, '');
+              await syncCallButton(b.twilio_phone_number, kellyReady);
+              document.getElementById('activationProvisionRetry').hidden = true;
+            } else if (!line && !b.twilio_phone_number) {
+              document.getElementById('activationProvisionRetry').hidden = false;
+              await syncCallButton(null, false);
+            } else if (line) {
+              await syncCallButton(line, kellyReady);
             }
           }
         } catch (_) {}
@@ -176,6 +220,33 @@
           const n = numEl.textContent;
           if (!n || n.includes('…')) return;
           navigator.clipboard?.writeText(n);
+        });
+
+        document.getElementById('activationRetryProvision')?.addEventListener('click', async () => {
+          const retryBtn = document.getElementById('activationRetryProvision');
+          retryBtn.disabled = true;
+          retryBtn.textContent = 'Retrying…';
+          try {
+            const res = await fetch(API_BASE + '/api/signup/assign-line', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.success && (data.twilio_phone_number || data.phone_number)) {
+              const num = data.twilio_phone_number || data.phone_number;
+              numEl.textContent = num;
+              await syncCallButton(num, kellyReady);
+              document.getElementById('activationProvisionRetry').hidden = true;
+            } else {
+              showError(data.error || 'Line setup failed. Try again or contact support.');
+            }
+          } catch (_) {
+            showError('Could not reach the server. Check your connection and try again.');
+          } finally {
+            retryBtn.disabled = false;
+            retryBtn.textContent = 'Retry line setup';
+          }
         });
 
         document.getElementById('activationDismiss').addEventListener('click', async () => {

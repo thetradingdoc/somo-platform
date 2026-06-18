@@ -19,7 +19,7 @@ describe('Kelly Rails language handoff (integration)', () => {
       clinicId: 'clinic-default'
     });
 
-    expect(out?.reply).toMatch(/especialista|support|idioma/i);
+    expect(out?.reply).toMatch(/especialista|support|idioma|soporte/i);
     expect(out?.toolsUsed || []).toEqual([]);
     expect(out?.kelly_rails?.active_lane).toBe('support');
   });

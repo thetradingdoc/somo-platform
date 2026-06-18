@@ -3,7 +3,8 @@
 const { Handoff } = require('../handoff-types');
 const {
   detectBookingIntents,
-  parseProviderFromMessage
+  parseProviderFromMessage,
+  BookingIntentType
 } = require('../../kelly-rails/turn-planner');
 
 const BOOKING_STEPS = [
@@ -26,17 +27,47 @@ const STEP_PROMPTS = {
 
 const KELLY_BOOKING_STEPS = new Set(['slot_lookup', 'slot_select', 'contact_confirm', 'schedule', 'confirm']);
 
+/** Advance L2 step only on intent or L4 gate outcomes — not blindly every turn. */
+function resolveNextBookingStep(step, ctx, bookingIntents) {
+  const flags = ctx.flags || {};
+  const msg = String(ctx.message || '').toLowerCase();
+
+  if (flags.schedule_appointment_success || flags.last_appointment_id || flags.appointment_id) {
+    return 'confirm';
+  }
+  if (flags.booking_conflict || flags.provider_mismatch) {
+    if (step === 'slot_lookup' || step === 'slot_select') return 'slot_select';
+  }
+
+  if (KELLY_BOOKING_STEPS.has(step)) {
+    if (
+      step === 'slot_select' &&
+      bookingIntents.some((i) => i.type === BookingIntentType.SLOT_SELECTED)
+    ) {
+      return 'contact_confirm';
+    }
+    return step;
+  }
+
+  if (step === 'intent_confirm' && /book|schedule|appointment|yes|need|visit/.test(msg)) {
+    return 'slot_lookup';
+  }
+
+  const idx = BOOKING_STEPS.indexOf(step);
+  if (idx < 0) return 'intent_confirm';
+  return BOOKING_STEPS[Math.min(idx + 1, BOOKING_STEPS.length - 1)];
+}
+
 async function handleBookingSubrail(ctx = {}) {
   const step = ctx.active_subrail_step || 'intent_confirm';
-  const idx = BOOKING_STEPS.indexOf(step);
-  const nextStep = BOOKING_STEPS[Math.min(idx + 1, BOOKING_STEPS.length - 1)];
   const msg = String(ctx.message || '').toLowerCase();
+  const bookingIntents = detectBookingIntents(ctx.message, step);
+  const nextStep = resolveNextBookingStep(step, ctx, bookingIntents);
 
   let reply = STEP_PROMPTS[step] || STEP_PROMPTS.intent_confirm;
   let endCall = false;
   let disposition = null;
   const stateUpdates = { active_subrail: 'booking', active_subrail_step: nextStep };
-  const bookingIntents = detectBookingIntents(ctx.message, step);
   if (bookingIntents.length) {
     stateUpdates.booking_intents = bookingIntents;
   }
@@ -114,4 +145,10 @@ async function handleBookingSubrail(ctx = {}) {
   };
 }
 
-module.exports = { handleBookingSubrail, BOOKING_STEPS, STEP_PROMPTS, parseProviderFromMessage };
+module.exports = {
+  handleBookingSubrail,
+  BOOKING_STEPS,
+  STEP_PROMPTS,
+  parseProviderFromMessage,
+  resolveNextBookingStep
+};

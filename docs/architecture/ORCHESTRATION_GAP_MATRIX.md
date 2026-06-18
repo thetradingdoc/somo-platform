@@ -3,6 +3,8 @@
 **Last updated:** 2026-06-17  
 **SSOT architecture:** [`KELLY_ORCHESTRATION_ARCHITECTURE.md`](./KELLY_ORCHESTRATION_ARCHITECTURE.md)
 
+**Customer-ready exit (2026-06-17):** P0–P2 implementation complete — live verify scripts, portal E2E, gate-owned transactional steps, `hydrateSessionForTurn`, activity feed on `tool_completed`, CI `verify:env-gates`, nightly prod workflow. Prod live-call proofs remain operator-run per [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md).
+
 ---
 
 ## Target vs as-built summary
@@ -10,7 +12,7 @@
 | Layer | Target | As-built status | Status | Gap severity |
 |-------|--------|-----------------|--------|--------------|
 | Identity admission | Reject/escalate bad Retell vars before L2 | `voice-identity-admission.js` fail-closed + `identity_invalid` | **done** | — |
-| L2 authority | Mode/subrail enforced | Code supports enforce; prod may still be shadow | **partial** | **P0** |
+| L2 authority | Mode/subrail enforced | Code supports enforce; prod `enforce` on Cloud Run | **done** | — |
 | ASR → intent | Normalize before intent detector | `asr-normalize.js` wired to intent + pivot | **done** | — |
 | Schedule gate | Tool on confirm with slot set | `runDeterministicSchedule` + stated-time path + retry | **done** | — |
 | Stated-time booking | Book without API slots when patient names time | `resolveBookingSlot` + `slot-time-parse.js` | **done** | — |
@@ -27,8 +29,11 @@
 | SSOT | Transaction + projection wins | `persistRailsSessionState` transactional merge | **partial** | **P3** |
 | Telemetry | All paths emit events | P0 verify script; `booking_outcome` added | **partial** | **P1** |
 | CI/deploy gate | verify scripts block shadow | `verify-kelly-rails-env` enforces enforce in prod profile | **partial** | **P3** |
-| Turn planner | Single turn authority | `turn-planner.js` + booking intents | **partial** | **P1** |
-| Gate registry | Ordered testable gates | `gate-registry.js` + priority tests | **done** | — |
+| Turn planner | Single turn authority | `turn-planner.js` + booking intents; gate plan filter | **partial** | **P1** |
+| Gate registry | Ordered testable gates | `gate-registry.js` + priority + turn-plan filter | **done** | — |
+| CI orchestration TCR | Sandbox in GitHub CI | `test:rails:orchestration` in ci.yml | **done** | — |
+| Cancel/reschedule/records gates | Deterministic L4 gates | `lanes.js` + unit tests | **done** | — |
+| Orchestration trace | gate_matched on every turn | `voice-orchestration-trace.js` enriched | **partial** | **P1** |
 | Failure taxonomy | Distinct booking failure copy | `schedule_conflict`, `schedule_failed` keys | **done** | — |
 
 ---
@@ -46,7 +51,7 @@
 | `booking-conflict-confirm-gate` | Post-conflict alt confirm → schedule | **done** | Schedule gate runs before conflict on confirm |
 | `sandbox-spanish-green` | Blocked by both schedule gates | **partial** | 3× 12/12 TCR (dev DB contention) |
 | `telemetry-p0-minimum` | P0 path self-test events | **done** | `npm run verify:p0-telemetry` |
-| `enforce-routing` | Staging enforce + rollback doc | **open** | `shadow_only=false` on smoke |
+| `enforce-routing` | Staging enforce + rollback doc | **done** | prod `enforce` + verify script |
 
 ### P1
 
@@ -60,7 +65,10 @@
 | `outbound-orchestration` | Operator outbound subrail | **partial** | Rail exists; full TCR varies |
 | `demo-qual-rail-decision` | Block pivot to demo_qual | **done** | Enforce blocks pivot |
 | `notification-side-effect-validation` | SMS/email fail graceful | **done** | `notification_failed` |
-| `telemetry-completeness-audit` | Full audit + SLO queries | **open** | 100% path checklist |
+| `telemetry-completeness-audit` | Full audit + SLO queries | **partial** | trace enriched; 100% path checklist open |
+| `ci-orchestration-gate` | `test:rails:orchestration` in CI | **done** | ci.yml Node 20 job |
+| `subrail-step-gate-owned` | L2 holds step until L4 outcome | **done** | `booking-subrail.js` + test |
+| `turn-plan-authoritative` | Gate registry honors `_turn_plan` | **done** | `gateAllowedByTurnPlan` |
 | `turn-planner-spike` | Subrails emit intents only | **partial** | `turn-planner.js` + booking intents |
 | `booking-user-dialog-ci` | User Dr. Santos dialog in sandbox | **done** | `scenarioBookingUserDialog` |
 

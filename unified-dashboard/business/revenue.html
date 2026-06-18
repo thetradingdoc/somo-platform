@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/revenue/revenue-ui.js"></script>
@@ -79,7 +80,7 @@
           <button type="button" class="pp-revenue-tab" data-tab="claims" role="tab" aria-selected="false">
             Claims <span class="pp-revenue-tab-badge" id="rev-tab-badge-claims" hidden></span>
           </button>
-          <button type="button" class="pp-revenue-tab" data-tab="payments" role="tab" aria-selected="false">
+          <button type="button" class="pp-revenue-tab" data-tab="payments" data-testid="revenue-tab-payments" role="tab" aria-selected="false">
             Patient pay <span class="pp-revenue-tab-badge" id="rev-tab-badge-payments" hidden></span>
           </button>
           <button type="button" class="pp-revenue-tab" data-tab="work" role="tab" aria-selected="false">

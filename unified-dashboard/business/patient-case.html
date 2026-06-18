@@ -12,12 +12,13 @@
   <link rel="stylesheet" href="/assets/css/provider-portal.css" />
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
   <style>
     .case-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
-    .case-timeline { border-left: 2px solid var(--gray-200, #e2e8f0); margin-top: 12px; padding-left: 16px; }
+    .case-timeline { border-left: 2px solid var(--gray-200, #e2e8f0); margin-top: 12px; padding-left: 16px; min-height: 48px; }
     .case-event { margin-bottom: 16px; position: relative; padding-left: 4px; }
     .case-event::before {
       content: '';
@@ -32,10 +33,13 @@
     .case-event-type { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted2); margin-bottom: 2px; }
     .case-event-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
     .case-event-meta { font-size: 12px; color: var(--muted); }
+    .case-notes-panel { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border, #e2e8f0); }
+    .case-notes-panel textarea { width: 100%; min-height: 100px; resize: vertical; }
+    .case-auto-load-banner { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
   </style>
 </head>
-<body class="provider-portal provider-portal--scroll">
-  <main class="main-content pp-content pp-content--case" id="ppMainContent">
+<body class="provider-portal provider-portal--scroll" data-page="patient-case">
+  <main class="main-content pp-content pp-content--case" id="ppMainContent" data-testid="patient-case-shell">
     <section class="pp-panel">
       <div class="pp-panel-head">
         <div>
@@ -45,19 +49,32 @@
         <a class="pp-btn pp-btn-ghost pp-btn-sm" id="journeyLink" href="rcm-journey.html" style="display:none">RCM journey</a>
       </div>
       <div class="pp-panel-body">
-        <div class="case-filters">
-          <input id="patientIdInput" class="pp-input" style="max-width:280px" placeholder="Patient ID" />
+        <div id="caseAutoLoadBanner" class="case-auto-load-banner" hidden aria-live="polite"></div>
+        <div class="case-filters" id="caseFilters">
+          <input id="patientIdInput" class="pp-input" style="max-width:280px" placeholder="Patient ID" data-testid="patient-case-id-input" />
           <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="loadCaseBtn">Load case</button>
         </div>
         <div id="msg" class="pp-provision-banner error" style="display:none;margin-bottom:12px"></div>
         <div id="journeyPanel" style="display:none;margin-bottom:12px"></div>
-        <div class="case-timeline" id="timeline"></div>
+        <div class="case-notes-panel" id="caseNotesPanel" hidden>
+          <div class="pp-panel-title" style="font-size:15px;margin-bottom:8px">Provider notes</div>
+          <p class="pp-muted" style="font-size:13px;margin:0 0 8px" id="caseNotesApptHint">Attach notes to the selected visit.</p>
+          <select id="caseNotesApptSelect" class="pp-input" style="max-width:100%;margin-bottom:8px" aria-label="Appointment for notes"></select>
+          <textarea id="caseNotesInput" class="pp-input" rows="4" placeholder="Post-visit notes, follow-up plan…" data-testid="patient-case-notes-input"></textarea>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="caseNotesSaveBtn" data-testid="patient-case-notes-save">Save notes</button>
+            <span id="caseNotesStatus" class="pp-muted" style="font-size:12px" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="case-timeline" id="timeline" data-testid="patient-case-timeline"></div>
       </div>
     </section>
   </main>
   <script>
     const API_BASE = window.API_BASE || 'http://localhost:4000';
     const clinicId = () => (window.ppGetClinicId ? window.ppGetClinicId() : 'clinic-default');
+    let caseAppointments = [];
+    let urlPatientId = '';
 
     function resolveBackHref() {
       const from = new URLSearchParams(window.location.search).get('from');
@@ -78,6 +95,52 @@
       div.className = 'case-event';
       div.innerHTML = `<div class="case-event-type">${type}</div><div class="case-event-title">${title}</div><div class="case-event-meta">${meta || ''}</div>`;
       timelineEl.appendChild(div);
+    }
+
+    function setupNotesComposer(appointments) {
+      caseAppointments = (appointments || []).filter((a) => a && a.id);
+      const panel = document.getElementById('caseNotesPanel');
+      const select = document.getElementById('caseNotesApptSelect');
+      if (!panel || !select) return;
+      if (!caseAppointments.length) {
+        panel.hidden = true;
+        return;
+      }
+      panel.hidden = false;
+      select.innerHTML = caseAppointments.map((a) => {
+        const label = [a.appointment_type || 'Visit', a.date || a.start_time, a.status].filter(Boolean).join(' · ');
+        return `<option value="${String(a.id).replace(/"/g, '&quot;')}">${label}</option>`;
+      }).join('');
+    }
+
+    async function saveCaseNotes() {
+      const apptId = document.getElementById('caseNotesApptSelect')?.value?.trim();
+      const notes = document.getElementById('caseNotesInput')?.value?.trim() || '';
+      const statusEl = document.getElementById('caseNotesStatus');
+      const btn = document.getElementById('caseNotesSaveBtn');
+      if (!apptId) {
+        showMsg('Select an appointment to attach notes.', 'error');
+        return;
+      }
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.textContent = 'Saving…';
+      try {
+        const res = await fetch(`${API_BASE}/api/provider/appointments/${encodeURIComponent(apptId)}/notes`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...(window.ppGetAuthHeaders?.() || {}) },
+          body: JSON.stringify({ provider_notes: notes })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not save notes');
+        if (statusEl) statusEl.textContent = 'Saved';
+        clearMsg();
+      } catch (err) {
+        showMsg(err.message || 'Failed to save notes.', 'error');
+        if (statusEl) statusEl.textContent = '';
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     async function loadJourneyForPatient(patientId) {
@@ -113,19 +176,22 @@
       }
     }
 
-    async function loadCase() {
+    async function loadCase(patientIdOverride) {
       clearMsg();
-      const patientId = document.getElementById('patientIdInput').value.trim();
+      const patientId = (patientIdOverride || document.getElementById('patientIdInput').value || '').trim();
       if (!patientId) { showMsg('Enter a patient ID to load case.', 'error'); return; }
+      document.getElementById('patientIdInput').value = patientId;
       const timelineEl = document.getElementById('timeline');
       timelineEl.innerHTML = '<div class="pp-empty">Loading…</div>';
+      document.getElementById('caseNotesPanel').hidden = true;
       try {
         const res = await fetch(`${API_BASE}/api/patient/${encodeURIComponent(patientId)}/case-report`, {
+          credentials: 'include',
           headers: { 'ngrok-skip-browser-warning': 'true', ...(window.ppGetAuthHeaders?.() || {}) }
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
-          timelineEl.innerHTML = '';
+          timelineEl.innerHTML = '<div class="pp-empty">No case events found for this patient.</div>';
           showMsg(data.error || 'Unable to load case report.', 'error');
           return;
         }
@@ -158,15 +224,26 @@
         (documents || []).forEach((doc) => {
           addEvent(timelineEl, 'Document', doc.file_name || 'Document', doc.created_at ? new Date(doc.created_at).toLocaleString() : '');
         });
+        setupNotesComposer(appointments);
         await loadJourneyForPatient(patientId);
+        if (urlPatientId && patientId === urlPatientId) {
+          const banner = document.getElementById('caseAutoLoadBanner');
+          if (banner) {
+            banner.hidden = false;
+            banner.textContent = `Loaded case for ${fullName}.`;
+          }
+        }
       } catch (err) {
-        timelineEl.innerHTML = '';
+        timelineEl.innerHTML = '<div class="pp-empty">Could not load case timeline.</div>';
         showMsg('Network error while loading case report.', 'error');
       }
     }
 
-    document.getElementById('loadCaseBtn').addEventListener('click', loadCase);
+    document.getElementById('loadCaseBtn').addEventListener('click', () => loadCase());
+    document.getElementById('caseNotesSaveBtn')?.addEventListener('click', saveCaseNotes);
+
     document.addEventListener('DOMContentLoaded', () => {
+      if (typeof window.requireAuth === 'function') window.requireAuth();
       mountProviderPage({
         activeId: 'patients',
         eyebrow: 'Patients',
@@ -176,10 +253,15 @@
         backLabel: 'Back to roster'
       });
       const params = new URLSearchParams(window.location.search);
-      const pid = params.get('patient_id');
-      if (pid) {
-        document.getElementById('patientIdInput').value = pid;
-        loadCase();
+      urlPatientId = params.get('patient_id') || params.get('patientId') || '';
+      if (urlPatientId) {
+        document.getElementById('patientIdInput').value = urlPatientId;
+        const banner = document.getElementById('caseAutoLoadBanner');
+        if (banner) {
+          banner.hidden = false;
+          banner.textContent = 'Loading patient case…';
+        }
+        loadCase(urlPatientId);
       }
     });
   </script>

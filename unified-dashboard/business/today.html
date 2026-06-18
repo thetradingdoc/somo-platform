@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
 </head>
@@ -78,6 +79,13 @@
       <main class="pp-content pp-content--today" id="ppMainContent">
         <div class="pp-alert-strip" id="ppAlertStrip" hidden aria-live="polite"></div>
 
+        <section class="pp-panel pp-panel--compact" id="ppOnboardingChecklist" data-testid="pp-onboarding-checklist" hidden>
+          <div class="pp-panel-head pp-panel-head--compact">
+            <div class="pp-panel-title">Get your front desk live</div>
+          </div>
+          <div class="pp-panel-body pp-panel-body--compact" id="ppOnboardingChecklistBody"></div>
+        </section>
+
         <div class="pp-kpi-row pp-kpi-row-4" id="kpiRow">
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
@@ -111,7 +119,7 @@
                 <button type="button" class="pp-ptab" data-filter="upcoming" role="tab" aria-selected="false" aria-controls="scheduleList">Upcoming Appointments</button>
                 <button type="button" class="pp-ptab" data-filter="recent" role="tab" aria-selected="false" aria-controls="scheduleList">Recent Appointments</button>
               </div>
-              <div class="pp-panel-body" id="scheduleList">
+              <div class="pp-panel-body" id="scheduleList" data-testid="pp-schedule-list">
                 <div class="pp-skeleton"></div>
                 <div class="pp-skeleton"></div>
               </div>
@@ -134,7 +142,7 @@
                 <div class="pp-panel-title">Kelly activity</div>
                 <a class="pp-btn pp-btn-link" href="agent.html">Voice agent</a>
               </div>
-              <div class="pp-panel-body pp-panel-body--compact" id="kellyActivityPanel">
+              <div class="pp-panel-body pp-panel-body--compact" id="kellyActivityPanel" data-testid="pp-kelly-activity">
                 <div class="pp-skeleton"></div>
               </div>
             </section>
@@ -142,7 +150,7 @@
             <section class="pp-panel pp-panel--rail pp-panel--comms">
               <div class="pp-panel-head pp-panel-head--compact">
                 <div class="pp-panel-title">Recent Calls</div>
-                <a class="pp-btn pp-btn-link" href="calendar.html">View all</a>
+                <a class="pp-btn pp-btn-link" href="calls.html">View all</a>
               </div>
               <div class="pp-panel-body pp-panel-body--compact" id="recentCallsPanel">
                 <div class="pp-skeleton"></div>
@@ -200,7 +208,8 @@
       else if (st === 'scheduled') tags.push('<span class="pp-chip pp-chip--pending">Scheduled</span>');
       else if (st === 'no_show') tags.push('<span class="pp-chip pp-chip--warn">No-show</span>');
       if (isTelehealth(a)) tags.push('<span class="pp-chip pp-chip--neutral">Telehealth</span>');
-      return tags.slice(0, 2).join('');
+      if (a.triage_session_id) tags.push('<span class="pp-chip pp-chip--info">Booked by Kelly</span>');
+      return tags.slice(0, 3).join('');
     }
 
     function chevronSvg() {
@@ -331,7 +340,14 @@
         });
         const json = await res.json();
         if (!res.ok || !json.success) {
-          body.textContent = 'No brief available yet.';
+          const errCode = json.error_code || json.error || '';
+          if (res.status >= 500) {
+            body.textContent = 'Could not load clinical prep — server error. Try again in a moment.';
+          } else if (/no clinical|not found|empty/i.test(String(errCode))) {
+            body.textContent = 'No clinical prep yet — Kelly will capture intake when the patient calls before this visit.';
+          } else {
+            body.textContent = 'No brief available yet for this appointment.';
+          }
         } else {
           const prep = json.prep || {};
           const summary =
@@ -724,6 +740,44 @@
       if (el && typeof window.ppGreetingName === 'function') el.textContent = window.ppGreetingName();
     }
 
+    async function loadOnboardingChecklist() {
+      const panel = document.getElementById('ppOnboardingChecklist');
+      const body = document.getElementById('ppOnboardingChecklistBody');
+      if (!panel || !body) return;
+      try {
+        const API_BASE = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+        const [agentRes, dashRes] = await Promise.all([
+          fetch(`${API_BASE}/api/voice-agent/status`, { credentials: 'include' }).catch(() => null),
+          fetch(`${API_BASE}/api/customer/dashboard`, { credentials: 'include' }).catch(() => null),
+        ]);
+        const agent = agentRes?.ok ? await agentRes.json().catch(() => ({})) : {};
+        const dash = dashRes?.ok ? await dashRes.json().catch(() => ({})) : {};
+        const kellyOn = !!(agent.enabled ?? agent.voice_agent_enabled);
+        const hasCalls = Number(dash.calls_this_week ?? dash.recent_calls?.length ?? 0) > 0;
+        const hasPayments = Number(dash.payments_this_week ?? dash.recent_payments?.length ?? 0) > 0;
+        const hasAppts = Number(dash.appointments_today ?? dash.appointments?.length ?? 0) > 0;
+        const items = [
+          { id: 'test-call', label: 'Place a test call to your Kelly line', done: hasCalls, href: 'agent.html' },
+          { id: 'test-payment', label: 'Send a test payment link', done: hasPayments, href: 'agent.html#test-payment' },
+          { id: 'verify-calendar', label: 'Verify today\'s schedule on calendar', done: hasAppts, href: 'calendar.html' },
+          { id: 'kelly-on', label: 'Turn Kelly on for live calls', done: kellyOn, href: 'agent.html' },
+        ];
+        const pending = items.filter((i) => !i.done);
+        if (pending.length === 0) {
+          panel.hidden = true;
+          return;
+        }
+        panel.hidden = false;
+        body.innerHTML = items.map((item) => `
+          <div class="pp-onboard-row${item.done ? ' is-done' : ''}" data-testid="onboard-${item.id}">
+            <span class="pp-onboard-check">${item.done ? '✓' : '○'}</span>
+            <a href="${item.href}" class="pp-onboard-label">${escapeHtml(item.label)}</a>
+          </div>`).join('');
+      } catch (_) {
+        panel.hidden = true;
+      }
+    }
+
     async function loadOnboardingNudge() {
       const strip = document.getElementById('ppAlertStrip');
       if (!strip) return;
@@ -750,6 +804,7 @@
       renderHeroGreeting();
       wireTopbarIcons();
       loadOnboardingNudge();
+      loadOnboardingChecklist();
       loadDashboard();
       if (typeof window.ppOnPaymentRefresh === 'function') {
         window.ppOnPaymentRefresh(() => loadDashboard().catch(() => {}));
@@ -757,6 +812,7 @@
       setInterval(() => {
         loadKellyActivity().catch(() => {});
       }, 30000);
+      window.ppRefreshAppointments = () => loadDashboard();
     })();
   </script>
 </body>

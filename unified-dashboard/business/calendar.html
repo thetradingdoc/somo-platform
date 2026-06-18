@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="/assets/css/provider-calendar.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
+  <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
@@ -71,7 +72,7 @@
       </div>
 
       <div id="calendarWrap">
-        <div id="calendar"></div>
+        <div id="calendar" data-testid="cal-calendar"></div>
       </div>
   </main>
 
@@ -208,6 +209,11 @@
         <button id="btnCheckSlots" class="btn">Check slots</button>
       </div>
       <div id="slotsWrap" style="padding:8px 16px; display:none;"></div>
+      <div class="section" id="calCancelSection">
+        <h4>Cancel appointment</h4>
+        <textarea id="calCancelReason" class="input" data-testid="cal-cancel-reason" rows="2" placeholder="Reason for cancellation (optional)" style="width:100%;resize:vertical;"></textarea>
+      </div>
+      <div id="calActionError" data-testid="cal-action-error" role="alert" hidden style="margin-top:8px;padding:8px 12px;border-radius:8px;background:#fee2e2;color:#991b1b;font-size:13px;"></div>
       <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; align-items:center; margin-top:12px; padding-top:12px; border-top:1px solid #e5e7eb;">
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button id="btnJoinVideo" class="btn" style="background:#16a637;color:#fff;border:none;">Join Video</button>
@@ -217,8 +223,8 @@
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button id="btnPHI" class="btn">Show PHI</button>
           <button id="btnConfirm" class="btn" style="background:#10b981;color:#fff;border:none;">Confirm</button>
-          <button id="btnReschedule" class="btn" style="background:#f59e0b;color:#fff;border:none;">Reschedule</button>
-          <button id="btnCancel" class="btn" style="background:#ef4444;color:#fff;border:none;">Cancel</button>
+          <button id="btnReschedule" class="btn" data-testid="cal-modal-reschedule" style="background:#f59e0b;color:#fff;border:none;">Reschedule</button>
+          <button id="btnCancel" class="btn" data-testid="cal-modal-cancel" style="background:#ef4444;color:#fff;border:none;">Cancel appointment</button>
         </div>
       </div>
     </div>
@@ -520,6 +526,17 @@
       return { start, end };
     }
 
+    function isBookedByKelly(a) {
+      if (!a) return false;
+      if (a.triage_session_id) return true;
+      if (a.booked_by_kelly === true || a.booked_by_kelly === 1 || String(a.booked_by_kelly).toLowerCase() === 'true') return true;
+      return false;
+    }
+
+    function kellyBookedBadgeHtml() {
+      return '<span class="pp-chip pp-chip--info cal-kelly-badge">Booked by Kelly</span>';
+    }
+
     function toCalendarEvents(appts) {
       return appts.map(a => {
         const meta = parseBufferFromNotes(a.notes);
@@ -566,10 +583,22 @@
             notes: a.notes || '',
             video_room: a.video_room_name || (a.id ? (String(a.id).startsWith('appt-') ? a.id : 'appt-' + a.id) : null),
             ehr_sync_status: a.ehr_sync_status || null,
-            ehr_sync_last_error: a.ehr_sync_last_error || null
+            ehr_sync_last_error: a.ehr_sync_last_error || null,
+            triage_session_id: a.triage_session_id || null,
+            booked_by_kelly: isBookedByKelly(a)
           }
         });
       });
+    }
+
+    function calendarEventContent(arg) {
+      const p = arg.event.extendedProps || {};
+      const title = arg.event.title || '';
+      const kelly = p.booked_by_kelly || p.triage_session_id;
+      if (!kelly) return { html: `<span class="fc-event-title">${escapeHtml(title)}</span>` };
+      return {
+        html: `<span class="fc-event-title">${escapeHtml(title)}</span> ${kellyBookedBadgeHtml()}`
+      };
     }
 
     function getLocalDateString(d) {
@@ -684,10 +713,11 @@
         const dot = statusColor(a.status);
         const title = ev.title || `${a.patient_name} • ${a.appointment_type || 'Somoation'}`;
         const idAttr = escapeHtml(a.id);
+        const kellyBadge = isBookedByKelly(a) ? ` ${kellyBookedBadgeHtml()}` : '';
         return `<button type="button" class="today-pinned-row" data-appt-id="${idAttr}">
       <span class="today-pinned-time">${escapeHtml(timeStr)}</span>
       <span class="today-pinned-dot" style="background:${dot}"></span>
-      <span class="today-pinned-title">${escapeHtml(title)}</span>
+      <span class="today-pinned-title">${escapeHtml(title)}${kellyBadge}</span>
     </button>`;
       }).join('');
 
@@ -821,7 +851,15 @@
         const res = await fetch(`${API_BASE}/api/admin/appointments/${encodeURIComponent(apptId)}/clinical-prep`, { credentials: 'include' });
         const json = await res.json();
         if (!json?.success || !json?.prep) {
-          currentClinicalPrep = { empty: true, message: json?.error || 'No clinical prep available.' };
+          const errMsg = json?.error || '';
+          if (/not found|no clinical|empty/i.test(String(errMsg))) {
+            currentClinicalPrep = {
+              empty: true,
+              message: 'No clinical prep yet — Kelly will capture intake when the patient calls before this visit.'
+            };
+          } else {
+            currentClinicalPrep = { empty: true, message: errMsg || 'No clinical prep available for this appointment.' };
+          }
         } else {
           currentClinicalPrep = { data: json.prep };
         }
@@ -855,11 +893,11 @@
         return;
       }
       if (currentClinicalPrep.error) {
-        target.innerHTML = `<div style="color:#ef4444;">${escapeHtml(currentClinicalPrep.message || 'Failed to load clinical prep')}</div>`;
+        target.innerHTML = `<div style="padding:12px;border-radius:10px;background:#fef2f2;color:#991b1b;">Could not load clinical prep — ${escapeHtml(currentClinicalPrep.message || 'server error')}. Try again in a moment.</div>`;
         return;
       }
       if (currentClinicalPrep.empty) {
-        target.innerHTML = `<div style="color:#6b7280;">${escapeHtml(currentClinicalPrep.message || 'No clinical prep available')}</div>`;
+        target.innerHTML = `<div style="padding:12px;border-radius:10px;background:#f8fafc;color:#64748b;">${escapeHtml(currentClinicalPrep.message || 'No clinical prep available')}</div>`;
         return;
       }
 
@@ -1129,6 +1167,7 @@
       document.getElementById('modalContent').innerHTML = contentHtml;
       const modal = document.getElementById('detailsModal');
       setCalendarPanelOpen(modal, true);
+      clearCalActionError();
 
       // Enable/disable action buttons based on status
       const btnConfirm = document.getElementById('btnConfirm');
@@ -1263,7 +1302,21 @@
         sub.innerHTML = '';
         sub.style.display = 'none';
       }
+      clearCalActionError();
+      const reasonEl = document.getElementById('calCancelReason');
+      if (reasonEl) reasonEl.value = '';
       setCalendarPanelOpen(document.getElementById('detailsModal'), false);
+    }
+
+    function showCalActionError(msg) {
+      const el = document.getElementById('calActionError');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.hidden = !msg;
+    }
+
+    function clearCalActionError() {
+      showCalActionError('');
     }
 
     function openCreateModal() {
@@ -1284,6 +1337,23 @@
     function closeCreateModal() {
       setCalendarPanelOpen(document.getElementById('createApptModal'), false);
       document.getElementById('createApptError').style.display = 'none';
+    }
+
+    let cachedAppts = [];
+
+    async function openApptFromQuery() {
+      const id = new URLSearchParams(window.location.search).get('id');
+      if (!id) return;
+      let appt = cachedAppts.find((a) => String(a.id) === String(id));
+      if (!appt) {
+        try {
+          const params = new URLSearchParams({ clinic_id: getClinicId(), _: Date.now() });
+          const res = await fetch(`${API_BASE}/api/admin/appointments?${params}`, { credentials: 'include' });
+          const data = await res.json();
+          appt = (data.appointments || []).find((a) => String(a.id) === String(id));
+        } catch (_) {}
+      }
+      if (appt) openModal('<div/>', appt.id, appt.status, appt);
     }
 
     async function initCalendar() {
@@ -1307,6 +1377,7 @@
       const calendarEl = document.getElementById('calendar');
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'listWeek',
+        eventContent: calendarEventContent,
         customButtons: {
           goToday: {
             text: 'today',
@@ -1360,6 +1431,7 @@
           end = lastOfMonth(currentYear, now.getMonth() + 2);
         }
         const appts = await fetchAppointments(start, end);
+        cachedAppts = appts;
         renderTodayPinned(appts);
         const events = toCalendarEvents(appts);
         const blocks = await fetchAvailabilityBlocks(start, end);
@@ -1518,6 +1590,7 @@
 
       calendar.render();
       await refresh();
+      await openApptFromQuery();
     }
 
     document.addEventListener('DOMContentLoaded', initCalendar);
@@ -1525,6 +1598,7 @@
     // Actions
     async function handleConfirm(appointmentId) {
       if (!appointmentId) return;
+      clearCalActionError();
       try {
         const res = await fetch(`${API_BASE}/voice/appointments/confirm`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1533,33 +1607,35 @@
         const data = await res.json();
         if (data.success) {
           closeModal();
-          location.reload();
-        } else { alert(data.error || 'Failed to confirm'); }
-      } catch (e) { alert('Confirm failed'); }
+          if (typeof window.calendarRefresh === 'function') await window.calendarRefresh();
+        } else { showCalActionError(data.error || 'Failed to confirm appointment'); }
+      } catch (e) { showCalActionError('Could not confirm — check your connection and try again.'); }
     }
 
     async function handleCancel(appointmentId) {
       if (!appointmentId) return;
-      const reason = prompt('Reason for cancellation?');
-      if (reason === null) return;
+      clearCalActionError();
+      const reasonEl = document.getElementById('calCancelReason');
+      const reason = reasonEl ? reasonEl.value.trim() : '';
       try {
         const res = await fetch(`${API_BASE}/voice/appointments/cancel`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ args: { appointment_id: appointmentId, reason } })
+          body: JSON.stringify({ args: { appointment_id: appointmentId, reason: reason || 'Cancelled from provider calendar' } })
         });
         const data = await res.json();
         if (data.success) {
           closeModal();
-          location.reload();
-        } else { alert(data.error || 'Failed to cancel'); }
-      } catch (e) { alert('Cancel failed'); }
+          if (typeof window.calendarRefresh === 'function') await window.calendarRefresh();
+        } else { showCalActionError(data.error || 'Failed to cancel appointment'); }
+      } catch (e) { showCalActionError('Could not cancel — check your connection and try again.'); }
     }
 
     async function handleReschedule(appointmentId) {
       if (!appointmentId) return;
+      clearCalActionError();
       const newDate = document.getElementById('rsDate').value;
       const newTime = document.getElementById('rsTime').value;
-      if (!newDate || !newTime) { alert('Select date and time'); return; }
+      if (!newDate || !newTime) { showCalActionError('Select a date and time to reschedule.'); return; }
       try {
         const res = await fetch(`${API_BASE}/voice/appointments/reschedule`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1568,9 +1644,9 @@
         const data = await res.json();
         if (data.success) {
           closeModal();
-          location.reload();
-        } else { alert(data.error || 'Failed to reschedule'); }
-      } catch (e) { alert('Reschedule failed'); }
+          if (typeof window.calendarRefresh === 'function') await window.calendarRefresh();
+        } else { showCalActionError(data.error || 'Failed to reschedule appointment'); }
+      } catch (e) { showCalActionError('Could not reschedule — check your connection and try again.'); }
     }
     // Check available slots for reschedule using complex scheduling logic
     document.addEventListener('click', async (e) => {

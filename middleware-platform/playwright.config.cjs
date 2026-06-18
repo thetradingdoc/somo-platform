@@ -102,19 +102,17 @@ module.exports = defineConfig({
       },
     },
     {
-      name: 'provider-portal',
-      testDir: './e2e',
-      testMatch: [
-        '**/provider-today-portal.spec.cjs',
-        '**/v6-3-provider-today-screenshot.spec.cjs',
-        '**/provider-portal-shell.spec.cjs',
-        '**/provider-portal-screenshots.spec.cjs',
-      ],
-      timeout: 60_000,
+      name: 'provider-journey',
+      testDir: './e2e/provider',
+      testMatch: ['**/*.spec.cjs'],
+      timeout: 120_000,
       use: {
         browserName: 'chromium',
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
         serviceWorkers: 'block',
+      },
+      env: {
+        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
       },
     },
     {

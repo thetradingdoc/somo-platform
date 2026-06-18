@@ -8,7 +8,7 @@ const STAGED_ENFORCE_MODE_DEFAULTS = Object.freeze({
   tenant_inbound_admin: false,
   tenant_inbound_clinical: false,
   tenant_billing: false,
-  tenant_records: false,
+  tenant_records: true,
   emergency_safety: false
 });
 

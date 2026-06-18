@@ -2,8 +2,9 @@
 
 const LLMRouter = require('../llm-router');
 const KellyToolExecutor = require('../kelly-tool-executor');
-const { getAllowedToolNames } = require('./tool-allowlists');
+const { getAllowedToolNames, TRANSACTIONAL_GATE_TOOLS, isGateOwnedTransactionalStep } = require('./tool-allowlists');
 const { laneSystemPrompt } = require('./prompts');
+const { getDeterministicReply } = require('./prompts/deterministic');
 const { loadHistory, appendHistory } = require('./history');
 const { formatVoiceReply } = require('../voice-reply-formatter');
 const { isToolAllowedForMode, logModeViolation } = require('../conversation-mode/mode-tool-firewall');
@@ -15,6 +16,27 @@ const OFF_TOPIC_PATTERNS = [
   /\bother services\b/i,
   /\bdid you know\b/i
 ];
+
+const INVENTED_CONFIRMATION_PATTERNS = [
+  /\b(appointment|visit|cita).{0,40}\b(confirm|booked|scheduled|reservad)/i,
+  /\byou(?:'re| are) (all )?set\b/i,
+  /\bi(?:'ve| have) (booked|scheduled|confirmed)\b/i,
+  /\bpayment link (?:has been |was )?sent\b/i,
+  /\byour copay\b/i,
+  /\bcancel(?:led|ed|ación)\b/i
+];
+
+function stripInventedTransactionalConfirmation(reply, state = {}, toolsUsed = []) {
+  if (!isGateOwnedTransactionalStep(state.active_lane, state.step, state.flags || {})) {
+    return reply;
+  }
+  const usedTransactional = (toolsUsed || []).some((n) => TRANSACTIONAL_GATE_TOOLS.has(n));
+  if (usedTransactional) return reply;
+  const text = String(reply || '').trim();
+  if (!text) return text;
+  if (!INVENTED_CONFIRMATION_PATTERNS.some((r) => r.test(text))) return reply;
+  return getDeterministicReply('gate_processing', state.locale || 'en');
+}
 
 function enforceScopeGuardrail(reply, state = {}, ctx = {}) {
   const text = String(reply || '').trim();
@@ -213,10 +235,11 @@ async function runNodeStep(state, ctx) {
     reply = formatVoiceReply(reply, state);
   }
 
+  reply = stripInventedTransactionalConfirmation(reply, state, toolsUsed);
   reply = enforceScopeGuardrail(reply, state, { ...ctx, db: ctx.db });
 
   appendHistory(sessionId, 'assistant', reply);
   return { reply, toolsUsed, endCall };
 }
 
-module.exports = { runNodeStep, filterTools, getKellyTools, enforceScopeGuardrail };
+module.exports = { runNodeStep, filterTools, getKellyTools, enforceScopeGuardrail, stripInventedTransactionalConfirmation };

@@ -14,6 +14,8 @@ const EN = {
   slots_offered: 'Which of these works best for you?',
   no_slots_available:
     'I do not see any bookable openings right now. I can connect you with our front desk to help find a time.',
+  slots_empty:
+    'I do not see any bookable openings right now. I can connect you with our front desk to help find a time.',
   schedule_failed:
     'I was not able to complete that booking in our system. I can connect you with our front desk to finish scheduling.',
   gate_processing:
@@ -23,7 +25,14 @@ const EN = {
   lookup_missing_id:
     'Can you confirm your name or the phone number on your account so I can look up your appointment?',
   lookup_not_found:
-    'I could not find an upcoming appointment on file. Can you confirm your name or the phone number we have for you?'
+    'I could not find an upcoming appointment on file. Can you confirm your name or the phone number we have for you?',
+  cancel_failed:
+    'I was not able to cancel that appointment in our system. I can connect you with our front desk to finish this.',
+  reschedule_failed:
+    'I was not able to reschedule that appointment in our system. I can connect you with our front desk to help.',
+  reschedule_need_slot: 'What date and time would you like to move your appointment to?',
+  records_failed:
+    'I was not able to retrieve those records right now. I can connect you with our front desk for help.'
 };
 
 const ES = {
@@ -40,6 +49,8 @@ const ES = {
   slots_offered: '¿Cuál de estos le funciona mejor?',
   no_slots_available:
     'No veo horarios disponibles en este momento. Puedo conectarle con recepción para ayudarle a encontrar un horario.',
+  slots_empty:
+    'No veo horarios disponibles en este momento. Puedo conectarle con recepción para ayudarle a encontrar un horario.',
   schedule_failed:
     'No pude completar esa reserva en nuestro sistema. Puedo conectarle con recepción para terminar de programar.',
   gate_processing:
@@ -49,7 +60,14 @@ const ES = {
   lookup_missing_id:
     '¿Puede confirmar su nombre o el número de teléfono de su cuenta para buscar su cita?',
   lookup_not_found:
-    'No encontré una cita próxima. ¿Puede confirmar su nombre o el teléfono que tenemos registrado?'
+    'No encontré una cita próxima. ¿Puede confirmar su nombre o el teléfono que tenemos registrado?',
+  cancel_failed:
+    'No pude cancelar esa cita en nuestro sistema. Puedo conectarle con recepción para terminar esto.',
+  reschedule_failed:
+    'No pude reprogramar esa cita en nuestro sistema. Puedo conectarle con recepción para ayudarle.',
+  reschedule_need_slot: '¿Para qué fecha y hora le gustaría mover su cita?',
+  records_failed:
+    'No pude recuperar esos registros en este momento. Puedo conectarle con recepción para ayudarle.'
 };
 
 const ZH = {
@@ -64,12 +82,17 @@ const ZH = {
   provider_mismatch: '无法为您预约{provider}。以下是其他医生的可用时间：{slots}',
   slots_offered: '哪个时间对您最合适？',
   no_slots_available: '目前没有可预约的时间。我可以为您转接前台协助安排。',
+  slots_empty: '目前没有可预约的时间。我可以为您转接前台协助安排。',
   schedule_failed: '我无法在系统中完成该预约。我可以为您转接前台完成安排。',
   gate_processing: '我需要在系统中处理一下。请确认您存档的电话或邮箱。',
   records_answer: '{answer}',
   records_empty: '我在档案中没有找到与该问题匹配的记录。',
   lookup_missing_id: '请确认您的姓名或账户电话号码，以便我查找您的预约。',
-  lookup_not_found: '我没有找到即将进行的预约。请确认您的姓名或我们存档的电话号码。'
+  lookup_not_found: '我没有找到即将进行的预约。请确认您的姓名或我们存档的电话号码。',
+  cancel_failed: '我无法在系统中取消该预约。我可以为您转接前台完成处理。',
+  reschedule_failed: '我无法在系统中改期该预约。我可以为您转接前台协助。',
+  reschedule_need_slot: '您希望将预约改到哪一天、什么时间？',
+  records_failed: '我目前无法检索这些记录。我可以为您转接前台协助。'
 };
 
 const TABLES = { en: EN, es: ES, zh: ZH };

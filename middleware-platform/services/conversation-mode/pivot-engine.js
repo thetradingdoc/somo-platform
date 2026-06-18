@@ -182,6 +182,15 @@ function evaluateTurn(input = {}) {
       currentMode === ConversationMode.TENANT_INBOUND_CLINICAL &&
       currentSubrail === Subrail.OPQRST
     ) {
+      result.state_updates = {
+        active_subrail: Subrail.BOOKING,
+        active_subrail_step: 'slot_lookup',
+        conversation_mode: ConversationMode.TENANT_INBOUND_ADMIN,
+        _sync_triage_to_projection: true
+      };
+      result.subrail = Subrail.BOOKING;
+      result.pivot_event = PivotEvent.BOOK_INTENT_DETECTED;
+      result.pivot_reason = 'opqrst_to_booking';
       return result;
     }
     result.subrail = Subrail.BOOKING;

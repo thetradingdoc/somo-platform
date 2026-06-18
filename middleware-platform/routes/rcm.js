@@ -1526,6 +1526,29 @@ router.post('/payments/:paymentId/mark-paid', (req, res) => {
   }
 });
 
+router.get('/voice-checkouts', (req, res) => {
+  try {
+    const clinicId = requireClinicScope(req);
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
+    const cols = db.db.prepare('PRAGMA table_info(voice_checkouts)').all().map((c) => c.name);
+    if (!cols.includes('clinic_id')) {
+      return res.json({ success: true, checkouts: [] });
+    }
+    const rows = db.db
+      .prepare(
+        `SELECT id, appointment_id, customer_email, customer_phone, amount, payment_method, status, created_at, completed_at
+         FROM voice_checkouts
+         WHERE clinic_id = ? AND (deleted_at IS NULL OR deleted_at = '')
+         ORDER BY created_at DESC LIMIT 100`
+      )
+      .all(clinicId);
+    return res.json({ success: true, checkouts: rows });
+  } catch (err) {
+    console.error('[rcm] voice-checkouts error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/payments', (req, res) => {
   try {
     ensureKellyRcmTables();

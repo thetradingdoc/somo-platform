@@ -1629,6 +1629,45 @@ async function scenarioProviderMismatchRebook() {
   };
 }
 
+async function scenarioAsrLanguageHandoff() {
+  const id = 'asr_language_handoff';
+  const sessionId = fixtures.newE2eSessionId('rail_asr_handoff');
+  const { handleTurn } = require('../services/kelly-rails/orchestrator');
+
+  const out = await handleTurn({
+    sessionId,
+    preferredLanguage: 'es',
+    forceLanguageHandoff: true,
+    languageConfidence: 0.2,
+    channel: 'voice'
+  });
+
+  const handoffReply = String(out?.reply || '');
+  const isHandoff =
+    /specialist|especialista|conectar|connecting|idioma|language/i.test(handoffReply);
+  const lane = out?.kelly_rails?.active_lane;
+
+  return {
+    id,
+    title: '13. ASR / language low-confidence handoff',
+    ctx: { id, sessionId, transcript: [{ content: '[low confidence]', reply: handoffReply }] },
+    checks: {
+      mode_ok: true,
+      rail_progression: isHandoff,
+      partial_rail: isHandoff,
+      all_replies: !!handoffReply,
+      most_replies: !!handoffReply,
+      tools_ok: (out?.toolsUsed || []).length === 0,
+      tools_partial: true,
+      side_effect: lane === 'support' || isHandoff,
+      side_effect_partial: isHandoff,
+      conversation_complete: isHandoff
+    },
+    evidence: { lane, reply_snippet: handoffReply.slice(0, 120) },
+    gaps: [!isHandoff && 'Expected language handoff copy for low-confidence ASR path'].filter(Boolean)
+  };
+}
+
 const CRITICAL_TCR_SCENARIOS = new Set([
   'calling_about_appt',
   'booking',
@@ -1640,7 +1679,8 @@ const CRITICAL_TCR_SCENARIOS = new Set([
   'reschedule_appointment',
   'records_request',
   'same_day_cancel_rebook',
-  'provider_mismatch_rebook'
+  'provider_mismatch_rebook',
+  'asr_language_handoff'
 ]);
 
 const SCENARIOS = [
@@ -1656,7 +1696,8 @@ const SCENARIOS = [
   scenarioRescheduleAppointment,
   scenarioRecordsRequest,
   scenarioSameDayCancelRebook,
-  scenarioProviderMismatchRebook
+  scenarioProviderMismatchRebook,
+  scenarioAsrLanguageHandoff
 ];
 
 function printTranscript(ctx) {

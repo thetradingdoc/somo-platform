@@ -1,6 +1,6 @@
 # OPERATIONS
 
-**Last updated:** 2026-06-16
+**Last updated:** 2026-06-17
 
 
 ---
@@ -66,7 +66,138 @@ Set via `generate-cloudrun-env-yaml.cjs` when `CLOUDRUN_PROFILE=production`:
 - `KELLY_RAILS_V2=1`
 - `KELLY_RAILS_ROLLOUT_PCT=1`
 - `KELLY_ALLOW_HYBRID_GRAPH=0`
+- `CONVERSATION_MODE_ROUTING=enforce`
 
+After any deploy with `CLOUDRUN_PRESERVE_ENV=1`, verify Kelly env:
+
+```bash
+cd middleware-platform
+GCP_PROJECT=somo-callsomo npm run verify:kelly-rails-cloudrun
+```
+
+### Live booking acceptance (production)
+
+First real acceptance test after a voice deploy:
+
+1. Inbound call to operator line with Dr. Santos stated-time dialog.
+2. Pass = `tool_completed` for `schedule_appointment` in `kelly_call_events`, not fluent copy alone.
+3. Verify with session/call id:
+
+```bash
+SESSION_ID=<retell_call_id> DB_PATH=/path/to/prod.db npm run verify:live-booking-call
+```
+
+`callsomo-terminal-cutover.sh deploy-api` runs `verify:kelly-rails-cloudrun` and fails the deploy on shadow routing. Optional post-call check when `SESSION_ID` + `DB_PATH` are set (`SKIP_LIVE_CALL_VERIFY=1` to skip).
+
+### Kelly Cloud Run env snapshot (CR-001–004)
+
+Record revision + env after every production deploy:
+
+```bash
+cd middleware-platform
+GCP_PROJECT=somo-callsomo GCP_SERVICE=somo-middleware npm run verify:kelly-rails-cloudrun
+```
+
+Expected production values:
+
+| Variable | Required value |
+|----------|----------------|
+| `KELLY_RAILS_V2` | `1` |
+| `KELLY_RAILS_ROLLOUT_PCT` | `1` |
+| `KELLY_ALLOW_HYBRID_GRAPH` | `0` or unset |
+| `CONVERSATION_MODE_ROUTING` | `enforce` |
+
+**CR-003 — tenant inbound admin enforce:** After 48h clean shadow telemetry, set `CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=1` via `generate-cloudrun-env-yaml.cjs` (production profile) and redeploy. Rollback: set back to `0` per [`docs/runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md) (<15 min).
+
+### Live verify runbooks (prod — run manually after voice deploy)
+
+| Flow | Script | Pass criteria |
+|------|--------|---------------|
+| Booking | `npm run verify:live-booking-call` | `tool_completed` schedule_appointment + DB row |
+| Copay link | `npm run verify:live-copay-call` | `tool_completed` request_patient_payment + `payment_link_sent` |
+| Cancel | `npm run verify:live-cancel-call` | `tool_completed` cancel_appointment + status=cancelled |
+| Reschedule | `npm run verify:live-reschedule-call` | `tool_completed` reschedule_appointment + new date/time |
+| Visit checkout | `npm run verify:live-visit-checkout` | `voice_checkouts` row + `visit_pricing` amount |
+| Records Q&A | `npm run verify:live-records-call` | `tool_completed` query_patient_records |
+| Same-day cancel+rebook | `npm run verify:same-day-cancel-rebook` | cancel then new booking same session/day |
+| Emergency rail | `npm run verify:emergency-rail` | safety gate, no schedule after 911 pattern |
+| Call opener parity | `npm run verify:call-opener-parity` | settings greeting matches `call_opener_used` |
+
+All scripts accept `SESSION_ID=<call_id> DB_PATH=/path/to/prod.db`.
+
+### Book → checkout → pay (CR-037)
+
+1. Complete live booking verify above.
+2. Confirm `voice_checkouts` row: `npm run verify:live-visit-checkout`.
+3. Open patient pay link from checkout token on `patients/pay.html` and complete Stripe test/live payment.
+4. Confirm `payment_link_sent` or payment settled in `kelly_call_events`.
+
+### Telemetry SLO (CR-042)
+
+Target: `orchestration_trace_gap` < 1% of voice turns missing `gate_matched`, `gate_outcome`, `lane`, or `step`.
+
+```bash
+DB_PATH=/path/to/prod.db npm run verify:orchestration-trace
+DB_PATH=/path/to/prod.db HOURS=24 npm run verify:asr-low-confidence
+```
+
+GCS SQLite contention: `npm run verify:gcs-sqlite-contention` — alert if >5 `SQLITE_BUSY` retries/hour (see script output).
+
+### SAAS_VOICE_FAIL_CLOSED (CR-052)
+
+Production profile sets `SAAS_VOICE_FAIL_CLOSED=1`. Tenant calls without valid `customer_id`/`clinic_id`/`call_type=tenant` must fail-closed before L2. Spot-check with `npm run verify:voice-identity-vars`.
+
+### Signup → live line (CR-016)
+
+Twilio + Retell assign path:
+
+1. Self-serve: `POST /api/signup/assign-line` after trial activation (retry CTA on `trial-activation.html`).
+2. Ops fallback: `node scripts/trial-provision-smoke.cjs` with customer id.
+3. Retell: `API_BASE_URL=https://api.callsomo.com node configure-retell.js`.
+
+### Provider portal prod smoke (CR-047)
+
+```bash
+PW_PROVIDER_EMAIL=... PW_PROVIDER_PASSWORD=... npm run test:prod:provider-portal
+```
+
+### Nightly prod runtime (CR-062)
+
+GitHub workflow `.github/workflows/kelly-rails-prod-nightly.yml` runs `verify:kelly-rails-prod-runtime` daily at 07:00 UTC.
+
+### Kelly call forensics (bad booking/cancel)
+
+```sql
+SELECT event_type, created_at,
+       json_extract(payload_json, '$.tool_name') AS tool,
+       json_extract(payload_json, '$.error_code') AS err,
+       json_extract(payload_json, '$.gate_matched') AS gate
+FROM kelly_call_events
+WHERE session_id = '<call_id>'
+ORDER BY created_at;
+```
+
+Good booking sequence: `mode_resolved` → `tool_invoked`/`tool_completed` (`schedule_appointment`) → `booking_outcome` (booked). If `booking_outcome` shows `no_availability` but patient named a time, check L2/L4 step coordination (not LLM hallucination).
+
+Local repro: `node scripts/debug-booking-deadend.cjs`, `npm run test:rails:conversation-sandbox -- --scenario booking_user_dialog`.
+
+### Voice identity dynamic variables
+
+Twilio/Retell must pass `customer_id`, `clinic_id`, `call_type` or identity admission fail-closes. Audit:
+
+```bash
+npm run verify:voice-identity-vars
+```
+
+### Medical codebook parity (coding / suggest_codes)
+
+Voice Kelly orchestration is separate from medical coding RAG. For `suggest_codes` on calls:
+
+```bash
+npm run verify:prod-codebook   # icd10/cpt rows + embeddings on host DB
+```
+
+Set `PINECONE_INDEX_HOST` (or `PINECONE_INDEX_URL`) alongside `PINECONE_API_KEY` for remote code retrieval. See [Remote coding (Pinecone)](#remote-coding-pinecone-no-static-export) below.
 
 ---
 

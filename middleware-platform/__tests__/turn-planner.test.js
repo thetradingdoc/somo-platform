@@ -4,7 +4,9 @@ const {
   detectBookingIntents,
   applyBookingIntentsToFlags,
   planTurnOwner,
-  BookingIntentType
+  BookingIntentType,
+  CancelIntentType,
+  RecordsIntentType
 } = require('../services/kelly-rails/turn-planner');
 
 describe('turn-planner', () => {
@@ -33,5 +35,35 @@ describe('turn-planner', () => {
     });
     expect(plan.owner).toBe('gate');
     expect(plan.gateId).toBe('schedule');
+  });
+
+  test('planTurnOwner routes reschedule lookup before reschedule gate', () => {
+    const plan = planTurnOwner({
+      subrail: 'cancellation',
+      flags: { reschedule_pending: true, lookup_complete: false },
+      intents: [],
+      step: 'find_booking'
+    });
+    expect(plan.gateId).toBe('lookup');
+  });
+
+  test('planTurnOwner routes cancel confirm to cancel gate', () => {
+    const plan = planTurnOwner({
+      subrail: 'cancellation',
+      flags: { cancel_pending: true },
+      intents: [{ type: CancelIntentType.CONFIRM_CANCEL }]
+    });
+    expect(plan.owner).toBe('gate');
+    expect(plan.gateId).toBe('cancel');
+  });
+
+  test('planTurnOwner routes records query to records gate', () => {
+    const plan = planTurnOwner({
+      subrail: 'records_qa',
+      flags: { conversation_mode: 'tenant_records' },
+      intents: [{ type: RecordsIntentType.QUERY }]
+    });
+    expect(plan.owner).toBe('gate');
+    expect(plan.gateId).toBe('records');
   });
 });

@@ -91,6 +91,12 @@ function seedModeAtCallStart(opts = {}) {
       fields.active_subrail = 'copay_link';
       fields.pivot_reason = 'intent_billing_at_start';
     }
+    if (intent.intent === UserIntent.RECORDS && policy.records_enabled !== false) {
+      fields.conversation_mode = 'tenant_records';
+      fields.active_subrail = 'records_qa';
+      fields.active_subrail_step = 'records_qa';
+      fields.pivot_reason = 'intent_records_at_start';
+    }
   }
   writeSessionIfPresent(opts, fields);
   return { resolved, fields, policy };
@@ -124,6 +130,18 @@ function processConversationTurn(opts = {}) {
 
   const nextSession = applyPivotToSession(session, pivot);
   if (pivot.state_updates) Object.assign(nextSession, pivot.state_updates);
+
+  if (pivot.state_updates?._sync_triage_to_projection && sid) {
+    try {
+      const { syncTriageFieldsToProjection } = require('../kelly-rails/session-ssot');
+      syncTriageFieldsToProjection(sid, {
+        active_subrail: nextSession.active_subrail,
+        active_subrail_step: nextSession.active_subrail_step,
+        conversation_mode: nextSession.conversation_mode
+      });
+      delete nextSession._sync_triage_to_projection;
+    } catch (_) {}
+  }
 
   if (sid) saveConversationSession(sid, nextSession);
 
@@ -198,6 +216,10 @@ function mergeKellyRailsIntoSession(session = {}, kellyRails = {}, toolsUsed = [
 
   if ((toolsUsed || []).includes('schedule_appointment') && flags.schedule_appointment_success) {
     merged.schedule_appointment_success = true;
+  }
+  if ((toolsUsed || []).includes('search_appointments')) {
+    merged.lookup_complete = flags.lookup_complete !== false;
+    if (flags.last_appointment_id) merged.last_appointment_id = flags.last_appointment_id;
   }
   if ((toolsUsed || []).includes('cancel_appointment')) {
     merged.cancel_complete = true;

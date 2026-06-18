@@ -329,9 +329,20 @@ async function runKellyTurn(opts = {}) {
         handoff: convResult?.handoff,
         lane: out?.kelly_rails?.active_lane,
         step: out?.kelly_rails?.step,
+        gate_matched: out?.kelly_rails?.gate_matched || null,
+        gate_outcome: out?.kelly_rails?.gate_outcome || null,
         tools_executed: out?.toolsUsed || [],
         runtime: 'kelly_rails_v2',
         latency_ms: latencyMs
+      });
+      const { emitTelemetryGapIfNeeded } = require('./orchestration-telemetry-audit');
+      emitTelemetryGapIfNeeded(db, sessionId, {
+        conversation_mode: opts.conversation_mode || convResult?.session?.conversation_mode,
+        lane: out?.kelly_rails?.active_lane,
+        step: out?.kelly_rails?.step,
+        gate_matched: out?.kelly_rails?.gate_matched,
+        gate_outcome: out?.kelly_rails?.gate_outcome,
+        tools_executed: out?.toolsUsed || []
       });
     } catch (_) {}
     const lane = out?.kelly_rails?.active_lane || null;

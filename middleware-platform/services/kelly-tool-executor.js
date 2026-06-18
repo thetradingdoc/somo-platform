@@ -68,6 +68,20 @@ function _kellyToolDebug() {
   return process.env.KELLY_DEBUG === '1' || process.env.KELLY_DEBUG === 'true';
 }
 
+function _resolveCustomerType(clinicId, customerId) {
+  try {
+    if (customerId) {
+      const c = db.getCustomer?.(customerId);
+      if (c?.customer_type) return c.customer_type;
+    }
+    if (clinicId && db.getCustomerIdForClinic) {
+      const cid = db.getCustomerIdForClinic(clinicId);
+      if (cid) return db.getCustomer?.(cid)?.customer_type || 'saas';
+    }
+  } catch (_) {}
+  return 'saas';
+}
+
 function _emitKellyActivityEvent({ sessionId, clinicId, patientId, eventType, payload = {} }) {
   try {
     db.insertKellyCallEvent?.({
@@ -97,6 +111,21 @@ function _emitAppointmentBooked(ctx, appointment, extra = {}) {
       ...extra,
     },
   });
+  try {
+    const { sendPostCallOwnerEmail } = require('./post-call-owner-email');
+    sendPostCallOwnerEmail({
+      eventType: 'appointment_booked',
+      sessionId: ctx.sessionId,
+      clinicId: ctx.clinicId,
+      customerId: ctx.customerId,
+      patientId: ctx.patientId || appointment.patient_id,
+      patientName: appointment.patient_name || extra.patient_name,
+      payload: {
+        appointment_id: appointment.id,
+        appointment_type: appointment.appointment_type || appointment.specialty
+      }
+    }).catch(() => {});
+  } catch (_) {}
 }
 
 function _emitNotificationFailed(ctx, channel, error, extra = {}) {
@@ -816,6 +845,7 @@ class KellyToolExecutor {
                   clinic_id: clinicId,
                   appointment_type: 'Primary Care',
                   triage_session_id: sessionId,
+                  customer_type: _resolveCustomerType(clinicId, null),
                   timeoutMs: KellyToolExecutor._httpTimeoutMs()
                 });
                 if (_kellyToolDebug()) {
@@ -1073,6 +1103,7 @@ class KellyToolExecutor {
                   triageForNotes?.target_specialty ||
                   scheduleResult.appointment.appointment_type,
                 triage_session_id: sessionId || null,
+                customer_type: _resolveCustomerType(clinicId, null),
                 timeoutMs: KellyToolExecutor._httpTimeoutMs()
               });
               if (_kellyToolDebug()) {
@@ -1267,6 +1298,17 @@ class KellyToolExecutor {
               patient_name: args.patient_name || null,
             },
           });
+          try {
+            const { sendPostCallOwnerEmail } = require('./post-call-owner-email');
+            sendPostCallOwnerEmail({
+              eventType: 'payment_link_sent',
+              sessionId,
+              clinicId,
+              patientId: resolvedPatientId,
+              patientName: args.patient_name,
+              payload: { amount: result.amount, payment_id: result.payment_id }
+            }).catch(() => {});
+          } catch (_) {}
 
           const journeyId = args.journey_id || null;
           if (result.success && journeyId && clinicId) {
