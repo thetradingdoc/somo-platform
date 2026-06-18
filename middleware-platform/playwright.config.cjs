@@ -116,6 +116,18 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'provider-portal',
+      testDir: './e2e',
+      testMatch: [
+        '**/provider-portal-shell.spec.cjs',
+      ],
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+      },
+    },
+    {
       name: 'provider-rcm',
       testDir: './e2e',
       testMatch: [

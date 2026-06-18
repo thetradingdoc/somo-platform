@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#16a637">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <title>Somo Provider - Today</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
@@ -59,9 +59,9 @@
     <div class="pp-main">
       <header class="pp-topbar pp-topbar--page">
         <div class="pp-topbar-left">
-          <p class="pp-page-eyebrow">Today</p>
-          <h1 class="pp-page-title" id="ppHeroGreeting">Today</h1>
-          <p class="pp-page-sub">Welcome back — here's what needs attention today.</p>
+          <p class="pp-page-eyebrow">Dashboard</p>
+          <h1 class="pp-page-title">Today</h1>
+          <p class="pp-page-sub" id="ppHeroSubtitle">Welcome back — here's what needs attention today.</p>
         </div>
         <div class="pp-topbar-right">
           <div class="pp-date-chip" id="ppDateChip"></div>
@@ -77,7 +77,8 @@
       </header>
 
       <main class="pp-content pp-content--today" id="ppMainContent">
-        <div class="pp-alert-strip" id="ppAlertStrip" hidden aria-live="polite"></div>
+        <div class="pp-page-shell">
+        <div class="pp-alert-strip pp-alert-strip--compact" id="ppAlertStrip" hidden aria-live="polite"></div>
 
         <section class="pp-panel pp-panel--compact" id="ppOnboardingChecklist" data-testid="pp-onboarding-checklist" hidden>
           <div class="pp-panel-head pp-panel-head--compact">
@@ -161,6 +162,7 @@
               <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline">Revenue pipeline</a>
             </p>
           </div>
+        </div>
         </div>
       </main>
     </div>
@@ -261,6 +263,13 @@
       return apptsToday;
     }
 
+    function apptStatusDot(status) {
+      const s = (status || 'scheduled').toLowerCase();
+      if (['confirmed', 'arrived', 'in_room'].includes(s)) return '#10b981';
+      if (['cancelled', 'canceled', 'no_show'].includes(s)) return '#ef4444';
+      return '#06b6d4';
+    }
+
     function renderSchedule() {
       const el = document.getElementById('scheduleList');
       const sub = document.getElementById('scheduleSub');
@@ -278,26 +287,18 @@
         const id = escapeHtml(String(a.id || ''));
         const patient = escapeHtml(a.patient_name || 'Patient');
         const meta = escapeHtml(a.appointment_type || 'Visit');
-        const color = avatarColor(a.patient_name);
-        const tags = apptTags(a);
+        const status = escapeHtml((a.status || 'scheduled').replace(/_/g, ' '));
+        const dot = apptStatusDot(a.status);
         const timeRange = escapeHtml(formatApptTimeRange(a, scheduleFilter !== 'today'));
         const expanded = expandedApptIds.has(String(a.id));
         const calHref = a.id ? `calendar.html?id=${encodeURIComponent(a.id)}` : 'calendar.html';
         return `
-          <div class="pp-appt-item pp-appt-item-modern${expanded ? ' is-expanded' : ''}" data-appt-id="${id}">
-            <div class="pp-appt-row-main" role="button" tabindex="0" onclick="openApptRow('${id}')">
-              <div class="pp-appt-col pp-appt-col--identity">
-                <div class="pp-patient-avatar pp-patient-avatar--${color}">${escapeHtml(initials(a.patient_name))}</div>
-                <div class="pp-appt-body">
-                  <div class="pp-appt-name">${patient}</div>
-                  <div class="pp-appt-meta">${meta}</div>
-                  ${tags ? `<div class="pp-appt-tags">${tags}</div>` : ''}
-                </div>
-              </div>
-              <div class="pp-appt-col pp-appt-col--action">
-                <div class="pp-appt-time-range">${timeRange}</div>
-                <button type="button" class="pp-appt-chevron" aria-expanded="${expanded}" aria-label="Appointment details" onclick="toggleApptDetail(event, '${id}')">${chevronSvg()}</button>
-              </div>
+          <div class="pp-appt-item pp-appt-item--list${expanded ? ' is-expanded' : ''}" data-appt-id="${id}">
+            <div class="pp-list-row" role="button" tabindex="0" onclick="openApptRow('${id}')">
+              <span class="pp-list-row-time">${timeRange}</span>
+              <span class="pp-list-row-dot" style="background:${dot}"></span>
+              <span class="pp-list-row-main">${patient} · ${meta} · ${status}</span>
+              <button type="button" class="pp-list-row-action pp-appt-chevron" aria-expanded="${expanded}" aria-label="Appointment details" onclick="toggleApptDetail(event, '${id}')">${chevronSvg()}</button>
             </div>
             <div class="pp-appt-detail" id="appt-detail-${id}" hidden>
               <div class="pp-appt-detail-body">Loading brief…</div>
@@ -404,26 +405,22 @@
       const ws = weekStats || {};
 
       document.getElementById('kpiRow').innerHTML = `
-        <div class="pp-kpi pp-kpi--blue">
-          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('home')}</div>
+        <div class="pp-kpi pp-kpi--flat">
           <div class="pp-kpi-eyebrow">Upcoming appointments</div>
           <div class="pp-kpi-val">${upcoming}</div>
           ${trendHtml(computeTrendPercent(ws.upcomingThis, ws.upcomingLast))}
         </div>
-        <div class="pp-kpi pp-kpi--violet">
-          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('calendar-days')}</div>
+        <div class="pp-kpi pp-kpi--flat">
           <div class="pp-kpi-eyebrow">Appointments</div>
           <div class="pp-kpi-val">${appts.length}</div>
           ${trendHtml(computeTrendPercent(ws.apptsThis, ws.apptsLast))}
         </div>
-        <div class="pp-kpi pp-kpi--teal">
-          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('phone')}</div>
-          <div class="pp-kpi-eyebrow">Calls</div>
+        <div class="pp-kpi pp-kpi--flat">
+          <div class="pp-kpi-eyebrow">Telehealth</div>
           <div class="pp-kpi-val">${calls}</div>
           ${trendHtml(computeTrendPercent(ws.callsThis, ws.callsLast))}
         </div>
-        <div class="pp-kpi pp-kpi--amber">
-          <div class="pp-kpi-icon" aria-hidden="true">${kpiIcon('envelope')}</div>
+        <div class="pp-kpi pp-kpi--flat">
           <div class="pp-kpi-eyebrow">Messages</div>
           <div class="pp-kpi-val">${messageCount}</div>
           ${trendHtml(computeTrendPercent(ws.messagesThis, ws.messagesLast))}
@@ -451,6 +448,7 @@
         if (typeof window.ppPushAlert === 'function') {
           window.ppPushAlert({
             id: `payment-${p.id || i}`,
+            dedupeKey: p.id ? `payment-${p.id}` : `payment-${p.patient_id}-${p.amount}`,
             type: 'action',
             icon: 'credit-card',
             message: `Payment link sent · ${p.patient_name || p.patient_id || 'Patient'} · $${Number(p.amount || 0).toFixed(2)}`,
@@ -562,13 +560,18 @@
       }
       panel.hidden = false;
       if (sub) sub.textContent = `${open.length} open journey${open.length > 1 ? 's' : ''}`;
-      el.innerHTML = `<div class="pp-journey-strip">${open
+      const capped = open.slice(0, 4);
+      const chips = capped
         .map((j) =>
           typeof window.ppRenderJourneyActionChip === 'function'
             ? window.ppRenderJourneyActionChip(j)
             : ''
         )
-        .join('')}</div>`;
+        .join('');
+      const more = open.length > 4
+        ? `<a class="pp-btn pp-btn-link pp-journey-more" href="revenue.html?tab=pipeline">View all in pipeline (${open.length})</a>`
+        : '';
+      el.innerHTML = `<div class="pp-journey-strip">${chips}</div>${more}`;
     }
 
     async function loadKellyActivity() {
@@ -735,9 +738,11 @@
       if (calIcon && typeof window.getNavIcon === 'function') calIcon.innerHTML = window.getNavIcon('calendar-days');
     }
 
-    function renderHeroGreeting() {
-      const el = document.getElementById('ppHeroGreeting');
-      if (el && typeof window.ppGreetingName === 'function') el.textContent = window.ppGreetingName();
+    function renderHeroSubtitle() {
+      const el = document.getElementById('ppHeroSubtitle');
+      if (el && typeof window.ppGreetingSubtitle === 'function') {
+        el.textContent = window.ppGreetingSubtitle();
+      }
     }
 
     async function loadOnboardingChecklist() {
@@ -801,7 +806,7 @@
       if (typeof window.requireAuth === 'function') window.requireAuth();
       await new Promise((r) => setTimeout(r, 150));
       window.initProviderShell({ activeId: 'today', useGreeting: false });
-      renderHeroGreeting();
+      renderHeroSubtitle();
       wireTopbarIcons();
       loadOnboardingNudge();
       loadOnboardingChecklist();

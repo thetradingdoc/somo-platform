@@ -109,5 +109,6 @@ Links from calendar/Today search → `patients.html`; roster and payments tables
 ## Related
 
 - [PROVIDER_TODAY_PAGE.md](./PROVIDER_TODAY_PAGE.md) — Today-specific layout and KPI grid
+- [PROVIDER_CALENDAR.md](./PROVIDER_CALENDAR.md) — Schedule board + FullCalendar views
 - [SOMO_GUIDELINES.md](../Brand/SOMO_GUIDELINES.md) — brand on provider surfaces
 - E2E: `middleware-platform/e2e/provider-portal-shell.spec.cjs`, `provider-today-portal.spec.cjs`

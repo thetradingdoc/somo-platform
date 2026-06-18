@@ -175,7 +175,14 @@
   window.ppGetAuthHeaders = getAuthHeaders;
   window.ppFormatMoney = formatMoney;
   window.ppTodayYmd = todayYmd;
-  window.ppGreetingName = greetingName;
+  function greetingSubtitle() {
+    const clinic = clinicDisplayName();
+    const hour = new Date().getHours();
+    const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    return `${greet}, ${clinic} — here's what needs attention today.`;
+  }
+
+  window.ppGreetingSubtitle = greetingSubtitle;
   window.ppAgentLabel = agentLabel;
   window.ppClinicDisplayName = clinicDisplayName;
 
@@ -402,15 +409,24 @@
   window.ppFlushAlertStrip = function ppFlushAlertStrip() {
     const strip = document.getElementById('ppAlertStrip');
     if (!strip) return false;
-    const items = window.__ppAlertItems || [];
+    let items = window.__ppAlertItems || [];
     if (!items.length) {
       strip.innerHTML = '';
       strip.hidden = true;
       return false;
     }
+    const seen = new Set();
+    items = items.filter((a) => {
+      const key = a.dedupeKey || a.id || `${a.type}-${a.message}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const isMobile = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+    const maxVisible = isMobile ? 1 : 2;
     strip.hidden = false;
     const icon = (name) => (typeof window.getNavIcon === 'function' ? window.getNavIcon(name) : '');
-    strip.innerHTML = items.slice(0, 3).map((a) => {
+    strip.innerHTML = items.slice(0, maxVisible).map((a) => {
       const href = a.href ? resolveHref(a.href) : '';
       const type = ['info', 'action', 'risk', 'success'].includes(a.type) ? a.type : 'info';
       return `

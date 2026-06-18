@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#16a637">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <title>Somo Provider - Patients</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
@@ -68,7 +68,8 @@
         </div>
       </header>
       <main class="pp-content pp-content--patients" id="ppMainContent">
-        <div class="pp-alert-strip" id="ppAlertStrip" hidden aria-live="polite"></div>
+        <div class="pp-page-shell">
+        <div class="pp-alert-strip pp-alert-strip--compact" id="ppAlertStrip" hidden aria-live="polite"></div>
         <div id="patientsDebugStrip" class="pp-patients-debug" hidden aria-live="polite"></div>
         <div class="pp-kpi-row pp-kpi-row-4" id="patientsKpiRow">
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
@@ -109,6 +110,7 @@
             <div id="insCoverageMount"></div>
           </div>
         </section>
+        </div>
       </main>
     </div>
   </div>

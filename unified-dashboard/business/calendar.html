@@ -23,10 +23,13 @@
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
+  <script src="/assets/js/provider-calendar-core.js"></script>
+  <script src="/assets/js/provider-schedule-board.js"></script>
 </head>
 
 <body class="provider-portal provider-portal--scroll provider-portal--calendar" data-page="calendar">
   <main class="main-content pp-content pp-content--calendar" id="ppMainContent">
+      <div class="pp-page-shell">
       <div class="pp-toolbar">
         <div class="pp-toolbar-brand">
           <span class="pp-toolbar-label">Filters</span>
@@ -53,12 +56,26 @@
         </div>
       </div>
 
+      <div class="pp-cal-controls">
+        <div class="pp-cal-layer-toggle" role="group" aria-label="Calendar layer">
+          <button type="button" class="pp-cal-layer-btn active" data-layer="appointments">Appointments</button>
+          <button type="button" class="pp-cal-layer-btn" data-layer="capacity">Capacity</button>
+        </div>
+        <div class="pp-cal-view-tabs" role="tablist" aria-label="Calendar view">
+          <button type="button" class="pp-cal-view-tab active" data-view="board" role="tab" aria-selected="true">Board</button>
+          <button type="button" class="pp-cal-view-tab" data-view="list" role="tab" aria-selected="false">List</button>
+          <button type="button" class="pp-cal-view-tab" data-view="week" role="tab" aria-selected="false">Week</button>
+          <button type="button" class="pp-cal-view-tab" data-view="month" role="tab" aria-selected="false">Month</button>
+        </div>
+        <input type="search" id="boardSearch" class="input pp-cal-board-search" placeholder="Search patient…" autocomplete="off" />
+      </div>
+
       <div class="pp-calendar-legend legend">
         <button type="button" class="item legend-filter" data-status-key="scheduled"><span class="dot dot--scheduled"></span> Scheduled</button>
         <button type="button" class="item legend-filter" data-status-key="confirmed"><span class="dot dot--confirmed"></span> Confirmed</button>
         <button type="button" class="item legend-filter" data-status-key="cancelled"><span class="dot dot--cancelled"></span> Cancelled</button>
-        <button type="button" class="item legend-filter" data-status-key="available"><span class="dot dot--available"></span> Available</button>
-        <button type="button" class="item legend-filter" data-status-key="out_of_office"><span class="dot dot--ooo"></span> Out of Office</button>
+        <button type="button" class="item legend-filter" data-layer-only="capacity" data-status-key="available"><span class="dot dot--available"></span> Available</button>
+        <button type="button" class="item legend-filter" data-layer-only="capacity" data-status-key="out_of_office"><span class="dot dot--ooo"></span> Out of Office</button>
       </div>
 
       <div id="todayPinnedWrap" style="display:none;">
@@ -71,8 +88,11 @@
         </div>
       </div>
 
-      <div id="calendarWrap">
+      <div id="scheduleBoard" class="pp-schedule-board" data-testid="cal-schedule-board"></div>
+
+      <div id="calendarWrap" hidden>
         <div id="calendar" data-testid="cal-calendar"></div>
+      </div>
       </div>
   </main>
 
@@ -601,6 +621,20 @@
       };
     }
 
+    function monthEventContent(arg) {
+      const p = arg.event.extendedProps || {};
+      if (p.isAvailabilityBlock) {
+        return { html: `<span class="fc-event-title">${escapeHtml(arg.event.title || 'Block')}</span>` };
+      }
+      const we = wallClockStartEnd(p);
+      const patient = (p.patient_name || 'Unknown').trim().split(/\s+/)[0] || 'Appt';
+      const timeLabel = we
+        ? we.start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        : '';
+      const short = timeLabel ? `${timeLabel} · ${patient}` : patient;
+      return { html: `<span class="fc-event-title">${escapeHtml(short)}</span>` };
+    }
+
     function getLocalDateString(d) {
       const x = d instanceof Date ? d : new Date(d);
       if (Number.isNaN(x.getTime())) return null;
@@ -714,10 +748,10 @@
         const title = ev.title || `${a.patient_name} • ${a.appointment_type || 'Somoation'}`;
         const idAttr = escapeHtml(a.id);
         const kellyBadge = isBookedByKelly(a) ? ` ${kellyBookedBadgeHtml()}` : '';
-        return `<button type="button" class="today-pinned-row" data-appt-id="${idAttr}">
-      <span class="today-pinned-time">${escapeHtml(timeStr)}</span>
-      <span class="today-pinned-dot" style="background:${dot}"></span>
-      <span class="today-pinned-title">${escapeHtml(title)}${kellyBadge}</span>
+        return `<button type="button" class="pp-list-row today-pinned-row" data-appt-id="${idAttr}">
+      <span class="pp-list-row-time today-pinned-time">${escapeHtml(timeStr)}</span>
+      <span class="pp-list-row-dot today-pinned-dot" style="background:${dot}"></span>
+      <span class="pp-list-row-main today-pinned-title">${escapeHtml(title)}${kellyBadge}</span>
     </button>`;
       }).join('');
 
@@ -1340,6 +1374,99 @@
     }
 
     let cachedAppts = [];
+    let calendar = null;
+    let calendarLayer = 'appointments';
+    let calendarUiView = 'board';
+    let boardRangeStart = window.ProviderScheduleBoard
+      ? window.ProviderScheduleBoard.startOfWeekSunday(new Date())
+      : new Date();
+
+    function isMonthFcView() {
+      try {
+        return calendar && calendar.view && calendar.view.type === 'dayGridMonth';
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function shouldFetchAvailability() {
+      return calendarLayer === 'capacity';
+    }
+
+    function shouldShowAvailabilityInFc() {
+      if (!shouldFetchAvailability()) return false;
+      if (calendarUiView === 'month') return false;
+      if (isMonthFcView()) return false;
+      return true;
+    }
+
+    function setCalendarLayer(layer) {
+      calendarLayer = layer === 'capacity' ? 'capacity' : 'appointments';
+      document.body.classList.toggle('layer-capacity', calendarLayer === 'capacity');
+      document.body.classList.toggle('layer-appointments', calendarLayer === 'appointments');
+      document.querySelectorAll('.pp-cal-layer-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-layer') === calendarLayer);
+      });
+      refresh();
+    }
+
+    function updateViewTabsUi() {
+      document.querySelectorAll('.pp-cal-view-tab').forEach((tab) => {
+        const v = tab.getAttribute('data-view');
+        const active = v === calendarUiView;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    function renderScheduleBoardView() {
+      const boardEl = document.getElementById('scheduleBoard');
+      if (!boardEl || !window.ProviderScheduleBoard) return;
+      const providerFilter = document.getElementById('providerFilter');
+      const boardSearch = document.getElementById('boardSearch');
+      let visible = cachedAppts.filter((a) => isVisibleByLegendStatus(statusKeyFromAppointment(a)));
+      if (window.ProviderCalendarCore) {
+        visible = window.ProviderCalendarCore.filterAppointmentsForBoard(visible, {
+          providerFilter: providerFilter ? providerFilter.value : '',
+          boardSearch: boardSearch ? boardSearch.value : ''
+        });
+      }
+      window.ProviderScheduleBoard.renderScheduleBoard({
+        container: boardEl,
+        appointments: visible,
+        rangeStart: boardRangeStart,
+        onSelect: (appt) => openModal('<div/>', appt.id, appt.status, appt),
+        onRangeChange: (nextStart) => {
+          boardRangeStart = nextStart;
+          refresh();
+        }
+      });
+    }
+
+    function setCalendarUiView(view) {
+      calendarUiView = view;
+      const boardEl = document.getElementById('scheduleBoard');
+      const wrapEl = document.getElementById('calendarWrap');
+      const searchEl = document.getElementById('boardSearch');
+      const isBoard = view === 'board';
+
+      if (boardEl) boardEl.hidden = !isBoard;
+      if (wrapEl) wrapEl.hidden = isBoard;
+      if (searchEl) searchEl.hidden = !isBoard;
+
+      updateViewTabsUi();
+
+      if (isBoard) {
+        renderScheduleBoardView();
+        return;
+      }
+
+      if (!calendar) return;
+      const fcMap = { list: 'listWeek', week: 'timeGridWeek', month: 'dayGridMonth' };
+      const fcView = fcMap[view] || 'listWeek';
+      if (calendar.view.type !== fcView) calendar.changeView(fcView);
+      else refresh();
+    }
 
     async function openApptFromQuery() {
       const id = new URLSearchParams(window.location.search).get('id');
@@ -1375,9 +1502,14 @@
       dateInput.placeholder = 'All dates';
 
       const calendarEl = document.getElementById('calendar');
-      const calendar = new FullCalendar.Calendar(calendarEl, {
+      calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'listWeek',
-        eventContent: calendarEventContent,
+        dayMaxEvents: 3,
+        moreLinkClick: 'popover',
+        eventContent: function (arg) {
+          if (arg.view && arg.view.type === 'dayGridMonth') return monthEventContent(arg);
+          return calendarEventContent(arg);
+        },
         customButtons: {
           goToday: {
             text: 'today',
@@ -1415,12 +1547,20 @@
         const currentYear = now.getFullYear();
         const firstOfMonth = (y, m) => `${y}-${String(m + 1).padStart(2, '0')}-01`;
         const lastOfMonth = (y, m) => new Date(y, m + 1, 0).toISOString().slice(0, 10);
-        let start = null, end = null;
-        try {
-          const view = calendar.view;
-          if (view && view.activeStart) start = view.activeStart.toISOString().slice(0, 10);
-          if (view && view.activeEnd) end = view.activeEnd.toISOString().slice(0, 10);
-        } catch (_) {}
+        let start = null;
+        let end = null;
+
+        if (calendarUiView === 'board' && window.ProviderScheduleBoard) {
+          start = getLocalDateString(boardRangeStart);
+          end = getLocalDateString(window.ProviderScheduleBoard.addDays(boardRangeStart, 6));
+        } else {
+          try {
+            const view = calendar.view;
+            if (view && view.activeStart) start = view.activeStart.toISOString().slice(0, 10);
+            if (view && view.activeEnd) end = view.activeEnd.toISOString().slice(0, 10);
+          } catch (_) {}
+        }
+
         if (!start || !end) {
           start = firstOfMonth(currentYear, now.getMonth() - 1);
           end = lastOfMonth(currentYear, now.getMonth() + 1);
@@ -1433,14 +1573,33 @@
         const appts = await fetchAppointments(start, end);
         cachedAppts = appts;
         renderTodayPinned(appts);
+
+        if (calendarUiView === 'board') {
+          renderScheduleBoardView();
+        }
+
         const events = toCalendarEvents(appts);
-        const blocks = await fetchAvailabilityBlocks(start, end);
-        const avbEvents = toAvailabilityEvents(blocks);
-        const visibleEvents = events.filter(ev => isVisibleByLegendStatus(statusKeyFromEvent(ev)));
-        const visibleAvailabilityEvents = avbEvents.filter(ev => isVisibleByLegendStatus(statusKeyFromEvent(ev)));
-        calendar.removeAllEvents();
-        calendar.addEventSource(visibleEvents);
-        calendar.addEventSource(visibleAvailabilityEvents);
+        let avbEvents = [];
+        if (shouldFetchAvailability()) {
+          const blocks = await fetchAvailabilityBlocks(start, end);
+          avbEvents = toAvailabilityEvents(blocks);
+        }
+        const visibleEvents = events.filter((ev) => isVisibleByLegendStatus(statusKeyFromEvent(ev)));
+        let visibleAvailabilityEvents = avbEvents.filter((ev) =>
+          isVisibleByLegendStatus(statusKeyFromEvent(ev))
+        );
+        if (!shouldShowAvailabilityInFc()) {
+          visibleAvailabilityEvents = [];
+        }
+
+        if (calendar && calendarUiView !== 'board') {
+          calendar.removeAllEvents();
+          calendar.addEventSource(visibleEvents);
+          if (visibleAvailabilityEvents.length) {
+            calendar.addEventSource(visibleAvailabilityEvents);
+          }
+        }
+
         if (scrollPinnedNextRefresh) {
           scrollPinnedNextRefresh = false;
           const wrap = document.getElementById('todayPinnedWrap');
@@ -1455,7 +1614,21 @@
       document.getElementById('createApptBtn').addEventListener('click', openCreateModal);
       document.getElementById('statusFilter').addEventListener('change', refresh);
       document.getElementById('dateFilter').addEventListener('change', refresh);
-      document.getElementById('providerFilter').addEventListener('keydown', (e) => { if (e.key === 'Enter') refresh(); });
+      document.getElementById('providerFilter').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') refresh();
+      });
+      document.getElementById('providerFilter').addEventListener('input', () => {
+        if (calendarUiView === 'board') renderScheduleBoardView();
+      });
+      document.getElementById('boardSearch')?.addEventListener('input', () => {
+        if (calendarUiView === 'board') renderScheduleBoardView();
+      });
+      document.querySelectorAll('.pp-cal-layer-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setCalendarLayer(btn.getAttribute('data-layer')));
+      });
+      document.querySelectorAll('.pp-cal-view-tab').forEach((tab) => {
+        tab.addEventListener('click', () => setCalendarUiView(tab.getAttribute('data-view')));
+      });
       document.querySelectorAll('.legend-filter').forEach((btn) => {
         btn.addEventListener('click', () => {
           const key = String(btn.getAttribute('data-status-key') || '').toLowerCase();
@@ -1589,6 +1762,9 @@
       });
 
       calendar.render();
+      document.body.classList.add('layer-appointments');
+      const prefersBoard = window.matchMedia('(min-width: 1025px)').matches;
+      setCalendarUiView(prefersBoard ? 'board' : 'list');
       await refresh();
       await openApptFromQuery();
     }

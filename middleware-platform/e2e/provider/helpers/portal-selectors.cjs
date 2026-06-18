@@ -8,6 +8,7 @@ module.exports = {
   navToday: '[data-testid="pp-nav-today"]',
   kellyActivity: '[data-testid="pp-kelly-activity"]',
   scheduleList: '[data-testid="pp-schedule-list"]',
+  scheduleBoard: '[data-testid="cal-schedule-board"]',
   calendarRoot: '[data-testid="cal-calendar"]',
   calModalCancel: '[data-testid="cal-modal-cancel"]',
   calModalReschedule: '[data-testid="cal-modal-reschedule"]',

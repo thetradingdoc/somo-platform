@@ -14,6 +14,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Environment variables** | [`setup/README.md`](../setup/README.md) | Former `ENVIRONMENT_VARIABLES_BY_SURFACE` merged into setup README |
 | **Brand / logo / email HTML** | [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md) | [`Brand/README.md`](../Brand/README.md) |
 | **Provider portal shell** | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md) | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) (Today layout) |
+| **Provider calendar** | [`design/PROVIDER_CALENDAR.md`](../design/PROVIDER_CALENDAR.md) | Board + FullCalendar views in `business/calendar.html` |
 | **Provider Today UI** | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) | [`todos/pending/PROVIDER_TODAY_UI_TODOS.md`](../../todos/pending/PROVIDER_TODAY_UI_TODOS.md) |
 | **Staging profile** | [`meta/README.md`](./README.md#staging-profile) | [`testing/README.md`](../testing/README.md) |
 | **Somo demo (landing outbound)** | [`agent/somo-demo/RUNBOOK.md`](../agent/somo-demo/RUNBOOK.md#phase-a-go-recovery-runbook) | [`agent/somo-demo/README.md`](../agent/somo-demo/README.md) |

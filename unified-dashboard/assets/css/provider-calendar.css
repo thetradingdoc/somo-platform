@@ -6,6 +6,7 @@
   --cal-border: #e5e7eb;
   --cal-card: #ffffff;
   --cal-muted: #6b7280;
+  --pp-calendar-chrome: 280px;
 }
 
 .provider-portal--calendar .main-content,
@@ -82,8 +83,8 @@
 }
 
 #todayPinnedWrap {
-  max-width: 1200px;
-  margin: 16px auto 0;
+  max-width: 100%;
+  margin: 16px 0 0;
   position: sticky;
   top: 0;
   z-index: 25;
@@ -141,7 +142,8 @@
   overflow-y: auto;
 }
 
-.today-pinned-row {
+.today-pinned-row,
+.pp-list-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -157,29 +159,34 @@
   transition: background 0.15s;
 }
 
-.today-pinned-row:last-child {
+.today-pinned-row:last-child,
+.pp-list-row:last-child {
   border-bottom: none;
 }
 
-.today-pinned-row:hover {
+.today-pinned-row:hover,
+.pp-list-row:hover {
   background: #f9fafb;
 }
 
-.today-pinned-time {
+.today-pinned-time,
+.pp-list-row-time {
   flex: 0 0 130px;
   font-size: 13px;
   font-weight: 600;
   color: #374151;
 }
 
-.today-pinned-dot {
+.today-pinned-dot,
+.pp-list-row-dot {
   width: 10px;
   height: 10px;
   border-radius: 999px;
   flex-shrink: 0;
 }
 
-.today-pinned-title {
+.today-pinned-title,
+.pp-list-row-main {
   flex: 1;
   font-size: 14px;
   font-weight: 600;
@@ -191,9 +198,62 @@
   color: var(--cal-muted);
 }
 
+.pp-cal-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0 4px;
+}
+
+.pp-cal-layer-toggle,
+.pp-cal-view-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  border: 1px solid var(--cal-border);
+}
+
+.pp-cal-layer-btn,
+.pp-cal-view-tab {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pp-cal-layer-btn.active,
+.pp-cal-view-tab.active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.pp-cal-board-search {
+  min-width: 160px;
+  max-width: 220px;
+  margin-left: auto;
+}
+
+.pp-cal-board-search[hidden] {
+  display: none !important;
+}
+
+#scheduleBoard {
+  margin: 0 0 16px;
+}
+
 #calendarWrap {
-  max-width: 1200px;
-  margin: 16px auto;
+  max-width: 100%;
+  margin: 0 0 16px;
 }
 
 #calendar {
@@ -202,7 +262,162 @@
   border-radius: var(--pp-card-radius, 16px);
   padding: 14px;
   box-shadow: var(--shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
-  min-height: 760px;
+  min-height: calc(100vh - var(--pp-calendar-chrome));
+}
+
+/* Schedule board grid */
+.pp-schedule-board-inner {
+  background: var(--cal-card);
+  border: 1px solid var(--cal-border);
+  border-radius: var(--pp-card-radius, 16px);
+  box-shadow: var(--shadow, 0 1px 3px rgba(15, 23, 42, 0.06));
+  overflow: hidden;
+}
+
+.pp-schedule-board-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--cal-border);
+  flex-wrap: wrap;
+}
+
+.pp-schedule-board-range-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-left: 4px;
+}
+
+.pp-schedule-board-grid-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pp-schedule-board-grid {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.pp-schedule-board-grid th,
+.pp-schedule-board-grid td {
+  border: 1px solid var(--cal-border);
+  vertical-align: top;
+}
+
+.pp-schedule-board-corner {
+  width: 140px;
+  min-width: 120px;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  padding: 10px 12px;
+}
+
+.pp-schedule-board-day {
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  text-align: center;
+  padding: 10px 8px;
+}
+
+.pp-schedule-board-day.is-today {
+  background: #e1f5ee;
+  color: #0f6e56;
+}
+
+.pp-schedule-board-summary th,
+.pp-schedule-board-summary-cell {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  padding: 6px 8px;
+  background: #fafafa;
+}
+
+.pp-schedule-board-provider {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 10px 12px;
+  background: #fff;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pp-schedule-board-cell {
+  position: relative;
+  padding: 0;
+  background: #fff;
+  min-width: 100px;
+}
+
+.pp-schedule-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #fff;
+  text-align: left;
+  padding: 4px 6px;
+  cursor: pointer;
+  overflow: hidden;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font: inherit;
+}
+
+.pp-schedule-bar:hover {
+  filter: brightness(1.05);
+  z-index: 2;
+}
+
+.pp-schedule-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pp-schedule-bar-sub {
+  font-size: 10px;
+  opacity: 0.92;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pp-schedule-board-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--cal-muted);
+  font-size: 14px;
+}
+
+.legend-filter[data-layer-only="capacity"] {
+  display: none;
+}
+
+.provider-portal--calendar.layer-capacity .legend-filter[data-layer-only="capacity"] {
+  display: flex;
+}
+
+.provider-portal--calendar.layer-appointments .legend-filter[data-layer-only="capacity"] {
+  display: none;
 }
 
 .legend {
@@ -252,6 +467,30 @@
 .fc .fc-toolbar-title {
   font-weight: 800;
   color: #111827;
+}
+
+.fc .fc-button-primary {
+  background: var(--cal-primary) !important;
+  border-color: var(--cal-primary) !important;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: #128a2e !important;
+  border-color: #128a2e !important;
+}
+
+.fc .fc-button-primary:disabled {
+  opacity: 0.55;
+}
+
+.fc .fc-toolbar.fc-header-toolbar {
+  margin-bottom: 12px;
+  gap: 8px;
 }
 
 .fc-theme-standard td,
@@ -401,6 +640,18 @@
   margin-left: 6px;
   font-size: 10px;
   vertical-align: middle;
+}
+
+@media (max-width: 1024px) {
+  .pp-cal-board-search {
+    margin-left: 0;
+    width: 100%;
+    max-width: none;
+  }
+
+  #scheduleBoard.pp-schedule-board--hidden-mobile {
+    display: none !important;
+  }
 }
 
 @media (max-width: 768px) {
