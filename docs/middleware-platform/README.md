@@ -4302,7 +4302,7 @@ Set these in Retell (Variable name → Test value). Use your real DB values for 
 - Azure Communication Services (production), SMTP fallback (local)
 
 ### 7. Agent Prompt ✅
-- **File:** `docs/voice-agent/shop-voice-agent-prompt.md`
+- **File:** `docs/voice-agent/prompts/kelly-voice-agent-prompt.md` (shop commerce prompt removed 2026-06-17)
 - Explicit instructions for `customer_email` in function call
 
 ---

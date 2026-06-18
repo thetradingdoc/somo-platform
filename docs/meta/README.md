@@ -21,7 +21,7 @@ Browse by anchor above. Each section notes the former file path.
 
 ## Engineering doc hygiene (2026-06-02)
 
-- **Two files per folder:** `README.md` + one companion (`OPERATIONS.md`, `LIVE.md`, `RUNBOOK.md`, etc.). Exceptions: runtime prompt paths under `voice-agent/prompts/`, binary assets under `patient-app/screenshots/`.
+- **Two files per folder:** `README.md` + one companion (`OPERATIONS.md`, `LIVE.md`, `RUNBOOK.md`, etc.). Exceptions: runtime prompt paths under `voice-agent/prompts/`.
 - **Read first:** [CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md) — not the 12k-line `architecture/README.md` or `deployment/README.md` archives.
 - **New ops content:** append to the folder’s companion file with a dated anchor; register retired paths in [`_consolidated_path_redirects.json`](../_consolidated_path_redirects.json).
 - **Regenerate merges:** `node scripts/consolidate-docs-two-per-folder.cjs`
@@ -49,7 +49,7 @@ Browse by anchor above. Each section notes the former file path.
 |---------|------|------|
 | Marketing landing | `unified-dashboard/somo-landing/` | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#somo-landing), [`design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md) |
 | Middleware API | `middleware-platform/` | [`middleware-platform/README.md`](../middleware-platform/README.md), [`architecture/LIVE.md`](../architecture/LIVE.md) |
-| Patient mobile | `patient-app/` | [`patient-app/README.md`](../patient-app/README.md) |
+| Patient mobile | `patient-app/` (repo root) | `patient-app/README.md` if present |
 
 <a id="po-surface-scorecard"></a>
 

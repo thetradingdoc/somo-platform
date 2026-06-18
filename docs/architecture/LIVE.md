@@ -242,7 +242,7 @@ Characteristics:
   - checkout helpers and analytics
   - design token parity (`skinCareTokens.ts`)
   - optional ledger/safe-harbor primitives (`useUnifiedLedger.ts`, `SafeHarborRing.tsx`)
-- Dedicated doc (current): `docs/patient-app/PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`
+- Dedicated doc: [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](./patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md) (consumer routine tracker code in `patient-app/` — legacy)
 
 ---
 
@@ -403,7 +403,7 @@ Current mobile pattern:
 
 This is documented in:
 
-- `docs/patient-app/PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`
+- `docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`
 
 ---
 
@@ -1153,7 +1153,7 @@ Owned by **`routes/patient-routine.js`** (was inline in `server.js`):
 | GET | `/api/patient/journal/calendar-range` |
 | GET | `/api/patient/home/progress-summary` |
 
-Product contracts: [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](./patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md), parity: [`docs/user-journey/06-mobile-and-web-parity.md`](../user-journey/06-mobile-and-web-parity.md).
+Product contracts: [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](./patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md).
 
 ## How to add a new patient endpoint
 
@@ -1555,7 +1555,7 @@ Agent greeting and system prompt exist in Retell, `customers.custom_prompt`, `vo
 
 > Last reviewed: 2026-05-21
 
-Covers **routine Today** (photo loop), **Timeline / journal**, **middleware calendar-range**, and **billing** APIs. Routine tracker product flow: [`docs/user-journey/JOURNEY.md`](../user-journey/JOURNEY.md).
+Covers **routine Today** (photo loop), **Timeline / journal**, **middleware calendar-range**, and **billing** APIs. Legacy consumer app: `patient-app/` in repo root.
 
 ### Patient app routes
 

@@ -94,34 +94,10 @@ Always be professional, respectful, and helpful. If they're not interested, than
   }
 
   /**
-   * Load shop-specific prompt from file
+   * Load shop-specific prompt (inline default; commerce prompt file removed 2026-06-17)
    */
   loadShopPrompt() {
-    try {
-      const possiblePaths = [
-        path.join(__dirname, '../../docs/voice-agent/shop-voice-agent-prompt.md'), // Local dev
-        path.join(__dirname, '../docs/voice-agent/shop-voice-agent-prompt.md'), // Azure (if docs copied)
-        path.join(process.cwd(), 'docs/voice-agent/shop-voice-agent-prompt.md') // Fallback
-      ];
-
-      for (const templatePath of possiblePaths) {
-        try {
-          if (fs.existsSync(templatePath)) {
-            const prompt = fs.readFileSync(templatePath, 'utf8');
-            console.log('✅ Loaded shop voice agent prompt');
-            return prompt;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-
-      console.warn('⚠️  Shop prompt file not found, using default shop prompt');
-      return this.getDefaultShopPrompt();
-    } catch (error) {
-      console.error('Error loading shop prompt:', error);
-      return this.getDefaultShopPrompt();
-    }
+    return this.getDefaultShopPrompt();
   }
 
   /**

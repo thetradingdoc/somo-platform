@@ -15,7 +15,7 @@ import { chromium } from 'playwright';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const staticRoot = path.join(repoRoot, 'unified-dashboard');
-const outDir = path.join(repoRoot, 'docs/patient-app/screenshots');
+const outDir = path.join(repoRoot, 'tmp/patient-app-screenshots');
 const sessionId = process.env.PATIENT_SCREENSHOT_SESSION_ID || '';
 
 const targets = [

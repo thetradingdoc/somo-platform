@@ -12357,7 +12357,7 @@ Characteristics:
   - checkout helpers and analytics
   - design token parity (`skinCareTokens.ts`)
   - optional ledger/safe-harbor primitives (`useUnifiedLedger.ts`, `SafeHarborRing.tsx`)
-- Dedicated doc (current): `docs/patient-app/PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`
+- Dedicated doc: [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../../docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md) (legacy consumer `patient-app/`)
 
 ---
 
@@ -12518,7 +12518,7 @@ Current mobile pattern:
 
 This is documented in:
 
-- `docs/patient-app/PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`
+- `docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`
 
 ---
 
