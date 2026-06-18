@@ -11,7 +11,8 @@ Markdown prompts loaded by middleware and Retell configuration.
 | Kelly (voice) | [kelly-voice-agent-prompt.md](./kelly-voice-agent-prompt.md) | [`configure-retell.js`](../../middleware-platform/configure-retell.js) — primary system prompt |
 | Medical coding workflow | [../medical-voice-agent-prompt.md](../medical-voice-agent-prompt.md) | Appended to Kelly when file exists |
 | Kelly (chat) | [kelly-chat-prompt.md](./kelly-chat-prompt.md) | Chat/checkout surfaces (see middleware Kelly services) |
-| Shop agent | [../shop-voice-agent-prompt.md](../shop-voice-agent-prompt.md) | Commerce voice variant |
+
+Commerce shop voice prompt removed 2026-06-17 (legacy consumer).
 
 ## Configure Retell
 

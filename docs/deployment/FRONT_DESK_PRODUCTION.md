@@ -249,4 +249,4 @@ Legacy domains are retired; keep all production traffic on `callsomo.com` and `a
 
 - [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md) — rollback
 - [`docs/deployment/VOICE_CURRENT_ARCHITECTURE.md`](./VOICE_CURRENT_ARCHITECTURE.md) — voice detail
-- [`docs/meta/TRADING_AGENT_REPO.md`](../meta/TRADING_AGENT_REPO.md) — trading agent (separate repo)
+- Trading agent: [richiejeremiah/trading-agent](https://github.com/richiejeremiah/trading-agent) (separate repo)

@@ -108,5 +108,5 @@ Verify EventLog rows: `request_received`, `call_initiated`, `qualification_captu
 
 - Local middleware on `:4000` can hang on HTTP after restart in dev; use Cloud Run for smoke.
 - `smoke:somo-demo` flag-off test may see 429 `DUPLICATE_PHONE_WINDOW` when smoke number is locked — expected.
-- `verify:kelly-rails-cloudrun` needs interactive `gcloud auth login`; manual env per [`KELLY_CONVERSATION_RAILS_TODOS.md`](../../../todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md).
+- `verify:kelly-rails-cloudrun` needs interactive `gcloud auth login`; manual env per [`todos/PENDING.md`](../../../todos/PENDING.md).
 - Outbound qual uses `somo-demo-orchestrator`, not Kelly Rails V2 — do not infer voice demo health from golden-conversation tests alone.

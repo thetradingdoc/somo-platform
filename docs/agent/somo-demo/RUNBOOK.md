@@ -148,7 +148,7 @@ After every run, update:
 
 - `docs/agent/somo-demo/PROD_OUTBOUND_SALES_RUNBOOK.md`
 - `docs/agent/somo-demo/PROD_E2E_EXECUTION_REPORT_2026-06-02.md`
-- `todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md`
+- [`todos/PENDING.md`](../../todos/PENDING.md)
 - `docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`
 
 Required evidence entries:

@@ -31,6 +31,6 @@
 ## Related Docs
 
 - Docs parity tracker: [`../meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md`](../meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md)
-- Detailed implementation checklist: [`../../todos/pending/PAYOR_ENTITY_RESOLUTION_TODOS.md`](../../todos/pending/PAYOR_ENTITY_RESOLUTION_TODOS.md)
+- Detailed implementation checklist: [`../../todos/PENDING.md`](../../todos/PENDING.md) (payor section)
 - Prior authorization (case-level RCM workflow): [`../RCM/PA_ARCHITECTURE.md`](../RCM/PA_ARCHITECTURE.md)  
   (This Payor folder covers plan/provider datasets and routing; case-level PA lives under `docs/RCM/`.)

@@ -7,7 +7,7 @@
 
 > **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
-> **Trading agent (separate repo):** [richiejeremiah/trading-agent](https://github.com/richiejeremiah/trading-agent) — biotech paper trading; not maintained in this repository. See [`docs/meta/TRADING_AGENT_REPO.md`](docs/meta/TRADING_AGENT_REPO.md).
+> **Trading agent (separate repo):** [richiejeremiah/trading-agent](https://github.com/richiejeremiah/trading-agent) — biotech paper trading; not maintained in this repository.
 
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
 
@@ -72,11 +72,11 @@ somo/
 ├── patient-app/             # Expo (React Native) patient app
 ├── livekit-agents/          # Python transcription / agent workers
 ├── docs/                    # Canonical documentation (start at docs/README.md)
-├── todos/                   # Task lists & rollout notes (not all items are open work)
+├── todos/                   # Open work SSOT: todos/PENDING.md
 └── README.md                # This file
 ```
 
-**Agentic commerce (chat → quote → pay):** see [docs/architecture/README.md#commerce-public-agentic-checkout](docs/architecture/README.md#commerce-public-agentic-checkout) and [todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (status note at top).
+**Agentic commerce (chat → quote → pay):** see [docs/architecture/README.md#commerce-public-agentic-checkout](docs/architecture/README.md#commerce-public-agentic-checkout) and [todos/PENDING.md](todos/PENDING.md) (deferred checkout section). Legacy consumer code (`patient-app/`, Skin & Care portal) coexists with front-desk product; scheduled for future removal.
 
 ---
 
@@ -558,7 +558,7 @@ All documentation has been organized in the [`docs/`](./docs/) folder:
 
 ### Quick Links
 - **Setup Guides**: [Setup](./docs/setup/README.md#getting-started-setup), [Stripe Issuing](./docs/integrations/README.md#stripe-issuing-stripe-issuing)
-- **Routine tracker**: [User journey](./docs/user-journey/README.md)
+- **Open work:** [todos/PENDING.md](./todos/PENDING.md)
 - **Architecture**: [Vision](./docs/architecture/README.md#vision-vision), [Payment Architecture](./docs/architecture/README.md#payments-payment-architecture)
 - **RCM patient pay (Kelly)**: [RCM Patient Pay Gateway](./docs/RCM/RCM_PATIENT_PAY_GATEWAY.md)
 - **API**: [API Documentation](./docs/api/README.md#api-documentation)

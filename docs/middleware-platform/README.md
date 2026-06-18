@@ -214,7 +214,7 @@ Original as-is / to-be design and shipping plan. Implementation status and enums
 
 Cross-checks:
 
-- `todos/pending/AGENTIC_REASONING_TODOS.md`
+- [`todos/PENDING.md`](../../todos/PENDING.md)
 - Reasoning map / roadmap files under this folder (see §2)
 - Current middleware/frontend code paths
 
@@ -225,7 +225,7 @@ Primary references reviewed before drafting this design:
 - [Reasoning map v1 rollout](#reasoning-map-v1-rollout) · [Roadmap todos](#roadmaps-reasoning-pipeline-roadmap-todos) (same file)
 - `docs/architecture/README.md#intelligence-layer-readme`
 - [Debug LLM Kelly path](#debug-llm-kelly-path) · [Kelly phase prompts](#kelly-phase-prompt-architecture) (same file)
-- `todos/pending/AGENTIC_REASONING_TODOS.md`
+- [`todos/PENDING.md`](../../todos/PENDING.md)
 - Pipeline diagram: `/Users/ojrichard/Downloads/agentic_reasoning_pipeline.svg`
 
 Current implementation references:
@@ -436,7 +436,7 @@ Must pass before launch:
 
 ## 11) Mapping to todo execution
 
-This design is implemented via `todos/pending/AGENTIC_REASONING_TODOS.md`:
+This design is tracked in [`todos/PENDING.md`](../../todos/PENDING.md) (deferred LangGraph Step 10 section):
 
 - "Immediate safety stop (today)" -> Phase A
 - "Must before canary" -> Phase B/C readiness

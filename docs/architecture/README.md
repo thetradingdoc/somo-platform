@@ -1592,7 +1592,7 @@ Short, durable notes on **why** the platform chose certain approaches. Add a new
 ## Phase 0 — Derm patient Q&A: scope, intent taxonomy, metrics, positioning
 
 
-This document implements **Phase 0** from `todos/pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md` (align and scope). It is the **product + evaluation contract** for the Reddit-informed patient Q&A pipeline (intent router → passage retrieval → grounded answers).
+This document implements **Phase 0** from [`todos/PENDING.md`](../../todos/PENDING.md) (derm Q&A deferred section). It is the **product + evaluation contract** for the Reddit-informed patient Q&A pipeline (intent router → passage retrieval → grounded answers).
 
 ---
 
@@ -1674,7 +1674,7 @@ Every user turn is classified into **exactly one** primary intent before heavy r
 
 ## 4. References
 
-- Todo roadmap: `todos/pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md`
+- Todo roadmap: [`todos/PENDING.md`](../../todos/PENDING.md) (derm Q&A deferred)
 - RAG integration overview: `docs/architecture/README.md#overview-architecture-overview-and-colab-rag`
 - Triage rules (reuse for red flags): `Knowledge/rules/triage-rules.json` (paths may vary)
 
@@ -9343,12 +9343,12 @@ Twilio receives call → POST /voice/incoming
 | `docs/architecture/README.md#voice-agent-state-flow` | Medical coding state machine |
 | `docs/architecture/README.md#voice-agent-voice-agent-todo-and-status` | Implementation status |
 | [`docs/middleware-platform/README.md`](../middleware-platform/README.md#voice-agent-functions-and-dynamic-variables) | Voice tools and dynamic variables |
-| `todos/pending/PRODUCTION_READINESS_TASKS.md` | Production readiness checklist, Azure setup, compliance |
+| [`todos/PENDING.md`](../../todos/PENDING.md) | Production readiness + open work checklist |
 
 - [FINANCIAL_LAYER_ARCHITECTURE.md](./README.md#financial-financial-layer-architecture) — Stedi, coding pipeline, EOB, settlement, voice tools
 - [STATE_FLOW.md](./README.md#voice-agent-state-flow) — Medical coding state machine
 - [Voice agent functions (consolidated middleware docs)](../middleware-platform/README.md#voice-agent-functions-and-dynamic-variables) — All Retell functions and dynamic variables
-- pending/PRODUCTION_READINESS_TASKS.md (`../../todos/pending/PRODUCTION_READINESS_TASKS.md`) — Tasks to be production-ready, including Azure setup
+- [`todos/PENDING.md`](../../todos/PENDING.md) — Open work including production readiness (Azure sections historical)
 
 
 ---

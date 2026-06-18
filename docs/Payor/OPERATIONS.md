@@ -34,7 +34,7 @@ The objective is to move from basic payer lookup/caching to a canonical, pre-res
 | [`PROVIDER_NETWORK_INGESTION_CONTRACTS.md`](./PROVIDER_NETWORK_INGESTION_CONTRACTS.md) | Network evidence → `provider_payer_networks` |
 | [`PAYOR_DEFERRED_THIRD_PARTY_DATASETS.md`](./PAYOR_DEFERRED_THIRD_PARTY_DATASETS.md) | Explicit non-imports (companion NPPES files, etc.) |
 | [`PAYOR_NAMING_CONVENTION.md`](./PAYOR_NAMING_CONVENTION.md) | `payor` vs `payer` |
-| [`PAYOR_ENTITY_RESOLUTION_TODOS.md`](../../todos/pending/PAYOR_ENTITY_RESOLUTION_TODOS.md) | Detailed checklist (Steps 0–14) |
+| [`todos/PENDING.md`](../../todos/PENDING.md) | Detailed checklist (Steps 0–14) |
 
 ### Implementation status (latest architecture snapshot)
 
@@ -628,7 +628,7 @@ Keep **`payer`** for existing runtime/API compatibility surfaces that are alread
 
 # CMS-authoritative payor track — operator runbook
 
-**Architecture + completion summary:** [`PAYOR_ARCHITECTURE_AND_ENTITY_RESOLUTION.md`](./PAYOR_ARCHITECTURE_AND_ENTITY_RESOLUTION.md) (implementation status, doc map, Section 12 provider network). **Detailed checklist:** [`../../todos/pending/PAYOR_ENTITY_RESOLUTION_TODOS.md`](../../todos/pending/PAYOR_ENTITY_RESOLUTION_TODOS.md).
+**Architecture + completion summary:** [`PAYOR_ARCHITECTURE_AND_ENTITY_RESOLUTION.md`](./PAYOR_ARCHITECTURE_AND_ENTITY_RESOLUTION.md) (implementation status, doc map, Section 12 provider network). **Detailed checklist:** [`../../todos/PENDING.md`](../../todos/PENDING.md).
 
 Use this when Office Ally / Inovalon exports are **not** loaded yet. Free sources: CMS MA artifacts, NPPES dissemination (`npidata_pfile`, `endpoint_pfile`), NUCC, tier-1 pulls.
 
@@ -678,7 +678,7 @@ Run: `npm run report:payor:readiness:step0-2`
 
 Runs migrate → tier-1 pull → NPPES Type 2 bulk → directory → FHIR endpoints → normalization dictionaries seed → normalization (`--until-done`) → blocking → fuzzy → resolution → canonicalization → readiness + ops reports.
 
-**If you already ingested** `import:payor:nppes-bulk` and `import:nppes-endpoints` manually, do **not** re-run those steps: use **`npm run run:payor:nppes-path-b-pipeline -- --skip-migrate --skip-pull`** (wraps the same skips), or `npm run run:payor:cms-pipeline -- --skip-nppes-bulk --skip-directory --skip-endpoints`, or `npm run run:payor:cms-er-replay`. **Greenfield:** **`npm run run:payor:nppes-path-a`** after linking NPPES = verify + full pipeline. Full operator paths: **`todos/pending/PAYOR_ENTITY_RESOLUTION_TODOS.md`** §13 *Full NPPES bulk on disk — correct operator sequence*.
+**If you already ingested** `import:payor:nppes-bulk` and `import:nppes-endpoints` manually, do **not** re-run those steps: use **`npm run run:payor:nppes-path-b-pipeline -- --skip-migrate --skip-pull`** (wraps the same skips), or `npm run run:payor:cms-pipeline -- --skip-nppes-bulk --skip-directory --skip-endpoints`, or `npm run run:payor:cms-er-replay`. **Greenfield:** **`npm run run:payor:nppes-path-a`** after linking NPPES = verify + full pipeline. Full operator paths: **[`todos/PENDING.md`](../../todos/PENDING.md)** §13 *Full NPPES bulk on disk — correct operator sequence*.
 
 ```bash
 npm run run:payor:cms-pipeline

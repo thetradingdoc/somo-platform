@@ -1,9 +1,0 @@
-{
-  "description": "Strict do-not-delete allowlist for active segment/canonical landing pages.",
-  "pages": [
-    "unified-dashboard/littlelab-landing/public/index.html",
-    "unified-dashboard/waitlist.html",
-    "teamkelly/website/index.html",
-    "teamkelly/website/face-age.html"
-  ]
-}

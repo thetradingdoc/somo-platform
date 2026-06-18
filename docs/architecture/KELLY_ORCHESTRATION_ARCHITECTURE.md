@@ -232,7 +232,7 @@ Verify: `npm run verify:kelly-rails-env` (includes conversation mode check in st
 
 ## Known gaps and tickets
 
-See [`todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md`](../../todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md) and orchestration remediation backlog.
+See [`todos/PENDING.md`](../../todos/PENDING.md) and [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md).
 
 | Risk | Mitigation ticket |
 |------|-------------------|

@@ -32,4 +32,4 @@ Hard-refresh `https://callsomo.com` (Cmd+Shift+R).
 
 ## Next (operator)
 
-- [SOMO_DEMO_QUALIFICATION_TODOS.md](../../../todos/pending/SOMO_DEMO_QUALIFICATION_TODOS.md): Q-17, Q-18, Sheets proof
+- [`todos/PENDING.md`](../../../todos/PENDING.md): Q-17, Q-18, Sheets proof

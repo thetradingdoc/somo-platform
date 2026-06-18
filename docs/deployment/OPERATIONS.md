@@ -1062,7 +1062,7 @@ New exports also get columns via [`export-sqlite-to-postgres.js`](../../middlewa
 > **Last reviewed:** 2026-05-28  
 > **Status:** Target architecture (implementation in progress)  
 > **Voice telephony:** [VOICE_CURRENT_ARCHITECTURE.md](./VOICE_CURRENT_ARCHITECTURE.md)  
-> **Task tracker (archived v1):** [todos/archive/VOICE_BILLING_SUBSCRIPTION_TODOS_COMPLETED_2026-05-31.md](../../todos/archive/VOICE_BILLING_SUBSCRIPTION_TODOS_COMPLETED_2026-05-31.md)
+> **Task tracker:** [`todos/PENDING.md`](../../todos/PENDING.md)
 
 ![Voice subscription billing architecture](./assets/voice-subscription-architecture.svg)
 
@@ -1386,7 +1386,7 @@ E2E:
 **Status:** Implemented (feature-flagged)  
 **Signup flow:** [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.md)  
 **Voice billing:** [VOICE_SUBSCRIPTION_BILLING_ARCHITECTURE.md](./VOICE_SUBSCRIPTION_BILLING_ARCHITECTURE.md)  
-**Task tracker (archived v1):** [todos/archive/PROVIDER_TRIAL_SIM_TODOS_COMPLETED_2026-05-31.md](../../todos/archive/PROVIDER_TRIAL_SIM_TODOS_COMPLETED_2026-05-31.md)
+**Task tracker:** [`todos/PENDING.md`](../../todos/PENDING.md)
 
 ## Product contract
 

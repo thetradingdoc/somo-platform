@@ -781,7 +781,7 @@ Rebuild provider-to-payor network links from raw network evidence, validate qual
 
 # Photo-to-bill — key rotation runbook
 
-**Status:** Open before public prod ([`PHOTO_TO_BILL_EXTRACTION_TODOS.md`](../../todos/pending/PHOTO_TO_BILL_EXTRACTION_TODOS.md))
+**Status:** Open before public prod — see [`todos/PENDING.md`](../../todos/PENDING.md) (photo-to-bill section)
 
 ## 1. OpenAI
 

@@ -861,7 +861,7 @@ Fixtures: [`e2e/helpers/kelly-conversation-fixtures.cjs`](../../middleware-platf
 | Full conversation F2 | `test:e2e:rcm:conversation` |
 | **Browser golden path** | `test:e2e:kelly:golden` |
 
-See also [`todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md`](../../todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md).
+See also [`todos/PENDING.md`](../../todos/PENDING.md).
 
 ### Playwright browser golden path
 

@@ -12,7 +12,7 @@ This folder documents the **operational billing loop** that sits between medical
 1. Kelly RCM architecture (provider identity + journey backbone): [`KELLY_RCM_ARCHITECTURE.md`](./KELLY_RCM_ARCHITECTURE.md)
 2. Prior authorization (canonical): [`PA_ARCHITECTURE.md`](./PA_ARCHITECTURE.md)
 3. Stedi workstream and runbook: [`STEDI_PA_WORKSTREAM.md`](./STEDI_PA_WORKSTREAM.md)
-4. Execution backlog: [`../../todos/pending/KELLY_RCM_PIPELINE_TODOS.md`](../../todos/pending/KELLY_RCM_PIPELINE_TODOS.md)
+4. Execution backlog: [`../../todos/PENDING.md`](../../todos/PENDING.md)
 
 ## Voice and production operations (Kelly telephony)
 

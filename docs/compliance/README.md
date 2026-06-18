@@ -104,7 +104,7 @@ Use these paths when implementing the upload portal (Phase 4) and when the case 
 *Former path: `docs/compliance/BAA_COMPLIANCE_CHECKLIST.md`*
 
 **Purpose:** Track Business Associate Agreement (BAA) status before PHI flows through new telemedicine endpoints.  
-**Reference:** `todos/pending/TELEMEDICINE_TODOS.md` Phase 1 — Tasks 1–4.
+**Reference:** [`todos/PENDING.md`](../../todos/PENDING.md) (telemedicine section).
 
 | # | Task | Owner | Status | Notes |
 |---|------|--------|--------|-------|

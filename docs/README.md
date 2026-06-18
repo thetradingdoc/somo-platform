@@ -50,7 +50,7 @@
 
 - **Total .md files (repo, excluding `node_modules` / `.venv`):** ~249 — run `find . -name '*.md' -not -path '*/node_modules/*'` for current count. Historical note: 142 was cited after Phases 1–5 consolidation.
 - **Consolidation plan:** [meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./meta/README.md#documentation-audit-and-consolidation-plan)
-- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; triage phased roadmap is **complete** and archived (`../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md`); active gap work: [meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./meta/README.md#gap-analysis-richer-triage-and-records).)
+- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. Active gap work: [meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./meta/README.md#gap-analysis-richer-triage-and-records) and [`../todos/PENDING.md`](../todos/PENDING.md).
 
 ---
 
@@ -77,7 +77,7 @@
 - **[Agent index](./agent/README.md)** — Somo demo vs Kelly
 - **[Somo demo reference](./agent/somo-demo/README.md)** — architecture, ADRs, templates
 - **[Somo demo runbook](./agent/somo-demo/RUNBOOK.md)** — local dev, Phase A prod gates, outbound sales
-- Backlog: [`../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md`](../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md)
+- Backlog: [`../todos/PENDING.md`](../todos/PENDING.md)
 
 #### Marketing landing (Somo)
 - **[Somo landing](./deployment/OPERATIONS.md#somo-landing)** — build, hosts, demo API
@@ -147,16 +147,10 @@
 - **Invoice Workflow (`./user-guides/INVOICE_WORKFLOW.md`)** - Invoice generation workflow
 - **[Clinic Onboarding](./onboarding/README.md#clinic-onboarding-checklist)** - Clinic setup
 
-#### Routine tracker (consumer MVP)
-- **[User journey index](./user-journey/README.md)** — north star, happy path, surfaces
-- **[Photo-first v1 decisions](./user-journey/07-v1-product-decisions.md)** — one photo = day logged; phase card; no floating chat
-- **[Mobile + web parity](./user-journey/06-mobile-and-web-parity.md)** — Today / Timeline / Money; `/phase`, `/photo` APIs
-
 #### Patient booking, triage & agentic commerce
 - **[Richer Triage & Records](./meta/README.md#gap-analysis-richer-triage-and-records)** — Schema, records Q&A
 - **[Public agentic checkout](./architecture/README.md#commerce-public-agentic-checkout)** — Landing → quote → pay, commerce tools, APIs
-- **Triage phased todos (archived, all complete) (`../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md`)** — Historical phased roadmap
-- **Agentic checkout backlog / status (`../todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`)** — Backend audit + open items (read status at top). Frontend UI spec (complete): archive (`../todos/archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md`).
+- **Open work:** [`../todos/PENDING.md`](../todos/PENDING.md) — consolidated checklist (checkout deferred section)
 
 #### Voice Agent, Video Consult & Medical Coding
 - **[Medical Coding (canonical)](./Medical%20Coding/README.md)** — Architecture, operations, eval (start here for codebook/RAG)
@@ -217,7 +211,7 @@ docs/
 - **Set up GCP deploy flow** → [Deployment Guide](./deployment/README.md)
 - **Configure DNS** → [DNS Configuration](./deployment/README.md#dns-ionos-ionos-dns-setup)
 - **Work on the Admin Portal** → [Admin Portal docs](./admin-portal/README.md)
-- **Ship the routine tracker (pick → Today → photo)** → [User journey](./user-journey/README.md)
+- [`docs/deployment/FRONT_DESK_PRODUCTION.md`](./deployment/FRONT_DESK_PRODUCTION.md) — front-desk production surfaces
 
 ---
 

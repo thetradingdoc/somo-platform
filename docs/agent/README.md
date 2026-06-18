@@ -11,4 +11,4 @@ Product-specific voice agents (separate from production Kelly / clinic stack).
 
 Do not mix Somo demo Retell config with Kelly `configure-retell.js`.
 
-Backlog: [`../../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md`](../../todos/pending/SOMO_DEMO_PROD_GAP_BACKLOG.md).
+Backlog: [`../../todos/PENDING.md`](../../todos/PENDING.md).

@@ -46,7 +46,7 @@ function main() {
   const r = gcloud([]);
   if (r.status !== 0) {
     console.error('gcloud describe failed:', r.stderr || r.stdout);
-    console.error('Record manual env snapshot in todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md');
+    console.error('Record manual env snapshot in todos/PENDING.md');
     process.exit(2);
   }
 

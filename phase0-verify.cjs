@@ -26,7 +26,7 @@ const ROOT        = process.env.PROJECT_ROOT || path.join(__dirname, 'middleware
 /** Consolidated middleware docs (repo root), replaces former `docs/middleware-platform/*.md` tree */
 const MW_DOCS_README = path.join(ROOT, '..', 'docs', 'middleware-platform', 'README.md');
 const REPO_DOCS_RUNBOOKS_MP = path.join(ROOT, '..', 'docs', 'runbooks', 'middleware-platform');
-const TODOS_SRC   = process.env.TODOS_SRC   || path.join(__dirname, 'todos/pending/PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md');
+const TODOS_SRC   = process.env.TODOS_SRC   || path.join(__dirname, 'todos/PENDING.md');
 const TODOS_ARCH  = process.env.TODOS_ARCH  || path.join(__dirname, 'todos/archived');
 const ARGS        = process.argv.slice(2);
 const ONLY_SECTION = (() => { const i = ARGS.indexOf('--section'); return i >= 0 ? Number(ARGS[i+1]) : null; })();

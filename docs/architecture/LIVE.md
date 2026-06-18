@@ -636,7 +636,7 @@ KELLY_ALLOW_HYBRID_GRAPH=0
 | Gap audit | `node scripts/phase-b-production-gap-audit.cjs` |
 | Switch 3 | Patient confirmation in `post_payment`; provider sees appt + clinical prep (not session link) |
 
-Backlog: [`todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md`](../../todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md), Phase B+ [`todos/pending/KELLY_RAILS_PHASE_B_PLUS.md`](../../todos/pending/KELLY_RAILS_PHASE_B_PLUS.md).
+Backlog: [`todos/PENDING.md`](../../todos/PENDING.md) (Kelly rails + Phase B+ sections).
 
 ## E2E
 
@@ -676,7 +676,7 @@ RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:conversation
   - Deploy / cutover: `docs/deployment/SOMO_CLOUD_RUN_DEPLOY.md`, `docs/deployment/GCP_SOMO_SERVICE_CUTOVER.md`
   - Routing smoke: `npm run verify:prod:routing-smoke --prefix middleware-platform`
 - Phase B+ (Kelly rails / outbound analytics):
-  - V2 implementation in repo; Kelly E7-1 F2 and Sheets telemetry remain open per `todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md` and Somo demo backlog.
+  - V2 implementation in repo; Kelly E7-1 F2 and Sheets telemetry remain open per [`todos/PENDING.md`](../../todos/PENDING.md).
 
 **North star:** Cold-start patient ride — symptom → triage → book → copay link — without `seedBookingReady` or skip-triage fixtures.
 
@@ -684,11 +684,8 @@ RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:conversation
 
 **Related todos (execution checklists):**
 
-- Open backlog pointer: [`todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md`](../../todos/pending/KELLY_CONVERSATION_RAILS_TODOS.md)
-- Completed golden-path work: [`todos/archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md`](../../todos/archive/KELLY_CONVERSATION_RAILS_GOLDEN_PATH_COMPLETED_2026-05-31.md)
-- RCM identity / ledger (do not duplicate here): [`todos/pending/KELLY_RCM_PIPELINE_TODOS.md`](../../todos/pending/KELLY_RCM_PIPELINE_TODOS.md)
-- Hybrid orchestration context: [`todos/pending/Orchestration-todos.md`](../../todos/pending/Orchestration-todos.md)
-- Step 10 reasoning graph (separate product): [`todos/pending/Step10-LangChain-LangGraph-LangSmith-todos.md`](../../todos/pending/Step10-LangChain-LangGraph-LangSmith-todos.md)
+- Open backlog: [`todos/PENDING.md`](../../todos/PENDING.md)
+- Customer-ready detail: [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md)
 
 **Target diagram:** [`assets/kelly_target_architecture.png`](./assets/kelly_target_architecture.png) (place PNG alongside this doc if missing from repo).
 
@@ -905,7 +902,7 @@ From golden-path archive (2026-05-31):
 
 ## 9. Full build checklist
 
-Check off in PRs; archive completed phases under `todos/archive/KELLY_AGENTIC_RAILS_PHASE_*_COMPLETED_*.md`.
+Check off in PRs; completed phase history is in git history (todo archive purged 2026-06-17).
 
 ### Phase 0 — Documentation (this file)
 
@@ -976,7 +973,7 @@ Check off in PRs; archive completed phases under `todos/archive/KELLY_AGENTIC_RA
 - [ ] **E7-2** Playwright full golden (+ optional live Stripe)
 - [x] **E7-3** CI `run-rcm-e2e-suite.cjs` includes F2 with `LANGGRAPH_KELLY_ROLLOUT_PCT=1`
 - [x] **E7-4** Dev/E2E rollout `LANGGRAPH_KELLY_ROLLOUT_PCT=1`; `kelly_graph_active` meta; `LANGGRAPH_KELLY_ENABLED=0` escape
-- [x] **E7-5** Archive — [`KELLY_AGENTIC_RAILS_PHASE_2_7_COMPLETED_2026-06-01.md`](../../todos/archive/KELLY_AGENTIC_RAILS_PHASE_2_7_COMPLETED_2026-06-01.md)
+- [x] **E7-5** Archive — Kelly agentic rails phases 2–7 completed 2026-06-01
 
 ---
 

@@ -42,7 +42,7 @@ After calls, when metrics are wired:
 curl "http://127.0.0.1:4000/api/public/landing-assistant/voice-metrics/<callId>"
 ```
 
-Thresholds: `VOICE_SLO_*` env vars (see [`KELLY_RAILS_PHASE_C_EXECUTION.md`](../../todos/pending/KELLY_RAILS_PHASE_C_EXECUTION.md)).
+Thresholds: `VOICE_SLO_*` env vars (see [`todos/PENDING.md`](../../todos/PENDING.md) Kelly Phase C section).
 
 ---
 

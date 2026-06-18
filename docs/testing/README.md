@@ -229,7 +229,7 @@ CI proves **static** contracts (syntax, Jest smoke, agentic checkout file checks
 1. In staging, open checkout chat with a known `product_id` / `provider_id`.
 2. Use **Ask** / commerce chat to quote (or trigger `get_product_quote`) and note `quote_id` and amount from the tool / UI.
 3. Call `POST /api/public/commerce/quote` with the same product/provider (or use **Pay without chat** path) and compare **amount** and **quote_id** behavior to your product rules.
-4. Document any intentional divergence in `todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`.
+4. Document any intentional divergence in [`todos/PENDING.md`](../../todos/PENDING.md).
 
 ## Chat → quote → pay (manual / staging)
 
