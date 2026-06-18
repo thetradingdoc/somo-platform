@@ -12,15 +12,6 @@
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
-  <style>
-    .pp-calls-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 900px) { .pp-calls-layout { grid-template-columns: 1fr; } }
-    .pp-call-row { padding: 12px; border-bottom: 1px solid var(--gray-200, #e2e8f0); cursor: pointer; }
-    .pp-call-row:hover, .pp-call-row.is-active { background: #f0fdf4; }
-    .pp-call-detail { font-size: 13px; line-height: 1.5; }
-    .pp-call-detail h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; color: var(--muted2); }
-    .pp-event-line { padding: 6px 8px; border-radius: 8px; background: #f8fafc; margin-bottom: 4px; font-size: 12px; }
-  </style>
 </head>
 <body class="provider-portal provider-portal--scroll" data-page="calls">
   <div class="pp-app" id="ppAppMount"></div>
@@ -50,8 +41,8 @@
         listEl.innerHTML = calls.map((c) => {
           const sid = c.call_id || c.id;
           return `<div class="pp-call-row" data-session-id="${escapeHtml(sid)}" role="button" tabindex="0">
-            <div style="font-weight:600">${escapeHtml(c.direction || 'inbound')} · ${escapeHtml(c.status || 'completed')}</div>
-            <div style="font-size:12px;color:var(--muted)">${formatWhen(c.created_at)}</div>
+            <div class="pp-call-row-title">${escapeHtml(c.direction || 'inbound')} · ${escapeHtml(c.status || 'completed')}</div>
+            <div class="pp-call-row-meta">${formatWhen(c.created_at)}</div>
           </div>`;
         }).join('');
         listEl.querySelectorAll('.pp-call-row').forEach((row) => {
@@ -75,15 +66,26 @@
       try {
         const json = await (window.ppApi?.get(`/api/kelly/calls/${encodeURIComponent(sessionId)}`) ||
           fetch(`${API_BASE}/api/kelly/calls/${encodeURIComponent(sessionId)}`, { credentials: 'include' }).then(r => r.json()));
+        const summary = json.call_summary || {};
         let html = `<div class="pp-call-detail" data-testid="pp-call-detail">
           <p><strong>Session</strong> ${escapeHtml(sessionId)}</p>
           <p><strong>Events</strong> ${json.event_count || 0}</p>`;
+        if (summary.conversation_mode || summary.final_lane) {
+          html += '<div class="pp-call-summary">';
+          if (summary.conversation_mode) {
+            html += `<span class="pp-status-pill">${escapeHtml(summary.conversation_mode)}</span> `;
+          }
+          if (summary.final_lane) {
+            html += `<span class="pp-status-pill pp-status-pill--muted">Lane: ${escapeHtml(summary.final_lane)}</span>`;
+          }
+          html += '</div>';
+        }
         if (json.appointment) {
           html += `<p><a class="pp-btn pp-btn-link" href="calendar.html?id=${encodeURIComponent(json.appointment.id)}">Open appointment</a></p>`;
         }
         if (json.tools?.length) {
           html += '<h4>Tools</h4>' + json.tools.map((t) =>
-            `<div class="pp-event-line">${escapeHtml(t.tool || '—')} · ${escapeHtml(t.type)}</div>`
+            `<div class="pp-event-line">${escapeHtml(t.tool || '—')} · ${escapeHtml(t.type)}${t.success === false ? ' (failed)' : ''}</div>`
           ).join('');
         }
         if (json.booking_outcome) {
@@ -111,15 +113,17 @@
       });
       const main = document.getElementById('ppMainContent');
       main.innerHTML = `
-        <div class="pp-calls-layout">
-          <section class="pp-panel">
-            <div class="pp-panel-head"><div class="pp-panel-title">Recent calls</div></div>
-            <div class="pp-panel-body" id="ppCallsList" data-testid="pp-calls-list"></div>
-          </section>
-          <section class="pp-panel">
-            <div class="pp-panel-head"><div class="pp-panel-title">Call detail</div></div>
-            <div class="pp-panel-body" id="ppCallDetail"><div class="pp-empty">Select a call to see Kelly activity.</div></div>
-          </section>
+        <div class="pp-page-shell">
+          <div class="pp-calls-layout">
+            <section class="pp-panel">
+              <div class="pp-panel-head"><div class="pp-panel-title">Recent calls</div></div>
+              <div class="pp-panel-body" id="ppCallsList" data-testid="pp-calls-list"></div>
+            </section>
+            <section class="pp-panel">
+              <div class="pp-panel-head"><div class="pp-panel-title">Call detail</div></div>
+              <div class="pp-panel-body" id="ppCallDetail"><div class="pp-empty">Select a call to see Kelly activity.</div></div>
+            </section>
+          </div>
         </div>`;
       loadCalls();
     });

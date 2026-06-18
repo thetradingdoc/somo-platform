@@ -87,6 +87,11 @@ case "$cmd" in
       echo "ERROR: Kelly Rails env verification failed — fix Cloud Run env before accepting deploy."
       exit 1
     }
+    CLOUDRUN_PROFILE=production CONVERSATION_MODE_ROUTING=enforce KELLY_ALLOW_HYBRID_GRAPH=0 \
+      npm run verify:env-gates --prefix "$ROOT/middleware-platform" || {
+      echo "ERROR: verify:env-gates failed — production profile must not use shadow routing."
+      exit 1
+    }
     if [[ "${SKIP_LIVE_CALL_VERIFY:-}" == "1" ]]; then
       echo "SKIP_LIVE_CALL_VERIFY=1 — skipping verify:live-booking-call"
     elif [[ -n "${SESSION_ID:-}${CALL_ID:-}" && -n "${DB_PATH:-}" ]]; then

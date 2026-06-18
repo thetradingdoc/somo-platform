@@ -53,6 +53,7 @@ backups/
 middleware-platform/backups/
 
 # Local sqlite in-memory artifact created by tooling
+middleware-platform/var/db/
 middleware-platform/:memory:
 
 # Recovery files and secrets

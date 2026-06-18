@@ -3010,3 +3010,39 @@ body.billing--sidebar-nav #billingSectionTabs {
   padding: 16px 18px;
   box-shadow: var(--shadow);
 }
+
+/* Calls forensics */
+.pp-calls-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .pp-calls-layout { grid-template-columns: 1fr; }
+}
+.pp-call-row {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.pp-call-row:hover,
+.pp-call-row.is-active {
+  background: var(--somo-green-50, #f0fdf4);
+}
+.pp-call-row-title { font-weight: 600; }
+.pp-call-row-meta { font-size: 12px; color: var(--muted); }
+.pp-call-detail { font-size: 13px; line-height: 1.5; }
+.pp-call-detail h4 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+.pp-call-summary { margin: 8px 0 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-event-line {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface-2, #f8fafc);
+  margin-bottom: 4px;
+  font-size: 12px;
+}

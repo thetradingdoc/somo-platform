@@ -161,7 +161,9 @@
           const kellyRes = await fetch(API_BASE + '/api/kelly/status', { credentials: 'include' });
           if (kellyRes.ok) {
             const kelly = await kellyRes.json();
-            kellyReady = String(kelly.status || 'active').toLowerCase() !== 'paused';
+            kellyReady = String(kelly.status || 'active').toLowerCase() === 'active'
+              && kelly.checks?.has_phone === true
+              && String(kelly.provisioning_state || '').toLowerCase() === 'ready';
           }
         } catch (_) {}
 

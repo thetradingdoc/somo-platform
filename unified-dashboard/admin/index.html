@@ -98,7 +98,7 @@
     });
 
     async function loadAll() {
-      await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline()]);
+      await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline(), loadInboundDemos()]);
     }
 
     async function loadStatus() {
@@ -198,17 +198,29 @@
               <div style="height:100%;width:${pct}%;background:${s.color};border-radius:3px;"></div>
             </div>`;
         }).join('');
-
-        const demoLeads = [...(cards.demo || []), ...(cards.contacted || [])].slice(0, 4);
-        const demoEl = document.getElementById('demoList');
-        if (!demoLeads.length) {
-          demoEl.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">No demos yet</p>';
-          return;
-        }
-        demoEl.innerHTML = demoLeads.map(l => rowLead(l, false)).join('');
             } catch (e) {
         document.getElementById('funnelView').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load pipeline</p>';
       }
+    }
+
+    async function loadInboundDemoLeads(limit = 4) {
+      try {
+        const r = await apiFetch(`/api/admin/leads?source=landing_demo&limit=${limit}`);
+        return r.leads || [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    async function loadInboundDemos() {
+      const demoEl = document.getElementById('demoList');
+      if (!demoEl) return;
+      const demoLeads = await loadInboundDemoLeads(4);
+      if (!demoLeads.length) {
+        demoEl.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">No inbound demos yet</p>';
+        return;
+      }
+      demoEl.innerHTML = demoLeads.map(l => rowLead(l, false)).join('');
     }
 
     function rowLead(l, withCall) {
@@ -216,17 +228,17 @@
       const langTag = (l.language_labels && l.language_labels.length)
         ? `<span class="admin-crm-badge admin-crm-badge-info" style="font-size:10px;">${esc(l.language_labels[0])}</span>`
         : '';
-      const callBtn = withCall ? `<button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();callLead(${l.id},'${esc(l.clinic_name)}')">Call</button>` : '';
-          return `
-        <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${l.id}'">
-                  <div>
+      const callBtn = withCall ? `<button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();callLead('${esc(l.id)}','${esc(l.clinic_name)}')">Call</button>` : '';
+      return `
+        <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${esc(l.id)}'">
+          <div>
             <div class="admin-crm-row-name" style="font-weight:600;">${esc(l.clinic_name)}</div>
-            <div style="font-size:12px;color:var(--muted);">${esc(l.location)} · ${esc(l.specialty || '')} ${langTag}</div>
-                  </div>
+            <div style="font-size:12px;color:var(--muted);">${esc(l.clinic_email || l.clinic_phone || '')} ${langTag}</div>
+          </div>
           <div class="admin-crm-row-actions">
             <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
             ${callBtn}
-                </div>
+          </div>
         </div>`;
     }
 

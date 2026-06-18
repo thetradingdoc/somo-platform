@@ -105,19 +105,22 @@ test.describe('Somo demo landing', () => {
     await expect(page.locator('#demo select')).toHaveCount(0);
     await expect(page.locator('#demo textarea')).toHaveCount(0);
     await page.getByLabel('Your name').fill('Test User');
+    await page.getByLabel('Work email').fill('demo@example.com');
     await page.getByLabel('Mobile number').fill('+15555550123');
     await page
       .getByLabel('What do you need help with ?')
       .fill('Need after-hours coverage for a small clinic');
-    await expect(page.getByText(/signup link at this same number/i)).toBeVisible();
+    await expect(page.getByText(/product email at the address provided/i)).toBeVisible();
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: /Get my demo call/i }).click();
 
     await expect(page.getByText(/Calling you now/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/few quick questions/i)).toBeVisible();
-    await expect(page.getByRole('link', { name: /Sign up for Somo/i })).toBeVisible();
+    await expect(page.getByText(/confirmation to your email/i)).toBeVisible();
+    await expect(page.getByRole('link', { name: /Sign up for Somo/i })).toHaveCount(0);
     expect(capturedBody).toMatchObject({
       name: 'Test User',
+      email: 'demo@example.com',
       phone: '+15555550123',
       consent: true,
       questions_asked: 'Need after-hours coverage for a small clinic'

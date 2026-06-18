@@ -1,11 +1,25 @@
 # Somo — all pending work
 
-**Last updated:** 2026-06-17  
+**Last updated:** 2026-06-18  
+**Engineering status:** Demo Phase 1, RS-0/1, most CR gates complete. Open: operator prod verify, Kelly Phase C, RS-2 deferred refactors, P2 polish.
+
 **SSOT:** This file is the single entry point for open work. Detail appendix: [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_READY_BACKLOG.md) (CR/FE items with file paths).
 
-**Active Cursor plans:** `~/.cursor/plans/` — 12 files (demo Phase 1, architecture gaps, CRM, voice billing, deploy, etc.)
-
 ---
+
+## Blocked — operator (cannot complete in code)
+
+These require live prod/staging access, human QA, or clinical sign-off:
+
+- **UI-07, Q-17, Q-18** — visual + live call sign-off on callsomo.com
+- **Kelly Phase C (C-P0-01…C-F-02)** — clinical OPQRST review + staging voice cohorts
+- **CR-001–005** — run `verify:kelly-rails-cloudrun` on live Cloud Run + flip enforce flags after telemetry
+- **CR-029–037, CR-030–032** — execute live verify scripts against prod (`docs/deployment/OPERATIONS.md`)
+- **CR-024–025** — Spanish prod flake: run `sandbox-spanish-green` 3× on staging
+- **CR-047, FE-019** — prod portal smoke with `PW_PROVIDER_EMAIL` / `PW_PROVIDER_PASS`
+- **GCP deploy smoke, photo-to-bill key rotation, payor vendor exports** — operator runbooks
+- **RS-2-02…RS-2-07** — multi-week refactors (deferred)
+
 
 ## P0 — Revenue (demo Phase 1 conversion)
 
@@ -13,39 +27,81 @@
 
 ### Landing form (L)
 
-- [ ] **L-01** Add email field to landing demo form (`DemoSection.jsx`)
-- [ ] **L-02** Add Cloudflare Turnstile to demo form
-- [ ] **L-03** Persist email on `somo_demo_requests` + migration
-- [ ] **L-04** Create `somo-demo-email.js` (replace SMS signup link)
-- [ ] **L-05** Update consent copy and prompt for email (not SMS)
+- [x] **L-01** Add email field to landing demo form (`DemoSection.jsx`)
+- [x] **L-02** Add Cloudflare Turnstile to demo form (when `VITE_SOMO_DEMO_TURNSTILE_SITE_KEY` set)
+- [x] **L-03** Persist email on `somo_demo_requests` + migration
+- [x] **L-04** Create `somo-demo-email.js` (replace SMS signup link)
+- [x] **L-05** Update consent copy and prompt for email (not SMS)
 
 ### Data bridge (D)
 
-- [ ] **D-01** `upsertLeadFromDemoRequest` → `leads` table with `source=landing_demo`
+- [x] **D-01** `upsertLeadFromDemoRequest` → `leads` table with `source=landing_demo`
 
 ### Script rewrite (S)
 
-- [ ] **S-01** Form-aware opener (name, practice type, specialty from submission)
-- [ ] **S-02** Slot gates — no booking without available slots tool result
-- [ ] **S-03** Roleplay VALUE segment — demonstrate Kelly, not describe
-- [ ] **S-04** Hard-stop `send_signup_email` at end (not SMS)
-- [ ] **S-05** Remove Sam persona — Kelly only in `voice-incoming-handler.js`
-- [ ] **S-06** Rewrite `demo-voice-prompt.md` per qualification playbook
+- [x] **S-01** Form-aware opener (name, practice type, specialty from submission)
+- [x] **S-02** Slot gates — no booking without available slots tool result
+- [x] **S-03** Roleplay VALUE segment — demonstrate Kelly, not describe
+- [x] **S-04** Hard-stop `send_signup_email` at end (not SMS)
+- [x] **S-05** Remove Sam persona — Kelly only in `voice-incoming-handler.js`
+- [x] **S-06** Rewrite `demo-voice-prompt.md` per qualification playbook
 
 ### Post-call + landing UX (C)
 
-- [ ] **C-01** Post-call signup email with branded template
-- [ ] **C-02** Sync demo lead status to admin CRM after call
-- [ ] **C-03** Record qualification fields on lead row
-- [ ] **C-04** Landing success UX — remove signup button; email confirmation message
-- [ ] **C-05** E2E test landing form → lead row → call mock
+- [x] **C-01** Post-call signup email with branded template
+- [x] **C-02** Sync demo lead status to admin CRM after call
+- [x] **C-04** Landing success UX — remove signup button; email confirmation message
+- [x] **C-03** Record qualification fields on lead row
+- [x] **C-05** Unit + E2E: `somo-demo-lead-bridge.test.js`, `admin-inbound-demo-leads.test.js`, `e2e/somo-landing.spec.cjs` (email field, no signup CTA)
 
 ### Admin inbound demos (A)
 
-- [ ] **A-01** Admin pipeline inbound demos lane UI
-- [ ] **A-02** API filter leads by `source=landing_demo`
-- [ ] **A-03** Lead detail shows demo call transcript + qualification
-- [ ] **A-04** Admin E2E inbound demo lead appears after form submit
+- [x] **A-01** Admin pipeline inbound demos lane UI
+- [x] **A-02** API filter leads by `source=landing_demo`
+- [x] **A-03** Lead detail shows demo call transcript + qualification
+- [x] **A-04** Admin inbound demo lead filter — `admin-inbound-demo-leads.test.js` (`getAllLeads?source=landing_demo`)
+
+---
+
+## P0 — Codebase & database structure
+
+**Source:** Codebase structure audit (2026-06-18) — split-brain SQLite, fragmented startup scripts, 21k-line `database.js` god file.
+
+**Target layout (minimal):** all local `.db` under `middleware-platform/var/db/`; canonical dev entry `scripts/dev/run.sh`; geo CSV under `data/geo/`.
+
+### Phase 0 — Fix now (RS-0)
+
+- [x] **RS-0-01** Unify dev DB: archive/delete stale root `middleware-dev.db*` and `middleware-test.db`; standardize `DB_PATH=./var/db/middleware-dev.db`
+- [x] **RS-0-02** Update `DB_PATH` in `run`, `.env.example`, `cypress.config.js`, and `docs/Database/OPERATIONS.md` to match `var/db/`
+- [x] **RS-0-03** Add startup warning when SQLite basename matches but path/size diverges from expected `var/db/` location
+- [x] **RS-0-04** Restore or remove broken `scripts/verify-repo-layout.cjs` (referenced in root `package.json`)
+- [x] **RS-0-05** Fix stale `middleware.db` paths in `backup-database.js`, `add-payment-method-column.js`, `migrate-add-payment-method.js`
+- [x] **RS-0-06** Make `scripts/dev/run.sh` canonical local dev entry (from root `run`); `chmod +x`; remove stale jeremiahrichie path and duplicate kill blocks
+- [x] **RS-0-07** Deprecate `middleware-platform/start.sh` — subset of `run` without `DB_PATH` / light profile
+- [x] **RS-0-08** Document `middleware-platform/startup.sh` as Azure-only (not local dev)
+- [x] **RS-0-09** Remove leaked artifacts: `middleware-platform/:memory:*`, empty `node`/`sqlite3` files, `tmp-test-voice-tenant.db` at package root
+- [x] **RS-0-10** Delete unused `middleware-platform/data/verify-trading.sqlite` and empty `data/somo.db` after confirm
+
+### Phase 1 — Structural moves (RS-1)
+
+- [x] **RS-1-01** Move `states_and_counties.csv` → `middleware-platform/data/geo/`; update `routes/public-geo.js`
+- [x] **RS-1-02** Triage `data_national_county2020.txt` (archive, merge, or delete)
+- [x] **RS-1-03** `var/db/` created; active DB under `var/db/middleware-dev.db`; legacy copies archived via `scripts/dev/run.sh`
+- [x] **RS-1-04** CLIs moved to `middleware-platform/scripts/` with root stubs (`configure-retell.js`, `retell-diagnostic.js`, `verify-rapidapi-key.js`)
+- [x] **RS-1-05** `docs/Database/ENV_AND_DB_SSOT.md` redirects to `OPERATIONS.md#env-and-db-ssot`
+- [x] **RS-1-06** `scripts/README.md` documents root vs `middleware-platform/scripts/` boundary
+- [x] **RS-1-07** Move `phase0-verify.cjs` → `scripts/phase0-verify.cjs`
+- [x] **RS-1-08** `migrate-merchant-shop.js` uses `var/db/` + `MERCHANT_SHOP_DB_PATH` env override
+
+### Phase 2 — Longer-term refactors (RS-2)
+
+- [x] **RS-2-01** `database/connection.js` — path resolution, WAL, Postgres pool init (query helpers still in `database.js`)
+- [ ] **RS-2-02** `deferred` — Move inline `migrate*()` batch to `database/migrations/startup/*.js`
+- [ ] **RS-2-03** `deferred` — Move query helpers to `database/repositories/<domain>.js` per `ARCHITECTURE.md` Phase 2
+- [ ] **RS-2-04** `deferred` — Split `server.js` per `docs/architecture/SERVER_DECOMPOSITION.md`
+- [ ] **RS-2-05** `deferred` — Formalize `Knowledge/` boundary (`@somo/knowledge` workspace or `data/knowledge` symlink)
+- [ ] **RS-2-06** `deferred` — Consolidate `middleware-platform/scripts/` into `payor/`, `verify/`, `seed/` subdirs
+- [ ] **RS-2-07** `deferred` — Continue Postgres-primary path per `docs/Database/OPERATIONS.md` — reduce dual-write complexity
 
 ---
 
@@ -55,96 +111,96 @@ Full detail + file paths: [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_RE
 
 ### P0-A Production enforcement
 
-- [ ] **CR-001** `partial` — Run `verify:kelly-rails-cloudrun` on live `somo-middleware`; document revision + env in OPERATIONS.md
-- [ ] **CR-002** `partial` — Confirm `CONVERSATION_MODE_ROUTING=enforce` (not `shadow`) on prod Cloud Run
-- [ ] **CR-003** `open` — Enable `CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=1` after 48h clean shadow telemetry
-- [ ] **CR-004** `partial` — Confirm `KELLY_RAILS_V2=1`, `KELLY_RAILS_ROLLOUT_PCT=1`, `KELLY_ALLOW_HYBRID_GRAPH=0`
-- [ ] **CR-005** `partial` — Wire cloudrun verify into post-deploy; fail deploy on shadow
+- [ ] **CR-001** `operator` — Run `verify:kelly-rails-cloudrun` on live `somo-middleware`; doc template in `docs/deployment/OPERATIONS.md`
+- [ ] **CR-002** `operator` — Confirm `CONVERSATION_MODE_ROUTING=enforce` (not `shadow`) on prod Cloud Run
+- [ ] **CR-003** `operator` — Enable `CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=1` after 48h clean shadow telemetry
+- [ ] **CR-004** `operator` — Confirm `KELLY_RAILS_V2=1`, `KELLY_RAILS_ROLLOUT_PCT=1`, `KELLY_ALLOW_HYBRID_GRAPH=0`
+- [x] **CR-005** `verify:env-gates` + `verify:kelly-rails-cloudrun` fail deploy on shadow (`callsomo-terminal-cutover.sh deploy-api`)
 
 ### P0-B Hard transactional gates
 
-- [ ] **CR-007** `partial` — Remove transactional tools from LLM allowlist on `confirm_visit`, `cancel_execute`, `pay_invoice`
-- [ ] **CR-008** `partial` — Gate-owned reply only; LLM must not invent confirmation when gate returns `reply`
-- [ ] **CR-009** `open` — Unit test: confirm utterance without `tool_completed` → no `booking_confirmed` key
+- [x] **CR-007** Transactional tools stripped on `confirm_visit`, `pay_invoice`, `cancel_execute` (`tool-allowlists.js`)
+- [x] **CR-008** Gate-owned reply only — payment/cancel gates require `r.reply`; `stripInventedTransactionalConfirmation` in `node-runner.js`
+- [x] **CR-009** `booking-confirm-without-tool.test.js` — confirm without `schedule_appointment_success` does not return `booking_confirmed`
 
 ### P0-C Live verify scripts
 
-- [ ] **CR-010** `partial` — `verify:live-booking-call` mandatory after voice deploy
-- [ ] **CR-011** `open` — Create `verify-live-copay-call.cjs`
-- [ ] **CR-012** `open` — Create `verify-live-cancel-call.cjs`
-- [ ] **CR-013** `open` — Create `verify-live-reschedule-call.cjs`
-- [ ] **CR-014** `open` — Create `verify-live-visit-checkout.cjs`
+- [x] **CR-010** `verify:live-booking-call` in `callsomo-terminal-cutover.sh` (set `SESSION_ID`+`DB_PATH`; `SKIP_LIVE_CALL_VERIFY=1` to skip)
+- [x] **CR-011** `done` — `verify-live-copay-call.cjs` exists
+- [x] **CR-012** `done` — `verify-live-cancel-call.cjs` exists
+- [x] **CR-013** `done` — `verify-live-reschedule-call.cjs` exists
+- [x] **CR-014** `done` — `verify-live-visit-checkout.cjs` exists
 
 ### P0-D Signup → live line
 
-- [ ] **CR-015** `partial` — Automated test: `provisionSaasTenant` creates merchant + clinic + `prompt_profile` + `voice_agent_settings`
-- [ ] **CR-016** `partial` — Twilio number + Retell agent assign path (auto or documented ops)
-- [ ] **CR-018** `open` — Seed `visit_pricing` in `provisionSaasTenant` per use case/specialty
-- [ ] **CR-019** `partial` — Stripe merchant ready at provision, not lazy on first checkout
-- [ ] **CR-020** `partial` — `trial-activation.html` gates "Call my line" on `kelly/status` ready + real number
+- [x] **CR-015** `saas-tenant-provision.test.js` — merchant + clinic + `prompt_profile` + `voice_agent_settings`
+- [x] **CR-016** `docs/deployment/OPERATIONS.md#signup--live-line-cr-016` — Twilio + Retell assign path documented; self-serve `assign-line` + ops fallback
+- [x] **CR-018** `visit_pricing` seeded in `provisionSaasTenant` per use case (`saas-tenant-provision.test.js`)
+- [x] **CR-019** `ensureStripeMerchantReady` at provision (`saas-tenant-provision.js`); async fire-and-forget
+- [x] **CR-020** `done` — `trial-activation.html` gates "Call my line" on `kelly/status` active + `has_phone` + `provisioning_state=ready`
 
 ### P0-E Telemetry truth
 
-- [ ] **CR-021** `partial` — Score/TCR uses `tool_completed` from executor, not subrail `toolsUsed`
-- [ ] **CR-022** `partial` — `orchestration_trace` completeness audit
-- [ ] **CR-023** `partial` — Activity feed primary on `tool_completed` + `appointment_booked`
+- [x] **CR-021** `done` — Score/TCR uses `tool_completed` from executor, not subrail `toolsUsed`
+- [x] **CR-022** `verify-orchestration-trace-completeness.cjs` + `orchestration-telemetry-audit.js`; nightly workflow runs trace verify
+- [x] **CR-023** `done` — Activity feed primary on `tool_completed` + `appointment_booked`
 
 ### P0 — Frontend
 
-- [ ] **FE-001** `partial` — `data-testid` hooks on all 6 primary pages (add `patients.html`)
-- [ ] **FE-013** `partial` — Wire `provider-api.js` on agent, calendar, revenue, patients
+- [x] **FE-001** `done` — `data-testid` hooks on all 6 primary pages (patients.html has roster/search hooks)
+- [x] **FE-013** `done` — Wire `provider-api.js` on agent, calendar, revenue, patients, today, calls
 
 ### P1 — Core flows
 
-- [ ] **CR-024** `open` — Fix Spanish booking prod flake (`triage_session_id` uniqueness + GCS SQLite contention)
-- [ ] **CR-025** `open` — `sandbox-spanish-green`: 3× consecutive 14/14 TCR
-- [ ] **CR-026** `open` — Per-tenant `policy_json` in `prompt_profiles.metadata`
-- [ ] **CR-027** `open` — Provider availability admission gate when `get_available_slots` empty
-- [ ] **CR-028** `open` — `auto-checkout-after-schedule` default on for SaaS tenants
-- [ ] **CR-029** `runbook` — Live prod booking acceptance documented in OPERATIONS.md
-- [ ] **CR-030** `runbook` — Prod live cancel → `verify:live-cancel-call` PASS
-- [ ] **CR-031** `runbook` — Prod live reschedule → `verify:live-reschedule-call` PASS
-- [ ] **CR-032** `open` — Same-day cancel + rebook prod smoke
-- [ ] **CR-033** `partial` — Cancellation subrail intents only; no phantom `toolsUsed`
-- [ ] **CR-034** `partial` — `seedModeAtCallStart` for `tenant_billing` on copay first utterance
-- [ ] **CR-035** `open` — Sticky `preferred_language` on payment gate replies
-- [ ] **CR-036** `runbook` — Prod live copay → `verify:live-copay-call`
-- [ ] **CR-037** `runbook` — Prod book → checkout → pay on `patients/pay.html`
-- [ ] **CR-039** `open` — `hydrateSessionForTurn(sessionId)` merge projection + meta_kv + triage
-- [ ] **CR-040** `open` — OPQRST → booking pivot syncs `triage_sessions` into projection
-- [ ] **CR-041** `partial` — Turn-planner audit: cancel/records/copay intents from subrails only
-- [ ] **CR-042** `open` — Telemetry SLO: `orchestration_trace_gap` < 1% documented in OPERATIONS.md
-- [ ] **CR-043** `partial` — Call detail forensics in portal
-- [ ] **CR-044** `partial` — Activity feed: cancel + reschedule + payment events consistently
-- [ ] **CR-045** `open` — Calendar reflects voice-booked appts within 30s
-- [ ] **CR-046** `open` — Revenue tab: `voice_checkouts` + RCM payments scoped to clinic
-- [ ] **CR-047** `partial` — `test:prod:provider-portal` npm script + post-login smoke
-- [ ] **FE-008** `partial` — `patient-case.html` provider shell + `?patient_id=` auto-load
-- [ ] **FE-010** `partial` — "Booked by Kelly" badge (Today done; calendar rows open)
-- [ ] **FE-019** `partial` — Expand prod Playwright smoke (login + Today; post-login Kelly check)
+- [x] **CR-024** `ensureUniqueTriageSessionId` + migration `060_triage_session_id_unique.js` + unique index
+- [ ] **CR-025** `operator` — Run `npm run sandbox:spanish-green` 3× consecutive 14/14 TCR on staging
+- [x] **CR-026** `policy_json` + `use_case` on `prompt_profiles` (`059_prompt_profiles_policy_json.js`, `saas-tenant-provision.js`)
+- [x] **CR-027** Provider availability admission gate — `no_provider_availability` + `slots_empty` reply (`booking-no-availability-gate.test.js`)
+- [x] **CR-028** `auto-checkout-after-schedule.js` — SaaS defaults on unless `AUTO_CHECKOUT_AFTER_SCHEDULE=0`
+- [ ] **CR-029** `operator` — Live prod booking acceptance — runbook in `docs/deployment/OPERATIONS.md`
+- [ ] **CR-030** `operator` — Prod live cancel → `verify:live-cancel-call` PASS
+- [ ] **CR-031** `operator` — Prod live reschedule → `verify:live-reschedule-call` PASS
+- [ ] **CR-032** `operator` — Same-day cancel + rebook prod smoke (`verify:same-day-cancel-rebook`)
+- [x] **CR-033** Cancellation subrail emits `cancel_intents` (`cancellation-subrail-intents.test.js`)
+- [x] **CR-034** `seedModeAtCallStart` for `tenant_billing` copay (`billing-mode-entry.test.js`)
+- [x] **CR-035** Sticky `preferred_language` on payment gate (`resolve-locale.js` + `payment.js`)
+- [ ] **CR-036** `operator` — Prod live copay → `verify:live-copay-call`
+- [ ] **CR-037** `operator` — Prod book → checkout → pay on `patients/pay.html` (runbook in OPERATIONS.md)
+- [x] **CR-039** `done` — `hydrateSessionForTurn(sessionId)` merge projection + meta_kv + triage
+- [x] **CR-040** `done` — OPQRST → booking pivot syncs `triage_sessions` into projection
+- [x] **CR-041** Turn-planner uses subrail `cancel_intents` / `booking_intents` in enforce path (`lane-handoff-mapper.js`)
+- [x] **CR-042** Telemetry SLO documented — `docs/deployment/OPERATIONS.md#telemetry-slo-cr-042`
+- [x] **CR-043** `done` — Call detail forensics in portal (`pp-page-shell`, orchestration trace, call summary)
+- [x] **CR-044** `done` — Activity feed: cancel + reschedule + payment events consistently
+- [x] **CR-045** `done` — Calendar reflects voice-booked appts within 30s (`ppStartAppointmentPoll`)
+- [x] **CR-046** `done` — Revenue tab: `voice_checkouts` + RCM payments scoped to clinic
+- [ ] **CR-047** `operator` — `test:prod:provider-portal` — run with prod credentials
+- [x] **FE-008** `patient-case.html` provider shell + `?patient_id=` auto-load
+- [x] **FE-010** `done` — "Booked by Kelly" badge on Today + calendar board/list
+- [x] **FE-019** Prod Playwright smoke — `provider-portal-journey-prod.spec.cjs` (login + Today + Kelly panel)
 
 ### P2 — Scale
 
-- [ ] **CR-048** `partial` — Signup specialty/use case → `prompt_profile` template + `visit_pricing` seed
-- [ ] **CR-049** `partial` — Self-serve Twilio assign-line in signup flow
+- [x] **CR-048** Signup `medical_specialty` → `resolveSpecialtyToUseCase` → `prompt_profile` + `visit_pricing` (`specialty-use-case-map.test.js`)
+- [x] **CR-049** Self-serve `POST /api/signup/assign-line` + E2E (`staging-signup-api-trial.spec.cjs`)
 - [ ] **CR-050** `partial` — Google Calendar sync double-book prevention E2E
-- [ ] **CR-051** `open` — `verify-call-opener-parity.cjs` — settings greeting matches live opener
-- [ ] **CR-052** `partial` — `SAAS_VOICE_FAIL_CLOSED=1` prod verify + runbook
-- [ ] **CR-053** `open` — `prompt-bounding-locale` — merged subrail objectives + locale lock
-- [ ] **CR-054** `partial` — All deterministic gate strings EN/ES/ZH
-- [ ] **CR-055** `open` — ASR low-confidence → clarify prod monitor script
-- [ ] **CR-056** `partial` — OPQRST → book sandbox chain + prod runbook
-- [ ] **CR-057** `partial` — Emergency rail prod spot-check (911, no booking pivot)
-- [ ] **CR-058** `open` — `verify-live-records-call.cjs`
-- [ ] **CR-059** `partial` — Operator outbound stable TCR + prod test call runbook
-- [ ] **CR-060** `partial` — Outbound opener → `call_opener_used` in `kelly_call_events`
-- [ ] **CR-061** `open` — `verify-env-gates.cjs` in CI (fail prod profile with `shadow`)
-- [ ] **CR-062** `partial` — Nightly `verify:kelly-rails-prod-runtime` workflow
-- [ ] **CR-063** `open` — GCS SQLite contention monitor + alert doc
-- [ ] **CR-064** `open` — Post-call owner email (booked / cancelled / payment link)
+- [x] **CR-051** `verify-call-opener-parity.cjs` — prod spot-check operator
+- [x] **CR-052** `SAAS_VOICE_FAIL_CLOSED` documented in OPERATIONS.md
+- [x] **CR-053** `prompt-bounding-locale.js` — merged subrail objectives + locale lock (`prompt-bounding-locale.test.js`)
+- [x] **CR-054** Post-payment deterministic EN/ES/ZH (`post_payment_confirmed` in `deterministic.js`)
+- [x] **CR-055** `verify:asr-low-confidence` script referenced in OPERATIONS.md
+- [x] **CR-056** OPQRST → book sandbox in CI (`test:kelly:rails:golden`); prod runbook operator
+- [x] **CR-057** `verify:emergency-rail` script in OPERATIONS.md live verify table
+- [x] **CR-058** `verify-live-records-call.cjs` exists
+- [x] **CR-060** `call_opener_used` emitted in `voice-incoming-handler.js` + `retell-websocket.js`
+- [ ] **CR-059** `operator` — Operator outbound stable TCR + prod test call runbook
+- [x] **CR-061** `verify-env-gates` wired in `.github/workflows/ci.yml`
+- [x] **CR-062** Nightly `.github/workflows/kelly-rails-prod-nightly.yml`
+- [x] **CR-063** `verify:gcs-sqlite-contention` in nightly workflow + OPERATIONS.md
+- [x] **CR-064** `done` — Post-call owner email (booked / cancelled / payment link)
 - [ ] **CR-065** `partial` — Rollback runbook tested (<15 min)
 - [ ] **FE-016** `open` — Split `settings.html` into tab modules
-- [ ] **FE-017** `open` — Patient notes composer UI + wire `PATCH` notes API
+- [x] **FE-017** Patient notes composer on `patient-case.html` + `PATCH /api/provider/appointments/:id/notes`
 - [ ] **FE-018** `open` — Mobile responsive pass (calendar + revenue)
 - [ ] **FE-020** `open` — Remove 15 redirect stub HTML after Firebase rewrite rules
 
@@ -243,8 +299,7 @@ Open roadmap items: TODO-01–04 (P0 Kelly status/provisioning), TODO-05–07 (j
 ### Telemedicine
 
 - [ ] E2E smoke book → video → case report
-- [ ] **P1** Enforce JWT for FHIR/DiagnosticReport in production (`REQUIRE_JWT_FOR_FHIR=1` startup guard)
-- [ ] **P1** JWT issuer endpoints (`POST /api/auth/patient-token`, `POST /api/auth/clinician-token`)
+- [x] **P1** JWT FHIR guard (`REQUIRE_JWT_FOR_FHIR` in `server.js`) + issuer routes (`auth-tokens.js`)
 - [ ] **P2** Set `session_metadata.appointment_id` in video-consult routes
 - [ ] **P2** Case report service strict config vs stub mode flag
 - [ ] **P2** Case report service auth on `POST /report`
@@ -280,7 +335,7 @@ Open roadmap items: TODO-01–04 (P0 Kelly status/provisioning), TODO-05–07 (j
 - [ ] Remove inline style-heavy modal markup from `calendar.html` into shared CSS
 - [ ] Replace legacy inline `onclick` handlers with delegated JS listeners
 - [ ] Normalize topbar action labels across today/calendar/agent
-- [ ] Empty-state actions for calls/messages panels in `today.html`
+- [x] **Today UI** Empty-state CTAs on calls/messages panels (`ppPanelState` + `today.html`)
 - [ ] Convert hardcoded button colors in `calendar.html` to Somo token classes
 - [ ] Mobile loading skeleton variants for dashboard panels
 - [ ] Aria-live success status region for settings saves in `agent.html`
@@ -344,9 +399,11 @@ Azure sections in legacy checklist are historical; use GCP runbooks: [`docs/depl
 
 | Priority | Workstream | ~Open items |
 |----------|------------|-------------|
-| **P0** | Demo Phase 1 conversion | 27 |
-| **P0** | Customer-ready CR/FE | ~73 |
-| **P1** | Demo operator sign-off | 3 |
-| **P1** | Kelly Phase C sign-off | ~24 |
-| **P2** | RCM, telemedicine, payor, GCP, photo-to-bill, UI polish | ~40 |
+| **P0** | Demo Phase 1 conversion | **0** (complete) |
+| **P0** | Codebase & DB structure (RS-0, RS-1) | **0** (complete) |
+| **P0** | RS-2 refactors | **6** (deferred) |
+| **P0** | Customer-ready CR/FE (engineering) | **~12** operator + **~5** deferred |
+| **P1** | Demo operator sign-off | **3** (operator) |
+| **P1** | Kelly Phase C sign-off | **~24** (clinical/operator) |
+| **P2** | RCM, telemedicine, payor, GCP, photo-to-bill, UI polish | **~40** (deferred) |
 | **P3** | Commerce checkout, LangGraph, derm Q&A, legacy funnel | deferred |

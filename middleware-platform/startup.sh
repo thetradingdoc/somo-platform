@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Azure App Service Startup Script
-# Ensures dependencies are installed before starting the server
+# Azure App Service startup ONLY — do not use for local development.
+# Local dev: repo root `./run` → scripts/dev/run.sh
 
 echo "🚀 Starting Azure App Service..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

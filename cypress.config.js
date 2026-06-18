@@ -14,7 +14,7 @@ module.exports = defineConfig({
             const Database = require('better-sqlite3');
             const dbPath = process.env.DB_PATH
               ? path.resolve(process.cwd(), process.env.DB_PATH)
-              : path.join(process.cwd(), 'middleware-platform', 'middleware-dev.db');
+              : path.join(process.cwd(), 'middleware-platform', 'var', 'db', 'middleware-dev.db');
             const db = new Database(dbPath, { readonly: true, fileMustExist: true });
             const row = db
               .prepare(`

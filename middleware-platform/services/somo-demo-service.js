@@ -15,6 +15,7 @@ const { USE_CASES, USE_CASE_LABELS, USE_CASE_OPENERS, getUseCaseContext } = requ
 const SMSService = require('./sms-service');
 const { appendEventLog, upsertLeadStatus } = require('./somo-demo-sheets-sync');
 const somoDemoEnv = require('../lib/somo-demo-env');
+const somoDemoEmail = require('./somo-demo-email');
 
 function buildDemoError(message, code, status) {
   const err = new Error(message);
@@ -76,6 +77,62 @@ function normalizePhone(phone) {
 
 }
 
+function normalizeEmail(email) {
+  const trimmed = String(email || '').trim().toLowerCase();
+  if (!trimmed) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    throw new Error('Invalid email address');
+  }
+  return trimmed;
+}
+
+function upsertLeadFromDemoRequest({
+  demoRequestId,
+  name,
+  phone,
+  email,
+  useCase,
+  practiceSpecialty,
+  questionsAsked,
+  qualification = null
+}) {
+  if (!demoRequestId || !name) return null;
+  const externalId = `somo_demo:${demoRequestId}`;
+  const existing = db.getLeadByExternalId ? db.getLeadByExternalId(externalId) : null;
+  const clinicName = practiceSpecialty ? `${name} — ${practiceSpecialty}` : name;
+  let prior = {};
+  if (existing?.notes) {
+    try {
+      prior = JSON.parse(existing.notes);
+    } catch (_) {}
+  }
+  const notes = JSON.stringify({
+    ...prior,
+    demo_request_id: demoRequestId,
+    use_case: useCase || prior.use_case || null,
+    questions_asked: questionsAsked || prior.questions_asked || null,
+    ...(qualification && typeof qualification === 'object' ? { qualification } : {})
+  });
+  const payload = {
+    external_id: externalId,
+    title: name,
+    clinic_name: clinicName,
+    clinic_phone: phone || null,
+    clinic_email: email || null,
+    source: 'landing_demo',
+    lead_type: 'customer',
+    pipeline_stage: 'demo',
+    notes,
+    is_qualified: 1
+  };
+  if (existing?.id) {
+    db.updateLead(existing.id, payload);
+    return existing.id;
+  }
+  const created = db.createLead(payload);
+  return created?.id || null;
+}
+
 
 
 function checkRateLimits({ clientIp, phone }) {
@@ -135,6 +192,7 @@ function checkRateLimits({ clientIp, phone }) {
 async function requestDemoCall({
   name,
   phone,
+  email,
   use_case,
   language,
   country,
@@ -181,6 +239,7 @@ async function requestDemoCall({
   const prospectName = normalizeName(name);
 
   const normalizedPhone = normalizePhone(phone);
+  const normalizedEmail = normalizeEmail(email);
 
   checkRateLimits({ clientIp, phone: normalizedPhone });
 
@@ -205,6 +264,8 @@ async function requestDemoCall({
 
       phone: normalizedPhone,
 
+      email: normalizedEmail,
+
       use_case: useCase,
 
       template_id: template.template_id,
@@ -222,6 +283,18 @@ async function requestDemoCall({
       status: 'pending'
 
     });
+    upsertLeadFromDemoRequest({
+      demoRequestId: id,
+      name: prospectName,
+      phone: normalizedPhone,
+      email: normalizedEmail,
+      useCase,
+      practiceSpecialty: practice_specialty,
+      questionsAsked: questions_asked
+    });
+    if (normalizedEmail) {
+      somoDemoEmail.sendDemoConfirmation(normalizedEmail, { prospectName }).catch(() => null);
+    }
     await appendEventLog({
       event_type: 'request_received',
       demo_request_id: id,
@@ -265,6 +338,10 @@ async function requestDemoCall({
       use_case: useCase,
 
       prospect_name: prospectName,
+
+      practice_specialty: practice_specialty || null,
+
+      questions_asked: questions_asked || null,
 
       template
 
@@ -374,7 +451,11 @@ module.exports = {
 
   getDailyCap,
 
-  getMaxConcurrent
+  getMaxConcurrent,
+
+  upsertLeadFromDemoRequest,
+
+  normalizeEmail
 
 };
 

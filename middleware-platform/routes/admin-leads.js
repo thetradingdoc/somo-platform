@@ -186,6 +186,7 @@ router.get('/', requireAdminOrCapability('platform.leads'), adminLimiter, async 
     if (lead_type === 'sales' || lead_type === 'customer') {
       filters.lead_type = lead_type;
     }
+    if (req.query.source) filters.source = req.query.source;
 
     // Handle test leads filter
     // Default: exclude test leads (handled in getAllLeads)

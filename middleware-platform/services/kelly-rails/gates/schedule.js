@@ -96,7 +96,7 @@ async function runDeterministicSchedule(state, ctx) {
     let apptDate = apptDateFromSlot;
     let apptTime = apptTimeFromSlot;
     if (isSyntheticSlotId(slotId)) slotId = null;
-    if (!slotId) {
+    if (!slotId && !(apptDate && apptTime)) {
       const slots = await KellyToolExecutor.execute(
         'get_available_slots',
         { specialty: row?.target_specialty || 'Dermatology', days_ahead: 14 },
@@ -107,6 +107,15 @@ async function runDeterministicSchedule(state, ctx) {
         bundles.find((b) => String(b.time || '').startsWith('12:00')) ||
         bundles[0] ||
         null;
+      if (!pick && bundles.length === 0) {
+        state.flags.no_provider_availability = true;
+        emitBookingOutcome(ctx.sessionId, 'no_availability', { gate: 'schedule' });
+        return {
+          reply: getDeterministicReply('slots_empty', state.locale || 'en'),
+          toolsUsed: [...toolsUsed, 'get_available_slots'],
+          endCall: false
+        };
+      }
       if (pick) {
         slotId = pick.id || pick.slot_id || pick.practitioner_id;
         apptDate =
@@ -293,10 +302,13 @@ async function runDeterministicSchedule(state, ctx) {
               endCall: false
             };
           }
+          state.flags.no_provider_availability = true;
+          emitBookingOutcome(ctx.sessionId, 'no_availability', { gate: 'schedule' });
           return {
             reply: getDeterministicReply('slots_empty', state.locale || 'en'),
             toolsUsed,
-            endCall: false
+            endCall: false,
+            outcome: GATE_OUTCOME.NO_AVAILABILITY
           };
         }
         const preview = bundles.filter((b) => /12:00|12:15|09:00/.test(String(b.time || ''))).slice(0, 3);

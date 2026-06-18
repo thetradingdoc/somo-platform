@@ -29,6 +29,14 @@ const DEMO_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'send_signup_email',
+      description: 'Email the prospect a Somo signup link',
+      parameters: { type: 'object', properties: {} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'send_signup_link',
       description: 'Text the prospect a Somo signup or booking link',
       parameters: { type: 'object', properties: {} }
@@ -101,8 +109,11 @@ function ruleBasedReply(stage, context) {
       return `Hi ${name}, this is ${persona} from Somo. You asked for a quick call — is now still a good time?`;
     case 'QUALIFY':
       return 'Great. What kind of practice do you run — dental, medical, or specialty?';
-    case 'VALUE':
-      return `Somo answers calls 24/7 and books appointments from one dashboard — relevant for your ${context.use_case_label || 'practice'}.`;
+    case 'VALUE': {
+      const label = context.use_case_label || 'practice';
+      const q = context.questions_asked ? ` You mentioned ${String(context.questions_asked).slice(0, 60)}.` : '';
+      return `Picture this: a patient calls after hours — I greet them, ask what they need, and book into your schedule.${q} That's Somo for a ${label}.`;
+    }
     case 'OBJECTION':
       return 'Totally fair. Many teams use this for overflow and after-hours. Want me to text you a link?';
     case 'CTA':

@@ -48,7 +48,7 @@ describe('schedule gate booking_confirmed without tool', () => {
       locale: 'en',
       flags: {
         schedule_appointment_success: true,
-        current_booking_slot: { slot_id: 'slot_1', date: '2026-06-20', time: '14:00' }
+        current_booking_slot: { slot_id: 'real_slot_1', date: '2026-06-20', time: '14:00' }
       }
     };
     const ctx = {
@@ -79,7 +79,7 @@ describe('schedule gate booking_confirmed without tool', () => {
       locale: 'en',
       flags: {
         appointment_id: 'appt_existing_1',
-        current_booking_slot: { slot_id: 'slot_1', date: '2026-06-20', time: '14:00' }
+        current_booking_slot: { slot_id: 'real_slot_1', date: '2026-06-20', time: '14:00' }
       }
     };
     const ctx = {
@@ -95,6 +95,33 @@ describe('schedule gate booking_confirmed without tool', () => {
     expect(executeSpy).not.toHaveBeenCalledWith('schedule_appointment', expect.anything(), expect.anything());
   });
 
+  test('confirm without schedule_appointment_success does not return booking_confirmed before tool completes', async () => {
+    executeSpy.mockResolvedValue({ success: false, error: 'slot_taken' });
+
+    const state = {
+      active_lane: 'booking',
+      step: 'confirm_visit',
+      locale: 'en',
+      flags: {
+        current_booking_slot: { slot_id: 'real_slot_1', date: '2026-06-20', time: '14:00' }
+      }
+    };
+    const ctx = {
+      sessionId: 'sess_no_short_circuit',
+      patientId: 'Patient/test',
+      message: 'yes please confirm'
+    };
+
+    const out = await runDeterministicSchedule(state, ctx);
+
+    if (out?.reply) {
+      expect(out.reply).not.toBe(
+        getDeterministicReply('booking_confirmed', 'en', { when: '2026-06-20 at 14:00' })
+      );
+    }
+    expect(state.flags.schedule_appointment_success).toBeFalsy();
+  });
+
   test('calls schedule_appointment when no prior success or existing appointment', async () => {
     executeSpy.mockImplementation(async (name) => {
       if (name === 'schedule_appointment') {
@@ -105,15 +132,22 @@ describe('schedule gate booking_confirmed without tool', () => {
           time: '14:00'
         };
       }
+      if (name === 'get_available_slots') {
+        return {
+          slot_bundles: [
+            { id: 'real_slot_1', date: '2026-06-20', time: '14:00', practitioner_name: 'Dr. Test' }
+          ]
+        };
+      }
       return { success: true };
     });
 
     const state = {
       active_lane: 'booking',
-      step: 'schedule_visit',
+      step: 'confirm_visit',
       locale: 'en',
       flags: {
-        current_booking_slot: { slot_id: 'slot_1', date: '2026-06-20', time: '14:00' }
+        current_booking_slot: { slot_id: 'real_slot_1', date: '2026-06-20', time: '14:00' }
       }
     };
     const ctx = {

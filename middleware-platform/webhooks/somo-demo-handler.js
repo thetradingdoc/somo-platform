@@ -6,6 +6,7 @@ const { resolveTemplate } = require('../services/somo-demo-template-registry');
 const { USE_CASES } = require('../services/somo-demo-use-cases');
 const orchestrator = require('../services/somo-demo-orchestrator');
 const somoDemoSms = require('../services/somo-demo-sms');
+const somoDemoEmail = require('../services/somo-demo-email');
 const sheetsSync = require('../services/somo-demo-sheets-sync');
 const { evaluateFirstTurnLanguage } = require('../services/kelly-rails/language');
 const { isEmergencyUtterance } = require('../services/kelly-rails/state-schema');
@@ -51,6 +52,7 @@ function hydrateContextFromDb(ctx, row) {
   return {
     ...ctx,
     prospect_name: ctx.prospect_name || row.name,
+    prospect_email: ctx.prospect_email || row.email,
     use_case: ctx.use_case || row.use_case,
     language: ctx.language || row.language,
     detected_language: ctx.detected_language || row.language,
@@ -220,6 +222,25 @@ async function logCallEnded(ctx, connection, outcome) {
   } catch (e) {
     console.warn('Somo demo Sheets call_ended failed:', e.message);
   }
+  try {
+    const email = row?.email;
+    if (email && !row?.signup_link_sent) {
+      await somoDemoEmail.sendSignupEmail(email, { prospectName: row?.name || ctx.prospect_name });
+      db.updateSomoDemoRequest(demoId, { signup_link_sent: 1, cta_offered_at: endAt });
+    }
+    const { upsertLeadFromDemoRequest } = require('../services/somo-demo-service');
+    upsertLeadFromDemoRequest({
+      demoRequestId: demoId,
+      name: row?.name || ctx.prospect_name,
+      phone: row?.phone || ctx.prospect_phone,
+      email: row?.email || null,
+      useCase: row?.use_case,
+      practiceSpecialty: row?.practice_specialty,
+      questionsAsked: row?.questions_asked
+    });
+  } catch (e) {
+    console.warn('Somo demo post-call email/lead sync failed:', e.message);
+  }
 }
 
 function buildRecordInterestPatch(args, row) {
@@ -334,10 +355,43 @@ async function executeDemoTool(name, args, ctx, connection) {
       } catch (e) {
         console.warn('Somo demo Sheets qualification_captured failed:', e.message);
       }
+      try {
+        const { upsertLeadFromDemoRequest } = require('../services/somo-demo-service');
+        upsertLeadFromDemoRequest({
+          demoRequestId: demoId,
+          name: row?.name || ctx.prospect_name,
+          phone: row?.phone || ctx.prospect_phone,
+          email: row?.email || ctx.prospect_email,
+          useCase: patch.use_case || row?.use_case,
+          practiceSpecialty: patch.practice_specialty || row?.practice_specialty,
+          questionsAsked: patch.questions_asked || row?.questions_asked,
+          qualification: {
+            interest_level: level,
+            practice_type: args.practice_type,
+            primary_problem: args.primary_problem,
+            practice_size: args.practice_size,
+            notes: args.notes
+          }
+        });
+      } catch (e) {
+        console.warn('Somo demo lead qualification sync failed:', e.message);
+      }
       return { success: true, recorded: level };
     }
     case 'send_signup_link': {
       const phone = connection.customerPhone;
+      const prospectEmail = row?.email || ctx.prospect_email || null;
+      if (prospectEmail) {
+        const mail = await somoDemoEmail.sendSignupEmail(prospectEmail, { prospectName: ctx.prospect_name });
+        if (demoId) {
+          db.updateSomoDemoRequest(demoId, {
+            signup_link_sent: 1,
+            cta_offered_at: new Date().toISOString(),
+            conversation_stage: 'CTA'
+          });
+        }
+        return { success: true, channel: 'email', ...mail };
+      }
       if (!phone) return { success: false, error: 'No phone on call' };
       const sms = await somoDemoSms.sendSignupLink(phone, { prospectName: ctx.prospect_name });
       if (demoId) {
@@ -371,6 +425,30 @@ async function executeDemoTool(name, args, ctx, connection) {
         console.warn('Somo demo Sheets cta_sent failed:', e.message);
       }
       return { success: true, ...sms };
+    }
+    case 'send_signup_email': {
+      const prospectEmail = row?.email || ctx.prospect_email || null;
+      if (!prospectEmail) return { success: false, error: 'No email on file' };
+      const mail = await somoDemoEmail.sendSignupEmail(prospectEmail, { prospectName: ctx.prospect_name });
+      if (demoId) {
+        db.updateSomoDemoRequest(demoId, {
+          signup_link_sent: 1,
+          cta_offered_at: new Date().toISOString(),
+          conversation_stage: 'CTA'
+        });
+      }
+      try {
+        await sheetsSync.appendEventLog({
+          event_type: 'cta_email_sent',
+          demo_request_id: demoId,
+          phone: row?.phone || ctx.prospect_phone,
+          status: 'cta_sent',
+          language: ctx.detected_language || row?.language
+        });
+      } catch (e) {
+        console.warn('Somo demo Sheets cta_email_sent failed:', e.message);
+      }
+      return { success: true, channel: 'email', ...mail };
     }
     case 'end_call': {
       await hangupTwilioCall(connection);

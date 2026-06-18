@@ -72,8 +72,22 @@ async function promoteBookingWhenReady(state, ctx) {
     state.flags.triage_complete = true;
   }
 
+  if (row.quality || row.region || row.onset) {
+    state.flags.opqrst_from_triage = {
+      quality: row.quality || null,
+      region: row.region || row.body_site || null,
+      onset: row.onset || row.timing || null,
+      severity: row.severity ?? null
+    };
+  }
+  state.flags.triage_complete = true;
+
   state.active_lane = KELLY_LANE.BOOKING;
   state.step = 'schedule_visit';
+
+  try {
+    persistRailsSessionState(ctx.sessionId, state);
+  } catch (_) {}
 }
 
 function laneToOrchestratorPhase(lane) {

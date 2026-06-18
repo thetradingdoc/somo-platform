@@ -1,7 +1,7 @@
 'use strict';
 
 const { KELLY_LANE } = require('../state-schema');
-const { subrailPromptBlock, localePromptBlock } = require('./subrail-step-objectives');
+const { buildBoundedPromptContext } = require('../prompt-bounding-locale');
 
 const BASE =
   'Eres Kelly, asistente clínica de consultorio. Usa herramientas para hechos; nunca inventes citas, copagos ni enlaces de pago. ' +
@@ -51,8 +51,8 @@ function laneSystemPrompt(lane, step, state, providerCtx = {}) {
 
   const identityBlock = identityParts.length ? identityParts.join(' ') + '\n\n' : '';
 
-  const locale = state.flags?.preferred_language || state.locale || state.flags?.locale || 'es';
-  return `${identityBlock}${BASE}\n\n${hint}${subrailPromptBlock(state)}${localePromptBlock(locale, state)}\nSesión: ${state.session_id || ''}`;
+  const bounded = buildBoundedPromptContext({ ...state, locale: state.flags?.preferred_language || state.locale || 'es' });
+  return `${identityBlock}${BASE}\n\n${hint}${bounded.promptSuffix}\nSesión: ${state.session_id || ''}`;
 }
 
 module.exports = { laneSystemPrompt, BASE, LANE_HINTS };

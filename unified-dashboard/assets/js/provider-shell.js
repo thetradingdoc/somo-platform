@@ -1154,7 +1154,11 @@
       return `<div class="pp-state pp-state-error"><div>${text || 'Could not load this panel.'}</div>${retry}</div>`;
     }
     if (state === 'empty') {
-      return `<div class="pp-state pp-state-empty">${text || 'Nothing to show yet.'}</div>`;
+      const cta =
+        opts.ctaHref && opts.ctaLabel
+          ? `<a class="pp-btn pp-btn-ghost pp-btn-sm" href="${escapeHtml(opts.ctaHref)}">${escapeHtml(opts.ctaLabel)}</a>`
+          : '';
+      return `<div class="pp-state pp-state-empty"><div>${text || 'Nothing to show yet.'}</div>${cta}</div>`;
     }
     return '';
   };

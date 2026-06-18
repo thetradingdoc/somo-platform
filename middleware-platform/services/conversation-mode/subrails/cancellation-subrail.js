@@ -1,6 +1,7 @@
 'use strict';
 
 const { Handoff } = require('../handoff-types');
+const { detectCancelIntents } = require('../../kelly-rails/turn-planner');
 
 const CANCEL_STEPS = ['find_booking', 'confirm_cancel', 'cancel_execute', 'confirm_message'];
 
@@ -24,11 +25,15 @@ async function handleCancellationSubrail(ctx = {}) {
   const step = ctx.active_subrail_step || 'find_booking';
   const msg = String(ctx.message || '').toLowerCase();
   const lookupOnly = !!(ctx.appt_lookup_only || ctx.flags?.appt_lookup_only);
+  const cancelIntents = detectCancelIntents(ctx.message, step);
 
   const stateUpdates = {
     active_subrail: 'cancellation',
     opqrst_frozen: true
   };
+  if (cancelIntents.length) {
+    stateUpdates.cancel_intents = cancelIntents;
+  }
 
   if (
     (ctx.flags?.cancel_complete || step === 'confirm_message') &&

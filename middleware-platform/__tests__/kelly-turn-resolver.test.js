@@ -47,7 +47,8 @@ describe('kelly-turn-resolver runtime selection', () => {
     const out = await runKellyTurn({
       sessionId: 'sess-v2',
       clinicId: 'c1',
-      message: 'I have a rash'
+      message: 'I have a rash',
+      skipIdentityAdmission: true
     });
 
     expect(mockHandleTurn).toHaveBeenCalled();
@@ -63,7 +64,8 @@ describe('kelly-turn-resolver runtime selection', () => {
 
     const out = await runKellyTurn({
       sessionId: 'sess-hybrid',
-      message: 'hello'
+      message: 'hello',
+      skipIdentityAdmission: true
     });
 
     expect(runKellyConversationTurn).toHaveBeenCalled();

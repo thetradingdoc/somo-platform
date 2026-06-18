@@ -26,7 +26,7 @@ function hasTable(tableName) {
   }
 }
 
-const EPA_COUNTY_FALLBACK_CSV = path.join(__dirname, '..', 'states_and_counties.csv');
+const EPA_COUNTY_FALLBACK_CSV = path.join(__dirname, '..', 'data', 'geo', 'states_and_counties.csv');
 let countyFallbackCache = null;
 
 function parseCsvLine(line) {

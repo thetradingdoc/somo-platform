@@ -123,6 +123,7 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
     }
 
     let appointment = null;
+    let callSummary = { conversation_mode: null, final_lane: null, final_step: null };
     if (db.db) {
       try {
         appointment = db.db
@@ -132,6 +133,27 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
           )
           .get(sessionId);
       } catch (_) {}
+      try {
+        const proj = db.db
+          .prepare(
+            `SELECT active_lane, step, flags_json FROM kelly_rails_session_projection WHERE session_id = ?`
+          )
+          .get(sessionId);
+        if (proj) {
+          callSummary.final_lane = proj.active_lane || null;
+          callSummary.final_step = proj.step || null;
+          if (proj.flags_json) {
+            const flags = JSON.parse(proj.flags_json);
+            callSummary.conversation_mode = flags.conversation_mode || null;
+            if (!callSummary.final_lane && flags.active_lane) callSummary.final_lane = flags.active_lane;
+          }
+        }
+      } catch (_) {}
+    }
+    if (!callSummary.final_lane && orchestration.length) {
+      const last = orchestration[orchestration.length - 1];
+      callSummary.final_lane = last.lane || null;
+      callSummary.final_step = last.step || null;
     }
 
     return res.json({
@@ -147,6 +169,7 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
       tools,
       booking_outcome: bookingOutcome,
       orchestration_trace: orchestration,
+      call_summary: callSummary,
       appointment
     });
   } catch (error) {

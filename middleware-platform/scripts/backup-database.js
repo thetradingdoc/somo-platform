@@ -11,7 +11,14 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const DB_PATH = path.join(__dirname, '..', 'middleware.db');
+function resolveDbPath() {
+  if (process.env.DB_PATH) {
+    return path.resolve(process.cwd(), process.env.DB_PATH);
+  }
+  return path.join(__dirname, '..', 'var', 'db', 'middleware-dev.db');
+}
+
+const DB_PATH = resolveDbPath();
 const BACKUP_DIR = path.join(__dirname, '..', 'backups');
 
 // Create backups directory if it doesn't exist

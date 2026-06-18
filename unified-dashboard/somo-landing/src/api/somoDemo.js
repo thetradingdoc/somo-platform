@@ -9,16 +9,20 @@ export const USE_CASES = [
 export async function requestDemoCall({
   name,
   phone,
+  email,
   use_case,
   consent,
   practice_specialty,
-  questions_asked
+  questions_asked,
+  turnstile_token
 }) {
   const base = API_BASE || '';
   const body = { name, phone, consent };
+  if (email) body.email = email;
   if (use_case) body.use_case = use_case;
   if (practice_specialty) body.practice_specialty = practice_specialty;
   if (questions_asked) body.questions_asked = questions_asked;
+  if (turnstile_token) body.turnstile_token = turnstile_token;
 
   const res = await fetch(`${base}/api/public/somo-demo/request-call`, {
     method: 'POST',

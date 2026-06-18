@@ -2,6 +2,7 @@
 
 const { KELLY_LANE, PAYMENT_SIGNALS } = require('../state-schema');
 const { getDeterministicReply } = require('../prompts/deterministic');
+const { withStickyLocale } = require('../resolve-locale');
 const { KellyToolExecutor, executeDeterministicTool } = require('./shared');
 
 async function runDeterministicPayment(state, ctx) {
@@ -44,7 +45,7 @@ async function runDeterministicPayment(state, ctx) {
 
   const reply =
     out.pay_url
-      ? getDeterministicReply('payment_link_sent', state.locale || 'en', {
+      ? getDeterministicReply('payment_link_sent', withStickyLocale(state).locale, {
           amount: Number(amount).toFixed(2)
         })
       : String(out.message || 'Your secure payment link is on the way.');

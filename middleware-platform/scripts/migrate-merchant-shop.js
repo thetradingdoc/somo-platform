@@ -15,8 +15,10 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 
 // Paths
-const merchantShopDbPath = path.join(__dirname, '../../merchant-shop/merchant.db');
-const middlewareDbPath = process.env.DB_PATH || path.join(__dirname, '../middleware-dev.db');
+const merchantShopDbPath =
+  process.env.MERCHANT_SHOP_DB_PATH || path.join(__dirname, '../../merchant-shop/merchant.db');
+const middlewareDbPath =
+  process.env.DB_PATH || path.join(__dirname, '../var/db/middleware-dev.db');
 
 console.log('🔄 MERCHANT SHOP MIGRATION');
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');

@@ -1,10 +1,9 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { hashApiKey } = require('./utils/api-keys');
 
-const usePostgres = !!process.env.POSTGRES_URL;
+let usePostgres = !!process.env.POSTGRES_URL;
 let pgPool = null;
 let pgSql = null;
 /** impl-9: ensure Postgres voice_checkouts has triage_session_id before INSERT */
@@ -46,110 +45,30 @@ function phoneLookupCandidates(raw) {
   return [...new Set(out.filter(Boolean))];
 }
 
-// Use Azure's writable directory (/home) if available, otherwise use current directory
-// Azure App Service uses /home for writable files
-// CRITICAL: In production, always use /home (not process.env.HOME which may be /root)
-// Azure App Service does not persist data outside /home
-const env = process.env.NODE_ENV || 'development';
-const isProdEnv = env === 'production' || env === 'prod';
-const defaultDbDir = isProdEnv ? '/home' : (process.env.HOME || '/home' || __dirname);
+const {
+  getEnvConfig,
+  resolveDbPath,
+  warnSplitBrain,
+  openSqliteDatabase,
+  initPostgresPoolIfConfigured
+} = require('./database/connection');
 
-// Environment-based database naming to separate production and test/dev data
-// Production: middleware-prod.db
-// Development: middleware-dev.db
-// Test: middleware-test.db (if NODE_ENV=test)
-// Note: env is already defined above
+const _connConfig = getEnvConfig(__dirname);
+const env = _connConfig.env;
+const isProdEnv = _connConfig.isProdEnv;
+const dbFileName = _connConfig.dbFileName;
+const defaultDbDir = _connConfig.defaultDbDir;
 
-// CRITICAL: Check DB_NAME FIRST (highest priority), then fall back to environment-based naming
-let dbFileName;
-if (process.env.DB_NAME) {
-  // DB_NAME environment variable takes highest priority
-  dbFileName = process.env.DB_NAME;
-  console.log(`📁 Using DB_NAME from environment: ${dbFileName}`);
-} else if (env === 'production' || env === 'prod') {
-  // Production defaults to middleware-prod.db
-  dbFileName = 'middleware-prod.db';
-} else if (env === 'test') {
-  dbFileName = 'middleware-test.db';
-} else {
-  dbFileName = 'middleware-dev.db';
-}
-
-// DB_PATH overrides location (use project-local path to avoid readonly HOME dir)
-function canWriteDir(dirPath) {
-  try {
-    fs.mkdirSync(dirPath, { recursive: true });
-  } catch (_) {}
-  try {
-    fs.accessSync(dirPath, fs.constants.W_OK);
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-function resolveDbPath() {
-  if (process.env.DB_PATH) {
-    // Explicit override always wins (still may be readonly, but that's an operator choice).
-    return path.resolve(process.cwd(), process.env.DB_PATH);
-  }
-
-  // Production should remain on /home for persistence on Azure App Service.
-  if (isProdEnv) {
-    return path.join(defaultDbDir, dbFileName);
-  }
-
-  // Dev/test: prefer HOME if writable, otherwise fall back to workspace-local DB.
-  const homeCandidate = path.join(defaultDbDir, dbFileName);
-  const homeDir = path.dirname(homeCandidate);
-  if (canWriteDir(homeDir)) return homeCandidate;
-
-  // Workspace-local fallback (this repo is always writable in Cursor).
-  return path.join(__dirname, dbFileName);
-}
-
-const dbPath = resolveDbPath();
+const dbPath = resolveDbPath(_connConfig);
 console.log(`📁 Database path: ${dbPath} (environment: ${env})`);
+warnSplitBrain(dbPath, _connConfig);
 
-// Ensure target directory exists (and warn if readonly).
-try {
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!canWriteDir(dir)) {
-    console.warn(`⚠️  DB directory not writable: ${dir}`);
-  }
-} catch (e) {
-  console.warn('⚠️  Could not ensure db directory:', e.message);
-}
+const _pg = initPostgresPoolIfConfigured();
+usePostgres = _pg.usePostgres;
+pgPool = _pg.pgPool;
+pgSql = _pg.pgSql;
 
-if (usePostgres) {
-  try {
-    const { createPool } = require('./utils/postgres');
-    pgPool = createPool();
-    pgSql = pgPool;
-    console.log('🗄️  POSTGRES_URL detected – Postgres pool initialized');
-  } catch (err) {
-    console.error('❌ Failed to initialize Postgres pool:', err.message);
-    if (process.env.STAGING === '1' || process.env.SOMO_STAGING === '1') {
-      console.warn('⚠️  Staging: continuing SQLite-primary (Postgres mirror disabled until URL fixed)');
-    } else {
-      process.exit(1);
-    }
-  }
-}
-
-const db = new Database(dbPath);
-
-// Long NPPES imports and concurrent readers (dev server, sqlite3 CLI) otherwise hit SQLITE_BUSY.
-// WAL allows readers during writes; busy_timeout makes writers wait for locks instead of failing immediately.
-try {
-  db.pragma('journal_mode = WAL');
-} catch (e) {
-  console.warn('⚠️  SQLite journal_mode pragma failed:', e.message);
-}
-const _busyMs = parseInt(process.env.SQLITE_BUSY_TIMEOUT_MS || '60000', 10);
-const busyTimeoutMs = Number.isFinite(_busyMs) && _busyMs >= 0 ? Math.min(_busyMs, 600000) : 60000;
-db.pragma(`busy_timeout = ${busyTimeoutMs}`);
+const db = openSqliteDatabase(dbPath);
 
 // Environment helpers for better prod vs staging management
 const isProduction = () => {
@@ -3885,7 +3804,8 @@ function migrateSomoDemoRequests() {
       ['outcome', 'TEXT'],
       ['duration_sec', 'INTEGER'],
       ['voicemail_detected', 'INTEGER DEFAULT 0'],
-      ['attribution_json', 'TEXT']
+      ['attribution_json', 'TEXT'],
+      ['email', 'TEXT']
     ];
     const existing = new Set(
       db.prepare('PRAGMA table_info(somo_demo_requests)').all().map((c) => c.name)
@@ -16796,15 +16716,16 @@ module.exports = {
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO somo_demo_requests (
-        id, name, phone, use_case, template_id, language, country, city, practice_specialty, practice_size, questions_asked, status, client_ip, attribution_json, created_at, updated_at
+        id, name, phone, email, use_case, template_id, language, country, city, practice_specialty, practice_size, questions_asked, status, client_ip, attribution_json, created_at, updated_at
       )
       VALUES (
-        @id, @name, @phone, @use_case, @template_id, @language, @country, @city, @practice_specialty, @practice_size, @questions_asked, @status, @client_ip, @attribution_json, @created_at, @updated_at
+        @id, @name, @phone, @email, @use_case, @template_id, @language, @country, @city, @practice_specialty, @practice_size, @questions_asked, @status, @client_ip, @attribution_json, @created_at, @updated_at
       )
     `).run({
       id: row.id,
       name: row.name,
       phone: row.phone,
+      email: row.email || null,
       use_case: row.use_case,
       template_id: row.template_id || null,
       language: row.language || null,
@@ -16845,7 +16766,8 @@ module.exports = {
       'outcome',
       'duration_sec',
       'voicemail_detected',
-      'attribution_json'
+      'attribution_json',
+      'email'
     ];
     for (const key of allowed) {
       if (patch[key] != null) {
@@ -18017,6 +17939,11 @@ module.exports = {
 
     if (filters.has_phone === true) {
       query += ' AND clinic_phone IS NOT NULL AND LENGTH(clinic_phone) > 0';
+    }
+
+    if (filters.source) {
+      query += ' AND source = ?';
+      params.push(filters.source);
     }
 
     if (filters.needs_followup === true) {

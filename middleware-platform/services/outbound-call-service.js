@@ -112,6 +112,8 @@ async function initiateSomoDemoDemoCall({
   demo_request_id,
   use_case,
   prospect_name,
+  practice_specialty,
+  questions_asked,
   template: templateIn
 }) {
   if (!phone_number) throw new Error('Phone number is required');
@@ -129,6 +131,8 @@ async function initiateSomoDemoDemoCall({
   if (demo_request_id) webhookUrl.searchParams.set('demo_request_id', String(demo_request_id));
   if (use_case) webhookUrl.searchParams.set('use_case', String(use_case));
   if (prospect_name) webhookUrl.searchParams.set('prospect_name', encodeURIComponent(String(prospect_name)));
+  if (practice_specialty) webhookUrl.searchParams.set('practice_specialty', encodeURIComponent(String(practice_specialty)));
+  if (questions_asked) webhookUrl.searchParams.set('questions_asked', encodeURIComponent(String(questions_asked)));
 
   const statusCallback = `${apiBase}/voice/status-callback`;
   const amdCallback = `${apiBase}/voice/somo-demo-amd-callback`;

@@ -59,6 +59,7 @@ jobs:
           if [ -f "$DB_PATH" ]; then
             npm run verify:kelly-rails-prod-runtime
             npm run verify:orchestration-trace
+            npm run verify:gcs-sqlite-contention || true
           else
             echo "No DB snapshot available — runtime DB check skipped"
           fi

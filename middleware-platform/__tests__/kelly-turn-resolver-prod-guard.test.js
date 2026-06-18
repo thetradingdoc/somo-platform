@@ -38,7 +38,12 @@ describe('kelly-turn-resolver production runtime lock', () => {
     delete process.env.KELLY_RAILS_V2;
 
     await expect(
-      runKellyTurn({ sessionId: 'prod-sess', message: 'hello', channel: 'voice' })
+      runKellyTurn({
+        sessionId: 'prod-sess',
+        message: 'hello',
+        channel: 'voice',
+        skipIdentityAdmission: true
+      })
     ).rejects.toMatchObject({ code: 'KELLY_RUNTIME_BLOCKED' });
   });
 
@@ -49,7 +54,12 @@ describe('kelly-turn-resolver production runtime lock', () => {
     process.env.KELLY_RAILS_V2 = '1';
     process.env.KELLY_ALLOW_HYBRID_GRAPH = '1';
 
-    await runKellyTurn({ sessionId: 'prod-v2-sess', message: 'rash on leg' });
+    await runKellyTurn({
+      sessionId: 'prod-v2-sess',
+      clinicId: 'c1',
+      message: 'rash on leg',
+      skipIdentityAdmission: true
+    });
     expect(handleTurn).toHaveBeenCalled();
     expect(runKellyConversationTurn).not.toHaveBeenCalled();
   });

@@ -128,6 +128,68 @@ function _emitAppointmentBooked(ctx, appointment, extra = {}) {
   } catch (_) {}
 }
 
+function _emitAppointmentCancelled(ctx, result, args = {}) {
+  const appointmentId = result?.appointment_id || result?.appointment?.id || args.appointment_id || null;
+  const patientName = args.patient_name || result?.patient_name || result?.appointment?.patient_name || null;
+  _emitKellyActivityEvent({
+    sessionId: ctx.sessionId,
+    clinicId: ctx.clinicId,
+    patientId: ctx.patientId || result?.patient_id || args.patient_id || null,
+    eventType: 'appointment_cancelled',
+    payload: {
+      appointment_id: appointmentId,
+      patient_name: patientName,
+      appointment_type: result?.appointment_type || args.appointment_type || null,
+      reason: args.reason || result?.reason || null
+    }
+  });
+  try {
+    const { sendPostCallOwnerEmail } = require('./post-call-owner-email');
+    sendPostCallOwnerEmail({
+      eventType: 'appointment_cancelled',
+      sessionId: ctx.sessionId,
+      clinicId: ctx.clinicId,
+      customerId: ctx.customerId,
+      patientId: ctx.patientId || result?.patient_id,
+      patientName,
+      payload: { appointment_id: appointmentId }
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+function _emitAppointmentRescheduled(ctx, result, args = {}) {
+  const appointmentId = result?.appointment_id || result?.appointment?.id || args.appointment_id || null;
+  const patientName = args.patient_name || result?.patient_name || result?.appointment?.patient_name || null;
+  const when = [args.new_date || result?.new_date, args.new_time || result?.new_time].filter(Boolean).join(' ');
+  _emitKellyActivityEvent({
+    sessionId: ctx.sessionId,
+    clinicId: ctx.clinicId,
+    patientId: ctx.patientId || result?.patient_id || args.patient_id || null,
+    eventType: 'appointment_rescheduled',
+    payload: {
+      appointment_id: appointmentId,
+      patient_name: patientName,
+      when: when || null,
+      appointment_type: result?.appointment_type || args.appointment_type || null
+    }
+  });
+}
+
+function _emitAfterToolSuccess(toolName, result, context, args = {}) {
+  if (!_toolSuccess(result)) return;
+  const ctx = {
+    sessionId: context.sessionId,
+    clinicId: context.clinicId,
+    patientId: context.patientId,
+    customerId: context.customerId
+  };
+  if (toolName === 'cancel_appointment') {
+    _emitAppointmentCancelled(ctx, result, args);
+  } else if (toolName === 'reschedule_appointment') {
+    _emitAppointmentRescheduled(ctx, result, args);
+  }
+}
+
 function _emitNotificationFailed(ctx, channel, error, extra = {}) {
   try {
     db.insertKellyCallEvent?.({
@@ -700,12 +762,17 @@ class KellyToolExecutor {
         success,
         latency_ms: latencyMs,
         error: success ? null : result?.error || 'tool_failed',
-        clinic_id: clinicId || null
+        clinic_id: clinicId || null,
+        patient_id: patientId || args?.patient_id || result?.patient_id || null,
+        patient_name: args?.patient_name || result?.patient_name || result?.appointment?.patient_name || null,
+        appointment_id: result?.appointment?.id || args?.appointment_id || result?.appointment_id || null,
+        appointment_type: result?.appointment?.appointment_type || args?.appointment_type || null
       });
       if (sessionId && success) {
         const list = _turnToolLog.get(sessionId) || [];
         if (!list.includes(toolName)) list.push(toolName);
         _turnToolLog.set(sessionId, list);
+        _emitAfterToolSuccess(toolName, result, context, args);
       }
       return result;
     } catch (err) {

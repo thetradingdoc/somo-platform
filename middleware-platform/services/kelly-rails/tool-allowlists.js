@@ -85,6 +85,7 @@ function isGateOwnedTransactionalStep(lane, step, flags = {}) {
   if (lane === 'booking' && step === 'confirm_visit') return true;
   if (lane === 'payment' && step === 'pay_invoice') return true;
   if (lane === 'reschedule' && step === 'move_or_cancel' && flags.cancel_pending) return true;
+  if (lane === 'reschedule' && step === 'move_or_cancel' && flags.cancel_confirmed) return true;
   return false;
 }
 

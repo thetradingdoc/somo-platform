@@ -3,7 +3,7 @@
 const path = require('path');
 
 if (!process.env.DB_PATH) {
-  process.env.DB_PATH = path.join(__dirname, '..', '..', 'middleware-dev.db');
+  process.env.DB_PATH = path.join(__dirname, '..', '..', 'var', 'db', 'middleware-dev.db');
 }
 
 const db = require('../../database');

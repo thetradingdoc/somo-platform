@@ -38,6 +38,7 @@ router.post('/request-call', async (req, res) => {
     const {
       name,
       phone,
+      email,
       use_case,
       consent,
       language,
@@ -60,6 +61,7 @@ router.post('/request-call', async (req, res) => {
     const result = await requestDemoCall({
       name,
       phone,
+      email,
       use_case,
       language,
       country,

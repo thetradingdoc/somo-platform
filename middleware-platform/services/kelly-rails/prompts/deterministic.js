@@ -32,7 +32,9 @@ const EN = {
     'I was not able to reschedule that appointment in our system. I can connect you with our front desk to help.',
   reschedule_need_slot: 'What date and time would you like to move your appointment to?',
   records_failed:
-    'I was not able to retrieve those records right now. I can connect you with our front desk for help.'
+    'I was not able to retrieve those records right now. I can connect you with our front desk for help.',
+  post_payment_confirmed:
+    "You're all set — your {specialty} appointment is confirmed{when}.{paid_note} You'll receive details by email or text if we have them on file. If you need to change anything, say reschedule or call the clinic."
 };
 
 const ES = {
@@ -67,7 +69,9 @@ const ES = {
     'No pude reprogramar esa cita en nuestro sistema. Puedo conectarle con recepción para ayudarle.',
   reschedule_need_slot: '¿Para qué fecha y hora le gustaría mover su cita?',
   records_failed:
-    'No pude recuperar esos registros en este momento. Puedo conectarle con recepción para ayudarle.'
+    'No pude recuperar esos registros en este momento. Puedo conectarle con recepción para ayudarle.',
+  post_payment_confirmed:
+    'Todo listo — su cita de {specialty} está confirmada{when}.{paid_note} Recibirá los detalles por correo o mensaje si los tenemos. Si necesita cambiar algo, diga reprogramar o llame a la clínica.'
 };
 
 const ZH = {
@@ -92,7 +96,9 @@ const ZH = {
   cancel_failed: '我无法在系统中取消该预约。我可以为您转接前台完成处理。',
   reschedule_failed: '我无法在系统中改期该预约。我可以为您转接前台协助。',
   reschedule_need_slot: '您希望将预约改到哪一天、什么时间？',
-  records_failed: '我目前无法检索这些记录。我可以为您转接前台协助。'
+  records_failed: '我目前无法检索这些记录。我可以为您转接前台协助。',
+  post_payment_confirmed:
+    '一切就绪——您的{specialty}预约已确认{when}。{paid_note}如有存档，我们将通过邮件或短信发送详情。如需更改，请说改期或致电诊所。'
 };
 
 const TABLES = { en: EN, es: ES, zh: ZH };

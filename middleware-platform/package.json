@@ -178,7 +178,7 @@
         "test:e2e:provider-journey": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test --project provider-journey",
         "test:e2e:provider-journey-prod": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test -c playwright.prod.config.cjs --project provider-journey-prod",
         "test:prod:provider-portal": "npm run test:e2e:provider-journey-prod",
-        "test:e2e:provider-portal": "npm run test:e2e:provider-journey",
+        "test:e2e:provider-portal": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test --project provider-portal",
         "test:e2e:tenant-audit": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers PW_ALLOW_LIVE_ACTIONS=1 playwright test --project tenant-audit",
         "test:e2e:tenant-audit:safe": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test --project tenant-audit",
         "test:e2e:v6-3-today-screenshot": "echo 'Deprecated: use npm run test:e2e:provider-journey' && exit 0",

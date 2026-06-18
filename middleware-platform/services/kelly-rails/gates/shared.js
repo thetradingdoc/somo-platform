@@ -3,11 +3,18 @@
 const db = require('../../../database');
 const KellyToolExecutor = require('../../kelly-tool-executor');
 const { KELLY_LANE } = require('../state-schema');
-const { getAllowedToolNames } = require('../tool-allowlists');
+const {
+  getAllowedToolNames,
+  isGateOwnedTransactionalStep,
+  TRANSACTIONAL_GATE_TOOLS
+} = require('../tool-allowlists');
 const { parseSlotTimeFromMessage, normalizeSlotTime } = require('../slot-time-parse');
 
-function assertDeterministicToolAllowed(lane, step, toolName) {
-  const allowed = getAllowedToolNames(lane, step, {});
+function assertDeterministicToolAllowed(lane, step, toolName, flags = {}) {
+  if (isGateOwnedTransactionalStep(lane, step, flags) && TRANSACTIONAL_GATE_TOOLS.has(toolName)) {
+    return;
+  }
+  const allowed = getAllowedToolNames(lane, step, flags);
   if (!allowed.includes(toolName)) {
     const msg = `[kelly-rails] deterministic tool ${toolName} not allowed for ${lane}/${step}`;
     if (process.env.NODE_ENV === 'test' || process.env.KELLY_RAILS_STRICT_TOOLS === '1') {

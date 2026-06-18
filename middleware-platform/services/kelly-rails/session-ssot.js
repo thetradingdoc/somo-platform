@@ -180,7 +180,8 @@ function persistRailsSessionState(sessionId, state = {}) {
     outbound_purpose: flags.outbound_purpose || null,
     locale: state.locale || flags.locale || null,
     gate_matched: state.gate_matched || flags.gate_matched || null,
-    gate_outcome: state.gate_outcome || flags.gate_outcome || null
+    gate_outcome: state.gate_outcome || flags.gate_outcome || null,
+    opqrst_from_triage: flags.opqrst_from_triage || null
   };
   try {
     const write = () => {

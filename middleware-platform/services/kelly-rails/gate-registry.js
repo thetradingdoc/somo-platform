@@ -22,7 +22,7 @@ function buildGateRegistry(runners) {
       run: runners.runDeterministicPostPaymentConfirmation,
       owns: (r) => !!r
     },
-    { id: 'payment', priority: 98, run: runners.runDeterministicPayment, owns: (r) => !!r },
+    { id: 'payment', priority: 98, run: runners.runDeterministicPayment, owns: (r) => r && !!r.reply },
     { id: 'records', priority: 97, run: runners.runDeterministicRecords, owns: (r) => r && !!r.reply },
     {
       id: 'lookup',
@@ -31,7 +31,7 @@ function buildGateRegistry(runners) {
       owns: (r) => r && !!r.reply
     },
     { id: 'reschedule', priority: 95, run: runners.runDeterministicReschedule, owns: (r) => !!r },
-    { id: 'cancel', priority: 94, run: runners.runDeterministicCancel, owns: (r) => !!r },
+    { id: 'cancel', priority: 94, run: runners.runDeterministicCancel, owns: (r) => r && !!r.reply },
     {
       id: 'clinical_intro',
       priority: 93,

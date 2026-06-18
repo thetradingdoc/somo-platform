@@ -1,0 +1,447 @@
+/**
+ * CONFIGURE RETELL AGENT
+ * 
+ * Run: node configure-retell.js
+ * This will properly configure your Retell agent with webhook endpoints
+ */
+
+require('dotenv').config();
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+const RETELL_API_KEY = process.env.RETELL_API_KEY;
+const AGENT_ID =
+    process.env.RETELL_AGENT_ID || 'agent_85c66c32dec5575db0ed066130';
+// Retell TTS voice (openai-*, 11labs-*). Same env as RetellService.createAgent — set RETELL_VOICE_ID in .env to unify quality across agents.
+const RETELL_VOICE_ID =
+    (process.env.RETELL_VOICE_ID && String(process.env.RETELL_VOICE_ID).trim()) || 'retell-Cimo';
+const RETELL_VOICE_ID_ES =
+    (process.env.RETELL_VOICE_ID_ES && String(process.env.RETELL_VOICE_ID_ES).trim()) || RETELL_VOICE_ID;
+const RETELL_CONFIGURE_LOCALE = String(process.env.RETELL_CONFIGURE_LOCALE || 'en').toLowerCase();
+
+// Determine API base URL
+// Priority: API_BASE_URL > BASE_URL > Railway URL > localhost
+let API_BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL;
+if (!API_BASE_URL) {
+    // Check if running on Railway
+    if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+        API_BASE_URL = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+    } else if (process.env.NODE_ENV === 'production') {
+        API_BASE_URL = 'https://api.callsomo.com';
+    } else {
+        // Development: use localhost
+        API_BASE_URL = 'http://localhost:4000';
+    }
+}
+
+// Remove trailing slash if present
+API_BASE_URL = API_BASE_URL.replace(/\/$/, '');
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' ||
+    (API_BASE_URL && !API_BASE_URL.includes('localhost') && !API_BASE_URL.includes('127.0.0.1'));
+
+// WebSocket URL: use wss:// for production (HTTPS), ws:// for development
+const WEBSOCKET_URL = IS_PRODUCTION
+    ? API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')
+    : 'ws://localhost:4000';
+
+const TARGET_LLM_WS_URL = (
+    process.env.RETELL_LLM_WEBSOCKET_URL &&
+    String(process.env.RETELL_LLM_WEBSOCKET_URL).trim()
+) || `${WEBSOCKET_URL}/webhook/retell/llm`;
+
+const TARGET_AGENT_WEBHOOK_URL =
+    process.env.RETELL_AGENT_WEBHOOK_URL ||
+    `${API_BASE_URL}/webhook/retell/events`;
+
+function normalizeWsUrl(url) {
+    return String(url || '').trim().replace(/\/+$/, '');
+}
+
+function websocketAlreadyConfigured(agent) {
+    const current =
+        agent?.response_engine?.llm_websocket_url || agent?.llm_websocket_url || '';
+    return normalizeWsUrl(current) === normalizeWsUrl(TARGET_LLM_WS_URL);
+}
+
+async function patchRetellAgent(retellApiBase, agentId, payload, version) {
+    const body = version != null ? { ...payload, version } : payload;
+    return axios.patch(`${retellApiBase.replace(/\/$/, '')}/update-agent/${agentId}`, body, {
+        headers: {
+            Authorization: `Bearer ${RETELL_API_KEY}`,
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+async function updateAgentWithVersionFallback(retellApiBase, agent, updateData) {
+    const agentId = agent.agent_id || AGENT_ID;
+    const includeResponseEngine = !websocketAlreadyConfigured(agent);
+
+    const payload = { ...updateData };
+    if (!includeResponseEngine) {
+        delete payload.response_engine;
+        console.log('ℹ️  WebSocket URL already correct — skipping response_engine update');
+    }
+
+    if (agent.is_published) {
+        console.log('ℹ️  Agent is published — using draft version workflow');
+        const draftResp = await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/create-agent-version/${agentId}`,
+            { base_version: agent.version ?? 0 },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        const draftVersion = draftResp.data.version;
+        await patchRetellAgent(retellApiBase, agentId, payload, draftVersion);
+        await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/publish-agent-version/${agentId}`,
+            { version: draftVersion },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log(`✅ Published agent version ${draftVersion}`);
+        return { data: draftResp.data };
+    }
+
+    try {
+        return await patchRetellAgent(retellApiBase, agentId, payload, agent.version);
+    } catch (firstErr) {
+        const msg = firstErr.response?.data?.message || firstErr.message || '';
+        const needsDraft =
+            (firstErr.response?.status === 400 &&
+                (msg.includes('response engine') || msg.includes('version'))) ||
+            (firstErr.response?.status === 422 &&
+                msg.includes('published agent'));
+
+        if (!needsDraft) throw firstErr;
+
+        console.log('ℹ️  Published version locked — creating draft, updating, publishing...');
+        const baseVersion = agent.version ?? 0;
+        const draftResp = await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/create-agent-version/${agentId}`,
+            { base_version: baseVersion },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        const draftVersion = draftResp.data.version;
+        const draftPayload = { ...payload };
+        delete draftPayload.response_engine;
+
+        await patchRetellAgent(retellApiBase, agentId, draftPayload, draftVersion);
+        await axios.post(
+            `${retellApiBase.replace(/\/$/, '')}/publish-agent-version/${agentId}`,
+            { version: draftVersion },
+            {
+                headers: {
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log(`✅ Published agent version ${draftVersion}`);
+        return { data: draftResp.data };
+    }
+}
+
+// Load healthcare prompt and functions
+function loadHealthcarePrompt() {
+    try {
+        const docsPath = path.join(__dirname, '..', 'docs', 'voice-agent');
+        const kellyPaths = [
+            path.join(docsPath, 'prompts', 'kelly-voice-agent-prompt.md'),
+            path.join(docsPath, 'kelly-voice-agent-prompt.md'),
+            path.join(__dirname, 'retell-functions', 'kelly-voice-agent-prompt.md')
+        ];
+
+        let prompt = null;
+        for (const p of kellyPaths) {
+            if (fs.existsSync(p)) {
+                prompt = fs.readFileSync(p, 'utf8');
+                console.log('✅ Loaded Kelly prompt from', path.relative(path.join(__dirname, '..'), p));
+                break;
+            }
+        }
+
+        if (!prompt) {
+            console.error('⚠️  Could not find Kelly voice agent prompt');
+            return null;
+        }
+
+        const medicalPromptPath = path.join(docsPath, 'medical-voice-agent-prompt.md');
+        if (!fs.existsSync(medicalPromptPath)) {
+            throw new Error(
+                `Missing required medical workflow prompt: ${path.relative(path.join(__dirname, '..'), medicalPromptPath)}`
+            );
+        }
+        const medical = fs.readFileSync(medicalPromptPath, 'utf8');
+        prompt = prompt + '\n\n---\n\n' + medical;
+        console.log('✅ Appended medical coding workflow prompt');
+
+        return prompt;
+    } catch (error) {
+        console.error('❌ Could not load healthcare prompt:', error.message);
+        throw error;
+    }
+}
+
+function loadRetellFunctions() {
+    try {
+        const functionsPath = path.join(__dirname, 'retell-functions', 'retell-functions.json');
+        const functionsData = fs.readFileSync(functionsPath, 'utf8');
+        const parsed = JSON.parse(functionsData);
+        return parsed.functions || [];
+    } catch (error) {
+        console.error('⚠️  Could not load function definitions:', error.message);
+        console.error('   Using default functions instead');
+        return [
+            {
+                type: 'end_call',
+                name: 'end_call',
+                description: 'End the call when customer is done'
+            }
+        ];
+    }
+}
+
+async function configureRetellAgent() {
+    if (!RETELL_API_KEY) {
+        console.error('\n❌ RETELL_API_KEY is missing. Add it to middleware-platform/.env');
+        throw new Error('RETELL_API_KEY required');
+    }
+
+    console.log('\n🔧 CONFIGURING RETELL AGENT');
+    console.log('━'.repeat(60));
+    console.log('Agent ID:', AGENT_ID);
+    console.log('API Base URL:', API_BASE_URL);
+    console.log('WebSocket URL:', WEBSOCKET_URL);
+    console.log('Environment:', IS_PRODUCTION ? 'Production' : 'Development');
+    console.log('━'.repeat(60) + '\n');
+
+    try {
+        // Get current agent config
+        console.log('📥 Fetching current agent...');
+        // Retell API uses /get-agent/{id} and /update-agent/{id} (not /v2/agent/...).
+        const retellApiBase = process.env.RETELL_API_BASE_URL || 'https://api.retellai.com';
+        const getResponse = await axios.get(`${retellApiBase.replace(/\/$/, '')}/get-agent/${AGENT_ID}`, {
+            headers: {
+                Authorization: `Bearer ${RETELL_API_KEY}`
+            }
+        });
+
+        console.log('✅ Current agent:', getResponse.data?.agent_name || getResponse.data?.agent_id || AGENT_ID);
+
+        // Load healthcare prompt and functions
+        console.log('\n📚 Loading healthcare prompt and functions...');
+        const healthcarePrompt = loadHealthcarePrompt();
+        const retellFunctions = loadRetellFunctions();
+
+        if (healthcarePrompt) {
+            console.log('✅ Healthcare prompt loaded');
+        } else {
+            console.log('⚠️  Using default prompt');
+        }
+
+        if (retellFunctions && retellFunctions.length > 0) {
+            console.log(`✅ Loaded ${retellFunctions.length} function definitions`);
+        } else {
+            console.log('⚠️  Using default functions');
+        }
+
+        // Update agent with WebSocket URL
+        console.log('\n📤 Updating agent with healthcare configuration...');
+
+        // Build the prompt - use healthcare prompt if available, otherwise use default
+        let generalPrompt;
+        if (healthcarePrompt) {
+            generalPrompt = healthcarePrompt;
+        } else {
+            generalPrompt = `You are Kelly, a helpful medical voice assistant for Somo. Your role is to:
+1. Help patients check their insurance coverage
+2. Book physician appointments
+3. Handle appointment confirmations, cancellations, and rescheduling
+4. Process payments through insurance coverage and patient copays
+5. Look up patient claims and billing information
+
+Keep it friendly, professional, and empathetic—you're helping people with their healthcare needs.
+Always introduce yourself as: "Hi, I'm Kelly. I'll be your assistant today."
+Start by asking for the patient's full name, then greet them personally.
+
+Keep responses short and natural for voice conversation.`;
+        }
+
+        // Retell API: custom LLM is response_engine.type "custom-llm" + llm_websocket_url inside it (not top-level).
+        const useEsProfile = RETELL_CONFIGURE_LOCALE === 'es';
+        const updateData = {
+            agent_name: 'Kelly - Somo Medical Voice Assistant',
+            voice_id: useEsProfile ? RETELL_VOICE_ID_ES : RETELL_VOICE_ID,
+            language: useEsProfile ? 'es-US' : 'en-US',
+            webhook_url: TARGET_AGENT_WEBHOOK_URL,
+            response_engine: {
+                type: 'custom-llm',
+                llm_websocket_url: TARGET_LLM_WS_URL
+            },
+            enable_backchannel: true,
+            // Valid values include call-center, coffee-shop, etc.; "office" is not in the current API enum.
+            ambient_sound: null,
+            general_prompt: generalPrompt,
+            // Reproducible tools: Retell tool schemas MUST be set programmatically so deleting/resetting an agent
+            // does not silently remove coding + billing function-calling ability.
+            general_tools: (retellFunctions && retellFunctions.length > 0)
+                ? retellFunctions
+                : [
+                    {
+                        type: 'end_call',
+                        name: 'end_call',
+                        description: 'End the call when the customer is done or when the conversation is complete.'
+                    }
+                ]
+        };
+
+        const updateResponse = await updateAgentWithVersionFallback(
+            retellApiBase,
+            getResponse.data,
+            updateData
+        );
+
+        console.log('✅ Agent updated successfully!\n');
+        console.log('📋 Configuration:');
+        console.log('   Agent ID:', AGENT_ID);
+        console.log('   LLM WebSocket:', TARGET_LLM_WS_URL);
+        console.log('   Agent webhook:', TARGET_AGENT_WEBHOOK_URL);
+        console.log('   Voice (RETELL_VOICE_ID):', updateData.voice_id);
+        console.log('   Locale (RETELL_CONFIGURE_LOCALE):', RETELL_CONFIGURE_LOCALE);
+        if (process.env.RETELL_VOICE_ID_ES) {
+            console.log('   Spanish voice (RETELL_VOICE_ID_ES):', RETELL_VOICE_ID_ES);
+        }
+
+        console.log('\n' + '━'.repeat(60));
+        console.log('✅ CONFIGURATION COMPLETE!');
+        console.log('━'.repeat(60) + '\n');
+
+        console.log('🧪 TEST YOUR AGENT:');
+        console.log('   1. Make sure your server is running (npm start)');
+        if (IS_PRODUCTION) {
+            console.log('   2. Server is deployed to:', API_BASE_URL);
+            console.log('   3. WebSocket endpoint:', `${WEBSOCKET_URL}/webhook/retell/llm`);
+        } else {
+            console.log('   2. Server running on localhost:4000');
+            console.log('   3. For production, set API_BASE_URL=https://api.callsomo.com');
+        }
+        console.log('   4. Call: +15856202445');
+        console.log('   5. Say: "Hi, I\'d like to schedule an appointment"');
+        console.log('   6. Or: "I\'d like to check my insurance coverage"');
+        console.log('   7. Or: "I got a bill, can you tell me what it was for?"');
+        console.log('   8. Check your terminal for logs\n');
+
+        console.log('⚠️  MAKE SURE:');
+        if (IS_PRODUCTION) {
+            console.log('   ✓ Server deployed to production domain');
+            console.log('   ✓ SSL certificate is active (HTTPS)');
+            console.log('   ✓ WebSocket endpoint is accessible (WSS)');
+        } else {
+            console.log('   ✓ Server running on port 4000');
+            console.log('   ✓ For production: Set API_BASE_URL in .env');
+        }
+        console.log('   ✓ Products/Orders now integrated in middleware (no separate merchant-shop needed)');
+        console.log('   ✓ Your phone has SMS enabled\n');
+
+        return updateResponse.data;
+
+    } catch (error) {
+        console.error('\n❌ Configuration failed:');
+
+        if (error.response) {
+            console.error('   Status:', error.response.status);
+            console.error('   Error:', JSON.stringify(error.response.data, null, 2));
+        } else {
+            console.error('   Error:', error.message);
+        }
+
+        if (error.response?.status === 401) {
+            console.error('\n⚠️  Check your RETELL_API_KEY in .env');
+        }
+
+        if (error.response?.status === 404) {
+            console.error('\n⚠️  Agent not found. Check agent ID:', AGENT_ID);
+            console.error('   You can find your agent ID in the Retell dashboard');
+        }
+
+        throw error;
+    }
+}
+
+// Test webhook endpoint
+async function testWebhook() {
+    console.log('\n🧪 TESTING WEBHOOK ENDPOINT...\n');
+
+    try {
+        const healthUrl = `${API_BASE_URL}/health/live`;
+        console.log('   Testing:', healthUrl);
+        const response = await axios.get(healthUrl, {
+            timeout: 10000,
+            validateStatus: (status) => status === 200
+        });
+
+        console.log('✅ Server is reachable!');
+        console.log('   Status:', response.status);
+        console.log('   Response:', response.data);
+
+        // Test WebSocket endpoint (can't actually test WS connection with axios, but verify URL is correct)
+        console.log('   WebSocket URL:', `${WEBSOCKET_URL}/webhook/retell/llm`);
+
+        return true;
+    } catch (error) {
+        console.error('❌ Server test failed!');
+        if (IS_PRODUCTION) {
+            console.error('   Make sure your server is deployed and accessible at:', API_BASE_URL);
+            console.error('   Make sure SSL certificate is active');
+        } else {
+            console.error('   Make sure your server is running on port 4000');
+            console.error('   For production: Set API_BASE_URL=https://api.callsomo.com in .env');
+        }
+        console.error('   Error:', error.message);
+        if (error.code === 'ECONNREFUSED') {
+            console.error('   💡 Tip: Server is not running or not accessible');
+        }
+
+        return false;
+    }
+}
+
+// Run configuration
+if (require.main === module) {
+    (async () => {
+        try {
+            // Test webhook first
+            const webhookOk = await testWebhook();
+
+            if (!webhookOk) {
+                console.error('\n❌ Fix webhook issues before configuring agent');
+                process.exit(1);
+            }
+
+            // Configure agent
+            await configureRetellAgent();
+
+            process.exit(0);
+        } catch (error) {
+            process.exit(1);
+        }
+    })();
+}
+
+module.exports = configureRetellAgent;

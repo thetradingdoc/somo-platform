@@ -2,6 +2,7 @@
 
 const { KELLY_LANE } = require('../state-schema');
 const { getDeterministicReply } = require('../prompts/deterministic');
+const { withStickyLocale } = require('../resolve-locale');
 const { readAppointmentRowById, formatAppointmentWhen } = require('../appointment-read');
 const { KellyToolExecutor, sessionRow, argsFromMeta } = require('./shared');
 
@@ -34,8 +35,13 @@ async function runDeterministicPostPaymentConfirmation(state, ctx) {
       ? ' Your secure payment link was sent if you still need to pay.'
       : '';
 
+  const locale = withStickyLocale(state).locale;
   const whenPart = when ? ` scheduled for ${when}` : ' on file';
-  const reply = `You're all set — your ${specialty} appointment is confirmed${whenPart}.${paidNote} You'll receive details by email or text if we have them on file. If you need to change anything, say reschedule or call the clinic.`;
+  const reply = getDeterministicReply('post_payment_confirmed', locale, {
+    specialty,
+    when: whenPart,
+    paid_note: paidNote
+  });
 
   state.step = 'done';
   state.flags.post_visit_confirmation_pending = false;

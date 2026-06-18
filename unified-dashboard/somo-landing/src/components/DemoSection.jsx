@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { USE_CASES, requestDemoCall, saveSignupPrefill, signupUrl } from '../api/somoDemo';
+import { useEffect, useRef, useState } from 'react';
+import { USE_CASES, requestDemoCall, saveSignupPrefill } from '../api/somoDemo';
 import CapIcon from './CapIcon';
 import ParticleSphere from './ParticleSphere';
 
@@ -9,10 +9,35 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
   const [questionsAsked, setQuestionsAsked] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileRef = useRef(null);
+  const turnstileSiteKey = import.meta.env.VITE_SOMO_DEMO_TURNSTILE_SITE_KEY || '';
+
+  useEffect(() => {
+    if (!turnstileSiteKey || status !== 'idle') return;
+    const mountTurnstile = () => {
+      if (!turnstileRef.current || !window.turnstile) return;
+      window.turnstile.render(turnstileRef.current, {
+        sitekey: turnstileSiteKey,
+        callback: (token) => setTurnstileToken(token),
+        'expired-callback': () => setTurnstileToken('')
+      });
+    };
+    if (window.turnstile) {
+      mountTurnstile();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.onload = mountTurnstile;
+    document.head.appendChild(script);
+  }, [turnstileSiteKey, status]);
 
   useEffect(() => {
     if (!selectedUseCase) return;
@@ -36,20 +61,27 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
       setError('Please agree to receive a one-time demo call.');
       return;
     }
+    if (turnstileSiteKey && !turnstileToken) {
+      setError('Please complete the security check.');
+      return;
+    }
     setStatus('loading');
     try {
       await requestDemoCall({
         name: name.trim(),
         phone: phone.trim(),
+        email: email.trim() || undefined,
         use_case: useCase || undefined,
         practice_specialty:
           useCase === 'specialty_practice' ? practiceSpecialty.trim() || undefined : undefined,
         questions_asked: questionsAsked.trim() || undefined,
-        consent: true
+        consent: true,
+        turnstile_token: turnstileToken || undefined
       });
       saveSignupPrefill({
         name: name.trim(),
         phone: phone.trim(),
+        email: email.trim(),
         use_case: useCase,
         practice_specialty: practiceSpecialty.trim()
       });
@@ -124,11 +156,9 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
             <div className="dc-alert dc-alert-success">
               <strong>Calling you now!</strong>
               <p>
-                Answer your phone—Somo&apos;s front desk will ask a few quick questions (~2 minutes).
+                Answer your phone — Somo&apos;s front desk will ask a few quick questions (~2 minutes).
+                {email.trim() ? ' We also sent a confirmation to your email.' : ''}
               </p>
-              <a href={signupUrl()} className="dc-btn dc-btn-primary">
-                Sign up for Somo
-              </a>
             </div>
           ) : (
             <form onSubmit={onSubmit} className="dc-form">
@@ -145,6 +175,22 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
                   aria-labelledby="demo-name-label"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  disabled={status === 'loading'}
+                />
+              </label>
+
+              <label className="dc-field dc-field-underline">
+                <span className="dc-label" id="demo-email-label">
+                  Work email
+                </span>
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  aria-labelledby="demo-email-label"
+                  placeholder="you@practice.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   disabled={status === 'loading'}
                 />
               </label>
@@ -196,10 +242,13 @@ export default function DemoSection({ selectedUseCase = '', onUseCaseChange }) {
                   disabled={status === 'loading'}
                 />
                 <span>
-                  I agree to receive a one-time automated demo call at the number above. If I ask during the call,
-                  Somo may text me a signup link at this same number (message and data rates may apply).
+                  I agree to receive a one-time automated demo call at the number above and occasional
+                  product email at the address provided. Somo may email you a signup link if you ask
+                  during the call.
                 </span>
               </label>
+
+              {turnstileSiteKey ? <div ref={turnstileRef} className="dc-turnstile" /> : null}
 
               {error && (
                 <p className="dc-alert dc-alert-error" role="alert">

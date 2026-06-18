@@ -119,7 +119,7 @@ The active database path is chosen in [`middleware-platform/database.js`](../../
 
 | Variable | Purpose | Dev typical | Prod typical |
 |----------|---------|-------------|--------------|
-| `DB_PATH` | **Highest priority** — absolute or cwd-relative path to the `.db` file | `./middleware-dev.db` (see repo [`run`](../../run)) | Set explicitly on App Service |
+| `DB_PATH` | **Highest priority** — absolute or cwd-relative path to the `.db` file | `./var/db/middleware-dev.db` (see [`scripts/dev/run.sh`](../../scripts/dev/run.sh)) | Set explicitly on App Service |
 | `DB_NAME` | Filename only when `DB_PATH` unset | *(unset → `middleware-dev.db`)* | `middleware-prod.db` |
 | `NODE_ENV` | Selects default filename when `DB_NAME` unset | `development` | `production` |
 | `POSTGRES_URL` | Optional Postgres pool + sync mirror (not full SQLite replacement) | Usually unset | Set when using managed Postgres |

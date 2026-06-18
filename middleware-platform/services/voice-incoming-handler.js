@@ -35,6 +35,12 @@ function createVoiceIncomingHandler(deps) {
     const somoDemoProspectName = req.query.prospect_name
       ? decodeURIComponent(String(req.query.prospect_name))
       : null;
+    const somoDemoPracticeSpecialty = req.query.practice_specialty
+      ? decodeURIComponent(String(req.query.practice_specialty))
+      : null;
+    const somoDemoQuestionsAsked = req.query.questions_asked
+      ? decodeURIComponent(String(req.query.questions_asked))
+      : null;
 
     const isOutboundSales = isOutboundRequest(req, isSomoDemoDemo);
     const leadId = req.query.lead_id;
@@ -318,8 +324,14 @@ function createVoiceIncomingHandler(deps) {
       dynamicVariables.use_case = String(useCaseKey);
       dynamicVariables.use_case_label = String(ctx.use_case_label);
       dynamicVariables.use_case_opener = String(ctx.use_case_opener);
+      if (somoDemoPracticeSpecialty) {
+        dynamicVariables.practice_specialty = String(somoDemoPracticeSpecialty);
+      }
+      if (somoDemoQuestionsAsked) {
+        dynamicVariables.questions_asked = String(somoDemoQuestionsAsked);
+      }
       dynamicVariables.call_type = 'somo_demo';
-      dynamicVariables.persona_name = 'Sam';
+      dynamicVariables.persona_name = 'Kelly';
       if (demoRequestId) dynamicVariables.demo_request_id = String(demoRequestId);
       try {
         const tpl = resolveSomoDemoTemplate({ use_case: useCaseKey });

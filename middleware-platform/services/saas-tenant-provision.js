@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-const { resolveUseCaseTemplate } = require('./prompt-profile-templates');
+const { resolveUseCaseTemplate, resolveSpecialtyToUseCase } = require('./prompt-profile-templates');
 const { FALLBACKS, DEFAULT_FALLBACK, getPricingFallback } = require('../config/pricing-fallbacks');
 
 function slugify(name) {
@@ -33,25 +33,52 @@ function seedPromptProfile(dbModule, { clinicId, customerId, useCase, clinicName
     }
 
     const profileId = uuidv4();
+    const policyPayload = template.policy || {};
     const metadata = JSON.stringify({
       use_case: useCase || 'healthcare_clinic',
-      tenant_policy: template.policy || {}
+      tenant_policy: policyPayload
     });
-    dbModule.db.prepare(`
-      INSERT INTO prompt_profiles (
-        id, clinic_id, customer_id, name, specialty,
-        system_prompt, allowed_tools, version, status, metadata, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'v1', 'active', ?, datetime('now'), datetime('now'))
-    `).run(
-      profileId,
-      clinicId,
-      customerId,
-      `${clinicName || 'Practice'} — ${template.specialty}`,
-      template.specialty,
-      template.system_prompt,
-      JSON.stringify(template.allowed_tools),
-      metadata
-    );
+    const policyJson = JSON.stringify(policyPayload);
+    const cols = dbModule.db.prepare(`PRAGMA table_info(prompt_profiles)`).all();
+    const colNames = new Set(cols.map((c) => c.name));
+    const hasPolicyJson = colNames.has('policy_json');
+    const hasUseCase = colNames.has('use_case');
+
+    if (hasPolicyJson && hasUseCase) {
+      dbModule.db.prepare(`
+        INSERT INTO prompt_profiles (
+          id, clinic_id, customer_id, name, specialty, use_case,
+          system_prompt, allowed_tools, version, status, metadata, policy_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'v1', 'active', ?, ?, datetime('now'), datetime('now'))
+      `).run(
+        profileId,
+        clinicId,
+        customerId,
+        `${clinicName || 'Practice'} — ${template.specialty}`,
+        template.specialty,
+        useCase || 'healthcare_clinic',
+        template.system_prompt,
+        JSON.stringify(template.allowed_tools),
+        metadata,
+        policyJson
+      );
+    } else {
+      dbModule.db.prepare(`
+        INSERT INTO prompt_profiles (
+          id, clinic_id, customer_id, name, specialty,
+          system_prompt, allowed_tools, version, status, metadata, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'v1', 'active', ?, datetime('now'), datetime('now'))
+      `).run(
+        profileId,
+        clinicId,
+        customerId,
+        `${clinicName || 'Practice'} — ${template.specialty}`,
+        template.specialty,
+        template.system_prompt,
+        JSON.stringify(template.allowed_tools),
+        metadata
+      );
+    }
 
     console.log(`✅ [provision] Seeded prompt_profile ${profileId} for clinic ${clinicId} (${useCase || 'healthcare_clinic'})`);
     return profileId;
@@ -211,10 +238,16 @@ function provisionSaasTenant(dbModule, options = {}) {
     dbModule.migrateVoiceAgentSettingsToMerchant(customerId, merchantId);
   }
 
+  const baseUseCase = options.useCase || options.use_case || customer.use_case || 'healthcare_clinic';
+  const effectiveUseCase = resolveSpecialtyToUseCase(
+    options.medicalSpecialty || options.medical_specialty,
+    baseUseCase
+  );
+
   const profileId = seedPromptProfile(dbModule, {
     clinicId,
     customerId,
-    useCase: options.useCase || options.use_case || customer.use_case || 'healthcare_clinic',
+    useCase: effectiveUseCase,
     clinicName: displayName
   });
 
@@ -229,11 +262,7 @@ function provisionSaasTenant(dbModule, options = {}) {
     clinicName: displayName
   });
 
-  seedVisitPricingForClinic(
-    dbModule,
-    clinicId,
-    options.useCase || options.use_case || customer.use_case || 'healthcare_clinic'
-  );
+  seedVisitPricingForClinic(dbModule, clinicId, effectiveUseCase);
 
   ensureStripeMerchantReady(dbModule, customerId).catch(() => {});
 

@@ -1,21 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+    <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Somo Provider — Billing (redirect)</title>
   <!-- Firebase hosting also rewrites /business/billing.html → revenue.html?tab=payments; keep this file for direct opens and legacy links. -->
-  <script src="/assets/js/legacy-provider-redirect.js"></script>
+    <script src="/assets/js/legacy-provider-redirect.js"></script>
   <meta http-equiv="refresh" content="0;url=revenue.html?tab=payments">
 </head>
 <body>
   <p style="font-family:system-ui,sans-serif;padding:24px;color:#374151">
     Billing has moved to <a href="revenue.html?tab=payments">Revenue → Patient pay</a>.
   </p>
-  <script>
+    <script>
     if (!window.location.pathname.includes('revenue.html')) {
       window.location.replace('revenue.html?tab=payments');
-    }
-  </script>
+        }
+    </script>
 </body>
 </html>

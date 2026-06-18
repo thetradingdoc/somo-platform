@@ -6,7 +6,14 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '..', 'middleware.db');
+function resolveDbPath() {
+  if (process.env.DB_PATH) {
+    return path.resolve(process.cwd(), process.env.DB_PATH);
+  }
+  return path.join(__dirname, '..', 'var', 'db', 'middleware-dev.db');
+}
+
+const dbPath = resolveDbPath();
 const db = new Database(dbPath);
 
 try {

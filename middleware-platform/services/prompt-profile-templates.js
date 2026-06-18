@@ -51,6 +51,17 @@ function resolveUseCaseTemplate(useCase) {
   return USE_CASE_PROFILES[useCase] || USE_CASE_PROFILES.healthcare_clinic;
 }
 
+/** Map signup medical_specialty to prompt_profile use_case key. */
+function resolveSpecialtyToUseCase(medicalSpecialty, fallbackUseCase = 'healthcare_clinic') {
+  const raw = String(medicalSpecialty || '').trim().toLowerCase();
+  if (!raw) return fallbackUseCase;
+  if (/derm|skin|rash|mole/.test(raw)) return 'dermatology';
+  if (/mental|psych|therapy|counsel/.test(raw)) return 'healthcare_clinic';
+  if (/dental|dentist|orthodont/.test(raw)) return 'healthcare_clinic';
+  if (USE_CASE_PROFILES[raw.replace(/\s+/g, '_')]) return raw.replace(/\s+/g, '_');
+  return fallbackUseCase;
+}
+
 function getEffectiveTenantPolicy(profile) {
   if (!profile) return USE_CASE_POLICIES.healthcare_clinic;
   let policy = {};
@@ -64,4 +75,9 @@ function getEffectiveTenantPolicy(profile) {
   return { ...USE_CASE_POLICIES[useCase], ...USE_CASE_POLICIES.healthcare_clinic, ...policy };
 }
 
-module.exports = { USE_CASE_PROFILES, resolveUseCaseTemplate, getEffectiveTenantPolicy };
+module.exports = {
+  USE_CASE_PROFILES,
+  resolveUseCaseTemplate,
+  resolveSpecialtyToUseCase,
+  getEffectiveTenantPolicy
+};

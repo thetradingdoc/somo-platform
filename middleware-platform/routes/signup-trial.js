@@ -1081,7 +1081,19 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
           email: customer.email,
           customerType,
           enabledPlatforms,
-          useCase: customer.use_case || 'healthcare_clinic'
+          useCase: customer.use_case || 'healthcare_clinic',
+          medical_specialty: (() => {
+            try {
+              const pp = customer.provider_profile
+                ? typeof customer.provider_profile === 'string'
+                  ? JSON.parse(customer.provider_profile)
+                  : customer.provider_profile
+                : null;
+              return pp?.medical_specialty || null;
+            } catch (_) {
+              return null;
+            }
+          })()
         });
         merchantId = provisioned.merchantId;
         clinicId = provisioned.clinicId;

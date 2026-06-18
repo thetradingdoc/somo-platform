@@ -64,6 +64,51 @@ describe('kelly-activity-feed-service', () => {
     expect(row.icon).toBe('calendar-days');
   });
 
+  test('formatActivityRow maps tool_completed cancel_appointment', () => {
+    const row = formatActivityRow({
+      id: 'e5',
+      event_type: 'tool_completed',
+      created_at: '2026-06-01T12:12:00Z',
+      session_id: 'sess-2',
+      payload_json: JSON.stringify({
+        tool_name: 'cancel_appointment',
+        patient_name: 'Alex Kim',
+      }),
+    });
+    expect(row.headline).toContain('canceled');
+    expect(row.headline).toContain('Alex Kim');
+    expect(row.icon).toBe('calendar-xmark');
+  });
+
+  test('formatActivityRow maps appointment_cancelled', () => {
+    const row = formatActivityRow({
+      id: 'e6',
+      event_type: 'appointment_cancelled',
+      created_at: '2026-06-01T12:13:00Z',
+      session_id: 'sess-3',
+      payload_json: JSON.stringify({
+        patient_name: 'Jamie Lee',
+        appointment_id: 'appt-1',
+      }),
+    });
+    expect(row.headline).toContain('Jamie Lee');
+    expect(row.href).toContain('calendar.html');
+  });
+
+  test('formatActivityRow maps appointment_rescheduled', () => {
+    const row = formatActivityRow({
+      id: 'e7',
+      event_type: 'appointment_rescheduled',
+      created_at: '2026-06-01T12:14:00Z',
+      payload_json: JSON.stringify({
+        patient_name: 'Sam Park',
+        when: 'Tomorrow 2pm',
+      }),
+    });
+    expect(row.headline).toContain('rescheduled');
+    expect(row.subline).toContain('Tomorrow 2pm');
+  });
+
   test('listActivityForClinic returns array for unknown clinic', () => {
     const items = listActivityForClinic('clinic-nonexistent-test', { limit: 5 });
     expect(Array.isArray(items)).toBe(true);
