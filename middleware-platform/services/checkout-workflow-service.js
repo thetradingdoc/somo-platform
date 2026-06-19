@@ -26,11 +26,8 @@ function ensureSessionMetaTable() {
 function setSessionMeta(sessionId, key, value) {
   try {
     if (!sessionId || !key) return;
-    ensureSessionMetaTable();
-    db.db.prepare(`
-      INSERT OR REPLACE INTO kelly_session_meta_kv (session_id, meta_key, value, updated_at)
-      VALUES (?, ?, ?, datetime('now'))
-    `).run(String(sessionId), String(key), String(value));
+    const KellyToolExecutor = require('./kelly-tool-executor');
+    KellyToolExecutor._setSessionMeta(String(sessionId), String(key), String(value));
   } catch (_) {}
 }
 

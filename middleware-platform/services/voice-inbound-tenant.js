@@ -95,14 +95,36 @@ function resolveInboundRetellAgent({
   return { retellAgentId: fallback, failClosed: false, reason: null };
 }
 
-function buildMissingRetellTwiml(message) {
+function buildMissingRetellTwiml(message, opts = {}) {
   const msg =
     message ||
     'Your clinic line is not fully configured yet. Please try again later or contact support.';
   const safe = String(msg).replace(/[<>&"']/g, '');
+  const { attemptEscalation, normalizeE164 } = require('./escalation-service');
+  let dial = '';
+  if (opts.db || opts.clinicId || opts.customerId) {
+    try {
+      const esc = attemptEscalation(opts.db, {
+        clinicId: opts.clinicId,
+        customerId: opts.customerId,
+        reason: opts.reason || 'ingress_fail_closed',
+        sessionId: opts.sessionId,
+        callId: opts.callId,
+        locale: opts.locale || 'en',
+        reply: msg
+      });
+      const pstn = normalizeE164(esc.transfer_number || esc.pstn_target);
+      if (pstn && esc.outcome === 'transfer_requested') {
+        dial = `\n  <Dial>${pstn.replace(/[<>&"']/g, '')}</Dial>`;
+      }
+    } catch (_) {}
+  } else if (opts.transferNumber) {
+    const pstn = String(opts.transferNumber).replace(/[<>&"']/g, '');
+    if (pstn) dial = `\n  <Dial>${pstn}</Dial>`;
+  }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">${safe}</Say>
+  <Say voice="Polly.Joanna">${safe}</Say>${dial}
   <Hangup/>
 </Response>`;
 }

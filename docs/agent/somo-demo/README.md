@@ -40,6 +40,8 @@ sequenceDiagram
   Demo-->>Retell: conversion replies + tools
 ```
 
+**WS gate (R-4 / DOC-3):** `isSomoDemoDemoConnection()` returns true when `call_type=somo_demo` **or** inbound `to_number` matches `isDemoTwilioNumber()` — not metadata-only.
+
 ## Phases
 
 | Phase | Scope | Exit criteria |

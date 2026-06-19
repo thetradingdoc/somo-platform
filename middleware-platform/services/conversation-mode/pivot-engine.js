@@ -2,7 +2,7 @@
 
 const { ConversationMode, Subrail, UserIntent } = require('./conversation-mode-types');
 const { PivotEvent } = require('./pivot-events');
-const { detectIntents, isEmergency, isCancelRebookUtterance } = require('./intent-detector');
+const { detectIntents, isEmergency, isCancelRebookUtterance, hasSymptomEvidence } = require('./intent-detector');
 const { normalizeForIntentDetection } = require('./asr-normalize');
 const { canPivotToBilling, canPivotToRecords, canPivotToClinical } = require('./tenant-policy');
 
@@ -107,6 +107,7 @@ function evaluateTurn(input = {}) {
 
   if (
     primary === UserIntent.SYMPTOM &&
+    hasSymptomEvidence(utterance) &&
     canPivotToClinical(policy) &&
     currentMode === ConversationMode.TENANT_INBOUND_ADMIN &&
     !session.rebook_after_cancel &&

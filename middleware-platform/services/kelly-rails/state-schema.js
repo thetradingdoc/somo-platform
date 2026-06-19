@@ -89,13 +89,9 @@ const POST_VISIT_SIGNALS = [
 
 const RECORDS_SIGNALS = ['last visit', 'my records', 'medical history', 'what did my doctor'];
 
+/** Symptom-only tokens — admin/booking words live in intent-detector BOOK phrases (I-1). */
 const CLINICAL_SIGNALS = [
-  'see a doctor',
   'see a dermatolog',
-  'appointment',
-  'book',
-  'visit',
-  'clinic',
   'rash',
   'leg',
   'neck',
@@ -127,12 +123,7 @@ const CLINICAL_SIGNALS = [
   'síntoma',
   'sintoma',
   'fiebre',
-  'cita',
-  'doctor',
   'dermatolog',
-  'visita',
-  'clínica',
-  'clinica',
   'picor',
   'comezón',
   'comezon',
@@ -259,6 +250,19 @@ function normalizeState(input = {}) {
 function routeOrchestratorLane(state = {}) {
   const msg = String(state.last_user_message || '').toLowerCase();
   const flags = state.flags || {};
+  const db = require('../../database');
+  const sessionRow = state.session_id && db.getTriageSession ? db.getTriageSession(state.session_id) : null;
+  const { guardClinicalRoute } = require('./enter-clinical-lane');
+  const { isAdminBookingPhrase } = require('../conversation-mode/intent-detector');
+
+  function finalizeRoute(route) {
+    return guardClinicalRoute(route, {
+      message: state.last_user_message,
+      triageRow: sessionRow,
+      conversationMode: state.conversation_mode,
+      activeSubrail: state.active_subrail || flags.active_subrail
+    });
+  }
 
   if (flags.pending_human_handoff || flags.safety_blocked) {
     return { lane: KELLY_LANE.SUPPORT, step: 'handoff' };
@@ -306,6 +310,10 @@ function routeOrchestratorLane(state = {}) {
     }
   } catch (_) {}
 
+  if (isAdminBookingPhrase(msg)) {
+    return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
+  }
+
   const clinicalHit = CLINICAL_SIGNALS.some((s) => msg.includes(s));
   const educationHit = EDUCATION_SIGNALS.some((s) => msg.includes(s));
 
@@ -314,22 +322,20 @@ function routeOrchestratorLane(state = {}) {
   }
 
   if (flags.routine_intake_active && clinicalHit) {
-    return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+    return finalizeRoute({ lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] });
   }
 
   if (clinicalHit && !flags.routine_intake_active) {
     if (!flags.basic_intake_complete) {
-      return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+      return finalizeRoute({ lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] });
     }
-    return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+    return finalizeRoute({ lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] });
   }
 
   if (flags.appointment_id && flags.copay_amount && /pay|copay|payment/i.test(msg)) {
     return { lane: KELLY_LANE.PAYMENT, step: LANE_FIRST_STEP[KELLY_LANE.PAYMENT] };
   }
 
-  const db = require('../../database');
-  const sessionRow = state.session_id && db.getTriageSession ? db.getTriageSession(state.session_id) : null;
   const { opqrstCompleteForSession } = require('./gates/shared');
   const opqrstOk = opqrstCompleteForSession(sessionRow, {
     clinicId: state.clinic_id,
@@ -353,13 +359,13 @@ function routeOrchestratorLane(state = {}) {
 
   if (educationHit && !flags.routine_intake_active) {
     if (clinicalHit) {
-      return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+      return finalizeRoute({ lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] });
     }
     return { lane: KELLY_LANE.SUPPORT, step: LANE_FIRST_STEP[KELLY_LANE.SUPPORT] };
   }
 
   if (clinicalHit) {
-    return { lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] };
+    return finalizeRoute({ lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] });
   }
 
   return { lane: KELLY_LANE.BASIC_INTAKE, step: LANE_FIRST_STEP[KELLY_LANE.BASIC_INTAKE] };

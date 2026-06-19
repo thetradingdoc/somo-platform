@@ -3594,7 +3594,13 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
           fhirPatient = db.getFHIRPatientByEmail(checkout.customer_email);
         }
         if (!fhirPatient && checkout.customer_phone) {
-          fhirPatient = db.getFHIRPatientByPhone(checkout.customer_phone);
+          const { findFHIRPatientForVoice } = require('./services/fhir-voice-lookup');
+          fhirPatient = findFHIRPatientForVoice(db, {
+            phone: checkout.customer_phone,
+            clinicId: checkout.clinic_id,
+            customerId: checkout.customer_id,
+            requireClinicScope: !!checkout.clinic_id
+          });
         }
 
         if (!fhirPatient) {
@@ -8098,7 +8104,12 @@ app.get('/api/v1/patient/receipts', apiLimiter, requirePatientSession, async (re
       patient = db.getFHIRPatientByEmail(sessionValidation.email);
     }
     if (!patient && sessionValidation.phone) {
-      patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+      const { findFHIRPatientForVoice } = require('./services/fhir-voice-lookup');
+      patient = findFHIRPatientForVoice(db, {
+        phone: sessionValidation.phone,
+        clinicId: sessionValidation.clinic_id || null,
+        requireClinicScope: !!sessionValidation.clinic_id
+      });
     }
     const patientId = patient ? patient.resource_id : (sessionValidation.patient_id || null);
     const receipts = db.getMergedReceiptsForPatient

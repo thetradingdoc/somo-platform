@@ -268,6 +268,12 @@
           return;
         }
 
+        function getVaClinicId() {
+          return typeof window.ppGetClinicId === 'function'
+            ? window.ppGetClinicId()
+            : customer?.clinic_id || customer?.clinicId || 'clinic-default';
+        }
+
         hoursPickerApi = VoiceHoursPicker.mount(document.getElementById('vaHoursPicker'), {
           onChange: scheduleAutosave
         });
@@ -561,6 +567,7 @@
         try {
           const result = await VoiceAgentPage.saveVoiceSettings({
             enabled: kellyEnabled,
+            clinic_id: getVaClinicId(),
             greeting: document.getElementById('vaGreeting').value.trim(),
             after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
             business_hours: hoursPickerApi ? hoursPickerApi.getValue() : null,
@@ -587,6 +594,7 @@
         try {
           const result = await VoiceAgentPage.saveVoiceSettings({
             enabled: kellyEnabled,
+            clinic_id: getVaClinicId(),
             greeting: document.getElementById('vaGreeting').value.trim() || null,
             after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
             business_hours: hoursPickerApi.getValue(),
@@ -661,6 +669,7 @@
         try {
           const result = await VoiceAgentPage.saveVoiceSettings({
             enabled: kellyEnabled,
+            clinic_id: getVaClinicId(),
             outbound_opener: document.getElementById('vaOutboundOpener').value.trim(),
             outbound_enabled: document.getElementById('vaOutboundEnabled').checked,
             retell_agent_id: cachedSettings?.retell_agent_id || null,

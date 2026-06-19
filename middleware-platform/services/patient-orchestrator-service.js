@@ -152,13 +152,44 @@ function getOrCreateSession(params) {
   // Only fall back to caller_phone/patient_id when no explicit session_id was provided,
   // or when session_id matched an existing row (session already set above).
   if (!session && !session_id && caller_phone) {
-    session = db.getOrchestrateSessionByCallerPhone(caller_phone);
+    const isVoice = String(channel || '').toLowerCase() === 'voice';
+    const resumeOpts = {
+      clinicId: clinic_id || null,
+      customerId: params.customer_id || params.customerId || null,
+      requireClinicScope: isVoice
+    };
+    if (isVoice && !clinic_id) {
+      try {
+        db.insertKellyCallEvent?.({
+          session_id: session_id || null,
+          event_type: 'orchestrator_resume_blocked_no_clinic',
+          payload_json: { caller_phone, channel }
+        });
+      } catch (_) {}
+    } else {
+      session = db.getOrchestrateSessionByCallerPhone(caller_phone, resumeOpts);
+    }
     if (session) {
       session = { ...session, resumed_from_voice: true };
     }
   }
   if (!session && !session_id && patient_id) {
-    const rows = db.db.prepare('SELECT * FROM patient_orchestrate_sessions WHERE patient_id = ? AND status = ? ORDER BY last_activity_at DESC LIMIT 1').all(patient_id, 'active');
+    let sql = 'SELECT * FROM patient_orchestrate_sessions WHERE patient_id = ? AND status = ?';
+    const sqlParams = [patient_id, 'active'];
+    if (clinic_id) {
+      sql += ' AND clinic_id = ?';
+      sqlParams.push(clinic_id);
+    } else if (String(channel || '').toLowerCase() === 'voice') {
+      try {
+        db.insertKellyCallEvent?.({
+          session_id: session_id || null,
+          event_type: 'orchestrator_resume_blocked_no_clinic',
+          payload_json: { patient_id, channel }
+        });
+      } catch (_) {}
+      sql = null;
+    }
+    const rows = sql ? db.db.prepare(`${sql} ORDER BY last_activity_at DESC LIMIT 1`).all(...sqlParams) : [];
     session = rows && rows[0] ? { ...rows[0], conversation_history: rows[0].conversation_history ? JSON.parse(rows[0].conversation_history) : [], flow_state: rows[0].flow_state ? JSON.parse(rows[0].flow_state) : {} } : null;
   }
 
@@ -319,15 +350,25 @@ async function orchestrate(input) {
   // Phase 3.2: Generate case number at first meaningful turn (turn_count === 1)
   if (session.turn_count === 1 && !state.case_id && db.createCaseRecord) {
     try {
-      const caseNumber = `CR-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-      db.createCaseRecord({
-        id: uuidv4(),
-        case_number: caseNumber,
-        session_id: session.session_id,
-        channel,
-        status: 'draft'
+      const { extractTenantWriteContext, tenantWriteAllowed } = require('./tenant-write-context');
+      const tenantCtx = extractTenantWriteContext({
+        clinic_id: session.clinic_id,
+        customer_id: session.flow_state?.customer_id || input.customer_id,
+        site_context_status: input.site_context_status
       });
-      state.case_id = caseNumber;
+      if (channel !== 'voice' || tenantWriteAllowed(tenantCtx)) {
+        const caseNumber = `CR-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+        db.createCaseRecord({
+          id: uuidv4(),
+          case_number: caseNumber,
+          session_id: session.session_id,
+          channel,
+          status: 'draft',
+          clinic_id: tenantCtx.clinicId || session.clinic_id || null,
+          customer_id: tenantCtx.customerId || input.customer_id || null
+        });
+        state.case_id = caseNumber;
+      }
     } catch (e) {
       console.warn('[orchestrator] createCaseRecord failed:', e?.message || e);
     }

@@ -43,12 +43,17 @@ for (const item of deprecated) {
   }
 }
 
-if (staleRootDb.length) {
-  console.warn(`⚠ stale root SQLite (run scripts/dev/run.sh to archive): ${staleRootDb.join(', ')}`);
-}
-
 const devDbLegacy = path.join(MP, 'middleware-dev.db');
 const devDbCanonical = path.join(MP, 'var/db/middleware-dev.db');
+
+if (staleRootDb.length) {
+  console.warn(`⚠ stale root SQLite outside var/db/ (archive or remove): ${staleRootDb.join(', ')}`);
+}
+
+if (fs.existsSync(devDbLegacy) && !fs.existsSync(devDbCanonical)) {
+  console.warn('⚠ middleware-platform/middleware-dev.db exists outside var/db/ — use var/db/middleware-dev.db');
+}
+
 if (fs.existsSync(devDbLegacy) && fs.existsSync(devDbCanonical)) {
   console.warn('⚠ split-brain: both middleware-platform/middleware-dev.db and var/db/middleware-dev.db exist');
 }

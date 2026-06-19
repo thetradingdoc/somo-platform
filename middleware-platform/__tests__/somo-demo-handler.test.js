@@ -14,6 +14,15 @@ jest.mock('../services/somo-demo-sms', () => ({
   sendSignupLink: jest.fn().mockResolvedValue({ sent: true })
 }));
 
+jest.mock('../services/somo-demo-email', () => ({
+  sendSignupEmail: jest.fn().mockResolvedValue({ sent: true })
+}));
+
+jest.mock('../services/somo-demo-service', () => ({
+  ...jest.requireActual('../services/somo-demo-service'),
+  upsertLeadFromDemoRequest: jest.fn()
+}));
+
 jest.mock('../services/kelly-rails/language', () => ({
   evaluateFirstTurnLanguage: jest.fn(() => ({
     language: 'en',
@@ -27,6 +36,7 @@ describe('somo-demo-handler', () => {
   const db = require('../database');
   const language = require('../services/kelly-rails/language');
   const sheetsSync = require('../services/somo-demo-sheets-sync');
+  const somoDemoEmail = require('../services/somo-demo-email');
 
   afterEach(() => {
     if (origEnabled !== undefined) process.env.SOMO_DEMO_ENABLED = origEnabled;
@@ -34,7 +44,7 @@ describe('somo-demo-handler', () => {
     jest.clearAllMocks();
   });
 
-  test('isSomoDemoDemoConnection requires flag and call_type', () => {
+  test('isSomoDemoDemoConnection via call_type somo_demo', () => {
     process.env.SOMO_DEMO_ENABLED = '1';
     const { isSomoDemoDemoConnection } = require('../webhooks/somo-demo-handler');
 
@@ -47,7 +57,8 @@ describe('somo-demo-handler', () => {
 
     const prodConn = {
       callMetadata: {
-        metadata: { call_type: 'inbound' }
+        metadata: { call_type: 'inbound' },
+        to_number: '+15551234567'
       }
     };
     expect(isSomoDemoDemoConnection(prodConn)).toBe(false);
@@ -189,6 +200,39 @@ describe('somo-demo-handler', () => {
     );
     expect(sheetsSync.appendEventLog).toHaveBeenCalledWith(
       expect.objectContaining({ event_type: 'call_ended' })
+    );
+  });
+
+  test('end_call triggers post-call signup email and lead sync', async () => {
+    process.env.SOMO_DEMO_ENABLED = '1';
+    db.getSomoDemoRequest.mockReturnValue({
+      id: 'req-end',
+      name: 'Alex',
+      phone: '+15551112222',
+      email: 'alex@example.com',
+      use_case: 'medical_clinic',
+      signup_link_sent: 0
+    });
+    const demoService = require('../services/somo-demo-service');
+
+    const { handleDemoFunctionCall } = require('../webhooks/somo-demo-handler');
+    const connection = {
+      callMetadata: {
+        dynamic_variables: { demo_request_id: 'req-end', prospect_name: 'Alex' }
+      },
+      conversationHistory: [],
+      ws: { send: jest.fn() }
+    };
+    await handleDemoFunctionCall('call-end', connection, {
+      function_call: { name: 'end_call', id: 'fc-1', arguments: {} }
+    });
+
+    expect(somoDemoEmail.sendSignupEmail).toHaveBeenCalledWith(
+      'alex@example.com',
+      expect.objectContaining({ prospectName: 'Alex' })
+    );
+    expect(demoService.upsertLeadFromDemoRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ demoRequestId: 'req-end', email: 'alex@example.com' })
     );
   });
 });

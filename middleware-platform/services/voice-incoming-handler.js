@@ -66,6 +66,26 @@ function createVoiceIncomingHandler(deps) {
     let customerId = account.customerId;
     let matchedCustomer = account.matchedCustomer;
 
+    let siteContextForMetadata = null;
+    let voiceContextForCall = null;
+    try {
+      const { resolveCallSiteContext } = require('./call-site-context');
+      const { buildVoiceCallContext, runtimeClinicId, canPrepopulatePatient, toRetellMetadata } = require('./voice-call-context');
+      const siteCtx = resolveCallSiteContext({
+        db,
+        to_number: normalizedToNumber,
+        customer_id: customerId,
+        clinic_id: clinicId,
+        call_type: resolvedCallType,
+        direction: isOutboundSales ? 'outbound' : 'inbound',
+        isSomoDemoDemo
+      });
+      siteContextForMetadata = siteCtx;
+      voiceContextForCall = buildVoiceCallContext({ siteContext: siteCtx });
+      customerId = siteCtx.customer_id || customerId;
+      clinicId = runtimeClinicId(voiceContextForCall) || null;
+    } catch (_) {}
+
     let retellAgentId = isOutboundSales
       ? resolveOutboundRetellAgent(req, matchedCustomer, defaultAgentId)
       : defaultAgentId;
@@ -174,7 +194,8 @@ function createVoiceIncomingHandler(deps) {
         const VoiceAgentRuntime = require('./voice-agent-runtime');
         const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
           merchantId: matchedCustomer.merchant_id,
-          customerId: matchedCustomer.id
+          customerId: matchedCustomer.id,
+          clinicId: clinicId || undefined
         });
         const admission = VoiceAgentRuntime.evaluateCallAdmission(runtime);
         if (!admission.allowed) {
@@ -248,6 +269,11 @@ function createVoiceIncomingHandler(deps) {
     }
     if (clinicId) {
       metadata.clinic_id = clinicId;
+    }
+    if (siteContextForMetadata) {
+      metadata.site_context_status = siteContextForMetadata.site_context_status;
+      metadata.clinic_id_source = siteContextForMetadata.clinic_id_source;
+      metadata.to_number = normalizedToNumber;
     }
     const appointmentIdFromQuery = req.query.appointment_id
       ? String(req.query.appointment_id).trim()
@@ -362,6 +388,26 @@ function createVoiceIncomingHandler(deps) {
     if (clinicId) {
       dynamicVariables.clinic_id = String(clinicId);
     }
+    if (siteContextForMetadata) {
+      const { toRetellMetadata, buildVoiceCallContext, canPrepopulatePatient } = require('./voice-call-context');
+      const vctx = voiceContextForCall || buildVoiceCallContext({ siteContext: siteContextForMetadata });
+      const trustedMeta = toRetellMetadata(vctx);
+      if (trustedMeta.site_context_status) {
+        dynamicVariables.site_context_status = String(trustedMeta.site_context_status);
+      }
+      if (trustedMeta.clinic_id_source) {
+        dynamicVariables.clinic_id_source = String(trustedMeta.clinic_id_source);
+      }
+      if (trustedMeta.clinic_id) {
+        dynamicVariables.clinic_id = String(trustedMeta.clinic_id);
+        metadata.clinic_id = trustedMeta.clinic_id;
+      } else if (dynamicVariables.clinic_id && !canPrepopulatePatient(vctx)) {
+        delete dynamicVariables.clinic_id;
+        delete metadata.clinic_id;
+      }
+      metadata.site_context_status = siteContextForMetadata.site_context_status;
+      metadata.clinic_id_source = siteContextForMetadata.clinic_id_source;
+    }
     if (customerId) {
       dynamicVariables.customer_id = String(customerId);
     }
@@ -379,14 +425,31 @@ function createVoiceIncomingHandler(deps) {
       dynamicVariables.direction = 'outbound';
     }
 
-    // Pre-populate patient context for cost optimization (P1 - reduce data entry during call)
+    // Pre-populate patient context only when site is verified (no global FHIR fallback)
     if (!isOutboundSales && req.body.From) {
       try {
+        const { buildVoiceCallContext, canPrepopulatePatient } = require('./voice-call-context');
+        const vctx =
+          voiceContextForCall ||
+          buildVoiceCallContext({ siteContext: siteContextForMetadata || {} });
+        if (!canPrepopulatePatient(vctx)) {
+          // skip pre-pop — safer than wrong patient
+        } else {
         const callerPhone = SMSService.formatPhoneNumber(req.body.From);
-        let patient = db.getFHIRPatientByPhone(callerPhone);
+        const { findFHIRPatientForVoice } = require('./fhir-voice-lookup');
+        const lookupOpts = {
+          phone: callerPhone,
+          clinicId: vctx.clinic_id,
+          customerId: vctx.customer_id || metadata.customer_id || null,
+          merchantId: siteContextForMetadata?.merchant_id || metadata.merchant_id || null,
+          requireClinicScope: true
+        };
+        let patient = findFHIRPatientForVoice(db, lookupOpts);
         if (!patient) {
           const altPhone = normalizePhoneNumber(req.body.From);
-          if (altPhone !== callerPhone) patient = db.getFHIRPatientByPhone(altPhone);
+          if (altPhone !== callerPhone) {
+            patient = findFHIRPatientForVoice(db, { ...lookupOpts, phone: altPhone });
+          }
         }
         if (patient) {
           const data = patient.resource_data && typeof patient.resource_data === 'object' ? patient.resource_data : {};
@@ -397,6 +460,7 @@ function createVoiceIncomingHandler(deps) {
           if (patientName) dynamicVariables.patient_name = String(patientName);
           dynamicVariables.has_insurance = hasInsurance ? 'yes' : 'no';
           console.log(`✅ Pre-populated patient context: ${patientName || patient.resource_id} (insurance: ${dynamicVariables.has_insurance})`);
+        }
         }
       } catch (e) {
         console.warn('⚠️  Patient pre-population failed:', e.message);
@@ -447,6 +511,36 @@ function createVoiceIncomingHandler(deps) {
       callId = retellRegisterResp.data.call_id;
       console.log('✅ Call registered! Call ID:', callId);
 
+      if (callId && siteContextForMetadata) {
+        setImmediate(() => {
+          try {
+            db.upsertCallSiteContext?.({
+              session_id: callId,
+              call_id: callId,
+              to_number: normalizedToNumber,
+              customer_id: customerId,
+              clinic_id: clinicId,
+              clinic_id_source: siteContextForMetadata.clinic_id_source,
+              site_context_status: siteContextForMetadata.site_context_status
+            });
+            db.insertKellyCallEvent?.({
+              session_id: callId,
+              call_id: callId,
+              clinic_id: clinicId,
+              customer_id: customerId,
+              event_type: 'call_site_context_resolved',
+              payload_json: {
+                site_context_status: siteContextForMetadata.site_context_status,
+                clinic_id_source: siteContextForMetadata.clinic_id_source,
+                to_number: normalizedToNumber
+              }
+            });
+          } catch (siteErr) {
+            console.warn('⚠️  call_site_context ingress:', siteErr.message);
+          }
+        });
+      }
+
       if (callId && (customerId || clinicId)) {
         setImmediate(() => {
           try {
@@ -469,7 +563,13 @@ function createVoiceIncomingHandler(deps) {
               customerId,
               call_type: callTypeForMode,
               direction: callDirection,
-              tenantResolved: !!(clinicId || customerId),
+              tenantResolved: require('./voice-routing-world').isTenantResolvedForMode(customerId),
+              routing_world: isSomoDemoDemo
+                ? 'demo'
+                : customerId
+                  ? 'tenant'
+                  : 'unidentified',
+              site_context_status: voiceContextForCall?.site_context_status || null,
               appointmentId: appointmentIdFromQuery,
               outbound_purpose: outboundPurposeFromQuery,
               firstUtterance
@@ -488,7 +588,11 @@ function createVoiceIncomingHandler(deps) {
               });
               const settingsRow = db.getVoiceAgentSettingsForProvider?.({
                 merchantId: merchantId || matchedCustomer?.merchant_id,
-                customerId
+                customerId,
+                clinicId:
+                  siteContextForMetadata?.site_context_status === 'verified'
+                    ? siteContextForMetadata.clinic_id || clinicId
+                    : clinicId || null
               });
               const openerBundle = resolveCallOpeners({
                 settings: settingsRow || {},

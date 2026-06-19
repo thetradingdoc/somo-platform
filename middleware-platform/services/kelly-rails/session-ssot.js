@@ -7,6 +7,7 @@
 
 const db = require('../../database');
 const KellyToolExecutor = require('../kelly-tool-executor');
+const { isCommerceMetaKey } = require('./meta-kv-policy');
 
 function laneToOrchestratorPhase(lane) {
   const map = {
@@ -26,31 +27,16 @@ function laneToOrchestratorPhase(lane) {
 function mirrorMetaFromPayload(sessionId, payload = {}) {
   const sid = String(sessionId || '').trim();
   if (!sid) return;
+  const mirrorOpts = { fromMirror: true };
   try {
-    KellyToolExecutor._setSessionMeta(sid, 'kelly_rails_v2', '1');
-    KellyToolExecutor._setSessionMeta(sid, 'kelly_graph_active', '1');
-    const exportLane = String(payload.active_lane || '');
-    if (exportLane) {
-      KellyToolExecutor._setSessionMeta(sid, 'kelly_graph_branch', exportLane);
-      KellyToolExecutor._setSessionMeta(sid, 'kelly_orchestrator_phase', laneToOrchestratorPhase(exportLane));
-    }
-    if (payload.active_subrail) {
-      KellyToolExecutor._setSessionMeta(sid, 'active_subrail', payload.active_subrail);
-    }
-    if (payload.conversation_mode) {
-      KellyToolExecutor._setSessionMeta(sid, 'conversation_mode', payload.conversation_mode);
-    }
+    const commerceEntries = [];
     if (payload.last_appointment_id) {
-      KellyToolExecutor._setSessionMeta(sid, 'last_appointment_id', payload.last_appointment_id);
+      commerceEntries.push(['last_appointment_id', payload.last_appointment_id]);
     }
-    if (payload.locale) {
-      KellyToolExecutor._setSessionMeta(sid, 'kelly_session_locale', payload.locale);
-    }
-    if (payload.step) {
-      KellyToolExecutor._setSessionMeta(sid, 'kelly_graph_step', payload.step);
-    }
-    if (payload.gate_matched) {
-      KellyToolExecutor._setSessionMeta(sid, 'last_gate_matched', payload.gate_matched);
+    for (const [key, value] of commerceEntries) {
+      if (value != null && isCommerceMetaKey(key)) {
+        KellyToolExecutor._setSessionMeta(sid, key, String(value), mirrorOpts);
+      }
     }
   } catch (_) {}
 }
@@ -92,21 +78,25 @@ function postgresSsotEnabled() {
   return !!(process.env.POSTGRES_URL && process.env.KELLY_RAILS_SSOT_POSTGRES === '1');
 }
 
-async function mirrorProjectionToPostgres(sessionId, payload) {
+async function mirrorProjectionToPostgres(sessionId, payload, tenant = {}) {
   if (!postgresSsotEnabled()) return;
   try {
     const { createPool } = require('../../utils/postgres');
     const sql = createPool();
     await ensurePostgresProjectionTable(sql);
+    const clinicId = tenant.clinic_id || tenant.clinicId || payload.clinic_id || null;
+    const customerId = tenant.customer_id || tenant.customerId || payload.customer_id || null;
     await sql`
       INSERT INTO kelly_rails_session_projection (
-        session_id, active_lane, step, flags_json, appointment_id, runtime, updated_at
+        session_id, active_lane, step, flags_json, appointment_id, clinic_id, customer_id, runtime, updated_at
       ) VALUES (
         ${sessionId},
         ${payload.active_lane},
         ${payload.step},
         ${sql.json(payload)},
         ${payload.appointment_id},
+        ${clinicId},
+        ${customerId},
         'kelly_rails_v2',
         NOW()
       )
@@ -115,6 +105,8 @@ async function mirrorProjectionToPostgres(sessionId, payload) {
         step = EXCLUDED.step,
         flags_json = EXCLUDED.flags_json,
         appointment_id = EXCLUDED.appointment_id,
+        clinic_id = COALESCE(EXCLUDED.clinic_id, kelly_rails_session_projection.clinic_id),
+        customer_id = COALESCE(EXCLUDED.customer_id, kelly_rails_session_projection.customer_id),
         runtime = EXCLUDED.runtime,
         updated_at = NOW()
     `;
@@ -145,6 +137,17 @@ function persistRailsSessionState(sessionId, state = {}) {
   if (!sid) return;
   ensureProjectionTable();
   const flags = state.flags || {};
+  let clinicId = state.clinic_id || state.clinicId || flags.clinic_id || null;
+  let customerId = state.customer_id || state.customerId || flags.customer_id || null;
+  if ((!clinicId || !customerId) && db.getCallSiteContext) {
+    try {
+      const site = db.getCallSiteContext(sid);
+      if (site) {
+        clinicId = clinicId || site.clinic_id || null;
+        customerId = customerId || site.customer_id || null;
+      }
+    } catch (_) {}
+  }
   const payload = {
     active_lane: state.active_lane || null,
     step: state.step || null,
@@ -186,9 +189,37 @@ function persistRailsSessionState(sessionId, state = {}) {
   };
   try {
     const write = () => {
-      db.db
-        .prepare(
-          `INSERT INTO kelly_rails_session_projection (
+      const cols = db.db.prepare('PRAGMA table_info(kelly_rails_session_projection)').all();
+      const hasTenantCols = cols.some((c) => c.name === 'clinic_id');
+      if (hasTenantCols) {
+        db.db
+          .prepare(
+            `INSERT INTO kelly_rails_session_projection (
+          session_id, active_lane, step, flags_json, appointment_id, clinic_id, customer_id, runtime, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'kelly_rails_v2', datetime('now'))
+        ON CONFLICT(session_id) DO UPDATE SET
+          active_lane = excluded.active_lane,
+          step = excluded.step,
+          flags_json = excluded.flags_json,
+          appointment_id = excluded.appointment_id,
+          clinic_id = COALESCE(excluded.clinic_id, kelly_rails_session_projection.clinic_id),
+          customer_id = COALESCE(excluded.customer_id, kelly_rails_session_projection.customer_id),
+          runtime = excluded.runtime,
+          updated_at = datetime('now')`
+          )
+          .run(
+            sid,
+            payload.active_lane,
+            payload.step,
+            JSON.stringify(payload),
+            payload.appointment_id,
+            clinicId,
+            customerId
+          );
+      } else {
+        db.db
+          .prepare(
+            `INSERT INTO kelly_rails_session_projection (
           session_id, active_lane, step, flags_json, appointment_id, runtime, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'kelly_rails_v2', datetime('now'))
         ON CONFLICT(session_id) DO UPDATE SET
@@ -198,16 +229,17 @@ function persistRailsSessionState(sessionId, state = {}) {
           appointment_id = excluded.appointment_id,
           runtime = excluded.runtime,
           updated_at = datetime('now')`
-        )
-        .run(
-          sid,
-          payload.active_lane,
-          payload.step,
-          JSON.stringify(payload),
-          payload.appointment_id
-        );
+          )
+          .run(
+            sid,
+            payload.active_lane,
+            payload.step,
+            JSON.stringify(payload),
+            payload.appointment_id
+          );
+      }
       mirrorMetaFromPayload(sid, payload);
-      mirrorProjectionToPostgres(sid, payload).catch(() => {});
+      mirrorProjectionToPostgres(sid, payload, { clinic_id: clinicId, customer_id: customerId }).catch(() => {});
     };
     if (typeof db.db.transaction === 'function') {
       db.db.transaction(write)();

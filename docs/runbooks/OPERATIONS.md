@@ -410,6 +410,85 @@ Secret hygiene: [SECRET_SCANNING.md](../security/SECRET_SCANNING.md).
 
 Incident playbooks (Stripe, Stedi, reasoning, DLQ): [`docs/runbooks/README.md`](./README.md).
 
+## Platform voice number map (PD-3 / DOC-1)
+
+| Number / env | Role | `routing_world` | Handler |
+|--------------|------|-----------------|---------|
+| `+13639990205` / `TWILIO_PHONE_NUMBER` | Platform + demo fallback | `demo` inbound | `somo-demo-handler` |
+| `CALLSOMO_OPERATOR_TWILIO_NUMBER` | Operator CID outbound | `operator_outbound` | `operator-outbound-rail` |
+| Tenant `customers.twilio_phone_number` | Clinic DID | `tenant` | Kelly Rails V2 |
+| Unknown DID, no `customer_id` | Unidentified | `unidentified` | Fail-closed handoff |
+
+**Split DIDs (R-7):** Set `SOMO_DEMO_TWILIO_FROM_NUMBER` separate from operator number in production.
+
+**Smoke:** `cd middleware-platform && npm run smoke:voice-routing-matrix`
+
+**CI gate (REL-03):** `npm run ci:gate` (repo root) — includes matrix smoke + site/escalation unit tests.
+
+**Migrations 061–074 (voice site epic + post-review):** Applied automatically on API startup via `database.js` `runMigrations`. Prod GCS SQLite: back up bucket object, deploy API, verify with `npm run smoke:voice-routing-matrix`.
+
+**T-001 — Retell transfer manual gate (staging, before prod escalation):**
+
+**Owner:** operator · **Full checklist:** [VOICE_REMEDIATION_OPERATOR_GATES.md](./VOICE_REMEDIATION_OPERATOR_GATES.md#t-001--retell-transfer-staging-gate)
+
+1. Configure test clinic `transfer_number` (migration 068) or set `CALLSOMO_OPERATOR_FALLBACK_PSTN`.
+2. Place inbound staging call from external PSTN → trigger escalation (unidentified DID path, `agentBlocked`, or `transfer_call` tool).
+3. In Retell call log, confirm transfer dispatched (single WS frame with `transfer_number` + `no_interruption_allowed`) — not only `handoff_escalations.outcome = transfer_requested`.
+4. **Pass criterion:** callee PSTN rings. Log `call_id`, date, and operator name below.
+5. If step 4 fails, implement REST `POST /v2/call/{id}/transfer` fallback (R-06-4) and re-run.
+
+**PD-4 live routing matrix:** Offline smoke does not close PD-4. One live call per routing world — see [VOICE_REMEDIATION_OPERATOR_GATES.md](./VOICE_REMEDIATION_OPERATOR_GATES.md#pd-4--live-routing-matrix-5-worlds).
+
+**T-011 — NOT NULL promotion (SITE-25):**
+
+```bash
+cd middleware-platform
+# After backfill on target DB:
+DB_PATH=./backups/middleware-staging.db node scripts/verify-tenant-columns-null-free.cjs
+# Exit 0 required before deploying migration 074
+```
+
+**T-015 / T-016 — Staging + prod deploy sequence:**
+
+- Staging: deploy API → `npm run verify:kelly-rails-cloudrun` with `CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=1`.
+- Prod: GCS backup → deploy → confirm `schema_migrations` includes 061–074 → run backfill dry-run/apply → `verify-tenant-columns-null-free.cjs` → smoke.
+
+**PSTN escalation:** Configure `clinics.transfer_number` / `fallback_pstn` (migration 068) or `CALLSOMO_OPERATOR_FALLBACK_PSTN` for fail-closed transfer. Retell custom LLM path uses **one** WS response frame (`content` + `transfer_number` + `no_interruption_allowed`); TwiML `<Dial>` remains ingress fallback for non-Retell telephony.
+
+**Backfill tenant columns** (after pull from GCS):
+
+```bash
+# From repo root
+gsutil cp gs://somo-staging-db-somo-callsomo/middleware-staging.db ./backups/middleware-staging.db
+DB_PATH=./backups/middleware-staging.db npm run backfill:site-context-tenant --prefix middleware-platform -- --dry-run
+DB_PATH=./backups/middleware-staging.db npm run backfill:site-context-tenant --prefix middleware-platform
+
+# Already in middleware-platform/
+DB_PATH=../backups/middleware-staging.db npm run backfill:site-context-tenant -- --dry-run
+```
+
+**Deploy API** — run from **repo root** (not `middleware-platform/`):
+
+```bash
+cd "/Users/ojrichard/Voice Agent/somo"   # repo root
+npm run callsomo:deploy-api
+# or from middleware-platform/:
+npm run callsomo:deploy-api --prefix ..
+```
+
+**Staging enforce (REL-06/07):** Regenerate env with `CLOUDRUN_PROFILE=staging node middleware-platform/scripts/generate-cloudrun-env-yaml.cjs` — defaults `CONVERSATION_MODE_ROUTING=enforce` and `CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=1`. Deploy staging; 48h telemetry before prod flip.
+
+**PSTN escalation:** Configure `clinics.transfer_number` / `fallback_pstn` (migration 068) or `CALLSOMO_OPERATOR_FALLBACK_PSTN` for fail-closed transfer.
+
+**Spec:** [PLATFORM_NUMBER_INBOUND_SPEC.md](../voice/PLATFORM_NUMBER_INBOUND_SPEC.md) · [VOICE_ROUTING_ARCHITECTURE.md](../voice/VOICE_ROUTING_ARCHITECTURE.md)
+
+### Runbook: OPQRST on platform call (DOC-4)
+
+1. Pull `kelly_call_events` for `session_id` / `call_id`.
+2. Find `routing_world_resolved` — expect `demo`, not `tenant`.
+3. If `routing_world=tenant` without tenant DID → check false `clinic_id` from env fallback (R-5b).
+4. If Kelly ran on demo line → verify `isSomoDemoDemoConnection` and `to_number` (R-4).
+
 
 ---
 

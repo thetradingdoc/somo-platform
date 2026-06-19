@@ -48,8 +48,12 @@
     return json;
   }
 
-  async function fetchVoiceSettings() {
-    const res = await fetch(`${API_BASE()}/api/voice-agent/settings`, {
+  async function fetchVoiceSettings(clinicId) {
+    const cid =
+      clinicId ||
+      (typeof global.ppGetClinicId === 'function' ? global.ppGetClinicId() : null);
+    const qs = cid ? `?clinic_id=${encodeURIComponent(cid)}` : '';
+    const res = await fetch(`${API_BASE()}/api/voice-agent/settings${qs}`, {
       credentials: 'include'
     });
     if (!res.ok) return null;

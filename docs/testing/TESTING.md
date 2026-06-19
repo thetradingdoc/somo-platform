@@ -257,6 +257,17 @@ Pass: `voice_call_log.customer_id` = trial customer (not owner default).
 
 `POST /api/public/somo-demo/request-call` — see [somo-landing E2E](../../middleware-platform/e2e/somo-landing.spec.cjs); separate from tenant inbound.
 
+### Platform vs tenant voice (V-5)
+
+| Scenario | Number | Expected `routing_world` | Test |
+|----------|--------|--------------------------|------|
+| Platform inbound | `+13639990205` | `demo` | `npm run smoke:voice-routing-matrix` |
+| Tenant DID inbound | Tenant `twilio_phone_number` | `tenant` | `test:rails:tenant-harness` |
+| Operator outbound | Operator CID | `operator_outbound` | `operator-outbound-smoke.cjs` |
+| Unidentified | DID without `customer_id` | `unidentified` | Unit: `platform-voice-tenant.test.js` |
+
+Replay fixtures: `call_de149e6`, `call_affe468` utterances in `intent-detector-clinical-entry.test.js` + smoke script.
+
 ### Call failure matrix
 
 | Symptom | Likely root cause |

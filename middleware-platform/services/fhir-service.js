@@ -1438,7 +1438,14 @@ class FHIRService {
       let patientId = patientResource?.id;
 
       if (!patientId && callData.customerPhone) {
-        const byPhone = db.getFHIRPatientByPhone(callData.customerPhone);
+        const { findFHIRPatientForVoice } = require('./fhir-voice-lookup');
+        const byPhone = findFHIRPatientForVoice(db, {
+          phone: callData.customerPhone,
+          clinicId: callData.clinicId || callData.clinic_id,
+          customerId: callData.customerId || callData.customer_id,
+          merchantId: callData.merchantId,
+          requireClinicScope: !!(callData.clinicId || callData.clinic_id)
+        });
         if (byPhone?.resource_id) patientId = byPhone.resource_id;
       }
       if (!patientId && callData.customerEmail) {

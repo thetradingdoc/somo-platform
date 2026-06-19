@@ -20,7 +20,8 @@ async function initiateOutboundCall({
   call_type = 'rcm_follow_up',
   clinic_id,
   appointment_id = null,
-  outbound_purpose = null
+  outbound_purpose = null,
+  lead_id = null
 }) {
   if (!phone_number) throw new Error('Phone number is required');
   const phoneRegex = /^\+?[\d\s\-()]{10,}$/;
@@ -43,7 +44,8 @@ async function initiateOutboundCall({
   if (customer_id && !systemOutbound && !operatorCustomer) {
     const settings = db.getVoiceAgentSettingsForProvider({
       merchantId: resolvedMerchantId,
-      customerId: customer_id
+      customerId: customer_id,
+      clinicId: clinic_id || null
     });
     const outboundOn = settings?.outbound_enabled === 1 || settings?.outbound_enabled === true;
     if (settings && !outboundOn) {
@@ -51,6 +53,13 @@ async function initiateOutboundCall({
       err.code = 'outbound_disabled';
       throw err;
     }
+    const { assertOutboundAllowed } = require('./outbound-quiet-hours');
+    assertOutboundAllowed(settings);
+  }
+
+  if (!systemOutbound) {
+    const { checkOutboundRetryAllowed } = require('./outbound-retry-policy');
+    checkOutboundRetryAllowed(db, { phone_number, customer_id, lead_id });
   }
 
   let retellAgentId = null;

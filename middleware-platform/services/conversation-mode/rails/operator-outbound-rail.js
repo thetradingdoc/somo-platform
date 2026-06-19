@@ -2,6 +2,16 @@
 
 const OPERATOR_STAGES = ['callback_intro', 'update', 'confirm', 'handoff_offer', 'close'];
 
+function isVoicemailOrIvrUtterance(msg) {
+  return /\b(voicemail|voice mail|leave a message|after the tone|not available|mailbox|press \d|automated message)\b/i.test(
+    String(msg || '')
+  );
+}
+
+function isOptOutUtterance(msg) {
+  return /\b(don't call|do not call|stop calling|remove me|unsubscribe)\b/i.test(String(msg || ''));
+}
+
 function loadAppointmentSummary(appointmentId) {
   if (!appointmentId) return null;
   try {
@@ -78,6 +88,31 @@ function stageReply(stage, ctx) {
 }
 
 async function handleOperatorOutboundTurn(ctx = {}) {
+  const msg = String(ctx.message || '').toLowerCase();
+
+  if (isOptOutUtterance(msg)) {
+    return {
+      reply: 'Understood — we will not call this number again. Thank you.',
+      endCall: true,
+      conversation_mode: 'operator_outbound',
+      operator_stage: 'close',
+      disposition: 'opt_out',
+      flags: { opt_out: true, suppress_outbound: true }
+    };
+  }
+
+  if (isVoicemailOrIvrUtterance(msg)) {
+    const name = ctx.patientName || ctx.leadName || 'there';
+    return {
+      reply: `Hi ${name}, this is Kelly from Somo with a quick follow-up. We will try again later or you can reach us at callsomo.com. Thanks.`,
+      endCall: true,
+      conversation_mode: 'operator_outbound',
+      operator_stage: 'close',
+      disposition: 'voicemail',
+      flags: { voicemail_detected: true }
+    };
+  }
+
   const isReminder = isReminderContext(ctx);
   const appointmentId =
     ctx.appointment_id || ctx.appointmentId || ctx.flags?.appointment_id || null;
@@ -107,7 +142,6 @@ async function handleOperatorOutboundTurn(ctx = {}) {
 
   const idx = OPERATOR_STAGES.indexOf(step);
   const nextStage = OPERATOR_STAGES[Math.min(idx + 1, OPERATOR_STAGES.length - 1)];
-  const msg = String(ctx.message || '').toLowerCase();
 
   let reply = stageReply(step, ctx);
   let endCall = false;
@@ -185,4 +219,10 @@ async function handleOperatorOutboundTurn(ctx = {}) {
   };
 }
 
-module.exports = { handleOperatorOutboundTurn, OPERATOR_STAGES, stageReply };
+module.exports = {
+  handleOperatorOutboundTurn,
+  OPERATOR_STAGES,
+  stageReply,
+  isVoicemailOrIvrUtterance,
+  isOptOutUtterance
+};

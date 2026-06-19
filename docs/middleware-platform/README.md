@@ -563,7 +563,7 @@ This document orients new contributors. Deep dives live in `docs/` and `docs/arc
 
 ## CI
 
-- GitHub Actions: `.github/workflows/ci.yml` — middleware `npm test`; optional Playwright/Cypress as documented in `CONTRIBUTING.md`.
+- Local CI: `npm run ci:gate` (replaces GitHub Actions; see `.github/workflows/README.md`).
 - **Playwright:** install browsers in CI or locally: `cd middleware-platform && npx playwright install chromium`.
 
 

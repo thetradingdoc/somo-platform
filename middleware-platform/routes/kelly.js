@@ -97,9 +97,13 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
     const tools = [];
     let bookingOutcome = null;
     let orchestration = [];
+    let routingWorld = null;
 
     for (const row of events) {
       const payload = parsePayload(row);
+      if (row.event_type === 'routing_world_resolved' && payload.routing_world) {
+        routingWorld = payload.routing_world;
+      }
       if (row.event_type === 'tool_invoked' || row.event_type === 'tool_completed') {
         tools.push({
           at: row.created_at,
@@ -116,6 +120,7 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
           at: row.created_at,
           lane: payload.lane || payload.active_lane,
           step: payload.step,
+          routing_world: payload.routing_world || routingWorld,
           gate_matched: payload.gate_matched,
           gate_outcome: payload.gate_outcome
         });
@@ -123,7 +128,12 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
     }
 
     let appointment = null;
-    let callSummary = { conversation_mode: null, final_lane: null, final_step: null };
+    let callSummary = {
+      conversation_mode: null,
+      final_lane: null,
+      final_step: null,
+      routing_world: routingWorld
+    };
     if (db.db) {
       try {
         appointment = db.db
@@ -170,7 +180,11 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
       booking_outcome: bookingOutcome,
       orchestration_trace: orchestration,
       call_summary: callSummary,
-      appointment
+      appointment,
+      handoff_escalations: db.listHandoffEscalationsForCall
+        ? db.listHandoffEscalationsForCall(sessionId, { limit: 20 })
+        : [],
+      site_context: db.getCallSiteContext ? db.getCallSiteContext(sessionId) : null
     });
   } catch (error) {
     console.error('❌ Kelly call detail error:', error);

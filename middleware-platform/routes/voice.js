@@ -342,7 +342,13 @@ router.post('/checkout/create', async (req, res) => {
             const normalizedPhone = SMSService.formatPhoneNumber(phone);
 
             // Try to find FHIR patient by phone (primary lookup)
-            const patient = db.getFHIRPatientByPhone(normalizedPhone);
+            const { findFHIRPatientForVoice } = require('../services/fhir-voice-lookup');
+            const clinicId = req.body.clinic_id || req.body.call?.metadata?.clinic_id || null;
+            const patient = findFHIRPatientForVoice(db, {
+              phone: normalizedPhone,
+              clinicId,
+              requireClinicScope: !!clinicId
+            });
             if (patient) {
                 const patientData = typeof patient.resource_data === 'string'
                     ? JSON.parse(patient.resource_data)

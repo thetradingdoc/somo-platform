@@ -18,9 +18,16 @@ function hydrateConversationFieldsFromProjection(projection, activeLane) {
   }
   try {
     const parsed = JSON.parse(projection.flags_json);
+    const priorMode = parsed.conversation_mode || null;
     Object.assign(fields, parsed);
     if (!fields.conversation_mode && activeLane) {
       fields.conversation_mode = laneToConversationMode(activeLane);
+    } else if (
+      priorMode === 'tenant_inbound_admin' &&
+      activeLane === 'clinical' &&
+      fields.conversation_mode === 'tenant_inbound_clinical'
+    ) {
+      fields.conversation_mode = 'tenant_inbound_admin';
     }
     if (!fields.opqrst_accumulator || typeof fields.opqrst_accumulator !== 'object') {
       fields.opqrst_accumulator = defaultConversationFields().opqrst_accumulator;
@@ -50,6 +57,11 @@ function hydrateFlagsFromDb(sessionId, patientId) {
       if (parsed.appointment_id) flags.appointment_id = parsed.appointment_id;
       if (!flags.conversation_mode && projection.active_lane) {
         flags.conversation_mode = laneToConversationMode(projection.active_lane);
+      } else if (
+        flags.conversation_mode === 'tenant_inbound_admin' &&
+        projection.active_lane === 'clinical'
+      ) {
+        flags.conversation_mode = 'tenant_inbound_admin';
       }
     } catch (_) {}
   }

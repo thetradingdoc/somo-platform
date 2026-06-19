@@ -146,26 +146,37 @@ const merged = {
   TWILIO_OUTBOUND_WEBHOOK_URL: parsed.TWILIO_OUTBOUND_WEBHOOK_URL || baseUrl,
   PUBLIC_API_BASE_URL: parsed.PUBLIC_API_BASE_URL || baseUrl,
   CONVERSATION_MODE_ROUTING:
-    parsed.CONVERSATION_MODE_ROUTING || (isStaging ? 'shadow' : 'enforce'),
+    parsed.CONVERSATION_MODE_ROUTING || (isStaging ? 'enforce' : 'enforce'),
   CONVERSATION_MODE_ENFORCE_OPERATOR_OUTBOUND:
     parsed.CONVERSATION_MODE_ENFORCE_OPERATOR_OUTBOUND ??
-    (isStaging ? '0' : '1'),
+    (isStaging ? '1' : '1'),
   CONVERSATION_MODE_ENFORCE_OUTBOUND_SALES:
     parsed.CONVERSATION_MODE_ENFORCE_OUTBOUND_SALES ??
-    (isStaging ? '0' : '1'),
+    (isStaging ? '1' : '1'),
   CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN:
     parsed.CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN ??
-    (isStaging ? '0' : '0'),
+    (isStaging ? '1' : '0'),
   CONVERSATION_MODE_ENFORCE_DEMO_QUAL:
     parsed.CONVERSATION_MODE_ENFORCE_DEMO_QUAL || '0',
   STAGING: isStaging ? '1' : '0',
   ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0',
+};
+
+if (isStaging || profile === 'production') {
+  if (parsed.ALLOW_DEV_CLINIC_FALLBACK || merged.ALLOW_DEV_CLINIC_FALLBACK) {
+    console.error('ALLOW_DEV_CLINIC_FALLBACK must be unset for staging/production Cloud Run profiles');
+    process.exit(1);
+  }
+  delete merged.ALLOW_DEV_CLINIC_FALLBACK;
+}
+
+Object.assign(merged, {
   EMAIL_PROVIDER: parsed.EMAIL_PROVIDER || (isStaging ? 'smtp' : parsed.EMAIL_PROVIDER || 'auto'),
   SMTP_HOST: parsed.SMTP_HOST || (isStaging ? 'smtp.gmail.com' : ''),
   SMTP_PORT: parsed.SMTP_PORT || (isStaging ? '587' : ''),
   SMTP_USER: parsed.SMTP_USER || (isStaging ? 'richard@callsomo.com' : ''),
   SMTP_FROM: parsed.SMTP_FROM || parsed.SMTP_USER || (isStaging ? 'Somo <richard@callsomo.com>' : '')
-};
+});
 
 if (!useGcpSecrets) {
   merged.JWT_SECRET = secretOrRandom('JWT_SECRET', 32, 32);
@@ -188,6 +199,7 @@ if (!isStaging) {
   merged.KELLY_ALLOW_HYBRID_GRAPH = parsed.KELLY_ALLOW_HYBRID_GRAPH ?? '0';
   merged.KELLY_RAILS_FAST_RAG = parsed.KELLY_RAILS_FAST_RAG ?? '1';
   merged.KELLY_VOICE_FILLER_MS = parsed.KELLY_VOICE_FILLER_MS ?? '1200';
+  merged.OPQRST_FIELD_GATE_ENABLED = parsed.OPQRST_FIELD_GATE_ENABLED ?? '1';
 }
 
 if (isStaging) {

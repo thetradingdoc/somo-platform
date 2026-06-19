@@ -52,7 +52,9 @@ function seedModeAtCallStart(opts = {}) {
     direction: opts.direction,
     tenantPolicy: policy,
     firstUtterance: opts.firstUtterance || '',
-    tenantResolved: opts.tenantResolved !== false
+    tenantResolved: opts.tenantResolved !== false,
+    routing_world: opts.routing_world || null,
+    site_context_status: opts.site_context_status || opts.siteContextStatus || null
   });
   const fields = {
     ...defaultConversationFields(),
@@ -61,7 +63,8 @@ function seedModeAtCallStart(opts = {}) {
     pivot_reason: resolved.reason,
     call_type: resolved.call_type,
     direction: resolved.direction,
-    fail_closed: !!resolved.fail_closed
+    fail_closed: !!resolved.fail_closed,
+    routing_world: opts.routing_world || null
   };
   if (resolved.reason === 'intent_appt_lookup') {
     fields.active_subrail_step = 'find_booking';

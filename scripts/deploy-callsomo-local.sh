@@ -70,9 +70,8 @@ deploy_api() {
 }
 
 if [[ "$SKIP_CI" -eq 0 ]]; then
-  echo "==> Build and verify hosting bundle..."
-  node scripts/build-staging-hosting.cjs
-  node scripts/verify-staging-hosting.cjs
+  echo "==> Local CI gate (npm run ci:gate)..."
+  npm run ci:gate
 fi
 
 # UI first so callsomo.com updates even if Cloud Build / API deploy is slow or fails.
@@ -94,6 +93,7 @@ fi
 if [[ "$SKIP_SMOKE" -eq 0 ]]; then
   echo "==> Post-deploy smoke..."
   npm run smoke:callsomo || echo "WARN: smoke failed — check API and DNS"
+  npm run smoke:voice-routing-matrix --prefix middleware-platform || echo "WARN: voice routing matrix smoke failed"
 fi
 
 echo "==> Local callsomo deploy complete."

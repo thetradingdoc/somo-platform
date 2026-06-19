@@ -1,7 +1,7 @@
 'use strict';
 
 const { ConversationMode, Subrail, UserIntent, normalizeCallType, normalizeDirection } = require('./conversation-mode-types');
-const { primaryIntent, isEmergency } = require('./intent-detector');
+const { primaryIntent, isEmergency, hasSymptomEvidence } = require('./intent-detector');
 const { TriagePolicy, canPivotToClinical, bookingAllowedWithoutOpqrst } = require('./tenant-policy');
 
 /**
@@ -12,6 +12,7 @@ const { TriagePolicy, canPivotToClinical, bookingAllowedWithoutOpqrst } = requir
  * @param {object} input.tenantPolicy
  * @param {string} [input.firstUtterance]
  * @param {boolean} [input.tenantResolved]
+ * @param {string} [input.routing_world]
  */
 function resolveConversationMode(input = {}) {
   const callType = normalizeCallType(input.call_type);
@@ -19,6 +20,11 @@ function resolveConversationMode(input = {}) {
   const policy = input.tenantPolicy || {};
   const utterance = input.firstUtterance || '';
   const tenantResolved = input.tenantResolved !== false;
+  const routingWorld = String(input.routing_world || '').toLowerCase();
+
+  if (routingWorld === 'demo' || callType === 'somo_demo') {
+    return { mode: ConversationMode.DEMO_QUAL, subrail: null, reason: 'call_type_demo', call_type: callType, direction };
+  }
 
   if (isEmergency(utterance)) {
     return {
@@ -30,9 +36,6 @@ function resolveConversationMode(input = {}) {
     };
   }
 
-  if (callType === 'somo_demo') {
-    return { mode: ConversationMode.DEMO_QUAL, subrail: null, reason: 'call_type_demo', call_type: callType, direction };
-  }
   if (callType === 'sales_outbound') {
     return { mode: ConversationMode.OUTBOUND_SALES, subrail: null, reason: 'call_type_sales', call_type: callType, direction };
   }
@@ -45,6 +48,36 @@ function resolveConversationMode(input = {}) {
       mode: ConversationMode.TENANT_INBOUND_ADMIN,
       subrail: Subrail.HANDOFF,
       reason: 'tenant_unresolved_fail_closed',
+      call_type: callType,
+      direction,
+      fail_closed: true
+    };
+  }
+
+  if (routingWorld === 'platform_support') {
+    return {
+      mode: ConversationMode.TENANT_INBOUND_ADMIN,
+      subrail: Subrail.HANDOFF,
+      reason: 'platform_support_inbound',
+      call_type: callType,
+      direction,
+      triage_policy_override: TriagePolicy.DISABLED
+    };
+  }
+
+  const siteStatus = String(input.site_context_status || '').toLowerCase();
+  const tenantInbound =
+    callType !== 'somo_demo' &&
+    callType !== 'sales_outbound' &&
+    callType !== 'operator_outbound' &&
+    direction === 'inbound' &&
+    tenantResolved &&
+    routingWorld === 'tenant';
+  if (tenantInbound && (siteStatus === 'ambiguous' || siteStatus === 'missing' || siteStatus === '')) {
+    return {
+      mode: ConversationMode.TENANT_INBOUND_ADMIN,
+      subrail: Subrail.HANDOFF,
+      reason: siteStatus === 'ambiguous' ? 'site_context_ambiguous' : 'site_context_missing',
       call_type: callType,
       direction,
       fail_closed: true
@@ -104,11 +137,21 @@ function resolveConversationMode(input = {}) {
     };
   }
 
-  if (pi === UserIntent.SYMPTOM && canPivotToClinical(policy)) {
+  if (pi === UserIntent.SYMPTOM && hasSymptomEvidence(utterance) && canPivotToClinical(policy)) {
     return {
       mode: ConversationMode.TENANT_INBOUND_CLINICAL,
       subrail: Subrail.OPQRST,
       reason: 'intent_symptom',
+      call_type: callType,
+      direction
+    };
+  }
+
+  if (pi === UserIntent.HANDOFF) {
+    return {
+      mode: ConversationMode.TENANT_INBOUND_ADMIN,
+      subrail: Subrail.HANDOFF,
+      reason: 'intent_handoff',
       call_type: callType,
       direction
     };

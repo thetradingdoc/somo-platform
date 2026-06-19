@@ -72,6 +72,9 @@
           <p><strong>Events</strong> ${json.event_count || 0}</p>`;
         if (summary.conversation_mode || summary.final_lane) {
           html += '<div class="pp-call-summary">';
+          if (summary.routing_world) {
+            html += `<span class="pp-status-pill pp-status-pill--world">${escapeHtml(summary.routing_world)}</span> `;
+          }
           if (summary.conversation_mode) {
             html += `<span class="pp-status-pill">${escapeHtml(summary.conversation_mode)}</span> `;
           }
@@ -90,6 +93,14 @@
         }
         if (json.booking_outcome) {
           html += `<h4>Booking</h4><div class="pp-event-line">${escapeHtml(JSON.stringify(json.booking_outcome))}</div>`;
+        }
+        if (json.site_context?.site_context_status) {
+          html += `<h4>Site context</h4><div class="pp-event-line">${escapeHtml(json.site_context.site_context_status)} · ${escapeHtml(json.site_context.clinic_id_source || '—')}</div>`;
+        }
+        if (json.handoff_escalations?.length) {
+          html += '<h4>Handoff escalations</h4>' + json.handoff_escalations.map((h) =>
+            `<div class="pp-event-line">${escapeHtml(h.reason || 'handoff')} · ${escapeHtml(h.outcome || '—')}${h.pstn_target ? ' → ' + escapeHtml(h.pstn_target) : ''} · ${formatWhen(h.created_at)}</div>`
+          ).join('');
         }
         if (json.orchestration_trace?.length) {
           html += '<h4>Orchestration</h4>' + json.orchestration_trace.slice(-8).map((t) =>

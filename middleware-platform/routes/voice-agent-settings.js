@@ -288,7 +288,8 @@ async function handleSettingsSave(req, res) {
         outbound_quiet_hours = null,
         outbound_allowed_types = null,
         tone_preset = null,
-        settings_version = null
+        settings_version = null,
+        clinic_id = null
     } = body;
 
     const safeEnabled = !!enabled;
@@ -319,6 +320,7 @@ async function handleSettingsSave(req, res) {
         const syncResult = await saveAndSyncVoiceSettings(db, {
             merchantId,
             customerId,
+            clinicId: clinic_id || req.query.clinic_id || null,
             settingsPatch,
             retellService,
             expectedVersion: settings_version

@@ -1,6 +1,7 @@
 const db = require('../database');
 const Metrics = require('./metrics');
 const IntakeRequiredFields = require('./intake-required-fields');
+const { extractTenantWriteContext } = require('./tenant-write-context');
 
 function _asArray(v) {
   if (Array.isArray(v)) return v;
@@ -29,6 +30,11 @@ function upsertFromNormalizedEvent({ envelope, normalizedEvent }) {
 
   const current = db.getSessionStateProjection ? db.getSessionStateProjection({ session_id: sessionId, room_id: roomId }) : null;
   const fields = normalizedEvent?.fields || {};
+  const tenant = extractTenantWriteContext({
+    clinic_id: normalizedEvent?.clinic_id || envelope?.clinic_id,
+    customer_id: normalizedEvent?.customer_id || envelope?.customer_id,
+    session_id: sessionId
+  });
   const next = {
     id,
     session_id: sessionId,
@@ -42,7 +48,9 @@ function upsertFromNormalizedEvent({ envelope, normalizedEvent }) {
     severity: fields?.severity != null ? fields.severity : (current?.severity ?? null),
     timeline: fields?.timeline || current?.timeline || null,
     risk_flags: _uniq([...(current?.risk_flags || []), ...(fields?.risk_flags || [])]),
-    raw_last_text: normalizedEvent?.text || current?.raw_last_text || null
+    raw_last_text: normalizedEvent?.text || current?.raw_last_text || null,
+    clinic_id: tenant.clinicId || current?.clinic_id || null,
+    customer_id: tenant.customerId || current?.customer_id || null
   };
 
   const write = db.upsertSessionStateProjection ? db.upsertSessionStateProjection(next) : { success: false, error: 'db_method_missing' };

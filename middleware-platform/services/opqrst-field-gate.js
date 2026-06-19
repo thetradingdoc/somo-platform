@@ -230,7 +230,13 @@ function gateActive(input) {
   const mode = String(input.conversationMode || '');
   const subrail = String(input.activeSubrail || '');
   const clinicalMode = mode === 'tenant_inbound_clinical' || subrail === 'opqrst';
-  return clinicalMode;
+  if (!clinicalMode) return false;
+  if (input.symptomContextEstablished === true) return true;
+  const { hasSymptomFieldsInTriage } = require('./kelly-rails/enter-clinical-lane');
+  const { hasSymptomEvidence } = require('./conversation-mode/intent-detector');
+  if (hasSymptomFieldsInTriage(input.triageRow)) return true;
+  if (hasSymptomEvidence(input.userMessage || '')) return true;
+  return false;
 }
 
 /**

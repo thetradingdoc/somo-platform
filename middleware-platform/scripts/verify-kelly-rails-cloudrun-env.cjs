@@ -63,7 +63,8 @@ function main() {
     'KELLY_RAILS_V2',
     'KELLY_ALLOW_HYBRID_GRAPH',
     'KELLY_RAILS_ROLLOUT_PCT',
-    'CONVERSATION_MODE_ROUTING'
+    'CONVERSATION_MODE_ROUTING',
+    'OPQRST_FIELD_GATE_ENABLED'
   ];
   const snapshot = {};
   for (const k of keys) snapshot[k] = env[k] ?? '(unset)';
@@ -78,6 +79,10 @@ function main() {
   if (pct != null && pct !== '' && parseFloat(pct) < 1) errors.push('KELLY_RAILS_ROLLOUT_PCT must be 1');
   if (String(env.CONVERSATION_MODE_ROUTING || 'shadow').toLowerCase() !== 'enforce') {
     errors.push('CONVERSATION_MODE_ROUTING must be enforce');
+  }
+  const gate = String(env.OPQRST_FIELD_GATE_ENABLED ?? '1').trim().toLowerCase();
+  if (gate === '0' || gate === 'false' || gate === 'no') {
+    errors.push('OPQRST_FIELD_GATE_ENABLED must be 1 or unset (default on)');
   }
 
   if (errors.length) {

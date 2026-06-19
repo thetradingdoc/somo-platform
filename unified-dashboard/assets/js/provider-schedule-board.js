@@ -74,7 +74,15 @@
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(a);
     });
+    const defaultProvider =
+      (global.TENANT_CONFIG && global.TENANT_CONFIG.default_provider) ||
+      (global.TENANT_CONFIG && global.TENANT_CONFIG.provider_name) ||
+      '';
     const names = [...map.keys()].sort((a, b) => {
+      if (defaultProvider) {
+        if (a === defaultProvider) return -1;
+        if (b === defaultProvider) return 1;
+      }
       if (a === 'Unassigned') return 1;
       if (b === 'Unassigned') return -1;
       return a.localeCompare(b);

@@ -38,7 +38,26 @@ function evaluateIdentityAdmission(opts = {}) {
   }
 
   if (isOutbound && (customerId || clinicId)) {
+    const siteStatus = String(opts.site_context_status || opts.siteContextStatus || '').toLowerCase();
+    if (siteStatus && siteStatus !== 'verified' && siteStatus !== 'not_required') {
+      return {
+        admitted: false,
+        reason: 'site_context_not_verified',
+        reply: handoffCopy(locale),
+        locale
+      };
+    }
     return { admitted: true, locale };
+  }
+
+  const siteStatus = String(opts.site_context_status || opts.siteContextStatus || '').toLowerCase();
+  if (siteStatus && siteStatus !== 'verified' && siteStatus !== 'not_required') {
+    return {
+      admitted: false,
+      reason: 'site_context_not_verified',
+      reply: handoffCopy(locale),
+      locale
+    };
   }
 
   if (!tenantResolved || (!clinicId && !customerId)) {

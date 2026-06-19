@@ -157,6 +157,22 @@ API_BASE_URL=https://api.callsomo.com node scripts/operator-outbound-smoke.cjs -
 - Cloud Run logs: `voice_opener_sent` JSON with `direction: outbound`, `callType: operator_outbound`
 - `kelly_call_events` row with `event_type: call_opener_used` for the call
 
+## Operator outbound stages (O-1)
+
+Rail: `services/conversation-mode/rails/operator-outbound-rail.js`
+
+| Stage | Purpose |
+|-------|---------|
+| `callback_intro` | Somo-branded opener; skipped when `opener_delivered` |
+| `update` | Reminder or account update |
+| `confirm` | Acknowledge caller response |
+| `handoff_offer` | Offer human callback |
+| `close` | Polite end |
+
+**Voicemail (O-2):** Single short message then `endCall` when IVR/voicemail detected.
+
+**Register (O-3):** Outbound must set `call_type=operator_outbound`, `customer_id`, optional `appointment_id` / `outbound_purpose` in Twilio URL + Retell dynamic variables.
+
 
 
 **Prod DB patch (company_name + crisp opener):**

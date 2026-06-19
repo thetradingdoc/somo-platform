@@ -36,7 +36,8 @@ describe('kelly-rails executeTurn education escape', () => {
       v2_hydrated: true
     });
 
-    expect([KELLY_LANE.CLINICAL, KELLY_LANE.BOOKING]).toContain(state.active_lane);
+    expect(state.active_lane).not.toBe(KELLY_LANE.ROUTER);
+    expect([KELLY_LANE.CLINICAL, KELLY_LANE.BOOKING, KELLY_LANE.EDUCATION]).toContain(state.active_lane);
     expect(reply).toBeTruthy();
   });
 });

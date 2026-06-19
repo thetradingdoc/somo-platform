@@ -53,6 +53,11 @@ function applyLaneStepFromL2Handoff(state, ctx, input, options = {}) {
   }
 
   if (activeSubrail === 'booking' || state.flags?.active_subrail === 'booking') {
+    if (state.flags?.no_provider_availability) {
+      state.active_lane = KELLY_LANE.SUPPORT;
+      state.step = 'handoff';
+      state.flags.booking_dead_end_redirect = true;
+    } else {
     state.active_lane = KELLY_LANE.BOOKING;
     const intents =
       state.flags.booking_intents?.length > 0
@@ -65,6 +70,7 @@ function applyLaneStepFromL2Handoff(state, ctx, input, options = {}) {
     }
     state.flags._turn_plan = planTurnOwner({ subrail: 'booking', flags: state.flags, intents });
     state.step = l2BookingPhaseToL4Step(subrailStep, state.flags);
+    }
   }
 
   if (state.flags?.appt_lookup_only) {

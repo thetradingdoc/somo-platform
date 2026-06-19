@@ -75,6 +75,15 @@ describe('opqrst-field-gate', () => {
       });
       expect(r.active).toBe(false);
     });
+
+    test('inactive without symptom context (L-4)', () => {
+      const r = resolve({
+        triageRow: null,
+        userMessage: 'rest helps',
+        lastAssistantText: 'What makes it better or worse?'
+      });
+      expect(r.active).toBe(false);
+    });
   });
 
   describe('T-1b ambiguous utterances', () => {

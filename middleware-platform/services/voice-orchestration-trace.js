@@ -14,6 +14,7 @@ function emitOrchestrationTrace(db, opts = {}) {
       call_id: opts.callId || opts.call_id || sessionId,
       event_type: 'orchestration_trace',
       payload_json: {
+        routing_world: opts.routing_world || null,
         conversation_mode: opts.conversation_mode || null,
         active_subrail: opts.active_subrail || null,
         handoff: opts.handoff || null,

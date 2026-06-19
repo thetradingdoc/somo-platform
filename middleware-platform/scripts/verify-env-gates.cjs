@@ -39,6 +39,11 @@ function main() {
     }
   }
 
+  const profileIsDeployed = isProd || profile === 'staging';
+  if (profileIsDeployed && truthy(process.env.ALLOW_DEV_CLINIC_FALLBACK)) {
+    report.violations.push('ALLOW_DEV_CLINIC_FALLBACK must be unset for staging/production');
+  }
+
   report.pass = report.violations.length === 0;
   console.log(JSON.stringify(report, null, 2));
   process.exit(report.pass ? 0 : 1);

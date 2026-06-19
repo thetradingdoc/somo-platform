@@ -3,7 +3,21 @@
 **Last updated:** 2026-06-18  
 **Engineering status:** Demo Phase 1, RS-0/1, most CR gates complete. Open: operator prod verify, Kelly Phase C, RS-2 deferred refactors, P2 polish.
 
-**SSOT:** This file is the single entry point for open work. Detail appendix: [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_READY_BACKLOG.md) (CR/FE items with file paths).
+**Active epic:** [VOICE-SITE-ESC-EPIC.md](./VOICE-SITE-ESC-EPIC.md) — CallSiteContext (L1.5), escalation ladder, migrations 061–074, post-epic review train.
+
+**Active remediation train:** [VOICE-REMEDIATION-TRAIN.md](./VOICE-REMEDIATION-TRAIN.md) — R-01–R-13 (33 audit issues + gap tracks).
+
+### Post-epic review (T-001–T-018)
+
+Code landed in post-review train; operator gates still open:
+
+- **T-001** — Staging Retell transfer PSTN ring verify (before prod escalation)
+- **T-011** — Run `verify-tenant-columns-null-free.cjs` on target DB before migration 074
+- **T-013 / T-014** — `voice-routing-matrix-live.cjs --tenant-book` / `--fail-closed`
+- **T-015 / T-016** — Staging + prod deploy per OPERATIONS.md
+- **Deferred:** SITE-12 full location resolver; meta_kv phase 2 (all call sites)
+
+**SSOT:** This file is the single entry point for open work.
 
 ---
 
@@ -12,7 +26,7 @@
 These require live prod/staging access, human QA, or clinical sign-off:
 
 - **UI-07, Q-17, Q-18** — visual + live call sign-off on callsomo.com
-- **Kelly Phase C (C-P0-01…C-F-02)** — clinical OPQRST review + staging voice cohorts
+- **Kelly Phase C (C-P0-01…C-F-02)** — clinical OPQRST review + staging voice cohorts → [R-09](./VOICE-REMEDIATION-TRAIN.md#r-09--p1-spanish--kelly-phase-c-c-p0-01-07-cr-025)
 - **CR-001–005** — run `verify:kelly-rails-cloudrun` on live Cloud Run + flip enforce flags after telemetry
 - **CR-029–037, CR-030–032** — execute live verify scripts against prod (`docs/deployment/OPERATIONS.md`)
 - **CR-024–025** — Spanish prod flake: run `sandbox-spanish-green` 3× on staging
@@ -232,10 +246,13 @@ Engineering ~complete; human/staging proof required. Reference: [`docs/runbooks/
 
 ### P0 — Sign-off blockers
 
+**OPQRST Field Gate (engineering):** [`todos/OPQRST-FIELD-GATE.md`](OPQRST-FIELD-GATE.md) — **F-2 shipped** (rev `00076-6sr`, gate on). Sign-off: [`docs/clinical/OPQRST_FIELD_GATE_SHIP_SIGNOFF_2026-06-18.md`](../docs/clinical/OPQRST_FIELD_GATE_SHIP_SIGNOFF_2026-06-18.md). ES pack and live Retell scorecards still apply below.
+
+- [x] **C-P0-04-en-auto** EN automated cohort (10/10 gate scenarios) — `npm run smoke:opqrst-phase-c-en --prefix middleware-platform`
 - [ ] **C-P0-01** Complete OPQRST review packet; Spanish copy for `config/clinical-opqrst/es.json`
 - [ ] **C-P0-02** Add `docs/clinical/OPQRST_ES_SIGNOFF_<date>.md`
 - [ ] **C-P0-03** Populate `es.json` from approved text (no auto-translate in prod)
-- [ ] **C-P0-04** EN cohort: 10 happy-path calls per scorecard
+- [ ] **C-P0-04** EN cohort: 10 happy-path calls per scorecard _(automated 10/10 done; optional live Retell perceptual)_
 - [ ] **C-P0-05** ES cohort: 10 happy + 5 noisy + 5 low-confidence opener
 - [ ] **C-P0-06** Demo dry-run EN + ES per healthcare specialist scenario
 - [ ] **C-P0-07** Flip EXECUTION status to complete; all exit criteria met

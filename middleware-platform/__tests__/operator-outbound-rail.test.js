@@ -1,24 +1,38 @@
 'use strict';
 
-const { handleOperatorOutboundTurn, stageReply } = require('../services/conversation-mode/rails/operator-outbound-rail');
+const {
+  isVoicemailOrIvrUtterance,
+  isOptOutUtterance,
+  handleOperatorOutboundTurn
+} = require('../services/conversation-mode/rails/operator-outbound-rail');
 
-describe('operator-outbound-rail', () => {
-  test('callback_intro when opener not yet delivered', async () => {
-    const out = await handleOperatorOutboundTurn({ message: 'hello' });
-    expect(out.operator_stage).toBe('update');
-    expect(out.reply).toContain('Kelly calling from Somo');
-  });
-
-  test('skips callback_intro when opener_delivered', async () => {
-    const out = await handleOperatorOutboundTurn({
+describe('operator outbound (O-2, O-4)', () => {
+  test('voicemail utterance ends call', async () => {
+    const r = await handleOperatorOutboundTurn({
+      message: 'You have reached the voicemail please leave a message',
       opener_delivered: true,
-      message: 'yes hi'
+      operator_stage: 'update'
     });
-    expect(out.reply).not.toMatch(/Kelly calling from Somo with a quick follow-up/);
-    expect(out.operator_stage).toBe('confirm');
+    expect(r.endCall).toBe(true);
+    expect(r.disposition).toBe('voicemail');
   });
 
-  test('stageReply callback_intro mentions Somo', () => {
-    expect(stageReply('callback_intro', {})).toContain('Somo');
+  test('opt-out ends call', async () => {
+    const r = await handleOperatorOutboundTurn({
+      message: "don't call me again",
+      opener_delivered: true
+    });
+    expect(r.endCall).toBe(true);
+    expect(r.disposition).toBe('opt_out');
+  });
+
+  test('live answer continues operator_outbound mode', async () => {
+    const r = await handleOperatorOutboundTurn({
+      message: 'yes I have a moment',
+      opener_delivered: true,
+      operator_stage: 'callback_intro'
+    });
+    expect(r.conversation_mode).toBe('operator_outbound');
+    expect(r.endCall).not.toBe(true);
   });
 });

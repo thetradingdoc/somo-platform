@@ -9,7 +9,12 @@ const somoDemoSms = require('../services/somo-demo-sms');
 const somoDemoEmail = require('../services/somo-demo-email');
 const sheetsSync = require('../services/somo-demo-sheets-sync');
 const { evaluateFirstTurnLanguage } = require('../services/kelly-rails/language');
-const { isEmergencyUtterance } = require('../services/kelly-rails/state-schema');
+const {
+  emergencyReply,
+  getEmergencyResponseIfNeeded: getEmergencyResponseCore
+} = require('../services/emergency-safety');
+const { primaryIntent } = require('../services/conversation-mode/intent-detector');
+const { UserIntent } = require('../services/conversation-mode/conversation-mode-types');
 const twilio = require('twilio');
 const { getMaxDurationSec } = require('../lib/somo-demo-env');
 
@@ -33,9 +38,29 @@ function isSomoDemoDemoConnection(connection) {
   if (connection._isSomoDemoDemo === true) return true;
   if (connection._isSomoDemoDemo === false) return false;
   const callType = getCallType(connection);
-  const isDemo = callType === 'somo_demo';
-  connection._isSomoDemoDemo = isDemo;
-  return isDemo;
+  if (callType === 'somo_demo') {
+    connection._isSomoDemoDemo = true;
+    return true;
+  }
+  const meta = connection.callMetadata || {};
+  const toNumber = meta.to_number || meta.metadata?.to_number || connection.to_number || null;
+  const direction =
+    meta.metadata?.direction ||
+    meta.dynamic_variables?.direction ||
+    connection.direction ||
+    'inbound';
+  if (toNumber && String(direction).toLowerCase() !== 'outbound') {
+    try {
+      const { isDemoLineToNumber } = require('../services/voice-routing-world');
+      if (isDemoLineToNumber(toNumber)) {
+        connection._isSomoDemoDemo = true;
+        connection._demoCallType = 'somo_demo';
+        return true;
+      }
+    } catch (_) {}
+  }
+  connection._isSomoDemoDemo = false;
+  return false;
 }
 
 function mergeQuestionsAsked(existing, addition) {
@@ -121,19 +146,6 @@ function getDbRowForSheets(demoId, connection) {
   return row;
 }
 
-function emergencyReply(language) {
-  if (language === 'es') {
-    return (
-      'Si esto es una emergencia médica, cuelga y llama al 911 o ve a urgencias de inmediato. ' +
-      'No puedo ayudar con emergencias en esta llamada.'
-    );
-  }
-  return (
-    'If this is a medical emergency, please hang up and call 911 or go to urgent care right away. ' +
-    'I cannot help with emergencies on this call.'
-  );
-}
-
 function languageHandoffReply(language) {
   if (language === 'es') {
     return (
@@ -146,12 +158,11 @@ function languageHandoffReply(language) {
 }
 
 function getEmergencyResponseIfNeeded(userSaid, language) {
-  if (!userSaid || !isEmergencyUtterance(userSaid)) return null;
+  const base = getEmergencyResponseCore(userSaid, language);
+  if (!base) return null;
   return {
-    reply: emergencyReply(language),
-    endCall: true,
-    toolCalls: [{ name: 'end_call', arguments: {} }],
-    outcome: 'emergency_redirect'
+    ...base,
+    toolCalls: [{ name: 'end_call', arguments: {} }]
   };
 }
 
@@ -466,6 +477,54 @@ async function executeDemoTool(name, args, ctx, connection) {
   }
 }
 
+function capturePartialDemoSession(connection, reason) {
+  const ctx = extractDemoContext(connection);
+  const demoId = ctx.demo_request_id;
+  if (!demoId) return;
+  const lastUser = [...(connection.conversationHistory || [])]
+    .reverse()
+    .find((m) => m.role === 'user');
+  try {
+    db.updateSomoDemoRequest(demoId, {
+      conversation_stage: connection._demoStage || 'OPEN',
+      questions_asked: mergeQuestionsAsked(
+        connection._demoDbRow?.questions_asked,
+        `partial:${reason}:${(lastUser?.content || '').slice(0, 120)}`
+      ),
+      outcome: 'partial_capture'
+    });
+  } catch (_) {}
+}
+
+function trimDemoReply(text, maxWords = 25) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return words.join(' ');
+  return `${words.slice(0, maxWords).join(' ')}…`;
+}
+
+function isDemoOffScriptHandoff(msg) {
+  const pi = primaryIntent(msg);
+  return pi.intent === UserIntent.HANDOFF;
+}
+
+async function handleDemoOffScriptHandoff(callId, connection, userSaid, message, sendFn, ctx) {
+  const es = (ctx.detected_language || ctx.language || 'en') === 'es';
+  const reply = es
+    ? 'Gracias por tu interés. Nuestro equipo te contactará pronto. ¡Que tengas buen día!'
+    : 'Thanks for your interest. Someone from our team will reach out shortly. Have a great day!';
+  await executeDemoTool(
+    'record_interest',
+    { level: 'warm', primary_problem: 'off_script_handoff', notes: String(userSaid || '').slice(0, 200) },
+    ctx,
+    connection
+  );
+  sendFn(connection.ws, trimDemoReply(reply), message.response_id);
+  connection.conversationHistory.push({ role: 'assistant', content: reply, timestamp: Date.now() });
+  connection._demoStage = 'CLOSE';
+  await executeDemoTool('end_call', {}, ctx, connection);
+  await hangupTwilioCall(connection);
+}
+
 async function hangupTwilioCall(connection) {
   const sid =
     connection.twilio_call_sid ||
@@ -517,6 +576,11 @@ async function handleDemoTranscript(callId, connection, userSaid, message, sendF
     return;
   }
 
+  if (isDemoOffScriptHandoff(userSaid)) {
+    await handleDemoOffScriptHandoff(callId, connection, userSaid, message, sendFn, ctx);
+    return;
+  }
+
   const elapsedSec = Math.floor((Date.now() - (connection.startTime || Date.now())) / 1000);
 
   const result = await orchestrator.processTurn({
@@ -546,6 +610,7 @@ async function handleDemoTranscript(callId, connection, userSaid, message, sendF
   }
 
   let reply = result.reply;
+  if (reply) reply = trimDemoReply(reply);
   if (!reply && result.endCall) {
     reply = orchestrator.ruleBasedReply('CLOSE', ctx);
   }
@@ -649,6 +714,7 @@ module.exports = {
   getCallType,
   getEmergencyResponseIfNeeded,
   buildRecordInterestPatch,
-  mergeQuestionsAsked,
+  capturePartialDemoSession,
+  trimDemoReply,
   emergencyReply
 };

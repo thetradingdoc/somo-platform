@@ -377,71 +377,155 @@ class RetellWebSocketHandler {
                 console.log(`✅ Extracted customer_id from metadata: ${connection.customer_id}`);
             }
 
+            const dvEarly =
+                callMeta.dynamic_variables ||
+                callMeta.retell_llm_dynamic_variables ||
+                (callMeta.metadata && callMeta.metadata.dynamic_variables);
+
             if (callMeta.dynamic_variables && callMeta.dynamic_variables.clinic_id) {
                 connection.clinic_id = callMeta.dynamic_variables.clinic_id;
-                console.log(`✅ Extracted clinic_id from dynamic variables: ${connection.clinic_id}`);
             } else if (callMeta.metadata && callMeta.metadata.clinic_id) {
                 connection.clinic_id = callMeta.metadata.clinic_id;
-                console.log(`✅ Extracted clinic_id from metadata: ${connection.clinic_id}`);
-            } else if (connection.customer_id && !connection.clinic_id) {
-                const clinicRow = this.db.db
-                    .prepare('SELECT clinic_id FROM clinics WHERE merchant_id = (SELECT merchant_id FROM customers WHERE id = ? LIMIT 1) LIMIT 1')
-                    .get(connection.customer_id);
-                if (clinicRow?.clinic_id) {
-                    connection.clinic_id = clinicRow.clinic_id;
+            } else if (dvEarly?.clinic_id) {
+                connection.clinic_id = String(dvEarly.clinic_id);
+            }
+
+            if (dvEarly?.site_context_status) {
+                connection.site_context_status = String(dvEarly.site_context_status);
+            }
+            if (dvEarly?.clinic_id_source) {
+                connection.clinic_id_source = String(dvEarly.clinic_id_source);
+            }
+
+            try {
+                const { resolveCallSiteContext, isDevClinicFallbackAllowed } = require('../services/call-site-context');
+                const callTypeMetaEarly =
+                    dvEarly?.call_type ||
+                    callMeta.metadata?.call_type ||
+                    connection.call_type ||
+                    null;
+                const directionMetaEarly =
+                    dvEarly?.direction || callMeta.metadata?.direction || connection.direction || null;
+                const siteCtx = resolveCallSiteContext({
+                    db: this.db,
+                    to_number: callMeta.to_number || dvEarly?.to_number,
+                    customer_id: connection.customer_id,
+                    clinic_id: connection.clinic_id,
+                    merchant_id: dvEarly?.merchant_id || callMeta.metadata?.merchant_id || null,
+                    call_type: callTypeMetaEarly,
+                    direction: directionMetaEarly,
+                    routing_world: connection.routing_world || null,
+                    isSomoDemoDemo: somoDemoHandler.isSomoDemoDemoConnection(connection),
+                    allow_heuristic: isDevClinicFallbackAllowed()
+                });
+                connection.site_context = siteCtx;
+                connection.site_context_status = siteCtx.site_context_status;
+                connection.clinic_id_source = siteCtx.clinic_id_source;
+                try {
+                    const { buildVoiceCallContext, runtimeClinicId, canRunKelly } = require('../services/voice-call-context');
+                    connection.voiceContext = buildVoiceCallContext({
+                        siteContext: siteCtx,
+                        routing_world: connection.routing_world || null,
+                        call_type: callTypeMetaEarly,
+                        direction: directionMetaEarly
+                    });
+                    connection.kelly_admission_blocked = !canRunKelly(connection.voiceContext);
+                    const trustedClinic = runtimeClinicId(connection.voiceContext);
+                    if (trustedClinic) connection.clinic_id = trustedClinic;
+                } catch (_) {}
+                if (siteCtx.clinic_id && !connection.clinic_id && siteCtx.site_context_status === 'verified') {
+                    connection.clinic_id = siteCtx.clinic_id;
                 }
-            } else if (callMeta.agent_id) {
-                // Look up clinic by Retell agent_id (check clinics table first, then customers for backward compatibility)
+                if (siteCtx.customer_id && !connection.customer_id) {
+                    connection.customer_id = siteCtx.customer_id;
+                }
+                this.db.upsertCallSiteContext?.({
+                    call_id: callId,
+                    session_id: callId,
+                    to_number: siteCtx.to_number,
+                    customer_id: siteCtx.customer_id,
+                    clinic_id: siteCtx.clinic_id,
+                    merchant_id: siteCtx.merchant_id,
+                    location_id: siteCtx.location_id,
+                    clinic_id_source: siteCtx.clinic_id_source,
+                    site_context_status: siteCtx.site_context_status
+                });
+                this.db.insertKellyCallEvent?.({
+                    session_id: callId,
+                    call_id: callId,
+                    event_type: 'call_site_context_resolved',
+                    clinic_id: siteCtx.clinic_id,
+                    customer_id: siteCtx.customer_id,
+                    payload_json: siteCtx
+                });
+                if (this.db?.getOrchestrateSessionBySessionId && this.db?.upsertOrchestrateSession) {
+                    const existing = this.db.getOrchestrateSessionBySessionId(callId);
+                    if (
+                        existing?.clinic_id &&
+                        siteCtx.clinic_id &&
+                        String(existing.clinic_id) !== String(siteCtx.clinic_id) &&
+                        siteCtx.site_context_status === 'verified'
+                    ) {
+                        this.db.insertKellyCallEvent?.({
+                            session_id: callId,
+                            call_id: callId,
+                            event_type: 'orchestrate_site_mismatch',
+                            clinic_id: siteCtx.clinic_id,
+                            customer_id: siteCtx.customer_id,
+                            payload_json: {
+                                prior_clinic_id: existing.clinic_id,
+                                verified_clinic_id: siteCtx.clinic_id
+                            }
+                        });
+                    }
+                    if (siteCtx.site_context_status === 'verified' && siteCtx.clinic_id) {
+                        this.db.upsertOrchestrateSession({
+                            session_id: callId,
+                            channel: 'voice',
+                            clinic_id: siteCtx.clinic_id,
+                            caller_phone: connection.customerPhone || callMeta.from_number || null,
+                            patient_id: connection.patientId || null,
+                            turn_count: existing?.turn_count || 0,
+                            conversation_history: existing?.conversation_history || [],
+                            flow_state: {
+                                ...(existing?.flow_state || {}),
+                                customer_id: siteCtx.customer_id || connection.customer_id || null
+                            }
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️  call_site_context resolve failed:', e.message);
+            }
+
+            // Agent_id lookup only when clinic still missing (no LIMIT 1 merchant shortcut)
+            if (!connection.clinic_id && callMeta.agent_id) {
                 const clinic = this.db.db.prepare('SELECT * FROM clinics WHERE retell_agent_id = ?').get(callMeta.agent_id);
                 if (clinic) {
                     connection.clinic_id = clinic.clinic_id;
-                    console.log(`✅ Looked up clinic_id from agent_id: ${connection.clinic_id}`);
-                } else {
-                    // Fallback: check customers table (legacy support)
-                    const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(callMeta.agent_id);
-                    if (customer) {
-                        if (!connection.customer_id) {
-                            connection.customer_id = customer.id;
-                            console.log(`✅ Resolved customer_id from agent_id lookup: ${connection.customer_id}`);
-                        }
-                        const clinicRow = this.db.db.prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1').get(customer.merchant_id);
-                        if (clinicRow?.clinic_id) {
-                            connection.clinic_id = clinicRow.clinic_id;
-                            console.log(`✅ Looked up clinic_id from customer agent_id: ${connection.clinic_id}`);
-                        } else {
-                            console.warn(`⚠️  No clinic found for merchant_id=${customer.merchant_id} (agent_id lookup) — clinic_id left unset`);
-                        }
-                    }
+                    connection.clinic_id_source = 'agent_id';
                 }
             }
 
-            // Fallback: Try to lookup by phone number
-            if (!connection.clinic_id) {
-                const toNumber = callMeta.to_number;
-                if (toNumber) {
-                    const clinicPhone = this.db.getClinicPhoneNumber(toNumber);
-                    if (clinicPhone && clinicPhone.clinic_id) {
-                        connection.clinic_id = clinicPhone.clinic_id;
-                        console.log(`✅ Looked up clinic_id from phone number: ${connection.clinic_id}`);
-                    }
-                }
-            }
-
-            // Task 6: Fallback clinic_id from env only. S-1: No arbitrary DB clinic—multi-tenant leak risk.
-            if (!connection.clinic_id) {
-                const fallback = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID;
-                if (fallback) {
-                    connection.clinic_id = fallback;
-                    console.log(`⚠️  Using fallback clinic_id from env: ${connection.clinic_id}`);
-                }
-            }
-
-            // Inbound calls often register patient_name in Retell dynamic variables before the WS connects.
-            // Apply it so we do not loop on "I didn't catch your name" when the caller already exists.
             const dv =
                 callMeta.dynamic_variables ||
                 callMeta.retell_llm_dynamic_variables ||
                 (callMeta.metadata && callMeta.metadata.dynamic_variables);
+            if (!connection.customer_id && dv?.customer_id) {
+                connection.customer_id = String(dv.customer_id);
+            }
+            if (!connection.clinic_id && dv?.clinic_id) {
+                connection.clinic_id = String(dv.clinic_id);
+            }
+            if (!connection.call_type && dv?.call_type) {
+                connection._demoCallType = String(dv.call_type);
+            }
+            if (!connection.direction && dv?.direction) {
+                connection.direction = String(dv.direction);
+            }
+            connection.to_number = connection.to_number || callMeta.to_number || dv?.to_number || null;
+            connection.from_number = connection.from_number || callMeta.from_number || dv?.from_number || null;
+
             const knownFromCall = dv && (dv.patient_name || dv.patientName || dv.prospect_name);
             if (knownFromCall && String(knownFromCall).trim()) {
                 const pn = String(knownFromCall).trim();
@@ -472,13 +556,55 @@ class RetellWebSocketHandler {
             connection.call_type = callTypeMeta;
             connection.direction = directionMeta;
 
+            try {
+                const {
+                    resolveRoutingWorld,
+                    isTenantResolvedForMode,
+                    emitRoutingWorldEvent
+                } = require('../services/voice-routing-world');
+                let customerRow = null;
+                if (connection.customer_id) {
+                    try {
+                        customerRow = this.db.db
+                            .prepare('SELECT * FROM customers WHERE id = ?')
+                            .get(connection.customer_id);
+                    } catch (_) {}
+                }
+                const routingWorld = resolveRoutingWorld({
+                    call_type: callTypeMeta,
+                    direction: directionMeta,
+                    to_number: callMeta.to_number,
+                    customer_id: connection.customer_id,
+                    customer: customerRow
+                });
+                connection.routing_world = routingWorld;
+                emitRoutingWorldEvent(this.db, {
+                    session_id: callId,
+                    call_id: callId,
+                    routing_world: routingWorld,
+                    extra: {
+                        to_number: callMeta.to_number || null,
+                        customer_id: connection.customer_id || null,
+                        call_type: callTypeMeta,
+                        direction: directionMeta
+                    }
+                });
+                if (routingWorld === 'demo') {
+                    connection._demoCallType = 'somo_demo';
+                    connection._isSomoDemoDemo = true;
+                }
+            } catch (e) {
+                console.warn('⚠️  routing_world resolve failed:', e.message);
+            }
+
             if (callTypeMeta === 'sales_outbound' || callTypeMeta === 'operator_outbound') {
                 connection.awaitingName = false;
             }
 
             try {
                 const { seedModeAtCallStart } = require('../services/conversation-mode/conversation-mode-session');
-                const tenantResolved = !!(connection.clinic_id || connection.customer_id);
+                const { isTenantResolvedForMode } = require('../services/voice-routing-world');
+                const tenantResolved = isTenantResolvedForMode(connection.customer_id);
                 const seeded = seedModeAtCallStart({
                     sessionId: callId,
                     db: this.db,
@@ -487,6 +613,11 @@ class RetellWebSocketHandler {
                     call_type: callTypeMeta,
                     direction: directionMeta,
                     tenantResolved,
+                    routing_world: connection.routing_world || null,
+                    site_context_status:
+                        connection.voiceContext?.site_context_status ||
+                        connection.site_context_status ||
+                        null,
                     appointmentId:
                         connection.appointment_id ||
                         callMeta.metadata?.appointment_id ||
@@ -687,6 +818,26 @@ class RetellWebSocketHandler {
 
         // VOICE_AGENT_ENABLED gate (u-4): when 0, reject voice; redirect to web chat
         if (connection?.agentBlocked) {
+            const blockMsg =
+                connection.providerAfterHoursMessage ||
+                'Our office is unavailable by phone right now. Please try again during business hours.';
+            try {
+                const { attemptEscalation } = require('../services/escalation-service');
+                const esc = attemptEscalation(this.db, {
+                    sessionId: callId,
+                    callId,
+                    reason: 'agent_blocked',
+                    clinic_id: connection.clinic_id,
+                    customer_id: connection.customer_id,
+                    reply: blockMsg
+                });
+                this.sendEscalationResponse(connection.ws, esc.reply || blockMsg, message.response_id, {
+                    transferNumber: esc.transfer_number || null,
+                    endCall: esc.end_call || !esc.transfer_number
+                });
+            } catch (_) {
+                this.sendRetellResponse(connection.ws, blockMsg, message.response_id);
+            }
             return;
         }
 
@@ -901,6 +1052,96 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 }
 
                 if (!agentReply) {
+                const { shouldBlockKellyTurn } = require('../services/voice-routing-world');
+                if (shouldBlockKellyTurn(connection?.routing_world)) {
+                    try {
+                        const { getEmergencyResponseIfNeeded } = require('../services/emergency-safety');
+                        const locale =
+                            this.db?.getKellySessionLanguage?.(callId) ||
+                            connection?.preferred_language ||
+                            'en';
+                        const emergency = getEmergencyResponseIfNeeded(userSaid, locale);
+                        if (emergency?.reply) {
+                            agentReply = emergency.reply;
+                            kellyResult = {
+                                reply: agentReply,
+                                blocked: true,
+                                routing_world: connection.routing_world,
+                                end_call: emergency.endCall
+                            };
+                        }
+                    } catch (_) {}
+                    if (!agentReply) {
+                        const { attemptEscalation } = require('../services/escalation-service');
+                        const esc = attemptEscalation(this.db, {
+                            sessionId: callId,
+                            callId,
+                            reason: 'kelly_blocked',
+                            routing_world: connection.routing_world,
+                            clinic_id: connection.clinic_id,
+                            customer_id: connection.customer_id
+                        });
+                        agentReply =
+                            esc.reply ||
+                            'Thanks for calling Somo. I am having trouble loading your account. Let me connect you with our team.';
+                        kellyResult = {
+                            reply: agentReply,
+                            blocked: true,
+                            routing_world: connection.routing_world,
+                            transfer_number: esc.transfer_number || null,
+                            end_call: esc.end_call || false
+                        };
+                        if (esc.transfer_number || esc.end_call) {
+                            this.sendEscalationResponse(connection.ws, agentReply, message.response_id, {
+                                transferNumber: esc.transfer_number || null,
+                                endCall: esc.end_call || false
+                            });
+                            connection.conversationHistory.push({
+                                role: 'assistant',
+                                content: agentReply,
+                                timestamp: Date.now()
+                            });
+                            return;
+                        }
+                    }
+                    if (!kellyResult) {
+                        kellyResult = { reply: agentReply, blocked: true, routing_world: connection.routing_world };
+                    }
+                } else if (connection.kelly_admission_blocked) {
+                    try {
+                        const { attemptEscalation } = require('../services/escalation-service');
+                        const esc = attemptEscalation(this.db, {
+                            sessionId: callId,
+                            callId,
+                            reason: 'kelly_admission_blocked',
+                            routing_world: connection.routing_world,
+                            clinic_id: connection.clinic_id,
+                            customer_id: connection.customer_id
+                        });
+                        agentReply =
+                            esc.reply ||
+                            'Thanks for calling. I need to connect you with our team to help with your call.';
+                        kellyResult = {
+                            reply: agentReply,
+                            blocked: true,
+                            routing_world: connection.routing_world,
+                            transfer_number: esc.transfer_number || null,
+                            end_call: esc.end_call || false
+                        };
+                        if (esc.transfer_number || esc.end_call) {
+                            this.sendEscalationResponse(connection.ws, agentReply, message.response_id, {
+                                transferNumber: esc.transfer_number || null,
+                                endCall: esc.end_call || false
+                            });
+                            connection.conversationHistory.push({
+                                role: 'assistant',
+                                content: agentReply,
+                                timestamp: Date.now()
+                            });
+                            return;
+                        }
+                    } catch (_) {}
+                } else {
                 // Coding graph handles billing codes; Kelly Rails V2 owns patient conversation (see kelly-rails/).
                 const { runKellyTurn } = require('../services/kelly-turn-resolver');
                 const {
@@ -938,7 +1179,10 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     outbound_purpose:
                         connection?.outbound_purpose ||
                         connection?.callMetadata?.metadata?.outbound_purpose ||
-                        null
+                        null,
+                    routing_world: connection?.routing_world || null,
+                    fail_closed: !!connection?.conversation_fail_closed,
+                    site_context_status: connection?.site_context_status || null
                 };
                 const fillerMs = parseInt(process.env.KELLY_VOICE_FILLER_MS || '1200', 10) || 1200;
                 const voiceLocaleForFiller =
@@ -999,9 +1243,19 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                         try {
                             appendHistory(callId, 'assistant', agentReply);
                         } catch (_) {}
-                        this.sendRetellResponse(connection.ws, agentReply, message.response_id);
+                        if (result?.transfer_number) {
+                            this.sendEscalationResponse(connection.ws, agentReply, message.response_id, {
+                                transferNumber: result.transfer_number,
+                                endCall: result.endCall !== false
+                            });
+                        } else {
+                            this.sendRetellResponse(connection.ws, agentReply, message.response_id, {
+                                endCall: true
+                            });
+                        }
                     }
                     return;
+                }
                 }
                 }
             } catch (e) {
@@ -1108,11 +1362,18 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                         channel: 'voice',
                         patient_id: connection?.patientId || row?.patient_id,
                         caller_phone: connection?.customerPhone || connection?.callMetadata?.from_number || row?.caller_phone,
-                        clinic_id: connection?.clinic_id || row?.clinic_id,
+                        clinic_id:
+                            connection?.site_context_status === 'verified' && connection?.clinic_id
+                                ? connection.clinic_id
+                                : connection?.clinic_id || row?.clinic_id,
                         preferred_language: preferredLang,
                         turn_count: (row?.turn_count ?? 0) + 1,
                         conversation_history: connection.conversationHistory,
-                        flow_state: { ...(row?.flow_state || {}), initial_name: connection?.initialName }
+                        flow_state: {
+                            ...(row?.flow_state || {}),
+                            initial_name: connection?.initialName,
+                            customer_id: connection?.customer_id || row?.flow_state?.customer_id || null
+                        }
                     });
                 }
             } catch (e2) { console.warn('⚠️  orch-1/orch-4: Failed to persist voice session:', e2?.message); }
@@ -1141,7 +1402,16 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 }
             }
 
-            this.sendRetellResponse(connection.ws, agentReply, message.response_id);
+            const transferNum = kellyResult?.transfer_number || null;
+            const endCall = kellyResult?.end_call || false;
+            if (transferNum || (endCall && kellyResult?.blocked)) {
+                this.sendEscalationResponse(connection.ws, agentReply, message.response_id, {
+                    transferNumber: transferNum,
+                    endCall: endCall || Boolean(transferNum)
+                });
+            } else {
+                this.sendRetellResponse(connection.ws, agentReply, message.response_id, { endCall });
+            }
         }
     }
 
@@ -1179,6 +1449,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             const modeCtx = {
                 conversation_mode: connection.conversation_mode,
                 active_subrail: connection.active_subrail,
+                site_context_status: connection.site_context_status || null,
+                routing_world: connection.routing_world || null,
                 sessionId: callId,
                 callId
             };
@@ -1278,6 +1550,23 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 case 'end_call':
                     result = await this.handleEndCall(callId, functionArgs);
                     break;
+
+                case 'transfer_call': {
+                    const patientId = connection.patientId || null;
+                    const callerPhone =
+                        connection.customerPhone || connection.callMetadata?.from_number || null;
+                    result = await KellyToolExecutor.execute(functionName, functionArgs, {
+                        sessionId: callId,
+                        clinicId,
+                        patientId,
+                        callerPhone,
+                        customerId: connection.customer_id || null,
+                        callId,
+                        channel: 'voice',
+                        locale: this.db?.getKellySessionLanguage?.(callId) || 'en'
+                    });
+                    break;
+                }
 
                 case 'get_patient_claims':
                     result = await this.handleGetPatientClaims(callId, functionArgs);
@@ -1456,6 +1745,21 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 function_call_id: functionCall.id || functionCall.function_call_id,
                 result: result
             });
+
+            if (functionName === 'transfer_call' && result?.transfer_number) {
+                this.sendEscalationResponse(connection.ws, result.reply || 'Let me connect you with our team.', message.response_id, {
+                    transferNumber: result.transfer_number,
+                    endCall: result.end_call || true
+                });
+                try {
+                    const { updateHandoffOutcome } = require('../services/escalation-service');
+                    updateHandoffOutcome(this.db, {
+                        sessionId: callId,
+                        callId,
+                        outcome: 'transfer_dispatched_ws'
+                    });
+                } catch (_) {}
+            }
 
         } catch (error) {
             const responseTime = Date.now() - startTime;
@@ -2649,9 +2953,13 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 connection.clinic_id = tenant.clinicId;
             }
 
+            const { runtimeClinicId } = require('../services/voice-call-context');
+            const trustedClinic =
+                runtimeClinicId(connection.voiceContext) || tenant.clinicId || connection.clinic_id || null;
             const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(this.db, {
                 merchantId: tenant.merchantId,
-                customerId: tenant.customerId
+                customerId: tenant.customerId,
+                clinicId: trustedClinic || undefined
             });
             connection.voiceRuntime = runtime;
 
@@ -2683,7 +2991,11 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 settingsRow = normalizeSettingsRow(
                     this.db.getVoiceAgentSettingsForProvider({
                         merchantId: tenant.merchantId,
-                        customerId: tenant.customerId
+                        customerId: tenant.customerId,
+                        clinicId:
+                            connection.site_context_status === 'verified'
+                                ? connection.clinic_id || tenant.clinicId
+                                : null
                     })
                 );
             }
@@ -2782,7 +3094,27 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         if (options.endCall) {
             payload.end_call = true;
         }
+        if (options.transferNumber) {
+            payload.transfer_number = options.transferNumber;
+            if (options.noInterruptionAllowed !== false) {
+                payload.no_interruption_allowed = true;
+            }
+        }
+        if (options.noInterruptionAllowed && !options.transferNumber) {
+            payload.no_interruption_allowed = true;
+        }
         this.sendToRetell(ws, payload);
+    }
+
+    sendEscalationResponse(ws, content, responseId, options = {}) {
+        const { sendEscalationReply } = require('../services/retell-transfer');
+        sendEscalationReply((payload) => this.sendToRetell(ws, payload), {
+            content,
+            responseId,
+            transferNumber: options.transferNumber,
+            endCall: options.endCall,
+            noInterruptionAllowed: options.noInterruptionAllowed
+        });
     }
 
     /** Partial reply while turn is still processing (perceived latency). */

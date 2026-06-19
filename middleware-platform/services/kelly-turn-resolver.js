@@ -171,7 +171,9 @@ async function runKellyTurn(opts = {}) {
       customerId: opts.customerId || null,
       call_type: opts.call_type || null,
       direction: opts.direction || null,
-      tenantResolved: !!(clinicId || opts.customerId),
+      site_context_status: opts.site_context_status || null,
+      tenantResolved: require('./voice-routing-world').isTenantResolvedForMode(opts.customerId),
+      routing_world: opts.routing_world || null,
       preferredLanguage: locale
     });
     if (!admission.admitted) {
@@ -184,12 +186,24 @@ async function runKellyTurn(opts = {}) {
         direction: opts.direction || null,
         reason: admission.reason
       });
+      const { attemptEscalation } = require('./escalation-service');
+      const esc = attemptEscalation(db, {
+        sessionId,
+        callId: opts.callId || null,
+        clinicId,
+        customerId: opts.customerId || null,
+        reason: admission.reason || 'identity_admission_failed',
+        locale: admission.locale || locale,
+        reply: admission.reply
+      });
       return {
-        reply: admission.reply || '',
-        endCall: false,
+        reply: esc.reply || admission.reply || '',
+        transfer_number: esc.transfer_number || null,
+        endCall: esc.end_call || false,
         toolsUsed: [],
         language: admission.locale || locale,
         identity_admission_failed: true,
+        escalation_outcome: esc.outcome,
         kelly_rails: { active_lane: 'support', step: 'handoff', flags: { identity_invalid: true } }
       };
     }
@@ -221,6 +235,8 @@ async function runKellyTurn(opts = {}) {
         opener_delivered: opts.opener_delivered || false,
         appointmentId: opts.appointmentId || opts.appointment_id || null,
         outbound_purpose: opts.outbound_purpose || null,
+        routing_world: opts.routing_world || null,
+        fail_closed: opts.fail_closed || false,
         tenantPolicy: opts.tenantPolicy || null,
         db,
         patientId: opts.patientId || null,
@@ -324,6 +340,7 @@ async function runKellyTurn(opts = {}) {
       emitOrchestrationTrace(db, {
         sessionId,
         callId: opts.callId,
+        routing_world: opts.routing_world || convResult?.session?.routing_world || null,
         conversation_mode: opts.conversation_mode || convResult?.session?.conversation_mode,
         active_subrail: opts.active_subrail || convResult?.session?.active_subrail,
         handoff: convResult?.handoff,

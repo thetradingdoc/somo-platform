@@ -2,13 +2,20 @@
 
 const { ConversationMode, Subrail } = require('./conversation-mode-types');
 const { isOpqrstFieldGateEnabled } = require('../kelly-rails/config');
+const { TriagePolicy } = require('./tenant-policy');
 
 /**
  * Mode + subrail tool firewall.
  * Blocks cross-mode tool bleed per plan P5.
  */
 
-const ALWAYS_ALLOWED = new Set(['get_triage_session', 'end_call', 'transfer_call']);
+const ALWAYS_ALLOWED = new Set(['get_triage_session', 'end_call']);
+
+const CLINICAL_TOOLS = new Set([
+  'store_triage_opqrst',
+  'store_triage_rich_intake',
+  'run_triage_rag'
+]);
 
 const MODE_FORBIDDEN_TOOLS = {
   [ConversationMode.DEMO_QUAL]: new Set([
@@ -45,8 +52,33 @@ const SUBRAIL_FORBIDDEN_TOOLS = {
   [Subrail.COPAY_LINK]: new Set(['store_triage_opqrst', 'schedule_appointment']),
   [Subrail.RECORDS_QA]: new Set(['schedule_appointment', 'request_patient_payment']),
   [Subrail.BOOKING]: new Set(['store_triage_opqrst']),
-  [Subrail.CANCELLATION]: new Set(['store_triage_opqrst', 'request_patient_payment'])
+  [Subrail.CANCELLATION]: new Set(['store_triage_opqrst', 'request_patient_payment']),
+  [Subrail.HANDOFF]: new Set([
+    'store_triage_opqrst',
+    'store_triage_rich_intake',
+    'run_triage_rag',
+    'schedule_appointment'
+  ])
 };
+
+const SITE_SENSITIVE_TOOLS = new Set([
+  'store_triage_opqrst',
+  'store_triage_rich_intake',
+  'run_triage_rag',
+  'schedule_appointment',
+  'cancel_appointment',
+  'reschedule_appointment',
+  'create_appointment_checkout',
+  'search_appointments',
+  'transfer_call'
+]);
+
+function isSiteSensitiveToolBlocked(ctx = {}, name) {
+  if (!SITE_SENSITIVE_TOOLS.has(name)) return false;
+  const status = ctx.site_context_status || ctx.siteContextStatus;
+  if (!status || status === 'not_required' || status === 'verified') return false;
+  return true;
+}
 
 const SUBRAIL_ALLOWED_EXTRA = {
   [Subrail.OPQRST]: new Set(['store_triage_opqrst', 'store_triage_rich_intake', 'run_triage_rag']),
@@ -61,10 +93,30 @@ const SUBRAIL_ALLOWED_EXTRA = {
   [Subrail.RECORDS_QA]: new Set(['query_patient_records'])
 };
 
+function isClinicalToolBlocked(ctx = {}, name) {
+  if (!CLINICAL_TOOLS.has(name)) return false;
+  if (ctx.fail_closed || ctx.routing_world === 'unidentified') return true;
+  const triagePolicy = String(ctx.triage_policy || ctx.triagePolicy || '').toLowerCase();
+  if (triagePolicy === TriagePolicy.DISABLED) return true;
+  if (ctx.routing_world === 'platform_support') return true;
+  if (ctx.active_subrail === Subrail.HANDOFF || ctx.subrail === Subrail.HANDOFF) return true;
+  if (
+    ctx.conversation_mode === ConversationMode.TENANT_INBOUND_ADMIN &&
+    ctx.active_subrail !== Subrail.OPQRST &&
+    ctx.subrail !== Subrail.OPQRST
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function isToolAllowedForMode(toolName, ctx = {}) {
   const name = String(toolName || '').trim();
   if (!name) return false;
   if (ALWAYS_ALLOWED.has(name)) return true;
+
+  if (isSiteSensitiveToolBlocked(ctx, name)) return false;
+  if (isClinicalToolBlocked(ctx, name)) return false;
 
   const mode = ctx.conversation_mode || ctx.mode;
   const subrail = ctx.active_subrail || ctx.subrail;
@@ -127,6 +179,7 @@ function logModeViolation(db, ctx = {}) {
       event_type: 'mode_violation_blocked',
       payload_json: {
         tool: ctx.toolName,
+        routing_world: ctx.routing_world || null,
         conversation_mode: ctx.conversation_mode || ctx.mode,
         active_subrail: ctx.active_subrail || ctx.subrail,
         step: ctx.step || null
@@ -141,5 +194,6 @@ module.exports = {
   SUBRAIL_FORBIDDEN_TOOLS,
   SUBRAIL_ALLOWED_EXTRA,
   isToolAllowedForMode,
-  logModeViolation
+  logModeViolation,
+  isClinicalToolBlocked
 };

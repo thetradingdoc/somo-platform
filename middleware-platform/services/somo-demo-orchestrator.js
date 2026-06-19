@@ -74,9 +74,18 @@ function advanceStage(current, userText) {
   const t = String(userText || '').toLowerCase();
   const idx = STAGES.indexOf(current);
   if (idx < 0) return 'OPEN';
+  if (/\b(don't call|do not call|stop calling|remove me|unsubscribe)\b/.test(t)) return 'CLOSE';
   if (/\b(no|not interested|stop|goodbye|bye)\b/.test(t) && idx >= 2) return 'CLOSE';
-  if (/\b(sign up|signup|link|text me|send link|envía|envíame|mándame)\b/.test(t)) return 'CTA';
+  if (/\b(sign up|signup|link|text me|send link|envía|envíame|mándame|book a call|schedule a call|team call)\b/.test(t)) {
+    return 'CTA';
+  }
   if (/\b(expensive|already have|not sure|think about|caro|pensarlo)\b/.test(t)) return 'OBJECTION';
+  if (
+    current === 'VALUE' &&
+    /\b(rash|pain|fever|symptom|appointment for my|book me for|see a doctor)\b/.test(t)
+  ) {
+    return 'CTA';
+  }
   if (idx < STAGES.length - 1) return STAGES[idx + 1];
   return current;
 }
@@ -96,8 +105,8 @@ function ruleBasedReply(stage, context) {
         return 'Somo contesta llamadas 24/7 y agenda citas con un solo panel. Puedo mostrarte cómo encaja con tu equipo.';
       case 'OBJECTION':
         return 'Entiendo. Muchos equipos lo usan fuera de horario para no saturar recepción. ¿Te envío un enlace por mensaje?';
-      case 'CTA':
-        return '¿Te envío un enlace para agendar una demo de 15 minutos o empezar el registro?';
+    case 'CTA':
+      return '¿Te envío un enlace para agendar una llamada con nuestro equipo o empezar el registro?';
       case 'CLOSE':
       default:
         return `Gracias por tu tiempo, ${name}. ¡Que tengas buen día!`;
@@ -117,7 +126,7 @@ function ruleBasedReply(stage, context) {
     case 'OBJECTION':
       return 'Totally fair. Many teams use this for overflow and after-hours. Want me to text you a link?';
     case 'CTA':
-      return 'I can text you a link to book a short walkthrough or get started — should I send it?';
+      return 'I can text you a signup link, or our team can book a quick 15-minute call with you — which works better?';
     case 'CLOSE':
     default:
       return `Thanks for your time, ${name}. Have a great day!`;

@@ -6618,12 +6618,30 @@ module.exports = {
       return row ? { ...row, conversation_history: row.conversation_history ? JSON.parse(row.conversation_history) : [], flow_state: row.flow_state ? JSON.parse(row.flow_state) : {} } : null;
     } catch (_) { return null; }
   },
-  getOrchestrateSessionByCallerPhone: (caller_phone) => {
+  getOrchestrateSessionByCallerPhone: (caller_phone, opts = {}) => {
     if (!caller_phone) return null;
     try {
       const norm = String(caller_phone).replace(/\D/g, '');
       if (norm.length < 6) return null;
-      const rows = db.prepare('SELECT * FROM patient_orchestrate_sessions WHERE REPLACE(REPLACE(REPLACE(caller_phone, \'-\', \'\'), \' \', \'\'), \'+\', \'\') LIKE ? AND status = ? ORDER BY last_activity_at DESC LIMIT 1').all('%' + norm.slice(-10) + '%', 'active');
+      const clinicId = opts.clinicId || opts.clinic_id || null;
+      const customerId = opts.customerId || opts.customer_id || null;
+      const requireClinicScope = opts.requireClinicScope === true;
+      if (requireClinicScope && !clinicId) return null;
+
+      let sql = `SELECT * FROM patient_orchestrate_sessions
+        WHERE REPLACE(REPLACE(REPLACE(caller_phone, '-', ''), ' ', ''), '+', '') LIKE ?
+        AND status = ?`;
+      const params = ['%' + norm.slice(-10) + '%', 'active'];
+      if (clinicId) {
+        sql += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+      if (customerId) {
+        sql += ' AND (flow_state LIKE ? OR flow_state IS NULL)';
+        params.push(`%"customer_id":"${customerId}"%`);
+      }
+      sql += ' ORDER BY last_activity_at DESC LIMIT 1';
+      const rows = db.prepare(sql).all(...params);
       const row = rows && rows[0];
       return row ? { ...row, conversation_history: row.conversation_history ? JSON.parse(row.conversation_history) : [], flow_state: row.flow_state ? JSON.parse(row.flow_state) : {} } : null;
     } catch (_) { return null; }
@@ -6636,6 +6654,10 @@ module.exports = {
       const history = JSON.stringify(data.conversation_history || []);
       const flow_state = JSON.stringify(data.flow_state || {});
       const case_id = data.case_id || (data.flow_state && data.flow_state.case_id) || null;
+      const forceClinicSync = !!(data.force_clinic_sync || data.verified_site_upsert);
+      const clinicUpdate = forceClinicSync
+        ? 'clinic_id = excluded.clinic_id,'
+        : 'clinic_id = COALESCE(excluded.clinic_id, patient_orchestrate_sessions.clinic_id),';
       db.prepare(`
         INSERT INTO patient_orchestrate_sessions (id, session_id, channel, patient_id, caller_phone, portal_session_id, clinic_id, preferred_language, turn_count, conversation_history, flow_state, case_id, status, created_at, updated_at, last_activity_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -6643,7 +6665,7 @@ module.exports = {
           patient_id = COALESCE(excluded.patient_id, patient_orchestrate_sessions.patient_id),
           caller_phone = COALESCE(excluded.caller_phone, patient_orchestrate_sessions.caller_phone),
           portal_session_id = COALESCE(excluded.portal_session_id, patient_orchestrate_sessions.portal_session_id),
-          clinic_id = COALESCE(excluded.clinic_id, patient_orchestrate_sessions.clinic_id),
+          ${clinicUpdate}
           preferred_language = COALESCE(excluded.preferred_language, patient_orchestrate_sessions.preferred_language),
           turn_count = excluded.turn_count,
           conversation_history = excluded.conversation_history,
@@ -6690,21 +6712,43 @@ module.exports = {
   createCaseRecord: (data) => {
     try {
       const now = new Date().toISOString();
-      db.prepare(`
-        INSERT INTO case_records (id, case_number, patient_id, session_id, channel, visit_mode, status, opqrst, suggested_icd10, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        data.id,
-        data.case_number,
-        data.patient_id || null,
-        data.session_id || null,
-        data.channel || 'chat',
-        data.visit_mode || null,
-        data.status || 'draft',
-        data.opqrst ? (typeof data.opqrst === 'string' ? data.opqrst : JSON.stringify(data.opqrst)) : null,
-        data.suggested_icd10 || null,
-        data.created_at || now
-      );
+      const cols = db.prepare('PRAGMA table_info(case_records)').all().map((c) => c.name);
+      const hasTenant = cols.includes('clinic_id') && cols.includes('customer_id');
+      if (hasTenant) {
+        db.prepare(`
+          INSERT INTO case_records (id, case_number, patient_id, session_id, channel, visit_mode, status, opqrst, suggested_icd10, clinic_id, customer_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          data.id,
+          data.case_number,
+          data.patient_id || null,
+          data.session_id || null,
+          data.channel || 'chat',
+          data.visit_mode || null,
+          data.status || 'draft',
+          data.opqrst ? (typeof data.opqrst === 'string' ? data.opqrst : JSON.stringify(data.opqrst)) : null,
+          data.suggested_icd10 || null,
+          data.clinic_id || null,
+          data.customer_id || null,
+          data.created_at || now
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO case_records (id, case_number, patient_id, session_id, channel, visit_mode, status, opqrst, suggested_icd10, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          data.id,
+          data.case_number,
+          data.patient_id || null,
+          data.session_id || null,
+          data.channel || 'chat',
+          data.visit_mode || null,
+          data.status || 'draft',
+          data.opqrst ? (typeof data.opqrst === 'string' ? data.opqrst : JSON.stringify(data.opqrst)) : null,
+          data.suggested_icd10 || null,
+          data.created_at || now
+        );
+      }
       return { id: data.id, case_number: data.case_number };
     } catch (e) {
       if (e.message && (e.message.includes('UNIQUE') || e.message.includes('unique'))) {
@@ -7314,9 +7358,19 @@ module.exports = {
   getCustomerIdForClinic(clinicId) {
     if (!clinicId) return null;
     try {
+      const joinRow = db
+        .prepare(
+          `SELECT customer_id FROM customer_clinics WHERE clinic_id = ? ORDER BY is_primary DESC LIMIT 1`
+        )
+        .get(clinicId);
+      if (joinRow?.customer_id && db.getCustomer(joinRow.customer_id)) {
+        return joinRow.customer_id;
+      }
       const clinic = db.prepare('SELECT merchant_id FROM clinics WHERE clinic_id = ?').get(clinicId);
       if (!clinic?.merchant_id) return null;
-      const customer = db.prepare('SELECT id FROM customers WHERE merchant_id = ? LIMIT 1').get(clinic.merchant_id);
+      const customer = db
+        .prepare('SELECT id FROM customers WHERE merchant_id = ? ORDER BY created_at ASC LIMIT 1')
+        .get(clinic.merchant_id);
       return customer?.id || null;
     } catch (_) {
       return null;
@@ -9853,9 +9907,28 @@ module.exports = {
   getVoiceAgentSettings: (merchantId) => {
     if (!merchantId) return null;
     if (usePostgres && pgPool) {
-      return pgPool`SELECT * FROM voice_agent_settings WHERE merchant_id = ${merchantId}`.then(res => res[0] || null);
+      return pgPool`SELECT * FROM voice_agent_settings WHERE merchant_id = ${merchantId} AND clinic_id IS NULL`.then(res => res[0] || null);
     }
-    return db.prepare('SELECT * FROM voice_agent_settings WHERE merchant_id = ?').get(merchantId);
+    return db
+      .prepare('SELECT * FROM voice_agent_settings WHERE merchant_id = ? AND clinic_id IS NULL LIMIT 1')
+      .get(merchantId);
+  },
+
+  getVoiceAgentSettingsForClinic: ({ merchantId, clinicId } = {}) => {
+    if (!merchantId || !clinicId) return null;
+    try {
+      const cols = db.prepare('PRAGMA table_info(voice_agent_settings)').all();
+      if (!cols.some((c) => c.name === 'clinic_id')) return null;
+      return db
+        .prepare(
+          `SELECT * FROM voice_agent_settings
+           WHERE merchant_id = ? AND clinic_id = ?
+           LIMIT 1`
+        )
+        .get(merchantId, clinicId);
+    } catch (_) {
+      return null;
+    }
   },
 
   getVoiceAgentSettingsByCustomer: (customerId) => {
@@ -9875,7 +9948,11 @@ module.exports = {
     `).get(customerId, custKey);
   },
 
-  getVoiceAgentSettingsForProvider: ({ merchantId, customerId } = {}) => {
+  getVoiceAgentSettingsForProvider: ({ merchantId, customerId, clinicId } = {}) => {
+    if (clinicId && merchantId && module.exports.getVoiceAgentSettingsForClinic) {
+      const clinicRow = module.exports.getVoiceAgentSettingsForClinic({ merchantId, clinicId });
+      if (clinicRow) return clinicRow;
+    }
     if (merchantId) {
       const row = module.exports.getVoiceAgentSettings(merchantId);
       if (row) return row;
@@ -9886,13 +9963,16 @@ module.exports = {
     return null;
   },
 
-  upsertVoiceAgentSettings: (merchantId, settings = {}, customerId = null) => {
+  upsertVoiceAgentSettings: (merchantId, settings = {}, customerId = null, opts = {}) => {
     const resolvedMerchantId =
       merchantId ||
       (customerId ? module.exports.customerVoiceSettingsMerchantKey(customerId) : null);
     if (!resolvedMerchantId) {
       throw new Error('merchantId or customerId is required');
     }
+
+    const clinicId = opts.clinicId || opts.clinic_id || settings.clinic_id || null;
+    const rowId = clinicId ? `${resolvedMerchantId}:${clinicId}` : resolvedMerchantId;
 
     const payload = {
       retell_agent_id: settings.retell_agent_id || null,
@@ -9901,6 +9981,7 @@ module.exports = {
       after_hours_message: settings.after_hours_message || null,
       business_hours: settings.business_hours ? JSON.stringify(settings.business_hours) : null,
       customer_id: customerId || settings.customer_id || null,
+      clinic_id: clinicId || null,
       outbound_opener: settings.outbound_opener ?? null,
       outbound_enabled:
         settings.outbound_enabled !== undefined ? (settings.outbound_enabled ? 1 : 0) : undefined,
@@ -9917,16 +9998,6 @@ module.exports = {
       tone_preset: settings.tone_preset ?? undefined
     };
 
-    const sqliteSets = [];
-    const sqliteVals = [
-      resolvedMerchantId,
-      payload.customer_id,
-      payload.retell_agent_id,
-      payload.enabled,
-      payload.greeting,
-      payload.after_hours_message,
-      payload.business_hours
-    ];
     const optionalCols = [
       'outbound_opener',
       'outbound_enabled',
@@ -9938,13 +10009,46 @@ module.exports = {
       'last_sync_error',
       'tone_preset'
     ];
-    for (const col of optionalCols) {
-      if (payload[col] !== undefined) {
-        sqliteSets.push(`${col} = excluded.${col}`);
+
+    const hasIdCol = (() => {
+      try {
+        return db
+          .prepare('PRAGMA table_info(voice_agent_settings)')
+          .all()
+          .some((c) => c.name === 'id');
+      } catch (_) {
+        return false;
       }
-    }
+    })();
 
     if (usePostgres && pgPool) {
+      if (hasIdCol) {
+        return pgPool`
+          INSERT INTO voice_agent_settings (
+            id, merchant_id, clinic_id, customer_id, retell_agent_id, enabled, greeting,
+            after_hours_message, business_hours, updated_at
+          ) VALUES (
+            ${rowId},
+            ${resolvedMerchantId},
+            ${payload.clinic_id},
+            ${payload.customer_id},
+            ${payload.retell_agent_id},
+            ${payload.enabled},
+            ${payload.greeting},
+            ${payload.after_hours_message},
+            ${payload.business_hours},
+            NOW()
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            customer_id = COALESCE(EXCLUDED.customer_id, voice_agent_settings.customer_id),
+            retell_agent_id = EXCLUDED.retell_agent_id,
+            enabled = EXCLUDED.enabled,
+            greeting = EXCLUDED.greeting,
+            after_hours_message = EXCLUDED.after_hours_message,
+            business_hours = EXCLUDED.business_hours,
+            updated_at = NOW()
+        `;
+      }
       return pgPool`
         INSERT INTO voice_agent_settings (
           merchant_id, customer_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
@@ -9969,6 +10073,62 @@ module.exports = {
       `;
     }
 
+    const sqliteSets = [];
+    for (const col of optionalCols) {
+      if (payload[col] !== undefined) {
+        sqliteSets.push(`${col} = excluded.${col}`);
+      }
+    }
+
+    if (hasIdCol) {
+      const baseInsertCols = [
+        'id',
+        'merchant_id',
+        'clinic_id',
+        'customer_id',
+        'retell_agent_id',
+        'enabled',
+        'greeting',
+        'after_hours_message',
+        'business_hours'
+      ];
+      const extraInsertCols = optionalCols.filter((c) => payload[c] !== undefined);
+      const allInsertCols = [...baseInsertCols, ...extraInsertCols, 'updated_at'];
+      const allInsertVals = [
+        rowId,
+        resolvedMerchantId,
+        payload.clinic_id,
+        payload.customer_id,
+        payload.retell_agent_id,
+        payload.enabled,
+        payload.greeting,
+        payload.after_hours_message,
+        payload.business_hours,
+        ...extraInsertCols.map((c) => payload[c])
+      ];
+      const placeholders = allInsertCols
+        .map((c) => (c === 'updated_at' ? 'CURRENT_TIMESTAMP' : '?'))
+        .join(', ');
+      const updateSets = [
+        'merchant_id = excluded.merchant_id',
+        'clinic_id = excluded.clinic_id',
+        'customer_id = COALESCE(excluded.customer_id, voice_agent_settings.customer_id)',
+        'retell_agent_id = excluded.retell_agent_id',
+        'enabled = excluded.enabled',
+        'greeting = excluded.greeting',
+        'after_hours_message = excluded.after_hours_message',
+        'business_hours = excluded.business_hours',
+        ...sqliteSets,
+        'updated_at = CURRENT_TIMESTAMP'
+      ];
+      return db.prepare(`
+        INSERT INTO voice_agent_settings (${allInsertCols.join(', ')})
+        VALUES (${placeholders})
+        ON CONFLICT(id) DO UPDATE SET
+          ${updateSets.join(', ')}
+      `).run(...allInsertVals);
+    }
+
     const extraInsertCols = optionalCols.filter((c) => payload[c] !== undefined);
     const allInsertCols = [
       'merchant_id',
@@ -9989,8 +10149,7 @@ module.exports = {
       payload.greeting,
       payload.after_hours_message,
       payload.business_hours,
-      ...extraInsertCols.map((c) => payload[c]),
-      'CURRENT_TIMESTAMP'
+      ...extraInsertCols.map((c) => payload[c])
     ];
     const placeholders = allInsertCols
       .map((c) => (c === 'updated_at' ? 'CURRENT_TIMESTAMP' : '?'))
@@ -10011,7 +10170,7 @@ module.exports = {
       VALUES (${placeholders})
       ON CONFLICT(merchant_id) DO UPDATE SET
         ${updateSets.join(', ')}
-    `).run(...allInsertVals.filter((v) => v !== 'CURRENT_TIMESTAMP'));
+    `).run(...allInsertVals);
   },
 
   // ============================================
@@ -10434,15 +10593,64 @@ module.exports = {
     return null;
   },
 
-  // Get FHIR Patient by Phone
-  getFHIRPatientByPhone(phone) {
-    const stmt = db.prepare('SELECT * FROM fhir_patients WHERE phone = ? AND is_deleted = 0 ORDER BY created_at DESC LIMIT 1');
-    const row = stmt.get(phone);
-    if (!row) return null;
-    return {
-      ...row,
-      resource_data: JSON.parse(row.resource_data)
+  // Get FHIR Patient by Phone (optionally clinic / merchant scoped — T-005)
+  getFHIRPatientByPhone(phone, opts = {}) {
+    if (!phone) return null;
+    const clinicId = opts.clinicId || opts.clinic_id || null;
+    const merchantId = opts.merchantId || opts.merchant_id || null;
+    const requireClinicScope = opts.requireClinicScope === true;
+    if (requireClinicScope && !clinicId) return null;
+    const parseRow = (row) => {
+      if (!row) return null;
+      return {
+        ...row,
+        resource_data: JSON.parse(row.resource_data)
+      };
     };
+
+    if (clinicId) {
+      const hasClinicCol = db
+        .prepare('PRAGMA table_info(fhir_patients)')
+        .all()
+        .some((c) => c.name === 'clinic_id');
+      if (hasClinicCol) {
+        const byClinic = db
+          .prepare(
+            `SELECT * FROM fhir_patients
+             WHERE phone = ? AND is_deleted = 0 AND clinic_id = ?
+             ORDER BY created_at DESC LIMIT 1`
+          )
+          .get(phone, clinicId);
+        if (byClinic) return parseRow(byClinic);
+      }
+      try {
+        const byAppt = db
+          .prepare(
+            `SELECT p.* FROM fhir_patients p
+             INNER JOIN appointments a ON a.patient_id = p.resource_id AND a.clinic_id = ?
+             WHERE p.phone = ? AND p.is_deleted = 0
+             ORDER BY p.created_at DESC LIMIT 1`
+          )
+          .get(clinicId, phone);
+        if (byAppt) return parseRow(byAppt);
+      } catch (_) {}
+      if (merchantId) {
+        const byMerchant = db
+          .prepare(
+            `SELECT * FROM fhir_patients
+             WHERE phone = ? AND is_deleted = 0 AND merchant_id = ?
+             ORDER BY created_at DESC LIMIT 1`
+          )
+          .get(phone, merchantId);
+        if (byMerchant) return parseRow(byMerchant);
+      }
+      return null;
+    }
+
+    const stmt = db.prepare(
+      'SELECT * FROM fhir_patients WHERE phone = ? AND is_deleted = 0 ORDER BY created_at DESC LIMIT 1'
+    );
+    return parseRow(stmt.get(phone));
   },
 
   // Get FHIR Patient by Email
@@ -16858,74 +17066,159 @@ module.exports = {
 
   insertKellyCallEvent(event = {}) {
     if (!event.event_type) return null;
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS kelly_call_events (
-        id TEXT PRIMARY KEY,
-        session_id TEXT,
-        call_id TEXT,
-        event_type TEXT NOT NULL,
-        payload_json TEXT,
-        clinic_id TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_kelly_call_events_session_created
-        ON kelly_call_events(session_id, created_at);
-      CREATE INDEX IF NOT EXISTS idx_kelly_call_events_type_created
-        ON kelly_call_events(event_type, created_at);
-    `);
-    try {
-      const cols = db.prepare('PRAGMA table_info(kelly_call_events)').all();
-      if (!cols.some((c) => c.name === 'clinic_id')) {
-        db.exec('ALTER TABLE kelly_call_events ADD COLUMN clinic_id TEXT');
-      }
-      db.exec(
-        'CREATE INDEX IF NOT EXISTS idx_kelly_call_events_clinic_created ON kelly_call_events(clinic_id, created_at DESC)'
-      );
-    } catch (_) {}
 
     const payload = event.payload_json || {};
     const clinicId =
       event.clinic_id ||
       payload.clinic_id ||
       null;
+    const customerId =
+      event.customer_id ||
+      payload.customer_id ||
+      null;
 
     const id = event.id || `kce_${require('crypto').randomBytes(12).toString('hex')}`;
-    db.prepare(`
-      INSERT INTO kelly_call_events (id, session_id, call_id, event_type, payload_json, clinic_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      event.session_id || null,
-      event.call_id || null,
-      event.event_type,
-      safeStringify(payload),
-      clinicId,
-      event.created_at || new Date().toISOString()
-    );
+    try {
+      db.prepare(`
+        INSERT INTO kelly_call_events (id, session_id, call_id, event_type, payload_json, clinic_id, customer_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        event.session_id || null,
+        event.call_id || null,
+        event.event_type,
+        safeStringify(payload),
+        clinicId,
+        customerId,
+        event.created_at || new Date().toISOString()
+      );
+    } catch (e) {
+      console.warn('[kelly_call_events] insert failed:', e.message);
+      return null;
+    }
     return id;
+  },
+
+  insertHandoffEscalation(row = {}) {
+    const id = row.id || `he_${require('crypto').randomBytes(12).toString('hex')}`;
+    try {
+      db.prepare(`
+        INSERT INTO handoff_escalations (
+          id, session_id, call_id, reason, pstn_target,
+          script_played_at, transfer_attempted_at, outcome, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        id,
+        row.session_id || null,
+        row.call_id || null,
+        row.reason || 'handoff',
+        row.pstn_target || null,
+        row.script_played_at || null,
+        row.transfer_attempted_at || null,
+        row.outcome || null,
+        row.metadata_json ? safeStringify(row.metadata_json) : safeStringify(row.metadata || {})
+      );
+      return id;
+    } catch (e) {
+      console.warn('[handoff_escalations] insert failed:', e.message);
+      return null;
+    }
+  },
+
+  listHandoffEscalationsForCall(callId, { limit = 20 } = {}) {
+    if (!callId) return [];
+    try {
+      return db
+        .prepare(
+          `SELECT * FROM handoff_escalations
+           WHERE call_id = ? OR session_id = ?
+           ORDER BY created_at DESC LIMIT ?`
+        )
+        .all(callId, callId, Math.min(100, limit));
+    } catch (_) {
+      return [];
+    }
+  },
+
+  updateHandoffEscalationOutcome({ session_id, call_id, outcome, error } = {}) {
+    const sid = session_id || call_id;
+    const cid = call_id || session_id;
+    if (!sid && !cid) return null;
+    try {
+      const row = db
+        .prepare(
+          `SELECT id FROM handoff_escalations
+           WHERE call_id = ? OR session_id = ?
+           ORDER BY created_at DESC LIMIT 1`
+        )
+        .get(cid || sid, sid || cid);
+      if (!row?.id) return null;
+      const metaPatch = error ? JSON.stringify({ error: String(error) }) : null;
+      db.prepare(
+        `UPDATE handoff_escalations
+         SET outcome = ?, metadata_json = COALESCE(?, metadata_json)
+         WHERE id = ?`
+      ).run(outcome || 'unknown', metaPatch, row.id);
+      return row.id;
+    } catch (e) {
+      console.warn('[handoff_escalations] update outcome failed:', e.message);
+      return null;
+    }
+  },
+
+  upsertCallSiteContext(row = {}) {
+    const callId = row.call_id || row.callId;
+    if (!callId) return null;
+    const id = callId;
+    try {
+      db.prepare(`
+        INSERT INTO call_site_context (
+          call_id, session_id, to_number, customer_id, clinic_id, merchant_id,
+          location_id, clinic_id_source, site_context_status, verified_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(call_id) DO UPDATE SET
+          session_id = COALESCE(excluded.session_id, call_site_context.session_id),
+          to_number = COALESCE(excluded.to_number, call_site_context.to_number),
+          customer_id = COALESCE(excluded.customer_id, call_site_context.customer_id),
+          clinic_id = COALESCE(excluded.clinic_id, call_site_context.clinic_id),
+          merchant_id = COALESCE(excluded.merchant_id, call_site_context.merchant_id),
+          location_id = COALESCE(excluded.location_id, call_site_context.location_id),
+          clinic_id_source = COALESCE(excluded.clinic_id_source, call_site_context.clinic_id_source),
+          site_context_status = COALESCE(excluded.site_context_status, call_site_context.site_context_status),
+          verified_at = COALESCE(excluded.verified_at, call_site_context.verified_at),
+          updated_at = datetime('now')
+      `).run(
+        id,
+        row.session_id || callId,
+        row.to_number || null,
+        row.customer_id || null,
+        row.clinic_id || null,
+        row.merchant_id || null,
+        row.location_id || null,
+        row.clinic_id_source || null,
+        row.site_context_status || 'missing',
+        row.site_context_status === 'verified' ? new Date().toISOString() : row.verified_at || null
+      );
+      return id;
+    } catch (e) {
+      console.warn('[call_site_context] upsert failed:', e.message);
+      return null;
+    }
+  },
+
+  getCallSiteContext(callId) {
+    if (!callId) return null;
+    try {
+      return db.prepare('SELECT * FROM call_site_context WHERE call_id = ?').get(callId) || null;
+    } catch (_) {
+      return null;
+    }
   },
 
   listKellyCallEventsForClinic(clinicId, { limit = 60, since = null } = {}) {
     if (!clinicId) return [];
     const cap = Math.max(1, Math.min(500, Number(limit) || 60));
     const cid = String(clinicId);
-    try {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS kelly_call_events (
-          id TEXT PRIMARY KEY,
-          session_id TEXT,
-          call_id TEXT,
-          event_type TEXT NOT NULL,
-          payload_json TEXT,
-          clinic_id TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      const cols = db.prepare('PRAGMA table_info(kelly_call_events)').all();
-      if (!cols.some((c) => c.name === 'clinic_id')) {
-        db.exec('ALTER TABLE kelly_call_events ADD COLUMN clinic_id TEXT');
-      }
-    } catch (_) {}
 
     const params = [cid, cid, cid];
     let sinceClause = '';
@@ -16950,12 +17243,16 @@ module.exports = {
         LIMIT ?
       `).all(...params);
     } catch (_) {
-      return db.prepare(`
-        SELECT * FROM kelly_call_events
-        WHERE json_extract(payload_json, '$.clinic_id') = ?
-        ORDER BY created_at DESC
-        LIMIT ?
-      `).all(cid, cap);
+      try {
+        return db.prepare(`
+          SELECT * FROM kelly_call_events
+          WHERE json_extract(payload_json, '$.clinic_id') = ?
+          ORDER BY created_at DESC
+          LIMIT ?
+        `).all(cid, cap);
+      } catch (_) {
+        return [];
+      }
     }
   },
 
@@ -19616,6 +19913,21 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
   const existing = db.prepare(`SELECT id FROM triage_sessions WHERE session_id = ? LIMIT 1`).get(session.session_id);
   const id = existing?.id || session.id || `triage-${uuidv4()}`;
 
+  const tenantCols = db.prepare(`PRAGMA table_info(triage_sessions)`).all();
+  const hasClinicCol = tenantCols.some((c) => c.name === 'clinic_id');
+
+  let clinicId = session.clinic_id || null;
+  let customerId = session.customer_id || null;
+  if (hasClinicCol && session.session_id && (!clinicId || !customerId) && db.getCallSiteContext) {
+    try {
+      const site = db.getCallSiteContext(session.session_id);
+      if (site) {
+        clinicId = clinicId || site.clinic_id || null;
+        customerId = customerId || site.customer_id || null;
+      }
+    } catch (_) {}
+  }
+
   const critUnknowns = session.critical_unknowns != null
     ? (Array.isArray(session.critical_unknowns) ? JSON.stringify(session.critical_unknowns) : String(session.critical_unknowns))
     : null;
@@ -19691,6 +20003,16 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
       session.triage_complete ? 1 : 0,
       session.referred_to_911 ? 1 : 0
     );
+
+  if (hasClinicCol && (clinicId || customerId)) {
+    db.prepare(`
+      UPDATE triage_sessions SET
+        clinic_id = COALESCE(?, clinic_id),
+        customer_id = COALESCE(?, customer_id),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).run(clinicId || null, customerId || null, id);
+  }
 
   // Persist `intake_complete_at` without touching the main VALUES placeholder list.
   // We keep it idempotent: null means "don't overwrite".
@@ -19873,40 +20195,84 @@ module.exports.getIntakeStreamEvents = function getIntakeStreamEvents({ session_
 module.exports.upsertSessionStateProjection = function upsertSessionStateProjection(state) {
   if (!state?.id) return { success: false, error: 'id required' };
   try {
-    db.prepare(`
-      INSERT INTO session_state_projection (
-        id, session_id, room_id, trace_id, source_last, event_type_last, last_event_id,
-        chief_complaint, body_sites_json, severity, timeline_text, risk_flags_json, raw_last_text, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      ON CONFLICT(id) DO UPDATE SET
-        session_id = COALESCE(excluded.session_id, session_state_projection.session_id),
-        room_id = COALESCE(excluded.room_id, session_state_projection.room_id),
-        trace_id = COALESCE(excluded.trace_id, session_state_projection.trace_id),
-        source_last = COALESCE(excluded.source_last, session_state_projection.source_last),
-        event_type_last = COALESCE(excluded.event_type_last, session_state_projection.event_type_last),
-        last_event_id = COALESCE(excluded.last_event_id, session_state_projection.last_event_id),
-        chief_complaint = COALESCE(excluded.chief_complaint, session_state_projection.chief_complaint),
-        body_sites_json = COALESCE(excluded.body_sites_json, session_state_projection.body_sites_json),
-        severity = COALESCE(excluded.severity, session_state_projection.severity),
-        timeline_text = COALESCE(excluded.timeline_text, session_state_projection.timeline_text),
-        risk_flags_json = COALESCE(excluded.risk_flags_json, session_state_projection.risk_flags_json),
-        raw_last_text = COALESCE(excluded.raw_last_text, session_state_projection.raw_last_text),
-        updated_at = datetime('now')
-    `).run(
-      state.id,
-      state.session_id || null,
-      state.room_id || null,
-      state.trace_id || null,
-      state.source_last || null,
-      state.event_type_last || null,
-      state.last_event_id || null,
-      state.chief_complaint || null,
-      JSON.stringify(state.body_sites || []),
-      state.severity ?? null,
-      state.timeline || null,
-      JSON.stringify(state.risk_flags || []),
-      state.raw_last_text || null
-    );
+    const cols = db.prepare('PRAGMA table_info(session_state_projection)').all().map((c) => c.name);
+    const hasTenant = cols.includes('clinic_id') && cols.includes('customer_id');
+    if (hasTenant) {
+      db.prepare(`
+        INSERT INTO session_state_projection (
+          id, session_id, room_id, trace_id, source_last, event_type_last, last_event_id,
+          chief_complaint, body_sites_json, severity, timeline_text, risk_flags_json, raw_last_text,
+          clinic_id, customer_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(id) DO UPDATE SET
+          session_id = COALESCE(excluded.session_id, session_state_projection.session_id),
+          room_id = COALESCE(excluded.room_id, session_state_projection.room_id),
+          trace_id = COALESCE(excluded.trace_id, session_state_projection.trace_id),
+          source_last = COALESCE(excluded.source_last, session_state_projection.source_last),
+          event_type_last = COALESCE(excluded.event_type_last, session_state_projection.event_type_last),
+          last_event_id = COALESCE(excluded.last_event_id, session_state_projection.last_event_id),
+          chief_complaint = COALESCE(excluded.chief_complaint, session_state_projection.chief_complaint),
+          body_sites_json = COALESCE(excluded.body_sites_json, session_state_projection.body_sites_json),
+          severity = COALESCE(excluded.severity, session_state_projection.severity),
+          timeline_text = COALESCE(excluded.timeline_text, session_state_projection.timeline_text),
+          risk_flags_json = COALESCE(excluded.risk_flags_json, session_state_projection.risk_flags_json),
+          raw_last_text = COALESCE(excluded.raw_last_text, session_state_projection.raw_last_text),
+          clinic_id = COALESCE(excluded.clinic_id, session_state_projection.clinic_id),
+          customer_id = COALESCE(excluded.customer_id, session_state_projection.customer_id),
+          updated_at = datetime('now')
+      `).run(
+        state.id,
+        state.session_id || null,
+        state.room_id || null,
+        state.trace_id || null,
+        state.source_last || null,
+        state.event_type_last || null,
+        state.last_event_id || null,
+        state.chief_complaint || null,
+        JSON.stringify(state.body_sites || []),
+        state.severity ?? null,
+        state.timeline || null,
+        JSON.stringify(state.risk_flags || []),
+        state.raw_last_text || null,
+        state.clinic_id || null,
+        state.customer_id || null
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO session_state_projection (
+          id, session_id, room_id, trace_id, source_last, event_type_last, last_event_id,
+          chief_complaint, body_sites_json, severity, timeline_text, risk_flags_json, raw_last_text, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(id) DO UPDATE SET
+          session_id = COALESCE(excluded.session_id, session_state_projection.session_id),
+          room_id = COALESCE(excluded.room_id, session_state_projection.room_id),
+          trace_id = COALESCE(excluded.trace_id, session_state_projection.trace_id),
+          source_last = COALESCE(excluded.source_last, session_state_projection.source_last),
+          event_type_last = COALESCE(excluded.event_type_last, session_state_projection.event_type_last),
+          last_event_id = COALESCE(excluded.last_event_id, session_state_projection.last_event_id),
+          chief_complaint = COALESCE(excluded.chief_complaint, session_state_projection.chief_complaint),
+          body_sites_json = COALESCE(excluded.body_sites_json, session_state_projection.body_sites_json),
+          severity = COALESCE(excluded.severity, session_state_projection.severity),
+          timeline_text = COALESCE(excluded.timeline_text, session_state_projection.timeline_text),
+          risk_flags_json = COALESCE(excluded.risk_flags_json, session_state_projection.risk_flags_json),
+          raw_last_text = COALESCE(excluded.raw_last_text, session_state_projection.raw_last_text),
+          updated_at = datetime('now')
+      `).run(
+        state.id,
+        state.session_id || null,
+        state.room_id || null,
+        state.trace_id || null,
+        state.source_last || null,
+        state.event_type_last || null,
+        state.last_event_id || null,
+        state.chief_complaint || null,
+        JSON.stringify(state.body_sites || []),
+        state.severity ?? null,
+        state.timeline || null,
+        JSON.stringify(state.risk_flags || []),
+        state.raw_last_text || null
+      );
+    }
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };

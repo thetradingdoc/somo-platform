@@ -259,9 +259,13 @@ class KellyToolExecutor {
     } catch (_) {}
   }
 
-  static _setSessionMeta(sessionId, key, value) {
+  static _setSessionMeta(sessionId, key, value, opts = {}) {
     try {
       if (!sessionId || !key) return;
+      const { assertMetaKvWriteAllowed } = require('./kelly-rails/meta-kv-policy');
+      if (!assertMetaKvWriteAllowed(key, { fromMirror: !!opts.fromMirror, sessionId })) {
+        return;
+      }
       KellyToolExecutor._ensureSessionMetaTable();
       db.db.prepare(`
         INSERT OR REPLACE INTO kelly_session_meta_kv (session_id, meta_key, value, updated_at)
@@ -1416,7 +1420,7 @@ class KellyToolExecutor {
           return this._getTriageSession(sessionId);
 
         case 'store_triage_opqrst':
-          return this._storeTriageOpqrst(args, sessionId, patientId);
+          return this._storeTriageOpqrst(args, sessionId, patientId, context);
 
         case 'store_triage_rich_intake':
           return this._storeTriageRichIntake(args, sessionId, patientId);
@@ -1453,6 +1457,25 @@ class KellyToolExecutor {
 
         case 'end_call':
           return { success: true, end_call: true };
+
+        case 'transfer_call': {
+          const { attemptEscalation } = require('./escalation-service');
+          const esc = attemptEscalation(db, {
+            sessionId,
+            clinicId,
+            customerId: context.customerId || context.customer_id || null,
+            reason: args.reason || 'tool_transfer_call',
+            locale: context.locale || args.locale || 'en',
+            callId: context.callId || context.call_id || null
+          });
+          return {
+            success: true,
+            transfer_number: esc.transfer_number || null,
+            reply: esc.reply || null,
+            outcome: esc.outcome,
+            end_call: esc.end_call || false
+          };
+        }
 
         case 'return_to_triage': {
           if (KellyToolExecutor._triageLockedForRerag(sessionId)) {
@@ -3153,8 +3176,18 @@ class KellyToolExecutor {
     } catch (_) {}
   }
 
-  static _storeTriageOpqrst(args, sessionId, patientId) {
+  static _storeTriageOpqrst(args, sessionId, patientId, context = {}) {
+    const clinicId = context.clinicId || context.clinic_id || null;
+    const customerId = context.customerId || context.customer_id || null;
     try {
+      const siteStatus = context.site_context_status || context.siteContextStatus;
+      if (siteStatus && siteStatus !== 'verified' && siteStatus !== 'not_required') {
+        return {
+          success: false,
+          error: 'site_context_unverified',
+          message: 'Clinical intake requires a verified clinic site. Connecting you with support.'
+        };
+      }
       if (!db.upsertTriageSession) return { success: true };
       const stored = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
       const rawSeverity = args.severity ?? stored.severity;
@@ -3240,6 +3273,8 @@ class KellyToolExecutor {
       const opqrstPayload = {
         session_id: sessionId,
         patient_id: patientId,
+        clinic_id: clinicId || stored.clinic_id || null,
+        customer_id: customerId || stored.customer_id || null,
         opqrst_complete: opqrstComplete,
         onset: merged.onset,
         provocation: merged.provocation,

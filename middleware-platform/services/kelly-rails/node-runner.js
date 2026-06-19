@@ -136,6 +136,8 @@ async function runNodeStep(state, ctx) {
   const modeCtx = {
     conversation_mode: state.conversation_mode || state.flags?.conversation_mode,
     active_subrail: state.active_subrail || state.flags?.active_subrail,
+    site_context_status: state.site_context_status || state.flags?.site_context_status || ctx.site_context_status,
+    routing_world: state.routing_world || state.flags?.routing_world || ctx.routing_world,
     sessionId,
     step,
     _opqrst_gate: state.flags?._opqrst_gate,

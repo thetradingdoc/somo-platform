@@ -17,7 +17,13 @@ function shouldReroute(state, message) {
   if (state.step === 'done' || state.active_lane === KELLY_LANE.ROUTER) return true;
   if (PAYMENT_SIGNALS.some((s) => msg.includes(s))) return true;
   if (state.flags.pending_human_handoff) return true;
-  if (/book|schedule|appointment|slot|tomorrow|noon|12:00|12 pm|available/.test(msg)) return true;
+  const { isAdminBookingPhrase } = require('../conversation-mode/intent-detector');
+  const bookingSubrail =
+    state.active_subrail === 'booking' || state.flags?.active_subrail === 'booking';
+  if (/book|schedule|appointment|slot|tomorrow|noon|12:00|12 pm|available/.test(msg)) {
+    if (isAdminBookingPhrase(msg) || bookingSubrail) return true;
+    return false;
+  }
   return false;
 }
 
@@ -169,24 +175,6 @@ function laneToOrchestratorPhase(lane) {
   return map[String(lane || '').toLowerCase()] || 'TRIAGE_DISCOVERY';
 }
 
-function syncMetaFromFlags(sessionId, flags, lane) {
-  try {
-    KellyToolExecutor._setSessionMeta(sessionId, 'kelly_rails_v2', '1');
-    KellyToolExecutor._setSessionMeta(sessionId, 'kelly_graph_active', '1');
-    const exportLane = String(flags._lane_export || lane || '');
-    KellyToolExecutor._setSessionMeta(sessionId, 'kelly_graph_branch', exportLane);
-    if (lane) {
-      KellyToolExecutor._setSessionMeta(sessionId, 'kelly_orchestrator_phase', laneToOrchestratorPhase(lane));
-    }
-    if (flags.active_subrail) {
-      KellyToolExecutor._setSessionMeta(sessionId, 'active_subrail', flags.active_subrail);
-    }
-    if (flags.appointment_id) {
-      KellyToolExecutor._setSessionMeta(sessionId, 'last_appointment_id', flags.appointment_id);
-    }
-  } catch (_) {}
-}
-
 /**
  * Core turn logic (invoked from main-graph node or directly in tests).
  */
@@ -223,8 +211,18 @@ async function executeTurn(input = {}) {
     channel: state.channel || 'chat',
     message: String(input.message || state.last_user_message || ''),
     db: input.db || input.turn_context?.db || null,
-    providerInstructions: input.providerInstructions || input.turn_context?.providerInstructions || null
+    providerInstructions: input.providerInstructions || input.turn_context?.providerInstructions || null,
+    site_context_status:
+      input.site_context_status ||
+      input.turn_context?.site_context_status ||
+      state.flags?.site_context_status ||
+      null
   };
+
+  if (input.site_context_status) {
+    state.site_context_status = input.site_context_status;
+    state.flags.site_context_status = input.site_context_status;
+  }
 
   if (!state.v2_hydrated) {
     if (hydrated?.flags) {
@@ -268,6 +266,33 @@ async function executeTurn(input = {}) {
   if (state.conversation_mode) state.flags.conversation_mode = state.conversation_mode;
   if (state.active_subrail) state.flags.active_subrail = state.active_subrail;
   if (state.active_subrail_step) state.flags.active_subrail_step = state.active_subrail_step;
+
+  const { canEnterClinicalLane } = require('./enter-clinical-lane');
+  const { isAdminBookingPhrase } = require('../conversation-mode/intent-detector');
+  const triageForLane = sid && db.getTriageSession ? db.getTriageSession(sid) : null;
+  const clinicalModeActive =
+    state.conversation_mode === 'tenant_inbound_clinical' || state.active_lane === KELLY_LANE.CLINICAL;
+  if (
+    clinicalModeActive &&
+    !canEnterClinicalLane({
+      message: ctx.message,
+      triageRow: triageForLane,
+      conversationMode: state.conversation_mode,
+      activeSubrail: state.active_subrail
+    })
+  ) {
+    state.conversation_mode = 'tenant_inbound_admin';
+    state.flags.conversation_mode = 'tenant_inbound_admin';
+    if (isAdminBookingPhrase(String(ctx.message || '').toLowerCase())) {
+      state.active_subrail = 'booking';
+      state.flags.active_subrail = 'booking';
+      state.active_lane = KELLY_LANE.BOOKING;
+      state.step = 'schedule_visit';
+    } else if (state.active_lane === KELLY_LANE.CLINICAL) {
+      state.active_lane = KELLY_LANE.BASIC_INTAKE;
+      state.step = 'identity';
+    }
+  }
 
   const enforceMode = state.conversation_mode && shouldEnforceMode(state.conversation_mode);
 
@@ -337,7 +362,30 @@ async function executeTurn(input = {}) {
   }
 
   state.flags._lane_export = state.active_lane;
-  // meta_kv mirrors projection via persistRailsSessionState → mirrorMetaFromPayload (single write path)
+
+  if (
+    state.active_lane === KELLY_LANE.BOOKING &&
+    !state.flags.no_provider_availability &&
+    !state.flags._availability_probed &&
+    (process.env.NODE_ENV !== 'test' || process.env.KELLY_BOOKING_AVAIL_PROBE === '1')
+  ) {
+    state.flags._availability_probed = true;
+    try {
+      const triageRow = sid && db.getTriageSession ? db.getTriageSession(sid) : null;
+      const slots = await KellyToolExecutor.execute(
+        'get_available_slots',
+        { specialty: triageRow?.target_specialty || 'Dermatology', days_ahead: 14 },
+        ctx
+      );
+      const bundles = Array.isArray(slots?.slot_bundles) ? slots.slot_bundles : [];
+      if (!bundles.length) {
+        state.flags.no_provider_availability = true;
+        state.active_lane = KELLY_LANE.SUPPORT;
+        state.step = 'handoff';
+        state.flags.booking_dead_end_redirect = true;
+      }
+    } catch (_) {}
+  }
 
   const laneOut = await executeLaneStep(state, ctx);
   const { reply, toolsUsed, endCall, gate_matched, gate_outcome } = laneOut;

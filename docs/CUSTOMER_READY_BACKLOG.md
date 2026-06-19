@@ -1,11 +1,10 @@
 # Customer-Ready Backlog — Full Todo List (85 items)
 
-**Last updated:** 2026-06-17  
-**Implementation status:** P0–P2 code + runbooks shipped 2026-06-17. Prod live-call proofs are operator-run (`verify:live-*` scripts). See [`docs/deployment/OPERATIONS.md`](deployment/OPERATIONS.md).
+**Last updated:** 2026-06-18  
+**Canonical open-work SSOT:** [`todos/PENDING.md`](../todos/PENDING.md) and [`todos/VOICE-REMEDIATION-TRAIN.md`](../todos/VOICE-REMEDIATION-TRAIN.md).  
+**Implementation status:** P0–P2 engineering code largely complete. Prod live-call proofs are operator-run (`verify:live-*` scripts). See [`docs/deployment/OPERATIONS.md`](deployment/OPERATIONS.md).
 
-**Counts:** 65 CR (P0–P2) + 20 FE = **85 implementation todos** | +7 CR (P3 deferred) = 92 grand total | 7 phase meta-tasks replaced by line items below.
-
-**Status legend:** `done` | `partial` | `open` | `runbook` (script exists; prod execution documented separately)
+**Status legend:** `done` | `partial` | `open` | `runbook` (script exists; prod execution documented separately) | `operator` (human gate)
 
 **Prod live calls:** Scripts + runbooks only; you run live calls separately.
 
@@ -88,8 +87,8 @@
 
 - [ ] **CR-024** `open` — Fix Spanish booking prod flake (`triage_session_id` uniqueness + GCS SQLite contention)
 - [ ] **CR-025** `open` — `sandbox-spanish-green`: 3× consecutive 14/14 TCR
-- [ ] **CR-026** `open` — Per-tenant `policy_json` in `prompt_profiles.metadata` (triage-before-book)
-- [ ] **CR-027** `open` — Provider availability admission gate when `get_available_slots` empty | Files: [`kelly-rails/gates/`](middleware-platform/services/kelly-rails/gates/)
+- [x] **CR-026** `done` — `policy_json` + `use_case` on `prompt_profiles` at provision; backfill existing clinics → R-12-2
+- [x] **CR-027** `done` — Schedule gate `no_provider_availability`; lane-entry redirect → R-12-1
 - [ ] **CR-028** `open` — `auto-checkout-after-schedule` default on for SaaS tenants | [`auto-checkout-after-schedule.js`](middleware-platform/services/auto-checkout-after-schedule.js)
 - [ ] **CR-029** `runbook` — Live prod booking acceptance documented in OPERATIONS.md | Proof: `verify:live-booking-call`
 

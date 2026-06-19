@@ -1,25 +1,15 @@
 'use strict';
 
 const { test, expect } = require('@playwright/test');
-
-const API_BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
-const EMAIL = process.env.PW_PROVIDER_EMAIL || 'provider@doclittle.com';
-const PASS = process.env.PW_PROVIDER_PASS || process.env.PW_PROVIDER_PASSWORD || 'demo123';
-
-async function middlewareUp(request) {
-  try {
-    return (await request.get(`${API_BASE}/health`)).ok();
-  } catch {
-    return false;
-  }
-}
+const { API_BASE, middlewareUp, ownerCredentials } = require('./helpers/provider-auth.cjs');
 
 async function login(page, request) {
-  const login = await request.post(`${API_BASE}/api/customers/login`, {
-    data: { email: EMAIL, password: PASS, remember_me: true },
+  const { email, password } = ownerCredentials();
+  const loginRes = await request.post(`${API_BASE}/api/customers/login`, {
+    data: { email, password, remember_me: true },
   });
-  const json = await login.json();
-  expect(login.ok()).toBeTruthy();
+  const json = await loginRes.json();
+  expect(loginRes.ok()).toBeTruthy();
   expect(json.success).toBe(true);
   const customer = json.customer || {};
   await page.goto(`${API_BASE}/login`, { waitUntil: 'domcontentloaded' });
@@ -65,11 +55,13 @@ test.describe('Provider portal shell regression', () => {
     await expect(page.locator('.pp-cal-layer-btn.active[data-layer="appointments"]')).toBeVisible();
     await page.locator('.pp-cal-view-tab[data-view="month"]').click();
     await expect(page.locator('#calendar.fc')).toBeVisible({ timeout: 15_000 });
-    await page.waitForTimeout(500);
-    const avCount = await page.locator('.fc-event').evaluateAll((nodes) =>
-      nodes.filter((n) => /available|out of office/i.test(n.textContent || '')).length
-    );
-    expect(avCount).toBe(0);
+    await expect
+      .poll(async () =>
+        page.locator('.fc-event').evaluateAll((nodes) =>
+          nodes.filter((n) => /available|out of office/i.test(n.textContent || '')).length
+        )
+      )
+      .toBe(0);
   });
 
   test('calendar single page header and 28px title', async ({ page, request }) => {

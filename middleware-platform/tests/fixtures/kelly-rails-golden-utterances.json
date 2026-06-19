@@ -14,7 +14,7 @@
       "bucket": "front_door",
       "last_user_message": "I need to book a dermatology appointment",
       "flags": { "routine_intake_active": false },
-      "expect": { "lane": "clinical", "step": "clinical_intake" }
+      "expect": { "lane": "booking", "step": "schedule_visit" }
     },
     {
       "id": "front_door_back_pain",

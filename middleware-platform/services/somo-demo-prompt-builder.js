@@ -7,16 +7,20 @@ let _playbookCache = null;
 
 function loadPlaybook() {
   if (_playbookCache) return _playbookCache;
-  const playbookPath = path.join(
-    __dirname,
-    '..',
-    '..',
-    'docs',
-    'agent',
-    'somo-demo',
-    'QUALIFICATION_PLAYBOOK.md'
-  );
-  _playbookCache = fs.readFileSync(playbookPath, 'utf8');
+  const candidates = [
+    path.join(__dirname, '..', 'assets', 'somo-demo-qualification-playbook.md'),
+    path.join(__dirname, '..', '..', 'docs', 'agent', 'somo-demo', 'QUALIFICATION_PLAYBOOK.md')
+  ];
+  for (const playbookPath of candidates) {
+    try {
+      if (fs.existsSync(playbookPath)) {
+        _playbookCache = fs.readFileSync(playbookPath, 'utf8');
+        return _playbookCache;
+      }
+    } catch (_) {}
+  }
+  _playbookCache =
+    'Qualification demo stages: OPEN, QUALIFY, VALUE, CTA, CLOSE. No clinical intake or OPQRST.';
   return _playbookCache;
 }
 

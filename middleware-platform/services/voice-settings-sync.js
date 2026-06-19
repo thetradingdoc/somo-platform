@@ -18,12 +18,13 @@ async function saveAndSyncVoiceSettings(db, params) {
   const {
     merchantId,
     customerId,
+    clinicId = null,
     settingsPatch,
     retellService = new RetellService(),
     expectedVersion = null
   } = params;
 
-  const existing = db.getVoiceAgentSettingsForProvider({ merchantId, customerId });
+  const existing = db.getVoiceAgentSettingsForProvider({ merchantId, customerId, clinicId });
   if (expectedVersion != null && existing?.settings_version != null) {
     if (Number(existing.settings_version) !== Number(expectedVersion)) {
       const err = new Error('Settings were updated elsewhere. Refresh and try again.');
@@ -44,7 +45,7 @@ async function saveAndSyncVoiceSettings(db, params) {
     settings_version: nextVersion,
     sync_status: 'pending',
     last_sync_error: null
-  }, customerId);
+  }, customerId, { clinicId });
 
   const agentId =
     merged.retell_agent_id ||
@@ -86,7 +87,7 @@ async function saveAndSyncVoiceSettings(db, params) {
     synced_at: syncedAt,
     last_sync_error: syncError,
     settings_version: nextVersion
-  }, customerId);
+  }, customerId, { clinicId });
 
   if (customerId) {
     db.updateCustomer(customerId, { prompt_synced_at: syncedAt });

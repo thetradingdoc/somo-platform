@@ -157,10 +157,15 @@ function resolveTenantFromCallMeta(db, callMeta) {
 
   if (!clinicId && customer?.merchant_id && db.db) {
     try {
-      const row = db.db
-        .prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1')
-        .get(customer.merchant_id);
-      if (row?.clinic_id) clinicId = row.clinic_id;
+      const { resolveTenantClinicFromCallMeta } = require('./voice-call-context');
+      const resolved = resolveTenantClinicFromCallMeta(db, {
+        to_number: toNumber,
+        clinic_id: meta.clinic_id,
+        site_context_status: meta.site_context_status || dv.site_context_status
+      });
+      if (resolved?.site_context_status === 'verified' && resolved.clinic_id) {
+        clinicId = resolved.clinic_id;
+      }
     } catch (_) {}
   }
 
@@ -183,7 +188,7 @@ function resolveTenantFromCallMeta(db, callMeta) {
  * @param {{ merchantId?: string, customerId?: string }} ids
  */
 function loadProviderVoiceRuntime(db, ids = {}) {
-  let { merchantId, customerId } = ids;
+  let { merchantId, customerId, clinicId } = ids;
   let customer = null;
 
   if (customerId && db.getCustomer) {
@@ -193,7 +198,7 @@ function loadProviderVoiceRuntime(db, ids = {}) {
 
   let settings = null;
   if (db.getVoiceAgentSettingsForProvider) {
-    settings = db.getVoiceAgentSettingsForProvider({ merchantId, customerId });
+    settings = db.getVoiceAgentSettingsForProvider({ merchantId, customerId, clinicId });
     if (settings?.business_hours && typeof settings.business_hours === 'string') {
       try {
         settings.business_hours = JSON.parse(settings.business_hours);

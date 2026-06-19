@@ -27,6 +27,7 @@ function registerVoiceAppointmentRoutes(app, deps) {
   const InsuranceService = require('../services/insurance-service');
   const BookingService = require('../services/booking-service');
   const PatientIntakeService = require('../services/patient-intake-service');
+  const { findFHIRPatientForVoice } = require('../services/fhir-voice-lookup');
   const namesMatch = (a, b) => FHIRService.namesMatch(a, b);
   function invalidateSlotAvailabilityCache() {
     try {
@@ -611,7 +612,12 @@ app.post('/voice/checkout/verify', async (req, res) => {
         fhirPatient = db.getFHIRPatientByEmail(checkout.customer_email);
       }
       if (!fhirPatient && checkout.customer_phone) {
-        fhirPatient = db.getFHIRPatientByPhone(checkout.customer_phone);
+        fhirPatient = findFHIRPatientForVoice(db, {
+          phone: checkout.customer_phone,
+          clinicId: checkout.clinic_id,
+          customerId: checkout.customer_id,
+          requireClinicScope: !!checkout.clinic_id
+        });
       }
 
       if (fhirPatient && CircleService && CircleService.isAvailable()) {
@@ -1265,7 +1271,14 @@ app.post('/voice/patient/intake', async (req, res) => {
       try { patientId = db.getFHIRPatientByEmail(patient_email)?.resource_id || null; } catch (_) {}
     }
     if (!patientId && patient_phone) {
-      try { patientId = db.getFHIRPatientByPhone(patient_phone)?.resource_id || null; } catch (_) {}
+      try {
+        patientId =
+          findFHIRPatientForVoice(db, {
+            phone: patient_phone,
+            clinicId: args.clinic_id || resolveClinicIdFromRequest?.(req) || null,
+            requireClinicScope: !!(args.clinic_id || resolveClinicIdFromRequest?.(req))
+          })?.resource_id || null;
+      } catch (_) {}
     }
     if (!patientId && (patient_email || patient_phone || args.first_name || args.last_name || args.patient_name)) {
       try {
@@ -1336,7 +1349,14 @@ app.post('/voice/patient/intake/status', async (req, res) => {
       try { patientId = db.getFHIRPatientByEmail(patient_email)?.resource_id || null; } catch (_) {}
     }
     if (!patientId && patient_phone) {
-      try { patientId = db.getFHIRPatientByPhone(patient_phone)?.resource_id || null; } catch (_) {}
+      try {
+        patientId =
+          findFHIRPatientForVoice(db, {
+            phone: patient_phone,
+            clinicId: args.clinic_id || resolveClinicIdFromRequest?.(req) || null,
+            requireClinicScope: !!(args.clinic_id || resolveClinicIdFromRequest?.(req))
+          })?.resource_id || null;
+      } catch (_) {}
     }
 
     if (!patientId) {
@@ -1876,7 +1896,11 @@ app.post('/voice/insurance/collect', async (req, res) => {
     let foundPatient = null;
     if (!patientId && patientPhone) {
       try {
-        foundPatient = db.getFHIRPatientByPhone(patientPhone);
+        foundPatient = findFHIRPatientForVoice(db, {
+          phone: patientPhone,
+          clinicId: clinicId || resolveClinicIdFromRequest?.(req) || null,
+          requireClinicScope: !!(clinicId || resolveClinicIdFromRequest?.(req))
+        });
         if (foundPatient) {
           console.log(`✅ Found patient by phone: ${foundPatient.resource_id}`);
           patientId = foundPatient.resource_id;
@@ -2249,7 +2273,11 @@ app.post('/voice/insurance/collect', async (req, res) => {
     } else if (patientPhone && !finalPatientId) {
       // Try to find patient by phone and link insurance
       try {
-        const patient = db.getFHIRPatientByPhone(patientPhone);
+        const patient = findFHIRPatientForVoice(db, {
+          phone: patientPhone,
+          clinicId: args.clinic_id || resolveClinicIdFromRequest?.(req) || null,
+          requireClinicScope: !!(args.clinic_id || resolveClinicIdFromRequest?.(req))
+        });
         if (patient && payerId && payerName) {
           const { v4: uuidv4 } = require('uuid');
           const insuranceRecord = {

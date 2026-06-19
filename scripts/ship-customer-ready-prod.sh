@@ -27,13 +27,10 @@ echo "==> 2. Pull latest main"
 git checkout main && git pull origin main
 
 if [[ "$SKIP_TESTS" != "1" ]]; then
-  echo "==> 3. Pre-deploy tests"
-  cd middleware-platform
-  npm test -- --testPathPattern="booking-confirm|saas-tenant-provision|kelly-rails-tool-allowlists|kelly-activity-feed"
-  npm run test:e2e:provider-journey
-  cd "$ROOT"
+  echo "==> 3. Local CI gate (npm run ci:gate)"
+  npm run ci:gate
 else
-  echo "==> 3. Pre-deploy tests skipped (SKIP_TESTS=1)"
+  echo "==> 3. Local CI skipped (SKIP_TESTS=1)"
 fi
 
 echo "==> 4. Deploy API (Cloud Run + Kelly env verify)"
@@ -48,7 +45,10 @@ npm run smoke:callsomo
 echo "==> 7. Kelly Cloud Run env snapshot"
 GCP_PROJECT=somo-callsomo npm run verify:kelly-rails-cloudrun --prefix middleware-platform
 
-echo "==> 8. Optional live booking verify (after a real call)"
+echo "==> 8. Voice routing matrix smoke"
+npm run smoke:voice-routing-matrix --prefix middleware-platform
+
+echo "==> 9. Optional live booking verify (after a real call)"
 echo "    SESSION_ID=<call_id> DB_PATH=/path/to/prod.db npm run verify:live-booking-call --prefix middleware-platform"
 
 echo "Done."
