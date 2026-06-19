@@ -57,6 +57,7 @@ async function handleTurn(opts = {}) {
     endCall: !!out.endCall,
     toolsUsed: out.toolsUsed || [],
     language,
+    _opqrst_gate: out._opqrst_gate || out.state?.flags?._opqrst_gate || null,
     kelly_rails: {
       active_lane: out.state?.active_lane,
       step: out.state?.step,

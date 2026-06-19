@@ -1,5 +1,11 @@
 'use strict';
 
+/**
+ * Tenant policy loader — triage_policy drives OPQRST provocation requirement.
+ * Dermatology use_case in DEFAULT_POLICIES is an example profile only.
+ * OpqrstFieldGate uses triage_policy + target_specialty (not derm string heuristics).
+ */
+
 const { InconclusiveTriageAction } = require('./opqrst-exit-states');
 
 /** Triage policy levels. */
@@ -80,9 +86,10 @@ function loadTenantPolicyFromProfile(db, clinicId, customerId) {
     if (profile.policy_json) {
       policyJson = parsePolicyJson(profile.policy_json);
     }
-    const useCase = profile.use_case || profile.specialty?.toLowerCase()?.includes('derm')
-      ? 'dermatology'
-      : 'healthcare_clinic';
+    const useCase =
+      profile.use_case && USE_CASE_POLICIES[profile.use_case]
+        ? profile.use_case
+        : 'healthcare_clinic';
     return resolveTenantPolicy({ use_case: useCase, tenant_policy: policyJson });
   } catch (_) {
     return { ...DEFAULT_TENANT_POLICY };

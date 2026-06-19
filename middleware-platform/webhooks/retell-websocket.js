@@ -724,6 +724,11 @@ class RetellWebSocketHandler {
                     content: askIntent,
                     timestamp: Date.now()
                 });
+                try {
+                    const { appendHistory } = require('../services/kelly-rails/history');
+                    appendHistory(callId, 'user', userSaid);
+                    appendHistory(callId, 'assistant', askIntent);
+                } catch (_) {}
                 return;
             }
             const askNameAgain = "I didn't catch your name. Can I get your name first?";
@@ -733,6 +738,11 @@ class RetellWebSocketHandler {
                 content: askNameAgain,
                 timestamp: Date.now()
             });
+            try {
+                const { appendHistory } = require('../services/kelly-rails/history');
+                appendHistory(callId, 'user', userSaid);
+                appendHistory(callId, 'assistant', askNameAgain);
+            } catch (_) {}
             return;
         }
 
@@ -893,6 +903,21 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 if (!agentReply) {
                 // Coding graph handles billing codes; Kelly Rails V2 owns patient conversation (see kelly-rails/).
                 const { runKellyTurn } = require('../services/kelly-turn-resolver');
+                const {
+                    appendHistory,
+                    getLastAssistantText,
+                    lastAssistantFromMessages,
+                    seedKellyHistoryFromOrchestrate
+                } = require('../services/kelly-rails/history');
+                if (!connection._kellyHistorySeeded) {
+                    try {
+                        seedKellyHistoryFromOrchestrate(callId, this.db);
+                    } catch (_) {}
+                    connection._kellyHistorySeeded = true;
+                }
+                try {
+                    appendHistory(callId, 'user', userSaid);
+                } catch (_) {}
                 const turnOpts = {
                     message: userSaid,
                     sessionId: callId,
@@ -953,12 +978,27 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 if (result?.endCall) {
                     if (agentReply) {
                         const { formatVoiceReply } = require('../services/voice-reply-formatter');
+                        const priorAssistant = getLastAssistantText(callId, {
+                            db: this.db,
+                            override: lastAssistantFromMessages(
+                                connection.conversationHistory.slice(0, -1)
+                            )
+                        });
                         agentReply = formatVoiceReply(agentReply, {
                             locale: result?.language || dbLang,
                             channel: 'voice',
                             active_lane: result?.kelly_rails?.active_lane,
-                            step: result?.kelly_rails?.step
+                            step: result?.kelly_rails?.step,
+                            flags: result?.kelly_rails?.flags,
+                            _opqrst_gate: result?._opqrst_gate || result?.kelly_rails?.flags?._opqrst_gate,
+                            last_user_message: userSaid,
+                            last_assistant_text: priorAssistant,
+                            conversation_mode: result?.conversation_mode,
+                            active_subrail: result?.active_subrail
                         });
+                        try {
+                            appendHistory(callId, 'assistant', agentReply);
+                        } catch (_) {}
                         this.sendRetellResponse(connection.ws, agentReply, message.response_id);
                     }
                     return;
@@ -998,16 +1038,36 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             try {
                 const { formatVoiceReply } = require('../services/voice-reply-formatter');
                 const { recordVoiceAssistantTurn } = require('../services/voice-slo-metrics');
+                const {
+                    appendHistory,
+                    getLastAssistantText,
+                    lastAssistantFromMessages
+                } = require('../services/kelly-rails/history');
                 const voiceLocale =
                     this.db?.getKellySessionLanguage?.(callId) ||
                     kellyResult?.language ||
                     'en';
+                const priorAssistant = getLastAssistantText(callId, {
+                    db: this.db,
+                    override: lastAssistantFromMessages(
+                        connection.conversationHistory.slice(0, -1)
+                    )
+                });
                 agentReply = formatVoiceReply(agentReply, {
                     locale: voiceLocale,
                     channel: 'voice',
                     active_lane: kellyResult?.kelly_rails?.active_lane,
-                    step: kellyResult?.kelly_rails?.step
+                    step: kellyResult?.kelly_rails?.step,
+                    flags: kellyResult?.kelly_rails?.flags,
+                    _opqrst_gate: kellyResult?._opqrst_gate || kellyResult?.kelly_rails?.flags?._opqrst_gate,
+                    last_user_message: userSaid,
+                    last_assistant_text: priorAssistant,
+                    conversation_mode: kellyResult?.conversation_mode,
+                    active_subrail: kellyResult?.active_subrail
                 });
+                try {
+                    appendHistory(callId, 'assistant', agentReply);
+                } catch (_) {}
                 recordVoiceAssistantTurn({
                     sessionId: callId,
                     replyText: agentReply,

@@ -122,16 +122,28 @@ function resolveBookingSlot(state, ctx) {
   return { apptDate, apptTime, slotId, hasSlot: !!(apptDate && apptTime) };
 }
 
-function opqrstComplete(row) {
-  if (!row) return false;
-  const region = String(row.region || row.body_site || '').trim();
-  const quality = String(row.quality || '').trim();
-  return !!(
-    quality &&
-    String(row.onset || row.timing || '').trim() &&
-    (row.severity != null || String(row.severity || '').trim()) &&
-    (region || /leg|neck|arm|rash|skin/i.test(quality))
-  );
+function opqrstComplete(row, triagePolicyOrOpts) {
+  const { opqrstComplete: gateComplete } = require('../../opqrst-field-gate');
+  let triagePolicy = 'conditional';
+  let specialty = row?.target_specialty || null;
+  if (typeof triagePolicyOrOpts === 'string') {
+    triagePolicy = triagePolicyOrOpts;
+  } else if (triagePolicyOrOpts && typeof triagePolicyOrOpts === 'object') {
+    triagePolicy = triagePolicyOrOpts.triagePolicy || triagePolicy;
+    specialty = triagePolicyOrOpts.specialty ?? specialty;
+  }
+  return gateComplete(row, { triagePolicy, specialty });
+}
+
+function opqrstCompleteForSession(row, ctx = {}) {
+  let triagePolicy = 'conditional';
+  try {
+    const db = require('../../database');
+    const { loadTenantPolicyFromProfile } = require('../conversation-mode/tenant-policy');
+    triagePolicy =
+      loadTenantPolicyFromProfile(db, ctx.clinicId, ctx.customerId)?.triage_policy || 'conditional';
+  } catch (_) {}
+  return opqrstComplete(row, { triagePolicy, specialty: row?.target_specialty });
 }
 
 function formatApptWhen(appt) {
@@ -259,6 +271,7 @@ module.exports = {
   parseNameFromMessage,
   resolveBookingSlot,
   opqrstComplete,
+  opqrstCompleteForSession,
   formatApptWhen,
   resolvePatientAppointment,
   parseRescheduleSlot,

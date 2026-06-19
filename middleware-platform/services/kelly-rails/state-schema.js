@@ -330,12 +330,11 @@ function routeOrchestratorLane(state = {}) {
 
   const db = require('../../database');
   const sessionRow = state.session_id && db.getTriageSession ? db.getTriageSession(state.session_id) : null;
-  const opqrstOk =
-    sessionRow &&
-    String(sessionRow.quality || '').trim() &&
-    String(sessionRow.onset || sessionRow.timing || '').trim() &&
-    (sessionRow.severity != null || String(sessionRow.severity || '').trim()) &&
-    String(sessionRow.region || sessionRow.body_site || '').trim();
+  const { opqrstCompleteForSession } = require('./gates/shared');
+  const opqrstOk = opqrstCompleteForSession(sessionRow, {
+    clinicId: state.clinic_id,
+    customerId: state.customer_id || flags.customer_id
+  });
 
   if (
     opqrstOk &&

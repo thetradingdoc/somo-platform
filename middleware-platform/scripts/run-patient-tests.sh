@@ -188,6 +188,10 @@ chooseNextUserMessage() {
     echo "${OP_ONSET:-a few days ago}"
     return 0
   fi
+  if contains_any "$reply_lc" "better or worse" "makes it better" "makes it worse" "what makes it"; then
+    echo "${OP_PROVOCATION:-rest helps}"
+    return 0
+  fi
   if contains_any "$reply_lc" "what does it feel like" "quality" "itchy" "burning" "sharp" "dull"; then
     echo "${OP_QUALITY:-dull}"
     return 0

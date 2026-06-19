@@ -61,11 +61,19 @@ function isOpqrstEsPackActive() {
   return hasOpqrstEsSignoffFile();
 }
 
+/** OPQRST Field Gate — default on (fixes provocation loop); set OPQRST_FIELD_GATE_ENABLED=0 for legacy rollback. */
+function isOpqrstFieldGateEnabled() {
+  const v = String(process.env.OPQRST_FIELD_GATE_ENABLED ?? '1').trim().toLowerCase();
+  return v !== '0' && v !== 'false';
+}
+
 module.exports = {
   isKellyRailsV2Enabled,
   shouldUseKellyRailsV2,
   getRolloutPct,
   isKellyRailsEsEnabled,
   isOpqrstEsPackActive,
-  hasOpqrstEsSignoffFile
+  hasOpqrstEsSignoffFile,
+  isOpqrstFieldGateEnabled,
+  envTruthy
 };

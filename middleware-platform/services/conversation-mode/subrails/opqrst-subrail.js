@@ -5,6 +5,7 @@ const { Subrail } = require('../conversation-mode-types');
 const {
   mergeAccumulator,
   applyFieldUtterance,
+  accumulatorFromTriageRow,
   OPQRST_FIELDS,
   FIELD_KEYS
 } = require('../opqrst-accumulator');
@@ -54,7 +55,12 @@ function inconclusiveActionReply(action) {
 }
 
 async function handleOpqrstSubrail(ctx = {}) {
-  const acc = mergeAccumulator(ctx.opqrst_accumulator || {});
+  const db = require('../../../database');
+  const triageRow = ctx.sessionId && db.getTriageSession ? db.getTriageSession(ctx.sessionId) : null;
+  let acc = mergeAccumulator(ctx.opqrst_accumulator || {});
+  if (triageRow) {
+    acc = mergeAccumulator(acc, accumulatorFromTriageRow(triageRow));
+  }
   const msg = String(ctx.message || '').trim();
   const policy = ctx.tenantPolicy || {};
   const field = ctx.opqrst_current_field || nextMissingField(acc);

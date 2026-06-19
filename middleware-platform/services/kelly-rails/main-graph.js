@@ -95,14 +95,14 @@ async function getMainGraph() {
   const workflow = new StateGraph(KellyRailsAnnotation)
     .addNode('execute_turn', async (state) => {
       const ctx = state.turn_context || {};
-      const { state: nextState, reply, toolsUsed, endCall } = await executeTurn(
-        buildExecuteTurnInput(state, ctx, ctx)
-      );
+      const turnOut = await executeTurn(buildExecuteTurnInput(state, ctx, ctx));
+      const { state: nextState, reply, toolsUsed, endCall, _opqrst_gate } = turnOut;
       return {
         ...nextState,
         last_reply: reply,
         tools_used_last_turn: toolsUsed,
-        turn_end_call: endCall
+        turn_end_call: endCall,
+        _opqrst_gate: _opqrst_gate || nextState.flags?._opqrst_gate || null
       };
     })
     .addEdge(START, 'execute_turn')
@@ -191,7 +191,8 @@ async function invokeMainGraph(opts = {}) {
       state: normalizeState(result),
       reply: result.last_reply || '',
       toolsUsed: result.tools_used_last_turn || [],
-      endCall: !!result.turn_end_call
+      endCall: !!result.turn_end_call,
+      _opqrst_gate: result._opqrst_gate || result.flags?._opqrst_gate || null
     };
   } catch (e) {
     console.warn('[kelly-rails] graph invoke failed:', e.message);

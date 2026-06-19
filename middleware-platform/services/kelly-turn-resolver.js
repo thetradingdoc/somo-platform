@@ -390,6 +390,9 @@ async function runKellyTurn(opts = {}) {
       }
     } catch (_) {}
     recordKellyLlmUsage(opts, out, latencyMs);
+    if (out?.kelly_rails?.flags?._opqrst_gate && !out._opqrst_gate) {
+      out._opqrst_gate = out.kelly_rails.flags._opqrst_gate;
+    }
     return out;
   }
 

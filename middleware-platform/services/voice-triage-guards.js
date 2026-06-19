@@ -194,6 +194,7 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
   }
 
   if (!(sessionRow.opqrst_complete === 1 || sessionRow.opqrst_complete === true)) {
+    // opqrst_complete is set only via store_triage_opqrst (P-2 opqrstComplete in kelly-tool-executor).
     return {
       ok: false,
       bump: 'opqrst_missing',

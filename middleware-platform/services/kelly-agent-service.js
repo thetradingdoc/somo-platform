@@ -1158,7 +1158,7 @@ You MUST follow these states for every conversation:
 ## History of Present Illness (HPI) — OPQRST (W1-S1.5)
 You MUST complete triage BEFORE calling get_available_slots. Collect OPQRST in order:
 1. **Onset**: "When did this start?"
-2. **Provocation/Palliation**: "What makes it better or worse?"
+2. **Provocation/Palliation**: Ask what makes symptoms better or worse when relevant to the complaint (optional unless clinic triage_policy is required).
 3. **Quality**: "Can you describe what it feels like? (sharp, dull, pressure, burning...)"
 4. **Radiation**: "Does it spread anywhere?" (SKIP for mental health — see Psychiatry below)
 5. **Severity**: "On a scale of 1 to 10, how bad is it?" — If ≥8, route as urgent.
@@ -3098,10 +3098,33 @@ Antworten Sie durchgehend auf Deutsch.`,
     // If Kelly just asked for a specific OPQRST field and user answered,
     // store the field server-side so the LLM doesn't repeat previously answered prompts.
     try {
+      const { isOpqrstFieldGateEnabled } = require('./kelly-rails/config');
+      const OpqrstFieldGate = require('./opqrst-field-gate');
       const latestSession = db.getTriageSession ? db.getTriageSession(sessionId) : null;
       const triageIncomplete = !(latestSession && (latestSession.triage_complete === 1 || latestSession.triage_complete === true));
-      if (triageIncomplete && hasSymptomNow) {
-        const lastAssistant = [...history].reverse().find((m) => m?.role === 'assistant');
+      const lastAssistant = [...history].reverse().find((m) => m?.role === 'assistant');
+
+      if (isOpqrstFieldGateEnabled()) {
+        const gateResult = OpqrstFieldGate.resolve({
+          triageRow: latestSession,
+          userMessage: message,
+          lastAssistantText: String(lastAssistant?.content || ''),
+          activeLane: 'clinical',
+          conversationMode: 'tenant_inbound_clinical',
+          activeSubrail: 'opqrst',
+          triagePolicy: 'conditional',
+          specialty: latestSession?.target_specialty,
+          opqrstResumeField: KellyToolExecutor._getSessionMeta?.(sessionId, 'opqrst_resume_field'),
+          locale: preferredLanguage || 'en'
+        });
+        if (gateResult?.storePayload && Object.keys(gateResult.storePayload).length) {
+          await KellyToolExecutor.execute(
+            'store_triage_opqrst',
+            gateResult.storePayload,
+            { sessionId, clinicId, patientId, callerPhone, channel }
+          );
+        }
+      } else if (triageIncomplete && hasSymptomNow) {
         const lastText = String(lastAssistant?.content || '').toLowerCase();
         const msgText = String(message || '').trim();
         const upsertArgs = {};

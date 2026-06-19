@@ -8,6 +8,7 @@ const { getDeterministicReply } = require('./prompts/deterministic');
 const { loadHistory, appendHistory } = require('./history');
 const { formatVoiceReply } = require('../voice-reply-formatter');
 const { isToolAllowedForMode, logModeViolation } = require('../conversation-mode/mode-tool-firewall');
+const { isOpqrstFieldGateEnabled } = require('./config');
 
 const OFF_TOPIC_PATTERNS = [
   /\bI can also help with\b/i,
@@ -136,9 +137,17 @@ async function runNodeStep(state, ctx) {
     conversation_mode: state.conversation_mode || state.flags?.conversation_mode,
     active_subrail: state.active_subrail || state.flags?.active_subrail,
     sessionId,
-    step
+    step,
+    _opqrst_gate: state.flags?._opqrst_gate,
+    allowStoreOpqrst: !!state.flags?._opqrst_gate?.allowStoreOpqrst
   };
   allowedNames = allowedNames.filter((n) => isToolAllowedForMode(n, modeCtx));
+  if (isOpqrstFieldGateEnabled()) {
+    const gate = state.flags?._opqrst_gate;
+    if (gate?.active && !gate.allowStoreOpqrst) {
+      allowedNames = allowedNames.filter((n) => n !== 'store_triage_opqrst');
+    }
+  }
   if (allowedNames.length === 0) allowedNames = ['get_triage_session'];
   const allTools = getKellyTools();
   const tools = filterTools(allTools, allowedNames);

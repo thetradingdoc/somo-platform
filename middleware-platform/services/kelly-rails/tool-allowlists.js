@@ -2,6 +2,8 @@
 
 /** Tool names allowed per lane step (tool-first rails). */
 
+const { isOpqrstFieldGateEnabled } = require('./config');
+
 const SKINCARE_ROUTINE_TOOLS = new Set([
   'evaluate_skincare_routine',
   'resolve_product_ingredients',
@@ -115,6 +117,15 @@ function getAllowedToolNames(lane, step, flags = {}, profileAllowedTools = null)
     const ALWAYS_ALLOWED = new Set(['get_triage_session', 'end_call', 'transfer_call']);
     names = names.filter((n) => ALWAYS_ALLOWED.has(n) || profileSet.has(n));
     if (names.length === 0) names = ['get_triage_session'];
+  }
+
+  if (lane === 'clinical' && isOpqrstFieldGateEnabled()) {
+    const gate = flags._opqrst_gate;
+    if (gate?.allowStoreOpqrst || gate?.active) {
+      if (!names.includes('store_triage_opqrst')) {
+        names = [...names, 'store_triage_opqrst'];
+      }
+    }
   }
 
   return names;

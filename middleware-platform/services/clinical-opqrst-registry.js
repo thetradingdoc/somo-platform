@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { isOpqrstEsPackActive } = require('./kelly-rails/config');
+const { isOpqrstEsPackActive, isOpqrstFieldGateEnabled } = require('./kelly-rails/config');
 
 const cache = {};
 
@@ -29,7 +29,10 @@ function getNextQuestion(locale, stepId, specialty) {
   return { question_id: stepId, text: q.text, store_field: q.store_field };
 }
 
+/** D-1: null when gate on; L4 step mapping when gate off (legacy F-1). */
 function getOpqrstHintForClinicalLane(state = {}) {
+  if (isOpqrstFieldGateEnabled()) return null;
+
   const step = String(state.step || '');
   const map = {
     clinical_intake: 'opqrst_onset',
@@ -40,7 +43,12 @@ function getOpqrstHintForClinicalLane(state = {}) {
   };
   const stepId = map[step];
   if (!stepId) return null;
-  return { stepId, specialty: 'dermatology' };
+  const specialty =
+    state.triageRow?.target_specialty ||
+    state.flags?.target_specialty ||
+    state.target_specialty ||
+    null;
+  return { stepId, specialty };
 }
 
 module.exports = {

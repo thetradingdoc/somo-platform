@@ -3205,11 +3205,21 @@ class KellyToolExecutor {
       // M-S3.C: opqrst_complete when core OPQRST stored.
       // Provocation/radiation is helpful, but we should not block triage progress when it is missing
       // (otherwise the agent can get stuck in OPQRST-clarification loops).
+      const { opqrstComplete: computeOpqrstComplete } = require('./opqrst-field-gate');
+      let triagePolicy = 'conditional';
+      try {
+        const { loadTenantPolicyFromProfile } = require('./conversation-mode/tenant-policy');
+        const policy = loadTenantPolicyFromProfile(db, clinicId, customerId);
+        triagePolicy = policy?.triage_policy || 'conditional';
+      } catch (_) {}
+      const opqrstComplete = computeOpqrstComplete(merged, {
+        triagePolicy,
+        specialty: merged.target_specialty || stored.target_specialty
+      });
       const hasOnset = KellyToolExecutor._hasText(merged.onset);
       const hasQuality = KellyToolExecutor._hasText(merged.quality);
       const hasSeverity = merged.severity != null && merged.severity !== '';
       const hasTiming = KellyToolExecutor._hasText(merged.timing);
-      const opqrstComplete = hasOnset && hasQuality && hasSeverity && hasTiming;
 
       if (process.env.KELLY_DEBUG_OPQRST === '1') {
         console.log('[DEBUG_OPQRST]', {

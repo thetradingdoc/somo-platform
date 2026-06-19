@@ -347,17 +347,21 @@ Detail: [`docs/deployment/VOICE_CURRENT_ARCHITECTURE.md`](../deployment/VOICE_CU
 
 What actually runs today for prod health — no invented scheduled jobs.
 
-## GitHub Actions (on push to main/master)
+## Local CI (replaces GitHub Actions)
 
-From [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml):
+GitHub Actions is **disabled** (no billing). Run before push or deploy:
 
-| Step | Job | Purpose |
-|------|-----|---------|
-| Jest + reasoning gates | `test` | Unit/regression on every PR/push |
-| `npm run verify:prod:routing-smoke` | `deploy` | Prod URL routing check after merge to main |
-| Heuristic secret grep | `security` | Best-effort; not full secret scanning |
+```bash
+npm run ci:gate          # fast gate — default for ship/deploy scripts
+npm run ci:full          # + reasoning regression + landing E2E
+./scripts/install-git-hooks.sh   # optional pre-push hook
+```
 
-There is **no** dedicated scheduled workflow in-repo for nightly Playwright against prod. Run prod browser tests **manually** when needed.
+Skip on push: `SKIP_CI=1 git push`. Skip on deploy: `SKIP_TESTS=1` or `--skip-ci`.
+
+Archived workflow: [`.github/workflows/ci.yml.disabled`](../../.github/workflows/ci.yml.disabled).
+
+There is **no** dedicated scheduled nightly Playwright against prod. Run prod browser tests **manually** when needed.
 
 ## Manual prod checks
 
@@ -972,4 +976,50 @@ Approved for dev Week 1 work: [ ] yes  [ ] no
 ```bash
 node middleware-platform/scripts/migrate-voice-onboarding-v1.cjs --dry-run
 node middleware-platform/scripts/migrate-voice-onboarding-v1.cjs
+```
+
+## OPQRST Field Gate — provocation loop regression
+
+**Kill switch (F-1 dual-path):** `OPQRST_FIELD_GATE_ENABLED` default **on** (gate coordinator — fixes provocation loop). When `1` or unset, [opqrst-field-gate.js](../../middleware-platform/services/opqrst-field-gate.js) coordinates formatter, capture guard, L4 allowlists, L2 firewall, node-runner, and execute-turn reroute. Set `0`/`false` for legacy step-based paths at all six call sites (rollback only).
+
+### Symptom: Kelly repeats "What makes it better or worse?"
+
+1. Confirm `OPQRST_FIELD_GATE_ENABLED` is `1` or unset (default on) and redeploy if it was `0`.
+2. If gate is on and regression persists, inspect triage state (steps below).
+3. Inspect `kelly_conversation_history` for the call `session_id` — voice must have assistant lines for gate classification:
+   ```sql
+   SELECT role, content, created_at
+   FROM kelly_conversation_history
+   WHERE session_id = ?
+   ORDER BY created_at DESC
+   LIMIT 4;
+   ```
+   If empty while `orchestrate_sessions.conversation_history` has turns, voice history wiring is broken (see History SSOT in [OPQRST_FIELD_GATE_ARCHITECTURE.md](../clinical/OPQRST_FIELD_GATE_ARCHITECTURE.md)).
+4. Inspect `triage_sessions` for the call `session_id`:
+   - `provocation`, `onset`, `quality`, `severity`, `timing`
+   - `opqrst_complete` flag
+5. Inspect `kelly_rails_session_projection.flags_json`:
+   - `opqrst_resume_field` (should persist across billing pivot when gate on)
+   - `_opqrst_gate` snapshot on recent turns (when flag on)
+6. Query `kelly_call_events` for `pivot_evaluated` / `mode_violation_blocked` during the call.
+7. Run regression tests:
+   ```bash
+   cd middleware-platform
+   npx jest __tests__/opqrst-field-gate.test.js __tests__/opqrst-voice-history-wiring.test.js __tests__/voice-reply-formatter.test.js --runInBand
+   ```
+8. Measure billing-pivot frequency before prod enable:
+   ```bash
+   node scripts/opqrst-billing-pivot-frequency.cjs
+   ```
+   See [OPQRST_PROVOCATION_POLICY.md](../clinical/OPQRST_PROVOCATION_POLICY.md) R-5a thresholds.
+
+### Staging burn-in (F-2)
+
+Gate is **on** by default (`OPQRST_FIELD_GATE_ENABLED=1` or unset). Prod revision `somo-middleware-00076-6sr` (2026-06-18). Monitor `opqrst.tangent_detected` and `opqrst.repeat_blocked` for 7 days post-enable.
+
+```bash
+cd middleware-platform
+npm run verify:opqrst-f2
+DB_PATH=/tmp/middleware-staging.db npm run verify:opqrst-r5a
+npm run verify:opqrst-ship
 ```

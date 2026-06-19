@@ -1,0 +1,41 @@
+{
+  "ts": "2026-06-18T23:49:10.527Z",
+  "steps": [
+    {
+      "label": "test:opqrst-field-gate",
+      "ok": true,
+      "stdout": "\n> somo-middleware@3.0.0 test:opqrst-field-gate\n> jest --testPathPattern='opqrst-field-gate|opqrst-complete-parity|opqrst-pivot-survival|opqrst-gate-idempotency|voice-reply-formatter' --runInBand --passWithNoTests\n\n",
+      "stderr": " -- tip: ⚙️  enable debug logging with { debug: true }\n\n      at _log (node_modules/dotenv/lib/main.js:142:11)\n\n\nTest Suites: 5 passed, 5 total\nTests:       38 passed, 38 total\nSnapshots:   0 total\nTime:        2.162 s\nRan all test suites matching /opqrst-field-gate|opqrst-complete-parity|opqrst-pivot-survival|opqrst-gate-idempotency|voice-reply-formatter/i.\nForce exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?\n"
+    },
+    {
+      "label": "voice-dod-smoke",
+      "ok": true,
+      "stdout": "{\n  \"ok\": true,\n  \"checks\": [\n    \"provocation_stored_turn1\",\n    \"no_repeat_turn2\",\n    \"formatter_no_repeat_turn2\",\n    \"tangent_no_store_no_repeat\",\n    \"billing_pivot_resume\",\n    \"return_to_clinical_resume\"\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "label": "phase-c-en-cohort",
+      "ok": true,
+      "stdout": "{\n  \"cohort\": \"C-P0-04-en-automated\",\n  \"date\": \"2026-06-18\",\n  \"total\": 10,\n  \"passed\": 10,\n  \"failed\": 0,\n  \"gate_enabled\": true,\n  \"results\": [\n    {\n      \"id\": \"back_pain\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"rash\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"chest_pain\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"headache\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"anxiety\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"knee_pain\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"cough\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"abdominal\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"fatigue\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    },\n    {\n      \"id\": \"skin_spot\",\n      \"pass\": true,\n      \"openFieldAfter\": \"quality\"\n    }\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "label": "tenant-billing-pivot-smoke",
+      "ok": true,
+      "stdout": "[dotenv@17.2.3] injecting env (115) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }\n✅ V6 admin billing pivot same turn\n✅ V7 multi-intent billing primary keeps reschedule pending\n✅ V8 clinical→billing pivot preserves opqrst_resume_field\n✅ V9 return-to-clinical resumes open opqrst field\n\n✅ tenant-billing-pivot-smoke passed\n",
+      "stderr": ""
+    },
+    {
+      "label": "r5a-frequency",
+      "ok": null,
+      "note": "skipped — set DB_PATH to staging/prod sqlite"
+    },
+    {
+      "label": "f2-burn-in-verify",
+      "ok": true,
+      "stdout": "RIPE_PRICE_TOPUP_STANDARD\": \"price_1TcBY5CPd7jDemnqJdKs1sKL\",\n      \"STRIPE_PRICE_TOPUP_LARGE\": \"price_1TcBY6CPd7jDemnqmM5hfl18\",\n      \"TRIAL_SIM_FLOW_ENABLED\": \"1\",\n      \"TRIAL_SIM_LAUNCH_AT\": \"2020-01-01T00:00:00Z\",\n      \"TWILIO_VERIFY_DEV_MOCK\": \"1\",\n      \"REQUIRE_JWT_FOR_FHIR\": \"1\",\n      \"REQUIRE_TRIAGE_FOR_VOICE\": \"1\",\n      \"BASE_DOMAIN\": \"callsomo.com\",\n      \"RETELL_LLM_WEBSOCKET_URL\": \"wss://api.callsomo.com/webhook/retell/llm\",\n      \"GCS_DB_BUCKET\": \"somo-staging-db-somo-callsomo\",\n      \"SKIP_STARTUP_MIGRATIONS\": \"0\",\n      \"MIGRATIONS_STRICT\": \"1\",\n      \"CLOUDRUN_BOOT_DEBUG\": \"1\",\n      \"SAAS_VOICE_FAIL_CLOSED\": \"1\",\n      \"CALLSOMO_VOICE_CUSTOMER_ID\": \"cust_b7c7d3e1-31e6-4fbb-b6fd-8e306a79fad8\",\n      \"STAGING\": \"1\",\n      \"ALLOW_STRIPE_TEST_IN_PRODUCTION\": \"1\",\n      \"JWT_SECRET\": \"(secret)\",\n      \"ADMIN_PORTAL_SECRET\": \"(secret)\",\n      \"API_KEY_ENCRYPTION_KEY\": \"(secret)\",\n      \"RETELL_WEBHOOK_SECRET\": \"(secret)\",\n      \"RETELL_WEBHOOK_TOKEN\": \"(secret)\",\n      \"STRIPE_SECRET_KEY\": \"(secret)\",\n      \"STRIPE_PUBLISHABLE_KEY\": \"(secret)\",\n      \"TWILIO_ACCOUNT_SID\": \"(secret)\",\n      \"TWILIO_AUTH_TOKEN\": \"(secret)\",\n      \"TWILIO_VERIFY_SERVICE_SID\": \"(secret)\",\n      \"SOMO_OWNER_PASSWORD\": \"(secret)\",\n      \"SMTP_PASSWORD\": \"(secret)\",\n      \"RETELL_API_KEY\": \"(secret)\",\n      \"RETELL_AGENT_ID\": \"(secret)\",\n      \"EMAIL_SYNC\": \"1781542866\",\n      \"ADMIN_SYNC\": \"1781543505\",\n      \"DB_RELOAD\": \"1781544032\",\n      \"CALLSOMO_OPERATOR_TWILIO_NUMBER\": \"+13639990205\",\n      \"CONVERSATION_MODE_ROUTING\": \"enforce\",\n      \"CONVERSATION_MODE_ENFORCE_OPERATOR_OUTBOUND\": \"1\",\n      \"CONVERSATION_MODE_ENFORCE_OUTBOUND_SALES\": \"1\",\n      \"DB_RELOAD_TS\": \"1781629105\",\n      \"CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN\": \"0\",\n      \"KELLY_RAILS_V2\": \"1\",\n      \"KELLY_RAILS_ROLLOUT_PCT\": \"1\",\n      \"KELLY_ALLOW_HYBRID_GRAPH\": \"0\",\n      \"OPQRST_FIELD_GATE_ENABLED\": \"1\"\n    }\n  },\n  \"opqrst_gate\": {\n    \"env\": \"1\",\n    \"effective\": true\n  },\n  \"ok\": true\n}\n",
+      "stderr": ""
+    }
+  ],
+  "all_ok": true
+}

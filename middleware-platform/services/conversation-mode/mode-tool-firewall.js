@@ -1,6 +1,7 @@
 'use strict';
 
 const { ConversationMode, Subrail } = require('./conversation-mode-types');
+const { isOpqrstFieldGateEnabled } = require('../kelly-rails/config');
 
 /**
  * Mode + subrail tool firewall.
@@ -72,6 +73,12 @@ function isToolAllowedForMode(toolName, ctx = {}) {
   if (modeForbidden?.has(name)) return false;
 
   if (name === 'store_triage_opqrst') {
+    if (
+      isOpqrstFieldGateEnabled() &&
+      (ctx.allowStoreOpqrst || ctx._opqrst_gate?.allowStoreOpqrst)
+    ) {
+      return true;
+    }
     return (
       mode === ConversationMode.TENANT_INBOUND_CLINICAL && subrail === Subrail.OPQRST
     );

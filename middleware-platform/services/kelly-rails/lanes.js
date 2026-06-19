@@ -63,6 +63,11 @@ function advanceAfterStep(state, { outcome, toolsUsed = [] } = {}) {
       state.step = 'triage_assessment';
       return;
     }
+    if (opqrstComplete(row) && state.step !== 'triage_assessment') {
+      if (toolsUsed.includes('store_triage_rich_intake') || state.step === 'symptoms') {
+        state.step = 'triage_assessment';
+      }
+    }
   }
 
   if (lane === KELLY_LANE.BOOKING && outcome === GATE_OUTCOME.BOOKED) {

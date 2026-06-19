@@ -7,6 +7,10 @@ const { executeLaneStep } = require('./lanes');
 const { persistRailsSessionState, getRailsSessionProjection } = require('./session-ssot');
 const { shouldEnforceMode } = require('../conversation-mode/config');
 const { applyLaneStepFromL2Handoff } = require('./lane-handoff-mapper');
+const { opqrstCompleteForSession } = require('./gates/shared');
+const OpqrstFieldGate = require('../opqrst-field-gate');
+const { isOpqrstFieldGateEnabled } = require('./config');
+const { getLastAssistantText } = require('./history');
 
 function shouldReroute(state, message) {
   const msg = String(message || '').toLowerCase();
@@ -17,16 +21,76 @@ function shouldReroute(state, message) {
   return false;
 }
 
-function opqrstComplete(row) {
-  if (!row) return false;
-  const region = String(row.region || row.body_site || '').trim();
-  const quality = String(row.quality || '').trim();
-  return !!(
-    quality &&
-    String(row.onset || row.timing || '').trim() &&
-    (row.severity != null || String(row.severity || '').trim()) &&
-    (region || /leg|neck|arm|rash|skin/i.test(quality))
-  );
+async function applyOpqrstFieldGate(state, ctx, db) {
+  if (!isOpqrstFieldGateEnabled()) return null;
+  const triageRow = db.getTriageSession ? db.getTriageSession(ctx.sessionId) : null;
+  const lastAssistantText = getLastAssistantText(ctx.sessionId, { db });
+
+  let triagePolicy = 'conditional';
+  try {
+    const { loadTenantPolicyFromProfile } = require('../conversation-mode/tenant-policy');
+    const policy = loadTenantPolicyFromProfile(db, ctx.clinicId, ctx.customerId);
+    triagePolicy = policy?.triage_policy || 'conditional';
+  } catch (_) {}
+
+  const gateResult = OpqrstFieldGate.resolve({
+    triageRow,
+    userMessage: ctx.message,
+    lastAssistantText,
+    activeLane: state.active_lane,
+    conversationMode: state.conversation_mode || state.flags?.conversation_mode,
+    activeSubrail: state.active_subrail || state.flags?.active_subrail,
+    opqrstFrozen: !!(state.flags?.opqrst_frozen),
+    triagePolicy,
+    specialty: triageRow?.target_specialty,
+    opqrstResumeField: state.flags?.opqrst_resume_field,
+    locale: state.locale || 'en'
+  });
+
+  state.flags._opqrst_gate = gateResult;
+
+  if (gateResult?.resumeFieldAfterTangent) {
+    state.flags.opqrst_resume_field = gateResult.resumeFieldAfterTangent;
+  }
+
+  if (gateResult?.storePayload && Object.keys(gateResult.storePayload).length) {
+    const field = Object.keys(gateResult.storePayload)[0];
+    const existing = triageRow?.[field];
+    const incoming = gateResult.storePayload[field];
+    const same =
+      existing != null &&
+      String(existing).trim().toLowerCase() === String(incoming).trim().toLowerCase();
+    if (!same) {
+      await KellyToolExecutor.execute(
+        'store_triage_opqrst',
+        gateResult.storePayload,
+        {
+          sessionId: ctx.sessionId,
+          clinicId: ctx.clinicId,
+          patientId: ctx.patientId,
+          callerPhone: ctx.callerPhone,
+          channel: ctx.channel
+        }
+      );
+    }
+  }
+
+  return gateResult;
+}
+
+function applyReroutePreservingPartialTriage(state, route, db, sessionId) {
+  const triageRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+  const partial = OpqrstFieldGate.hasPartialTriage(triageRow);
+  state.active_lane = route.lane;
+  if (partial && route.lane === KELLY_LANE.CLINICAL && route.step === 'clinical_intake') {
+    if (state.flags?.opqrst_resume_field) {
+      state.step = 'medical_history';
+    } else {
+      state.step = state.step || route.step;
+    }
+  } else {
+    state.step = route.step;
+  }
 }
 
 async function promoteBookingWhenReady(state, ctx) {
@@ -36,7 +100,7 @@ async function promoteBookingWhenReady(state, ctx) {
 
   const db = require('../../database');
   const row = db.getTriageSession ? db.getTriageSession(ctx.sessionId) : null;
-  if (!opqrstComplete(row)) return;
+  if (!opqrstCompleteForSession(row, ctx)) return;
 
   try {
     KellyToolExecutor._setSessionMeta(ctx.sessionId, 'booking_intent_seen', '1');
@@ -187,6 +251,7 @@ async function executeTurn(input = {}) {
       if (projFlags.lookup_complete) state.flags.lookup_complete = true;
       if (projFlags.last_appointment_id) state.flags.last_appointment_id = projFlags.last_appointment_id;
       if (projFlags.reschedule_pending) state.flags.reschedule_pending = true;
+      if (projFlags.opqrst_resume_field) state.flags.opqrst_resume_field = projFlags.opqrst_resume_field;
     } catch (_) {}
   }
 
@@ -215,10 +280,11 @@ async function executeTurn(input = {}) {
 
   state.last_user_message = ctx.message;
 
+  await applyOpqrstFieldGate(state, ctx, db);
+
   if (!skipLegacyRouting && shouldReroute(state, ctx.message) && !(onRecordsRail && payIntentNow)) {
     const route = routeOrchestratorLane(state);
-    state.active_lane = route.lane;
-    state.step = route.step;
+    applyReroutePreservingPartialTriage(state, route, db, ctx.sessionId);
     if (route.safety_blocked) {
       state.flags.safety_blocked = true;
       state.flags.pending_human_handoff = true;
@@ -229,12 +295,14 @@ async function executeTurn(input = {}) {
         state.step = 'schedule_visit';
       }
     }
+    if (payIntentNow && state.flags._opqrst_gate?.openField) {
+      state.flags.opqrst_resume_field = state.flags._opqrst_gate.openField;
+    }
   }
 
   if (!skipLegacyRouting && state.active_lane === KELLY_LANE.ROUTER) {
     const route = routeOrchestratorLane(state);
-    state.active_lane = route.lane;
-    state.step = route.step;
+    applyReroutePreservingPartialTriage(state, route, db, ctx.sessionId);
     if (route.safety_blocked) {
       state.flags.safety_blocked = true;
       state.flags.pending_human_handoff = true;
@@ -342,8 +410,15 @@ async function executeTurn(input = {}) {
     toolsUsed: toolsUsed || [],
     endCall: !!endCall,
     gate_matched: state.gate_matched || null,
-    gate_outcome: state.gate_outcome || null
+    gate_outcome: state.gate_outcome || null,
+    _opqrst_gate: state.flags?._opqrst_gate || null
   };
 }
 
-module.exports = { executeTurn, shouldReroute };
+module.exports = {
+  executeTurn,
+  shouldReroute,
+  applyOpqrstFieldGate,
+  applyReroutePreservingPartialTriage,
+  promoteBookingWhenReady
+};

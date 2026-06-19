@@ -220,6 +220,18 @@ function applyPivotToSession(sessionState, pivotResult) {
   next.pivot_reason = pivotResult.pivot_reason;
   next.pivot_event = pivotResult.pivot_event;
   next.pending_intent_queue = pivotResult.pending_intents || [];
+
+  if (pivotResult.pivot_event === PivotEvent.BILLING_INTENT_DETECTED) {
+    const resume =
+      sessionState.opqrst_resume_field ||
+      sessionState.flags?.opqrst_resume_field ||
+      sessionState.flags?._opqrst_gate?.openField ||
+      sessionState._opqrst_gate?.openField;
+    if (resume) {
+      next.opqrst_resume_field = resume;
+    }
+  }
+
   return next;
 }
 

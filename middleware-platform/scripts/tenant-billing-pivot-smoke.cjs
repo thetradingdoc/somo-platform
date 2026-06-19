@@ -37,6 +37,50 @@ function main() {
   );
   console.log('✅ V7 multi-intent billing primary keeps reschedule pending');
 
+  const v8 = evaluateTurn({
+    utterance: 'I need to pay my copay',
+    tenantPolicy: { billing_enabled: true },
+    sessionState: {
+      conversation_mode: 'tenant_inbound_clinical',
+      active_subrail: 'opqrst',
+      opqrst_resume_field: 'provocation',
+      pending_intent_queue: []
+    }
+  });
+  assert(v8.mode === 'tenant_billing', `V8 expected tenant_billing, got ${v8.mode}`);
+  const { applyPivotToSession } = require('../services/conversation-mode/pivot-engine');
+  const merged = applyPivotToSession(
+    { conversation_mode: 'tenant_inbound_clinical', active_subrail: 'opqrst', opqrst_resume_field: 'provocation' },
+    v8
+  );
+  assert(merged.opqrst_resume_field === 'provocation', 'V8 expected opqrst_resume_field preserved');
+
+  console.log('✅ V8 clinical→billing pivot preserves opqrst_resume_field');
+
+  process.env.OPQRST_FIELD_GATE_ENABLED = '1';
+  const OpqrstFieldGate = require('../services/opqrst-field-gate');
+  const v9 = OpqrstFieldGate.resolve({
+    triageRow: {
+      onset: 'yesterday',
+      provocation: null,
+      quality: null,
+      severity: null,
+      timing: null
+    },
+    userMessage: 'ok I finished paying',
+    lastAssistantText: '',
+    activeLane: 'clinical',
+    conversationMode: 'tenant_inbound_clinical',
+    activeSubrail: 'opqrst',
+    triagePolicy: 'conditional',
+    opqrstResumeField: 'provocation',
+    locale: 'en'
+  });
+  assert(v9.openField === 'provocation', `V9 expected provocation resume, got ${v9.openField}`);
+  assert(v9.active, 'V9 expected gate active after return-to-clinical');
+  assert(v9.shouldScriptVoice, 'V9 expected shouldScriptVoice on resume field');
+  console.log('✅ V9 return-to-clinical resumes open opqrst field');
+
   console.log('\n✅ tenant-billing-pivot-smoke passed');
 }
 

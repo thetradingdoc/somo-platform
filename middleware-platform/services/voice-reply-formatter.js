@@ -1,10 +1,12 @@
 'use strict';
 
-const { isOpqrstEsPackActive } = require('./kelly-rails/config');
+const { isOpqrstEsPackActive, isOpqrstFieldGateEnabled } = require('./kelly-rails/config');
 const {
   getOpqrstHintForClinicalLane,
   getNextQuestion
 } = require('./clinical-opqrst-registry');
+const OpqrstFieldGate = require('./opqrst-field-gate');
+const Metrics = require('./metrics');
 
 const MAX_VOICE_WORDS = parseInt(process.env.KELLY_VOICE_MAX_REPLY_WORDS || '25', 10);
 const MAX_VOICE_QUESTIONS = 1;
@@ -34,10 +36,8 @@ function clampVoiceReply(text, _locale = 'en') {
   return kept.join(' ').trim();
 }
 
-/**
- * Prefer approved OPQRST registry line on voice clinical lane when pack active.
- */
-function applyClinicalOpqrstVoiceLine(reply, state = {}) {
+/** Legacy L4 step → registry scripted line (F-1 flag off). */
+function applyClinicalOpqrstVoiceLineLegacy(reply, state = {}) {
   const locale = state.locale || 'en';
   if (state.active_lane !== 'clinical' || state.channel !== 'voice') {
     return reply;
@@ -52,6 +52,57 @@ function applyClinicalOpqrstVoiceLine(reply, state = {}) {
   return reply;
 }
 
+/**
+ * Gate-based OPQRST script override when flag on; legacy step mapping when flag off.
+ */
+function applyClinicalOpqrstVoiceLine(reply, state = {}) {
+  if (!isOpqrstFieldGateEnabled()) {
+    return applyClinicalOpqrstVoiceLineLegacy(reply, state);
+  }
+
+  const locale = state.locale || 'en';
+  if (state.active_lane !== 'clinical' || state.channel !== 'voice') {
+    return reply;
+  }
+  if (locale === 'es' && !isOpqrstEsPackActive()) {
+    return reply;
+  }
+
+  const gateResult = state._opqrst_gate || state.flags?._opqrst_gate;
+  if (gateResult) {
+    if (gateResult.userAskedTangent || !gateResult.shouldScriptVoice) {
+      if (gateResult.userAnsweredOpenField || gateResult.userAskedTangent) {
+        try {
+          Metrics.increment('opqrst.repeat_blocked', 1);
+        } catch (_) {}
+      }
+      return reply;
+    }
+    if (gateResult.scriptedLine) return gateResult.scriptedLine;
+    return reply;
+  }
+
+  if (!state.triageRow) return reply;
+  const resolved = OpqrstFieldGate.resolve({
+    triageRow: state.triageRow,
+    userMessage: state.last_user_message || '',
+    lastAssistantText: state.last_assistant_text || '',
+    activeLane: state.active_lane,
+    conversationMode: state.conversation_mode || state.flags?.conversation_mode,
+    activeSubrail: state.active_subrail || state.flags?.active_subrail,
+    opqrstFrozen: !!(state.flags?.opqrst_frozen),
+    triagePolicy: state.triagePolicy || 'conditional',
+    specialty: state.triageRow?.target_specialty,
+    opqrstResumeField: state.flags?.opqrst_resume_field,
+    locale
+  });
+  if (resolved.userAskedTangent || !resolved.shouldScriptVoice) {
+    return reply;
+  }
+  if (resolved.scriptedLine) return resolved.scriptedLine;
+  return reply;
+}
+
 function formatVoiceReply(reply, state = {}) {
   const stickyLocale = state.flags?.preferred_language || state.preferred_language;
   const effectiveState = stickyLocale ? { ...state, locale: stickyLocale } : state;
@@ -63,5 +114,6 @@ function formatVoiceReply(reply, state = {}) {
 module.exports = {
   clampVoiceReply,
   applyClinicalOpqrstVoiceLine,
+  applyClinicalOpqrstVoiceLineLegacy,
   formatVoiceReply
 };

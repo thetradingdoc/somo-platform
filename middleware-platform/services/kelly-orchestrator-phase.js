@@ -464,6 +464,7 @@ function resolveOrchestrationPhase(opts) {
     bookingIntentSeen &&
     clinicIntakeMet &&
     sessionRow &&
+    // opqrst_complete from triage_sessions — set by P-2 store path only
     (sessionRow.opqrst_complete === 1 || sessionRow.opqrst_complete === true)
   ) {
     // A1b: booking intent + minimum intake + OPQRST done — stay in triage until RAG completes
