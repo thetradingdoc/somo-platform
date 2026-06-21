@@ -52,13 +52,42 @@ function enrichCandidates(candidates, type) {
   }));
 }
 
+function isValidIcd10Code(code) {
+  const norm = String(code || '').replace(/\./g, '').trim().toUpperCase();
+  if (!norm || norm.length < 3 || norm.length > 7) return false;
+  if (/^\d+$/.test(norm)) return false;
+  if (norm.startsWith('Y')) return false;
+  return /^[A-TV-Z][0-9A-Z]{2,6}$/.test(norm);
+}
+
+function isValidCodeForType(code, type) {
+  const norm = String(code || '').trim().toUpperCase();
+  if (!norm) return false;
+  if (type === 'icd10') return isValidIcd10Code(norm);
+  if (type === 'cpt') return /^\d{5}$/.test(norm.replace(/\./g, ''));
+  if (type === 'hcpcs') return /^[A-Z0-9]{4,5}$/.test(norm);
+  return true;
+}
+
 function aggregateFromMatches(matches, field, type) {
+  const minScore = parseFloat(process.env.PINECONE_MIN_SCORE || '0.45', 10);
+  const fallbackMin = parseFloat(process.env.PINECONE_FALLBACK_MIN_SCORE || '0.35', 10);
+  let filtered = (matches || []).filter((m) => {
+    const score = typeof m.score === 'number' ? m.score : 0;
+    return score >= minScore;
+  });
+  if (!filtered.length) {
+    filtered = (matches || [])
+      .filter((m) => (typeof m.score === 'number' ? m.score : 0) >= fallbackMin)
+      .slice(0, 10);
+  }
   const counts = new Map();
   const maxScore = new Map();
-  for (const m of matches || []) {
+  for (const m of filtered) {
     const meta = m.metadata || {};
     const score = typeof m.score === 'number' ? m.score : 0;
     for (const code of splitMetadataCodes(meta[field])) {
+      if (!isValidCodeForType(code, type)) continue;
       counts.set(code, (counts.get(code) || 0) + 1);
       maxScore.set(code, Math.max(maxScore.get(code) || 0, score));
     }
@@ -69,11 +98,18 @@ function aggregateFromMatches(matches, field, type) {
     return (maxScore.get(b) || 0) - (maxScore.get(a) || 0);
   });
   return enrichCandidates(
-    ranked.map((code) => ({
-      code,
-      description: '',
-      confidence: maxScore.get(code) || 0.7
-    })),
+    ranked.map((code) => {
+      const raw = maxScore.get(code) || 0.5;
+      const validated = !!lookupDescription(code, type);
+      const confidence = validated && type === 'icd10'
+        ? Math.max(raw, 0.68)
+        : (validated ? Math.max(raw, 0.65) : raw);
+      return {
+        code,
+        description: '',
+        confidence
+      };
+    }),
     type
   );
 }
@@ -90,18 +126,22 @@ function pineconeFallbackEnabled() {
  */
 async function retrieveCodesFromPineconeMetadata(query, opts = {}) {
   if (!pineconeFallbackEnabled() || !query || !String(query).trim()) return null;
-  const topK = Math.min(30, Math.max(5, opts.top_k || 15));
+  const topK = Math.min(30, Math.max(20, opts.top_k || parseInt(process.env.PINECONE_TOP_K || '20', 10)));
   try {
     const vector = await embedText(String(query).trim().slice(0, 2000));
     if (!vector || !vector.length) return null;
-    const matches = await pineconeQuery(vector, { topK });
+    const matches = await pineconeQuery(vector, {
+      topK,
+      timeoutMs: parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10)
+    });
     if (!matches.length) return null;
     return {
       icd10: aggregateFromMatches(matches, 'icd10_codes', 'icd10'),
       cpt: aggregateFromMatches(matches, 'cpt_codes', 'cpt'),
       hcpcs: aggregateFromMatches(matches, 'hcpcs_codes', 'hcpcs')
     };
-  } catch (_) {
+  } catch (e) {
+    console.warn('[pinecone-code-metadata] retrieval failed:', e.message);
     return null;
   }
 }
@@ -111,5 +151,7 @@ module.exports = {
   aggregateFromMatches,
   splitMetadataCodes,
   pineconeFallbackEnabled,
-  lookupDescription
+  lookupDescription,
+  isValidIcd10Code,
+  isValidCodeForType
 };

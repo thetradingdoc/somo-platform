@@ -1567,6 +1567,54 @@ app.get('/api/admin/claims/review-queue', (req, res) => {
   }
 });
 
+app.get('/api/admin/coding-reviews', (req, res) => {
+  try {
+    const codingReview = require('../services/coding-review-service');
+    const status = req.query.status || 'pending';
+    const clinicId = req.query.clinic_id || null;
+    const reviews = status === 'pending'
+      ? codingReview.listPending({ clinicId, limit: parseInt(req.query.limit, 10) || 50 })
+      : [];
+    res.json({ success: true, reviews, count: reviews.length });
+  } catch (error) {
+    console.error('❌ coding-reviews list error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/coding-reviews/:id/approve', (req, res) => {
+  try {
+    const codingReview = require('../services/coding-review-service');
+    const { icd10, cpt, resolved_by, session_id } = req.body || {};
+    const approved = codingReview.approveReview(req.params.id, {
+      icd10,
+      cpt,
+      resolved_by,
+      sessionId: session_id
+    });
+    res.json({ success: true, review: approved });
+  } catch (error) {
+    console.error('❌ coding-reviews approve error:', error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/coding-reviews/:id/reject', (req, res) => {
+  try {
+    const codingReview = require('../services/coding-review-service');
+    const { rejection_reason, resolved_by, session_id } = req.body || {};
+    const rejected = codingReview.rejectReview(req.params.id, {
+      rejection_reason,
+      resolved_by,
+      sessionId: session_id
+    });
+    res.json({ success: true, review: rejected });
+  } catch (error) {
+    console.error('❌ coding-reviews reject error:', error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 app.post('/api/admin/claims/:claimId/resubmit', async (req, res) => {
   try {
     const { claimId } = req.params;

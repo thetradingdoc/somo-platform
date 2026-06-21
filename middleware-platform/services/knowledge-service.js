@@ -911,6 +911,29 @@ function applyRemoteIcdCorrections(candidates, clinicalText) {
   return { ...candidates, icd10 };
 }
 
+/** When Pinecone returns ICD only, infer outpatient E/M from visit context (not CPT_TABLE). */
+function _inferEmCptForOutpatient(primaryIcd, opts = {}) {
+  if (!primaryIcd) return null;
+  const { CPT_INFERENCE_CONFIDENCE } = require('../config/coding-thresholds');
+  const isNewPatient = opts.isNewPatient !== false;
+  const urgency = String(opts.urgency || 'routine').toLowerCase();
+  const tier = isNewPatient ? 'new' : 'established';
+  const emMap = {
+    new: { routine: '99203', urgent: '99204', emergent: '99285' },
+    established: { routine: '99213', urgent: '99214', emergent: '99285' }
+  };
+  const urgKey = emMap[tier][urgency] ? urgency : 'routine';
+  const code = emMap[tier][urgKey] || emMap[tier].routine;
+  const v = validateCodesExist({ cpt: [code] });
+  if (!v.valid) return null;
+  return {
+    code,
+    description: _lookupCodeDescription(code, 'cpt'),
+    confidence: CPT_INFERENCE_CONFIDENCE,
+    source: 'em_inference'
+  };
+}
+
 /**
  * Unified dual-source code retrieval: remote RAG + local search in parallel, merge, validate.
  * Use this for video consult, assistant overlay, or any API that needs consistent code suggestions.
@@ -926,7 +949,7 @@ async function getCodeCandidatesDualSource(clinicalText, options = {}) {
   const maxCpt = options.maxCpt ?? 15;
   const maxHcpcs = options.maxHcpcs ?? 10;
 
-  const remoteTimeoutMs = options.remoteTimeoutMs ?? parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '2000', 10);
+  const remoteTimeoutMs = options.remoteTimeoutMs ?? parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
   const [remoteSettled, localSettled] = await Promise.allSettled([
     retrieveRemoteCodeKnowledge(
       { query: text, specialty, top_k: Math.max(maxIcd10, maxCpt, maxHcpcs) },
@@ -976,12 +999,34 @@ async function getCodeCandidatesDualSource(clinicalText, options = {}) {
     ? validation.invalid
     : undefined;
 
+  const confidence_breakdown = {
+    local_icd_confidence: local.icd10?.[0]?.confidence ?? 0,
+    remote_icd_confidence: remote.icd10?.[0]?.confidence ?? 0,
+    remote_source: remote.metadata?.source || 'none',
+    local_source: local.metadata?.source || 'local'
+  };
+  if (process.env.PHASE1_CODING_LOG === '1') {
+    console.log('[knowledge-service] confidence_breakdown', confidence_breakdown);
+  }
+
+  if ((!codes.cpt || codes.cpt.length === 0) && codes.icd10?.length) {
+    const inferred = _inferEmCptForOutpatient(codes.icd10[0]?.code, {
+      isNewPatient: options.isNewPatient,
+      urgency: options.urgency
+    });
+    if (inferred) {
+      codes.cpt = [inferred];
+      confidence_breakdown.cpt_inferred_from_icd = true;
+    }
+  }
+
   return {
     ...codes,
     invalid_codes,
     remote_knowledge: remote,
     local_knowledge: local,
-    merged_codes: codes
+    merged_codes: codes,
+    confidence_breakdown
   };
 }
 
@@ -1037,9 +1082,9 @@ function _mergeRemoteAndLocalCodes(remote, local, limits = {}) {
     });
   };
 
-  add('icd10', remote.icd10, 'colab', 0.05);
-  add('cpt', remote.cpt, 'colab', 0.05);
-  add('hcpcs', remote.hcpcs, 'colab', 0.02);
+  add('icd10', remote.icd10, 'remote', 0);
+  add('cpt', remote.cpt, 'remote', 0);
+  add('hcpcs', remote.hcpcs, 'remote', 0);
   add('icd10', local.icd10, 'local', 0);
   add('cpt', local.cpt, 'local', 0);
   add('hcpcs', local.hcpcs, 'local', 0);
@@ -1249,7 +1294,7 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
  * @returns {{ valid: boolean, invalid: { icd10: string[], cpt: string[], hcpcs: string[] } }}
  */
 function validateCodesExist(codes = {}, options = {}) {
-  const invalid = { icd10: [], cpt: [], hcpcs: [] };
+  const invalid = { icd10: [], cpt: [], hcpcs: [], icd10_pcs: [] };
   const trustByFormat =
     options.trustExternalSource === true ||
     options.trustFormattedCodes === true;
@@ -1276,7 +1321,15 @@ function validateCodesExist(codes = {}, options = {}) {
     if (trustByFormat && isHcpcsFormat(str)) return;
     if (!db.codeExists?.(c, 'hcpcs')) invalid.hcpcs.push(str);
   });
-  const hasInvalid = invalid.icd10.length > 0 || invalid.cpt.length > 0 || invalid.hcpcs.length > 0;
+  const isPcsFormat = (s) => /^[0-9A-HJ-NP-Z]{7}$/.test(String(s).trim().toUpperCase());
+  (codes.icd10_pcs || []).forEach(c => {
+    if (!c) return;
+    const str = String(c).trim().toUpperCase();
+    if (trustByFormat && isPcsFormat(str)) return;
+    if (!db.codeExists?.(c, 'icd10_pcs')) invalid.icd10_pcs.push(str);
+  });
+  const hasInvalid = invalid.icd10.length > 0 || invalid.cpt.length > 0 || invalid.hcpcs.length > 0
+    || invalid.icd10_pcs.length > 0;
   return { valid: !hasInvalid, invalid };
 }
 

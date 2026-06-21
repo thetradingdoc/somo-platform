@@ -1,9 +1,11 @@
 # Medical coding architecture
 
-> **Last reviewed:** 2026-05-25  
-> **Status:** Production-ready on dev (92% eval); prod codebook parity and Stedi webhook are ops follow-ups.
+> **Last reviewed:** 2026-06-20  
+> **Status:** Voice Kelly coding spine implemented; live Retell call proof is manual. See [VOICE_CODING_SPINE.md](./VOICE_CODING_SPINE.md).
 
 This document describes the **implemented** medical coding stack in `middleware-platform`. It is the canonical reference for how ICD-10, CPT, and HCPCS codes are retrieved, validated, suggested to the voice agent, and attached to claims.
+
+**Voice Kelly path (collect_insurance → quote → book):** [VOICE_CODING_SPINE.md](./VOICE_CODING_SPINE.md)
 
 ---
 
@@ -434,3 +436,24 @@ npm run fee-schedule:mpfs
 ```
 
 See [Knowledge/fee-schedules/README.md](../../Knowledge/fee-schedules/README.md).
+
+---
+
+## Refactor boundaries
+
+Voice Kelly coding orchestration is documented in [VOICE_CODING_SPINE.md](./VOICE_CODING_SPINE.md). For **PR review**, invariants, test matrix, and module extraction map, use [CODING_LAYER_REVIEW.md](./CODING_LAYER_REVIEW.md).
+
+**Do not refactor in one PR:**
+
+- Kelly triage gates (`voice-triage-guards.js`) and Retell tool routing (`retell-websocket.js`)
+- Verify script consolidation and resolver parity changes
+- `database.js` repository extraction (one domain repo per PR)
+
+**Preferred edit targets** after modularization:
+
+| Concern | Edit here, not in god file |
+|---------|----------------------------|
+| Insurance collect / quote | `services/voice-insurance-collect-service.js`, `resolve-insurance-codes.js` |
+| Kelly collect tool | `services/kelly-tool-executor/collect-insurance.js` |
+| Post-call verification | `scripts/lib/coding-spine-checks.cjs` |
+| Deploy env gates | `scripts/lib/deploy-readiness.cjs` |

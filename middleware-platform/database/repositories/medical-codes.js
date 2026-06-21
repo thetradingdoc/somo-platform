@@ -223,6 +223,97 @@ function createMedicalCodesRepository(db) {
     return row ? row.n : 0;
   }
 
+  function bulkUpsertIcd10PcsCodes(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+    const stmt = db.prepare(`
+    INSERT INTO icd10_pcs_codes (code, description, source_file)
+    VALUES (?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      description = excluded.description,
+      source_file = excluded.source_file,
+      updated_at = datetime('now')
+  `);
+    let count = 0;
+    for (const item of items) {
+      if (!item || !item.code || !item.description) continue;
+      stmt.run(
+        String(item.code).trim().toUpperCase(),
+        String(item.description).trim(),
+        item.source_file || null
+      );
+      count++;
+    }
+    return { inserted: count };
+  }
+
+  function searchIcd10PcsCodes(query, limit = 15) {
+    const q = (query || '').toString().trim();
+    if (!q) return [];
+    const term = `%${q.toLowerCase()}%`;
+    return db.prepare(`
+    SELECT code, description
+    FROM icd10_pcs_codes
+    WHERE LOWER(code) LIKE ? OR LOWER(description) LIKE ?
+    ORDER BY CASE WHEN LOWER(code) LIKE ? THEN 0 ELSE 1 END,
+             CASE WHEN LOWER(code) = LOWER(?) THEN 0 ELSE 1 END,
+             description
+    LIMIT ?
+  `).all(term, term, term, q, limit);
+  }
+
+  function getIcd10PcsCodesCount() {
+    const row = db.prepare('SELECT COUNT(*) as n FROM icd10_pcs_codes').get();
+    return row ? row.n : 0;
+  }
+
+  function bulkUpsertPlaceOfServiceCodes(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+    const stmt = db.prepare(`
+    INSERT INTO place_of_service_codes (code, description, is_telehealth)
+    VALUES (?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      description = excluded.description,
+      is_telehealth = excluded.is_telehealth
+  `);
+    let count = 0;
+    for (const item of items) {
+      if (!item || !item.code || !item.description) continue;
+      stmt.run(
+        String(item.code).trim(),
+        String(item.description).trim(),
+        item.is_telehealth ? 1 : 0
+      );
+      count++;
+    }
+    return { inserted: count };
+  }
+
+  function bulkUpsertModifierCodes(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+    const stmt = db.prepare(`
+    INSERT INTO modifier_codes (code, description, applies_to, telehealth_required, payer_type)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      description = excluded.description,
+      applies_to = excluded.applies_to,
+      telehealth_required = excluded.telehealth_required,
+      payer_type = excluded.payer_type
+  `);
+    let count = 0;
+    for (const item of items) {
+      if (!item || !item.code || !item.description) continue;
+      stmt.run(
+        String(item.code).trim().toUpperCase(),
+        String(item.description).trim(),
+        item.applies_to || 'cpt',
+        item.telehealth_required ? 1 : 0,
+        item.payer_type || 'any'
+      );
+      count++;
+    }
+    return { inserted: count };
+  }
+
   function codeExists(code, codeType) {
     if (!code || !codeType) return false;
     const raw = String(code).trim().toUpperCase();
@@ -238,6 +329,9 @@ function createMedicalCodesRepository(db) {
     }
     if (codeType === 'hcpcs') {
       return db.prepare('SELECT 1 FROM hcpcs_codes WHERE UPPER(TRIM(code)) = ?').get(raw) != null;
+    }
+    if (codeType === 'icd10_pcs') {
+      return db.prepare('SELECT 1 FROM icd10_pcs_codes WHERE UPPER(TRIM(code)) = ?').get(raw) != null;
     }
     return false;
   }
@@ -346,6 +440,11 @@ function createMedicalCodesRepository(db) {
     bulkUpsertHcpcsCodes,
     searchHcpcsCodes,
     getHcpcsCodesCount,
+    bulkUpsertIcd10PcsCodes,
+    searchIcd10PcsCodes,
+    getIcd10PcsCodesCount,
+    bulkUpsertPlaceOfServiceCodes,
+    bulkUpsertModifierCodes,
     codeExists,
     getAllCodeEmbeddings,
     getCodeEmbeddingsBatch,

@@ -4,7 +4,7 @@
  * Requires OPENAI_API_KEY. Run after ICD-10/CPT/HCPCS imports.
  *
  * Usage:
- *   node scripts/populate-code-embeddings.js [--limit N] [--type icd10|cpt|hcpcs] [--incremental]
+ *   node scripts/populate-code-embeddings.js [--limit N] [--type icd10|cpt|hcpcs|icd10_pcs] [--incremental]
  *   node scripts/populate-code-embeddings.js --until-done [--batch-size 5000]
  */
 
@@ -112,6 +112,16 @@ const TYPE_CONFIG = {
     fullSql: 'SELECT code, long_desc FROM hcpcs_codes LIMIT ?',
     descField: 'long_desc',
     defaultBatch: 2000
+  },
+  icd10_pcs: {
+    incrementalSql: `SELECT c.code, c.description FROM icd10_pcs_codes c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM code_embeddings e
+        WHERE e.code = c.code AND e.code_type = 'icd10_pcs'
+      ) LIMIT ?`,
+    fullSql: 'SELECT code, description FROM icd10_pcs_codes LIMIT ?',
+    descField: 'description',
+    defaultBatch: 3000
   }
 };
 

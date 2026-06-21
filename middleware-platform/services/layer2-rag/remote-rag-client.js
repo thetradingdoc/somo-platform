@@ -14,7 +14,7 @@ const {
 
 const RAG_TIMEOUT = parseInt(process.env.RAG_TIMEOUT || '10000', 10);
 const RAG_RETRIES = parseInt(process.env.RAG_RETRIES || '2', 10);
-const DEFAULT_REMOTE_TIMEOUT_MS = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '2000', 10);
+const DEFAULT_REMOTE_TIMEOUT_MS = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
 
 /** Empty/disabled RAG_API_URL skips Colab; unset no longer defaults to localhost (use Pinecone). */
 function resolveRagApiUrl() {
@@ -70,27 +70,41 @@ async function retrieveRemoteCodeKnowledge(params, options = {}) {
   let out = emptyRemote('none');
 
   if (pineconeFallbackEnabled()) {
-    try {
-      const pinecone = await withTimeout(
-        retrieveCodesFromPineconeMetadata(payload.query, { top_k: payload.top_k }),
-        timeoutMs,
-        'pinecone'
-      );
-      if (pinecone && (pinecone.icd10?.length || pinecone.cpt?.length || pinecone.hcpcs?.length)) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const pinecone = await withTimeout(
+          retrieveCodesFromPineconeMetadata(payload.query, { top_k: payload.top_k }),
+          timeoutMs,
+          'pinecone'
+        );
+        if (pinecone && (pinecone.icd10?.length || pinecone.cpt?.length || pinecone.hcpcs?.length)) {
+          out = {
+            icd10: pinecone.icd10 || [],
+            cpt: pinecone.cpt || [],
+            hcpcs: pinecone.hcpcs || [],
+            metadata: { source: 'pinecone', rag_cpt_source: 'pinecone' }
+          };
+          logger.info('Pinecone remote code retrieval', {
+            icd10_count: out.icd10.length,
+            cpt_count: out.cpt.length,
+            hcpcs_count: out.hcpcs.length
+          });
+          break;
+        }
         out = {
-          icd10: pinecone.icd10 || [],
-          cpt: pinecone.cpt || [],
-          hcpcs: pinecone.hcpcs || [],
-          metadata: { source: 'pinecone', rag_cpt_source: 'pinecone' }
+          icd10: [],
+          cpt: [],
+          hcpcs: [],
+          metadata: { source: 'pinecone', rag_cpt_source: 'pinecone_empty' }
         };
-        logger.info('Pinecone remote code retrieval', {
-          icd10_count: out.icd10.length,
-          cpt_count: out.cpt.length,
-          hcpcs_count: out.hcpcs.length
-        });
+        break;
+      } catch (e) {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 1500));
+        } else {
+          logger.warn('Pinecone remote retrieval failed', { error: e.message });
+        }
       }
-    } catch (e) {
-      logger.warn('Pinecone remote retrieval failed', { error: e.message });
     }
   }
 

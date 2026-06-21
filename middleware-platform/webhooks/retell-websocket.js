@@ -1475,48 +1475,29 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
 
             switch (functionName) {
                 case 'collect_insurance':
-                    result = await this.handleCollectInsurance(callId, functionArgs);
-                    break;
-
                 case 'schedule_appointment':
-                    result = await this.handleScheduleAppointment(callId, functionArgs);
-                    break;
-
                 case 'patient_intake':
-                    result = await this.handlePatientIntake(callId, functionArgs);
-                    break;
-
                 case 'get_patient_intake_status':
-                    result = await this.handleGetPatientIntakeStatus(callId, functionArgs);
-                    break;
-
                 case 'get_available_slots':
-                    result = await this.handleGetAvailableSlots(callId, functionArgs);
-                    break;
-
                 case 'search_appointments':
-                    result = await this.handleSearchAppointments(callId, functionArgs);
-                    break;
-
                 case 'confirm_appointment':
-                    result = await this.handleConfirmAppointment(callId, functionArgs);
-                    break;
-
                 case 'cancel_appointment':
-                    result = await this.handleCancelAppointment(callId, functionArgs);
-                    break;
-
                 case 'reschedule_appointment':
-                    result = await this.handleRescheduleAppointment(callId, functionArgs);
-                    break;
-
                 case 'create_appointment_checkout':
-                    result = await this.handleCreateAppointmentCheckout(callId, functionArgs);
+                case 'verify_checkout_code': {
+                    const KellyToolExecutor = require('../services/kelly-tool-executor');
+                    const patientId = connection.patientId || null;
+                    const callerPhone =
+                        connection.customerPhone || connection.callMetadata?.from_number || null;
+                    result = await KellyToolExecutor.execute(functionName, functionArgs, {
+                        sessionId: callId,
+                        clinicId,
+                        patientId,
+                        callerPhone,
+                        channel: 'voice'
+                    });
                     break;
-
-                case 'verify_checkout_code':
-                    result = await this.handleVerifyCheckoutCode(callId, functionArgs);
-                    break;
+                }
 
                 case 'get_product_quote':
                 case 'prepare_commerce_checkout': {
@@ -2137,7 +2118,7 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             return { success: false, error: 'clinical_text is required', icd10: [], cpt: [] };
         }
         try {
-            const knowledgeService = require('../services/knowledge-service');
+            const visitCodesService = require('../services/visit-codes-service');
             const conn = this.activeConnections?.get(callId);
             const clinicId = conn?.clinic_id || null;
 
@@ -2162,7 +2143,7 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             }
 
             const remoteTimeoutMs = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '2000', 10);
-            const result = await knowledgeService.getCodeCandidatesDualSource(clinicalText.trim(), {
+            const visit = await visitCodesService.getVisitCodes(clinicalText.trim(), {
                 maxIcd10,
                 maxCpt,
                 maxHcpcs: 3,
@@ -2172,8 +2153,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 useSemantic,
                 remoteTimeoutMs
             });
-            if (result.remote_knowledge?.metadata) {
-                console.log('[suggest_codes] remote', result.remote_knowledge.metadata);
+            if (visit.remote_knowledge?.metadata) {
+                console.log('[suggest_codes] remote', visit.remote_knowledge.metadata);
             }
 
             // Track tokens used (embedding + retrieval estimate)
@@ -2187,10 +2168,11 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     .trim()
                     .slice(0, 80);
             };
-            let icd10List = (result.icd10 || []).slice(0, maxIcd10);
-            let cptList = (result.cpt || []).slice(0, maxCpt);
+            let icd10List = (visit.icd10 || []).slice(0, maxIcd10);
+            let cptList = (visit.cpt || []).slice(0, maxCpt);
 
             // Mandatory validation: filter out codes not in KB (Section 6)
+            const knowledgeService = require('../services/knowledge-service');
             const validation = knowledgeService.validateCodesExist({
                 icd10: icd10List.map(c => c.code).filter(Boolean),
                 cpt: cptList.map(c => c.code).filter(Boolean)
@@ -2200,8 +2182,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 cptList = cptList.filter(c => !validation.invalid.cpt.includes(c.code));
             }
 
-            // Check if any suggested code has low confidence (Section 5)
-            const minConfidence = 0.6;
+            const { CODING_CONFIDENCE_THRESHOLD } = require('../config/coding-thresholds');
+            const minConfidence = CODING_CONFIDENCE_THRESHOLD;
             const hasLowConfidence = [...icd10List, ...cptList].some(
                 c => (c.confidence ?? 0.8) < minConfidence
             );
@@ -2223,6 +2205,11 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             }
             return {
                 success: true,
+                primary_icd10: visit.primary_icd10,
+                primary_cpt: visit.primary_cpt,
+                confidence: visit.confidence,
+                sources: visit.sources,
+                source_breakdown: visit.source_breakdown,
                 icd10: icd10List.map(c => ({
                     code: c.code,
                     description: c.description,

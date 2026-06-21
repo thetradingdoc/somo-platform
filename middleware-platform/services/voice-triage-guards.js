@@ -82,9 +82,10 @@ function bumpCounter(bumpOp, suffix) {
 }
 
 function threshold() {
-  const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
+  const { CODING_CONFIDENCE_THRESHOLD } = require('../config/coding-thresholds');
+  const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? String(CODING_CONFIDENCE_THRESHOLD);
   const n = parseFloat(v);
-  return Number.isFinite(n) ? n : 0.7;
+  return Number.isFinite(n) ? n : CODING_CONFIDENCE_THRESHOLD;
 }
 
 /**
@@ -155,7 +156,28 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
   }
 
   if (allowRoutineBypass) {
-    // Routine/no-symptoms booking path: allow slots/schedule without full symptom triage.
+    const triageResult = require('./triage-rag-service').getAuthoritativeForSession?.(sessionIdForGuard) || null;
+    const preventiveIcd = triageResult?.primary_icd10
+      && (() => {
+        try {
+          const { isPreventiveIcd } = require('./preventive-visit-spine');
+          return isPreventiveIcd(triageResult.primary_icd10);
+        } catch (_) {
+          return false;
+        }
+      })();
+    if (!preventiveIcd) {
+      return {
+        ok: false,
+        bump: 'routine_missing_preventive_spine',
+        body: {
+          success: false,
+          error: 'TRIAGE_INCOMPLETE',
+          error_code: 'TRIAGE_INCOMPLETE',
+          message: 'Routine visits require preventive diagnosis codes from the coding spine before scheduling.'
+        }
+      };
+    }
     return { ok: true };
   }
 
