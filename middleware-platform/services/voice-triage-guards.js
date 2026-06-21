@@ -199,7 +199,7 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
     };
   }
 
-  if (confidence < THRESHOLD) {
+  if (confidence < THRESHOLD && bumpOp !== 'insurance') {
     return {
       ok: false,
       bump: 'low_confidence',
@@ -208,9 +208,7 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
         error: 'LOW_CONFIDENCE',
         error_code: 'LOW_CONFIDENCE',
         message:
-          bumpOp === 'insurance'
-            ? 'RAG confidence is low. Please clarify symptoms and re-run triage before verifying insurance.'
-            : 'RAG confidence is low. Please clarify symptoms and re-run triage before continuing.'
+          'RAG confidence is low. Please clarify symptoms and re-run triage before continuing.'
       }
     };
   }

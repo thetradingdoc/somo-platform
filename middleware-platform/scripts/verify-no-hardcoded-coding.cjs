@@ -74,7 +74,11 @@ for (const file of PROD_FILES) {
 // Structural guards on core files
 const coreChecks = [
   { file: 'utils/cpt-helper.js', must: ['codingSpineOnly', 'hitl_required'] },
-  { file: 'services/kelly-tool-executor.js', must: ['CODING_REVIEW_REQUIRED', 'coding-review-service', 'seeded_for_harness'] },
+  {
+    file: 'services/kelly-tool-executor/collect-insurance.js',
+    must: ['CODING_REVIEW_REQUIRED', 'coding-review-service']
+  },
+  { file: 'services/resolve-insurance-codes.js', must: ['seeded_for_harness', 'CODING_REVIEW_REQUIRED'] },
   { file: 'services/kelly-rails/execute-turn.js', must: [], mustNot: ['completeTriageRagForSession'] },
   { file: 'services/kelly-rails/gates/opqrst.js', must: [], mustNot: ['triage-rag-fast-complete'] }
 ];
