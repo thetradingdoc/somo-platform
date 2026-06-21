@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Coding Reviews — Somo Admin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    button { margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Coding review queue</h1>
+  <p>Pending HITL coding decisions — approve to resume insurance collection on active sessions.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Session</th>
+        <th>ICD-10</th>
+        <th>CPT</th>
+        <th>Confidence</th>
+        <th>SLA</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <script>
+    const API = window.location.origin.replace(/:\d+$/, ':4000');
+    async function load() {
+      const res = await fetch(`${API}/api/admin/coding-reviews?status=pending`);
+      const data = await res.json();
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '';
+      for (const r of data.reviews || []) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.call_id || ''}</td>
+          <td>${r.proposed_icd10 || ''}</td>
+          <td>${r.proposed_cpt || ''}</td>
+          <td>${r.confidence_score ?? ''}</td>
+          <td>${r.sla_deadline || ''}</td>
+          <td>
+            <button data-id="${r.id}" data-action="approve">Approve</button>
+            <button data-id="${r.id}" data-action="reject">Reject</button>
+          </td>`;
+        tbody.appendChild(tr);
+      }
+    }
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      const url = `${API}/api/admin/coding-reviews/${id}/${action}`;
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolved_by: 'admin_ui', rejection_reason: 'clinical_reject' })
+      });
+      load();
+    });
+    load();
+  </script>
+</body>
+</html>

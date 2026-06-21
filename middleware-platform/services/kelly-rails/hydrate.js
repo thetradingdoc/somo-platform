@@ -90,6 +90,13 @@ function hydrateFlagsFromDb(sessionId, patientId) {
   const payTok = KellyToolExecutor._getSessionMeta(sessionId, 'rcm_pay_token');
   if (payTok) flags.payment_token = payTok;
 
+  flags.coding_hitl_resume_pending = metaBool(sessionId, 'coding_hitl_resume_pending');
+  flags.coding_hitl_resume_active = metaBool(sessionId, 'coding_hitl_resume_active');
+  if (flags.coding_hitl_resume_pending || flags.coding_hitl_resume_active) {
+    flags.coding_resume_icd = KellyToolExecutor._getSessionMeta(sessionId, 'coding_hitl_resume_icd') || null;
+    flags.coding_resume_cpt = KellyToolExecutor._getSessionMeta(sessionId, 'coding_hitl_resume_cpt') || null;
+  }
+
   if (flags.cancel_complete == null && projection?.flags_json) {
     try {
       const parsed = JSON.parse(projection.flags_json);

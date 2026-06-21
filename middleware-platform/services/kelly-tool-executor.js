@@ -25,6 +25,7 @@ const ProductIngredientResolver = require('./product-ingredient-resolver');
 const { resolverMapToProviderCards } = require('./provider-card-normalizer');
 const { getAvailableSlotsWithSpecialist, isSpecialtyType } = require('./specialist-slot-service');
 const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, normalizeDateStr } = require('../config/clinic-business-hours');
+const { isConfidenceNearThreshold } = require('../config/coding-thresholds');
 
 const BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 
@@ -217,14 +218,7 @@ function _emitNotificationFailed(ctx, channel, error, extra = {}) {
   });
 }
 
-const CHECKOUT_STAGES = Object.freeze({
-  COLLECTING_DETAILS: 'collecting_details',
-  CODE_SENT: 'code_sent',
-  CODE_VERIFIED: 'code_verified',
-  CHECKOUT_PREPARED: 'checkout_prepared',
-  PAYMENT_CONFIRMED: 'payment_confirmed',
-  FAILED: 'failed'
-});
+const CHECKOUT_STAGES = require('./kelly-tool-executor/checkout-context').CHECKOUT_STAGES;
 
 /** DB + tool keys for Skin & Care assessment (migration 021). */
 const SKINCARE_ASSESSMENT_DB_KEYS = [
@@ -641,6 +635,40 @@ class KellyToolExecutor {
     return value === 1 || value === true;
   }
 
+  /**
+   * Kelly executor wrapper for voice-triage-guards (SSOT for session gates).
+   * Returns error response object or null when allowed.
+   */
+  static _enforceKellyTriageGuardrails(sessionId, args, bumpOp) {
+    const { evaluateTriageGuardrailsForSession } = require('./voice-triage-guards');
+    const ev = evaluateTriageGuardrailsForSession(sessionId, args, bumpOp);
+    if (ev.ok) return null;
+    const prefix =
+      bumpOp === 'insurance'
+        ? 'voice_agent_misuse_collect_insurance'
+        : bumpOp === 'slots'
+          ? 'voice_agent_misuse_get_available_slots'
+          : 'voice_agent_misuse_schedule_appointment';
+    let bumpSuffix = ev.bump;
+    if (ev.bump === 'triage_not_started') {
+      bumpSuffix =
+        bumpOp === 'insurance'
+          ? 'no_session_row'
+          : bumpOp === 'slots'
+            ? 'no_rag_result'
+            : 'no_triage_session_row';
+    } else if (ev.bump === 'low_confidence' && bumpOp === 'schedule') {
+      bumpSuffix = 'low_confidence';
+    }
+    KellyToolExecutor._bumpOpsCounter(`${prefix}_${bumpSuffix}`);
+    return {
+      success: false,
+      error: ev.body.error,
+      error_code: ev.body.error_code,
+      message: ev.body.message
+    };
+  }
+
   static _hasText(value) {
     return !!String(value || '').trim();
   }
@@ -675,9 +703,28 @@ class KellyToolExecutor {
   }
 
   static _ragConfidenceThreshold() {
-    const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : 0.7;
+    const { CODING_CONFIDENCE_THRESHOLD } = require('../config/coding-thresholds');
+    return CODING_CONFIDENCE_THRESHOLD;
+  }
+
+  static _logGateBypass(sessionId, bypass, detail = {}) {
+    try {
+      db.insertKellyCallEvent?.({
+        session_id: sessionId || null,
+        event_type: 'gate_bypass',
+        payload_json: JSON.stringify({ bypass, at: new Date().toISOString(), ...detail })
+      });
+    } catch (_) {}
+  }
+
+  static _logCodingProvenance(sessionId, payload = {}) {
+    try {
+      db.insertKellyCallEvent?.({
+        session_id: sessionId || null,
+        event_type: 'coding_provenance',
+        payload_json: JSON.stringify({ at: new Date().toISOString(), ...payload })
+      });
+    } catch (_) {}
   }
 
   /** KELLY_E2E_SKIP_TRIAGE=1 + session meta — relaxes RAG confidence/differential gates in E2E only. */
@@ -823,6 +870,65 @@ class KellyToolExecutor {
         case 'collect_insurance':
           return await this._collectInsurance(args, { sessionId, patientId, callerPhone });
 
+        case 'compute_visit_quote': {
+          const { computeVisitQuote } = require('./payer-quote-service');
+          const { resolveInsuranceCodes } = require('./resolve-insurance-codes');
+          const codingReviewSvc = require('./coding-review-service');
+          const resolved = resolveInsuranceCodes(sessionId, {
+            service_code: args.primary_cpt || args.service_code || null,
+            force_after_clarified: args.force_after_clarified === true || args.force_after_clarified === 'true',
+            clinicId: args.clinic_id || clinicId || null,
+            patientId: args.patient_id || patientId || null,
+            flagHitl: (p) => codingReviewSvc.flagForReview(p)
+          });
+          if (!resolved.ok) {
+            return {
+              success: false,
+              error: resolved.error_code || resolved.status,
+              error_code: resolved.error_code || resolved.status,
+              message: resolved.message
+            };
+          }
+          const quote = await computeVisitQuote({
+            primary_icd10: resolved.primary_icd10,
+            primary_cpt: resolved.primary_cpt,
+            payer_id: args.payer_id,
+            plan_id: args.plan_id,
+            call_id: sessionId,
+            session_id: sessionId
+          });
+          if (quote.status === 'hard_number' && sessionId) {
+            KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', quote.status);
+            KellyToolExecutor._setSessionMeta(sessionId, 'last_copay_due', String(quote.copay_due_now));
+            if (args.deliver_quote === true || args.deliver_quote === 'true') {
+              KellyToolExecutor._setSessionMeta(sessionId, 'quote_delivered', '1');
+            }
+          }
+          KellyToolExecutor._logCodingProvenance(sessionId, {
+            tool: 'compute_visit_quote',
+            primary_icd10: resolved.primary_icd10,
+            primary_cpt: resolved.primary_cpt,
+            quote_status: quote.status,
+            copay_due_now: quote.copay_due_now,
+            rule_id: quote.rule_id || null,
+            code_pair_valid: resolved.code_pair_valid
+          });
+          return { success: true, quote };
+        }
+
+        case 'suggest_codes_from_symptoms': {
+          const visitCodes = require('./visit-codes-service');
+          const text = args.clinical_text || args.symptoms || '';
+          const codes = await visitCodes.getVisitCodes(text, {
+            clinicId,
+            callId: sessionId,
+            maxIcd10: args.max_icd10 || 5,
+            maxCpt: args.max_cpt || 3,
+            useSemantic: args.use_semantic !== false
+          });
+          return { success: true, ...codes };
+        }
+
         case 'get_available_slots':
           return await this._getAvailableSlots(args, { sessionId, clinicId, patientId, channel });
 
@@ -845,18 +951,41 @@ class KellyToolExecutor {
           // Routine/no-symptoms path: bypass full triage stack when session has routine_no_symptoms flag.
           // Voice HTTP guardrails (allowRoutineBypass) already permit schedule; executor must not block.
           if (routineNoSymptoms && !triageReopenSchedule) {
+            const { ensurePreventiveSpine } = require('./preventive-visit-spine');
+            const preventive = await ensurePreventiveSpine({
+              sessionId,
+              patientId,
+              clinicId,
+              isNewPatient: args.is_new_patient !== false
+            });
+            if (preventive.hitl_required) {
+              try {
+                const codingReview = require('./coding-review-service');
+                codingReview.flagForReview({
+                  sessionId,
+                  clinicId,
+                  patientId,
+                  proposed_icd10: preventive.proposed_icd10 || '',
+                  proposed_cpt: preventive.proposed_cpt || '',
+                  confidence: preventive.confidence || 0,
+                  reason: preventive.reason || 'preventive_spine_hitl'
+                });
+              } catch (_) {}
+              return {
+                success: false,
+                error: 'CODING_REVIEW_REQUIRED',
+                error_code: 'CODING_REVIEW_REQUIRED',
+                message: 'A clinical reviewer must confirm preventive visit codes before scheduling.'
+              };
+            }
             const syntheticTriage = {
               target_specialty: 'Primary Care',
               urgency: 'routine',
-              primary_icd10: null,
-              soap_note: 'Routine wellness visit — no active symptoms'
+              primary_icd10: preventive.primary_icd10,
+              primary_cpt: preventive.primary_cpt,
+              soap_note: 'Routine wellness visit — preventive care'
             };
-            const { getCptCodeForVisit } = require('../utils/cpt-helper');
-            const primaryCptRoutine = getCptCodeForVisit({
-              specialty: 'PrimaryCare',
-              isNewPatient: true,
-              urgency: 'routine'
-            });
+            const primaryCptRoutine = preventive.primary_cpt;
             const normalizedArgsRoutine = { ...args };
             if (normalizedArgsRoutine.date) {
               normalizedArgsRoutine.date = KellyToolExecutor._normalizeToBusinessDate(normalizedArgsRoutine.date, clinicId);
@@ -874,7 +1003,7 @@ class KellyToolExecutor {
               clinic_id: clinicId,
               visit_mode: visitMode,
               notes: normalizedArgsRoutine.notes || syntheticTriage.soap_note,
-              primary_icd10: null,
+              primary_icd10: preventive.primary_icd10,
               primary_cpt: primaryCptRoutine || null,
               metadata: { session_id: sessionId },
               session_id: sessionId
@@ -963,31 +1092,6 @@ class KellyToolExecutor {
             return scheduleResultRoutine || { success: false, error: 'Schedule failed' };
           }
 
-          if (!sessionRow) {
-            bump('voice_agent_misuse_schedule_appointment_no_triage_session_row');
-            return {
-              success: false,
-              error: 'TRIAGE_REQUIRED',
-              error_code: 'TRIAGE_REQUIRED',
-              message: 'Please complete triage first (run_triage_rag) before scheduling an appointment.'
-            };
-          }
-
-          const isSafetyRed =
-            sessionRow.safety_level === 'red' ||
-            sessionRow.referred_to_911 === 1 ||
-            sessionRow.referred_to_911 === true;
-          const providerOverrideEmergency = args.provider_override_emergency === true || args.provider_override_emergency === 'true';
-          if (isSafetyRed && !providerOverrideEmergency) {
-            bump('voice_agent_misuse_schedule_appointment_safety_blocked');
-            return {
-              success: false,
-              error: 'SAFETY_BLOCKED',
-              error_code: 'SAFETY_BLOCKED',
-              message: 'Scheduling is blocked because this session was flagged as emergency/red safety.'
-            };
-          }
-
           if (triageReopenSchedule) {
             bump('voice_agent_misuse_schedule_appointment_triage_reopen');
             return {
@@ -1010,54 +1114,55 @@ class KellyToolExecutor {
             };
           }
 
-          const triageComplete = KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete);
-          if (!triageComplete) {
-            bump('voice_agent_misuse_schedule_appointment_triage_incomplete');
-            return {
-              success: false,
-              error: 'TRIAGE_INCOMPLETE',
-              error_code: 'TRIAGE_INCOMPLETE',
-              message: 'Triage is not complete yet. Ask one more clarifying question / call run_triage_rag before booking.'
-            };
-          }
-
           const confidence = KellyToolExecutor._confidenceFromTriageRow(triageForNotes);
           const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
-          const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
+          const confidenceNearThreshold = isConfidenceNearThreshold(confidence, THRESHOLD);
+          const sessionRowForBorderline = db.getTriageSession ? db.getTriageSession(sessionId) : null;
           const allowBorderlineProgress = !!(
             forceAfterClarified &&
-            KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete) &&
-            !!sessionRow.intake_complete_at &&
+            sessionRowForBorderline &&
+            KellyToolExecutor._isCompleteFlag(sessionRowForBorderline.opqrst_complete) &&
+            !!sessionRowForBorderline.intake_complete_at &&
             confidenceNearThreshold
           );
-          if (confidence < THRESHOLD && !allowBorderlineProgress) {
+
+          const scheduleGuard = KellyToolExecutor._enforceKellyTriageGuardrails(sessionId, args, 'schedule');
+          if (scheduleGuard) {
+            if (!(scheduleGuard.error_code === 'LOW_CONFIDENCE' && allowBorderlineProgress)) {
+              return scheduleGuard;
+            }
+          }
+
+          const journeyGates = require('./journey-gates-service');
+          const codingGate = journeyGates.checkCodingGate({ sessionId, triageRow: sessionRowForBorderline, db });
+          if (!codingGate.allowed && !allowBorderlineProgress) {
             bump('voice_agent_misuse_schedule_appointment_low_confidence');
             return {
               success: false,
               error: 'LOW_CONFIDENCE',
               error_code: 'LOW_CONFIDENCE',
-              message: 'RAG confidence is low. Please clarify and re-run triage before booking.'
+              message: codingGate.holding_utterance
             };
           }
 
-          if (!KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete)) {
-            bump('voice_agent_misuse_schedule_appointment_opqrst_missing');
+          const journeyGatesBooking = require('./journey-gates-service');
+          const quoteDelivered = KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered');
+          const bookingQuoteGate = journeyGatesBooking.checkBookingAfterQuoteGate({
+            sessionFlags: { quote_delivered: quoteDelivered }
+          });
+          if (!bookingQuoteGate.allowed && !routineNoSymptoms) {
+            bump('voice_agent_misuse_schedule_appointment_quote_not_delivered');
             return {
               success: false,
-              error: 'OPQRST_REQUIRED',
-              error_code: 'OPQRST_REQUIRED',
-              message: 'Please complete the OPQRST clinical history before we schedule.'
+              error: 'QUOTE_REQUIRED',
+              error_code: 'QUOTE_REQUIRED',
+              message: bookingQuoteGate.holding_utterance
             };
           }
-
-          if (!sessionRow.intake_complete_at) {
-            bump('voice_agent_misuse_schedule_appointment_rich_intake_missing');
-            return {
-              success: false,
-              error: 'RICH_INTAKE_REQUIRED',
-              error_code: 'RICH_INTAKE_REQUIRED',
-              message: 'Please complete the rich intake (medications, allergies, and key history) before we schedule.'
-            };
+          if (!bookingQuoteGate.allowed && routineNoSymptoms) {
+            KellyToolExecutor._logGateBypass(sessionId, 'routine_no_symptoms_booking_quote', {
+              quote_delivered: quoteDelivered
+            });
           }
 
           // W4-S6.5: Surface soap_note for specialist at appointment creation
@@ -1065,15 +1170,27 @@ class KellyToolExecutor {
           const notes = args.notes
             ? (soapNote ? `${soapNote}\n\n---\n${args.notes}` : args.notes)
             : soapNote;
-          // W3-S4.2: Pass resolved ICD/CPT from triage for billing
-          const { getCptCodeForVisit } = require('../utils/cpt-helper');
-          const primaryCpt = triageForNotes?.target_specialty
-            ? getCptCodeForVisit({
-                specialty: triageForNotes.target_specialty,
-                isNewPatient: true,
-                urgency: triageForNotes.urgency || 'routine'
-              })
-            : null;
+          // W3-S4.2: Pass resolved ICD/CPT from triage spine for billing (same resolver as collect)
+          const { resolveInsuranceCodes } = require('./resolve-insurance-codes');
+          const scheduleResolved = resolveInsuranceCodes(sessionId, {
+            service_code: args.service_code,
+            adminOverride: args.admin_coding_override === true || args.admin_coding_override === 'true',
+            force_after_clarified: forceAfterClarified,
+            clinicId,
+            patientId,
+            isNewPatient: args.is_new_patient !== false
+          });
+          if (!scheduleResolved.ok) {
+            bump('voice_agent_misuse_schedule_appointment_invalid_codes');
+            return {
+              success: false,
+              error: scheduleResolved.error_code || scheduleResolved.status,
+              error_code: scheduleResolved.error_code || scheduleResolved.status,
+              message: scheduleResolved.message,
+              invalid_codes: scheduleResolved.invalid_codes
+            };
+          }
+          const primaryCpt = scheduleResolved.primary_cpt;
 
           // The async slot provider can return `time: "ASYNC"`.
           // Some downstream booking/check-out paths require a concrete time and/or a
@@ -1109,7 +1226,7 @@ class KellyToolExecutor {
             clinic_id: clinicId,
             visit_mode: visitMode,
             notes: notes || args.notes,
-            primary_icd10: triageForNotes?.primary_icd10 || null,
+            primary_icd10: scheduleResolved.primary_icd10 || triageForNotes?.primary_icd10 || null,
             primary_cpt: primaryCpt || null,
             // Ensure backend guardrails can reliably associate this tool call
             // with the triage session.
@@ -1319,6 +1436,19 @@ class KellyToolExecutor {
           }
 
         case 'request_patient_payment': {
+          const journeyGates = require('./journey-gates-service');
+          const quoteDelivered = KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered');
+          const paymentGate = journeyGates.checkPaymentGate({
+            sessionFlags: { quote_delivered: quoteDelivered }
+          });
+          if (!paymentGate.allowed) {
+            return {
+              success: false,
+              error: 'QUOTE_REQUIRED',
+              error_code: 'QUOTE_REQUIRED',
+              message: paymentGate.holding_utterance
+            };
+          }
           const paymentRequestService = require('./rcm-payment-request-service');
           const resolvedPatientId = args.patient_id || patientId || null;
           const result = paymentRequestService.createRcmPaymentRequest({
@@ -2419,6 +2549,9 @@ class KellyToolExecutor {
         rag_confidence: THRESHOLD,
         differentials: [{ specialty: args.appointment_type || 'PrimaryCare', probability: 1 }]
       };
+      KellyToolExecutor._logGateBypass(sessionId, 'synthetic_routine_triage_row', {
+        appointment_type: args.appointment_type || 'PrimaryCare'
+      });
     }
     if (!triageResult) {
       bump('voice_agent_misuse_get_available_slots_no_rag_result');
@@ -2472,7 +2605,7 @@ class KellyToolExecutor {
     const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
     const opqrstComplete = sessionRow && KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete);
     const intakeComplete = !!(sessionRow && sessionRow.intake_complete_at);
-    const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
+    const confidenceNearThreshold = isConfidenceNearThreshold(confidence, THRESHOLD);
     const allowBorderlineProgress = !!(
       forceAfterClarified &&
       opqrstComplete &&
@@ -2724,93 +2857,13 @@ class KellyToolExecutor {
   }
 
   static async _postDirect(path, body = {}) {
-    const BookingService = require('./booking-service');
-    const p = String(path || '');
-    if (p.includes('available-slots')) {
-      const resultRaw = await BookingService.getAvailableSlots(
-        body.date,
-        body.provider || null,
-        body.appointment_type,
-        body.timezone || 'America/New_York',
-        body.clinic_id,
-        body.practitioner_id || null
-      );
-      return KellyToolExecutor._ensureSlotBundles(resultRaw, body.date, body.practitioner_id || null);
-    }
-    if (p.includes('/schedule')) {
-      return BookingService.scheduleAppointment({
-        patient_name: body.patient_name,
-        patient_phone: body.patient_phone,
-        patient_email: body.patient_email,
-        patient_id: body.patient_id,
-        appointment_type: body.appointment_type || 'Dermatology',
-        date: body.date || body.appointment_date,
-        time: body.time,
-        duration_minutes: body.duration_minutes || 50,
-        provider: body.provider,
-        practitioner_id: body.practitioner_id || body.slot_id || null,
-        notes: body.notes,
-        timezone: body.timezone || 'America/New_York',
-        clinic_id: body.clinic_id,
-        primary_icd10: body.primary_icd10 || null,
-        primary_cpt: body.primary_cpt || null
-      });
-    }
-    if (p.includes('/appointments/search') || p.includes('search')) {
-      if (body.patient_id && body.clinic_id) {
-        const dbMod = require('../database');
-        const rows =
-          dbMod.db
-            ?.prepare(
-              `SELECT * FROM appointments WHERE patient_id = ? AND clinic_id = ?
-               AND (deleted_at IS NULL OR deleted_at = '')
-               ORDER BY datetime(created_at) DESC LIMIT 10`
-            )
-            ?.all(body.patient_id, body.clinic_id) || [];
-        if (rows.length) {
-          return { success: true, appointments: rows, count: rows.length };
-        }
-      }
-      const searchTerm =
-        body.search_term ||
-        body.phone ||
-        body.patient_phone ||
-        body.email ||
-        body.patient_email;
-      if (!searchTerm) {
-        return { success: false, error: 'search_term required' };
-      }
-      return BookingService.searchAppointments(searchTerm, body.clinic_id || null);
-    }
-    if (p.includes('/cancel')) {
-      return BookingService.cancelAppointment(
-        body.appointment_id,
-        body.reason || null,
-        body.clinic_id || null
-      );
-    }
-    if (p.includes('/reschedule')) {
-      return BookingService.rescheduleAppointment(
-        body.appointment_id,
-        body.new_date,
-        body.new_time,
-        body.reason || null,
-        body.timezone || null,
-        body.clinic_id || null
-      );
-    }
-    throw new Error(`RCM_E2E_DIRECT_TOOLS: unsupported path ${path}`);
+    const { postDirect } = require('./kelly-tool-executor/http-client');
+    return postDirect(path, body);
   }
 
   static async _post(path, body) {
-    if (String(process.env.RCM_E2E_DIRECT_TOOLS || '').trim() === '1') {
-      return KellyToolExecutor._postDirect(path, body);
-    }
-    const response = await axios.post(`${BASE_URL}${path}`, body, {
-      timeout: KellyToolExecutor._httpTimeoutMs(),
-      headers: KellyToolExecutor._internalJobHeaders()
-    });
-    return response.data;
+    const { kellyPost } = require('./kelly-tool-executor/http-client');
+    return kellyPost(path, body);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -3383,133 +3436,16 @@ class KellyToolExecutor {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // gap15 + W3-S4: collect_insurance — block until triage, use getCptCodeForVisit
-  // ─────────────────────────────────────────────────────────────
-  static async _collectInsurance(args, { sessionId, patientId, callerPhone }) {
-    const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
-    const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
+  static async _collectInsurance(args, ctx) {
+    const { collectInsurance } = require('./kelly-tool-executor/collect-insurance');
+    return collectInsurance(KellyToolExecutor, this, args, ctx);
+  }
 
-    const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
-    if (sessionRow) {
-      const isSafetyRed =
-        sessionRow.safety_level === 'red' ||
-        sessionRow.referred_to_911 === 1 ||
-        sessionRow.referred_to_911 === true;
-      if (isSafetyRed) {
-        bump('voice_agent_misuse_collect_insurance_safety_blocked');
-        return {
-          success: false,
-          error: 'SAFETY_BLOCKED',
-          error_code: 'SAFETY_BLOCKED',
-          message: 'Insurance verification is blocked because this session was flagged as emergency/red safety.'
-        };
-      }
-    }
-
-    const triageResult = TriageRAGService.getAuthoritativeForSession(sessionId);
-    if (!triageResult) {
-      bump('voice_agent_misuse_collect_insurance_no_rag_result');
-      return {
-        success: false,
-        error: 'TRIAGE_REQUIRED',
-        error_code: 'TRIAGE_REQUIRED',
-        message: 'Complete triage first with run_triage_rag to determine the right specialty and CPT code for insurance verification.'
-      };
-    }
-
-    if (!sessionRow) {
-      bump('voice_agent_misuse_collect_insurance_no_session_row');
-      return {
-        success: false,
-        error: 'TRIAGE_REQUIRED',
-        error_code: 'TRIAGE_REQUIRED',
-        message: 'Please complete triage first (run_triage_rag) before we can verify insurance.'
-      };
-    }
-
-    const triageComplete = KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete);
-    if (!triageComplete) {
-      bump('voice_agent_misuse_collect_insurance_triage_incomplete');
-      return {
-        success: false,
-        error: 'TRIAGE_INCOMPLETE',
-        error_code: 'TRIAGE_INCOMPLETE',
-        message: 'Triage is not complete yet. Please call run_triage_rag before we verify insurance.'
-      };
-    }
-
-    const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
-    const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
-    const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
-    const allowBorderlineProgress = !!(
-      forceAfterClarified &&
-      KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete) &&
-      !!sessionRow.intake_complete_at &&
-      confidenceNearThreshold
-    );
-    if (confidence < THRESHOLD && !allowBorderlineProgress) {
-      bump('voice_agent_misuse_collect_insurance_low_confidence');
-      return {
-        success: false,
-        error: 'LOW_CONFIDENCE',
-        error_code: 'LOW_CONFIDENCE',
-        message: 'RAG confidence is low. Please clarify and re-run triage before verifying insurance.'
-      };
-    }
-
-    if (!KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete)) {
-      bump('voice_agent_misuse_collect_insurance_opqrst_missing');
-      return {
-        success: false,
-        error: 'OPQRST_REQUIRED',
-        error_code: 'OPQRST_REQUIRED',
-        message: 'Please complete the OPQRST clinical history before we verify your insurance.'
-      };
-    }
-
-    if (!sessionRow.intake_complete_at) {
-      bump('voice_agent_misuse_collect_insurance_rich_intake_missing');
-      return {
-        success: false,
-        error: 'RICH_INTAKE_REQUIRED',
-        error_code: 'RICH_INTAKE_REQUIRED',
-        message: 'Please complete the rich intake (medications, allergies, key history) before we verify your insurance.'
-      };
-    }
-    // M-S4.A: Block until target_specialty known
-    if (!triageResult.target_specialty) {
-      return {
-        success: false,
-        error: 'TRIAGE_INCOMPLETE',
-        error_code: 'TRIAGE_INCOMPLETE',
-        message: "I'll confirm your coverage once we understand your needs better. Please complete triage first so we can verify the right specialty and codes."
-      };
-    }
-    // W3-S4.4: Use getCptCodeForVisit instead of firstCpt || '90834'
-    const { getCptCodeForVisit } = require('../utils/cpt-helper');
-    const serviceCode = getCptCodeForVisit({
-      specialty: triageResult.target_specialty,
-      isNewPatient: true, // Default; could check patient history
-      urgency: triageResult.urgency || 'routine'
-    });
-    // Bug 9: Pass initial_name for fraud check (from session when Kelly path; Retell path passes it directly)
-    let initialName = args.initial_name || null;
-    if (!initialName && sessionId && db.getOrchestrateSessionBySessionId) {
-      try {
-        const row = db.getOrchestrateSessionBySessionId(sessionId);
-        initialName = row?.flow_state?.initial_name || null;
-      } catch (_) {}
-    }
-    // W3-S4.2: Pass resolved ICD and CPT to insurance/checkout flow
-    return await this._post('/voice/insurance/collect', {
-      ...args,
-      patient_phone: args.patient_phone || callerPhone || undefined,
-      call_id: sessionId,
-      service_code: args.service_code || serviceCode,
-      primary_icd10: triageResult.primary_icd10 || null,
-      initial_name: initialName || undefined
-    });
+  static _clearHitlResumeOnCollectSuccess(sessionId) {
+    try {
+      const { clearCodingHitlResumePending } = require('./coding-hitl-resume');
+      clearCodingHitlResumePending(sessionId);
+    } catch (_) {}
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -3633,7 +3569,7 @@ class KellyToolExecutor {
       // Allow a small "near threshold" window when we already have a specialty, so
       // we don't get stuck in clarifying loops when the external differential
       // generation is flaky but a target_specialty is still present.
-      const confNearThreshold = conf >= Math.max(0, THRESHOLD - 0.2);
+      const confNearThreshold = isConfidenceNearThreshold(conf, THRESHOLD);
       const confOk = conf >= THRESHOLD || (hasSpecialty && confNearThreshold);
       // Expose the effective threshold so the LLM can make consistent routing decisions.
       result.rag_confidence_threshold = THRESHOLD;

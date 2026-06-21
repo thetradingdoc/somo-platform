@@ -3,7 +3,11 @@ const { generateCodingSuggestion } = require('./medical-coding-service');
 const FeeScheduleService = require('./fee-schedule-service');
 const CodeAcceptanceService = require('./code-acceptance-service');
 
-const MIN_CONFIDENCE = parseFloat(process.env.MIN_CODING_CONFIDENCE || '0.7');
+const { CODING_CONFIDENCE_THRESHOLD } = require('../config/coding-thresholds');
+
+const MIN_CONFIDENCE = parseFloat(
+  process.env.MIN_CODING_CONFIDENCE || String(CODING_CONFIDENCE_THRESHOLD)
+);
 
 function classifyEncounter(encounter) {
   const simpleMatch = knowledgeService.matchSimpleRule({

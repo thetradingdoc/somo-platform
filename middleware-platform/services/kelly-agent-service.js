@@ -392,23 +392,7 @@ function _extractStep1Fields(message) {
  * so tool-order metrics match what actually happened.
  */
 function _toolsUsedEnsureRagBeforeSlots(sessionId, tools) {
-  const arr = Array.isArray(tools) ? [...tools] : [];
-  if (!arr.length || arr.includes('run_triage_rag') || !arr.includes('get_available_slots')) {
-    return arr;
-  }
-  try {
-    if (!TriageRAGService.getLatestForSession(sessionId)) return arr;
-  } catch (_) {
-    return arr;
-  }
-  const out = [];
-  for (const t of arr) {
-    if (t === 'get_available_slots' && !out.includes('run_triage_rag')) {
-      out.push('run_triage_rag');
-    }
-    out.push(t);
-  }
-  return out;
+  return Array.isArray(tools) ? [...tools] : [];
 }
 
 function _kellyDebugTurn(tag, payload) {
@@ -438,12 +422,13 @@ function _buildCompactSystemPrompt(context) {
       : '';
   return `You are Kelly (Somo).${orchHint}
 
-GOAL: triage OPQRST and route to the right specialist, then book (cash-only; no insurance step).
+GOAL: triage OPQRST and route to the right specialist, verify insurance, quote copay, then book.
 
 TOOL ORDER (hard rule):
 1) get_triage_session → store_triage_opqrst → store_triage_rich_intake → run_triage_rag
-2) After triage_complete: get_available_slots → schedule_appointment → create_appointment_checkout → verify_checkout_code
-NEVER schedule before triage_complete.
+2) collect_insurance → compute_visit_quote
+3) get_available_slots → schedule_appointment → create_appointment_checkout → verify_checkout_code
+NEVER schedule before triage_complete and insurance quote when payer info is available.
 
 EMERGENCY: chest pain / stroke symptoms / suicidal intent → say call 911 immediately and stop tools.
 
@@ -1386,15 +1371,42 @@ ${lang}`;
 // Tool definitions (OpenAI-compatible, Groq supports these)
 // ─────────────────────────────────────────────────────────────
 const KELLY_TOOLS = [
-  // PHASE 2 — Insurance collection not active (checkout is cash-only for now)
-  // {
-  //   type: 'function',
-  //   function: {
-  //     name: 'collect_insurance',
-  //     description: 'Check patient insurance. REQUIRES run_triage_rag first.',
-  //     parameters: { type: 'object', properties: { member_id: {}, patient_name: {} }, required: ['member_id', 'patient_name'] }
-  //   }
-  // },
+  {
+    type: 'function',
+    function: {
+      name: 'collect_insurance',
+      description: 'Verify patient insurance and return coverage quote. REQUIRES run_triage_rag first with spine codes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          member_id: { type: 'string', description: 'Insurance member ID' },
+          patient_name: { type: 'string' },
+          payer_id: { type: 'string', description: 'e.g. BCBS_PILOT' },
+          plan_id: { type: 'string', description: 'e.g. plan_x' },
+          payer_name: { type: 'string' }
+        },
+        required: ['member_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'compute_visit_quote',
+      description: 'Compute visit copay from spine ICD/CPT and plan rules. Call after run_triage_rag.',
+      parameters: {
+        type: 'object',
+        properties: {
+          primary_icd10: { type: 'string' },
+          primary_cpt: { type: 'string' },
+          payer_id: { type: 'string' },
+          plan_id: { type: 'string' },
+          deliver_quote: { type: 'boolean', description: 'When true, mark quote as delivered to patient' }
+        },
+        required: ['payer_id', 'plan_id']
+      }
+    }
+  },
   {
     type: 'function',
     function: {

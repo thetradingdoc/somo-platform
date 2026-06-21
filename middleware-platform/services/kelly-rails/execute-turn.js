@@ -13,6 +13,7 @@ const { isOpqrstFieldGateEnabled } = require('./config');
 const { getLastAssistantText } = require('./history');
 
 function shouldReroute(state, message) {
+  if (state.flags?.coding_hitl_resume_active) return false;
   const msg = String(message || '').toLowerCase();
   if (state.step === 'done' || state.active_lane === KELLY_LANE.ROUTER) return true;
   if (PAYMENT_SIGNALS.some((s) => msg.includes(s))) return true;
@@ -99,7 +100,17 @@ function applyReroutePreservingPartialTriage(state, route, db, sessionId) {
   }
 }
 
+async function applyCodingHitlResume(state, ctx) {
+  const { applyCodingHitlResumeToTurn } = require('../coding-hitl-resume');
+  const applied = applyCodingHitlResumeToTurn(state, ctx);
+  if (!applied) return;
+  try {
+    persistRailsSessionState(ctx.sessionId, state);
+  } catch (_) {}
+}
+
 async function promoteBookingWhenReady(state, ctx) {
+  if (state.flags?.coding_hitl_resume_active) return;
   const msg = String(ctx.message || '').toLowerCase();
   const bookingIntent = /book|schedule|appointment|slot|tomorrow|noon|12:00|12 pm|available/.test(msg);
   if (!bookingIntent) return;
@@ -113,30 +124,14 @@ async function promoteBookingWhenReady(state, ctx) {
   } catch (_) {}
 
   if (!state.flags.has_rag && !row?.rag_result_id) {
-    const useFastRag = process.env.KELLY_RAILS_FAST_RAG !== '0';
-    if (useFastRag) {
-      const { completeTriageRagForSession } = require('../triage-rag-fast-complete');
-      completeTriageRagForSession(ctx.sessionId, ctx.patientId, {
-        region: row?.region || 'leg and neck',
-        quality: row?.quality || 'itchy rash on leg and neck',
-      });
-      state.flags.has_rag = true;
-      state.flags.triage_complete = true;
-    } else if (state.active_lane === KELLY_LANE.CLINICAL && state.step === 'triage_assessment') {
+    if (state.active_lane === KELLY_LANE.CLINICAL && state.step === 'triage_assessment') {
       const rag = await KellyToolExecutor.execute('run_triage_rag', {}, ctx);
       if (rag && !rag.error) {
         state.flags.has_rag = true;
         state.flags.triage_complete = true;
       }
-    } else {
-      const { completeTriageRagForSession } = require('../triage-rag-fast-complete');
-      completeTriageRagForSession(ctx.sessionId, ctx.patientId, {
-        region: row?.region || 'leg and neck',
-        quality: row?.quality || 'itchy rash on leg and neck',
-      });
-      state.flags.has_rag = true;
-      state.flags.triage_complete = true;
     }
+    // No RAG row yet: booking intent recorded; LLM must call run_triage_rag before slots.
   } else {
     state.flags.has_rag = true;
     state.flags.triage_complete = true;
@@ -266,6 +261,8 @@ async function executeTurn(input = {}) {
   if (state.conversation_mode) state.flags.conversation_mode = state.conversation_mode;
   if (state.active_subrail) state.flags.active_subrail = state.active_subrail;
   if (state.active_subrail_step) state.flags.active_subrail_step = state.active_subrail_step;
+
+  await applyCodingHitlResume(state, ctx);
 
   const { canEnterClinicalLane } = require('./enter-clinical-lane');
   const { isAdminBookingPhrase } = require('../conversation-mode/intent-detector');

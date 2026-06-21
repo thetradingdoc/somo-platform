@@ -85,7 +85,8 @@ class TriageRAGServiceV2 {
     combinedText = normalizeForRAG(combinedText);
 
     let queryForRAG = combinedText;
-    if (process.env.OPENAI_API_KEY) {
+    const hydeEnabled = String(process.env.TRIAGE_HYDE_ENABLED ?? '1').trim() !== '0';
+    if (hydeEnabled && process.env.OPENAI_API_KEY) {
       const hypothetical = await generateHypotheticalDocument(combinedText);
       queryForRAG = blendQuery(combinedText, hypothetical);
     }
@@ -95,6 +96,9 @@ class TriageRAGServiceV2 {
     let cptCodes = [];
     /** True if at least one knowledge call completed without throw (empty arrays OK). */
     let knowledgeFetchSucceeded = false;
+    const remoteTimeoutMs = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
+
+    let codingProvenance = params._codingProvenance || null;
 
     if (useDualSource) {
       try {
@@ -102,11 +106,19 @@ class TriageRAGServiceV2 {
           maxIcd10: 5,
           maxCpt: 3,
           clinicId,
-          specialty: 'general'
+          callId: sessionId,
+          specialty: 'general',
+          remoteTimeoutMs,
+          useSemantic: process.env.EVAL_USE_SEMANTIC !== 'false'
         });
         icdCodes = result?.icd10 || result?.merged_codes?.icd10 || [];
         cptCodes = result?.cpt || result?.merged_codes?.cpt || [];
         knowledgeFetchSucceeded = true;
+        codingProvenance = {
+          confidence_breakdown: result.confidence_breakdown,
+          remote_source: result.remote_knowledge?.metadata?.source || 'none',
+          local_source: result.local_knowledge?.metadata?.source || 'local'
+        };
       } catch (e) {
         console.warn('[TriageRAGv2] Dual-source failed, falling back to v1:', e.message);
       }
@@ -157,6 +169,7 @@ class TriageRAGServiceV2 {
     return TriageRAGService.enrichFromSymptoms({
       ...params,
       _ragResultOverride: { icdCodes, cptCodes },
+      _codingProvenance: codingProvenance,
       _skipKnowledgeService: false
     });
   }

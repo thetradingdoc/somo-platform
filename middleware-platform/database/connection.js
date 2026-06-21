@@ -47,11 +47,15 @@ function resolveDbPath(config = getEnvConfig()) {
     return path.join(defaultDbDir, dbFileName);
   }
 
+  // Dev/test SSOT: package var/db (matches scripts/dev/run.sh and .env.example)
+  const varDbCandidate = path.join(packageDir, 'var', 'db', dbFileName);
+  if (canWriteDir(path.dirname(varDbCandidate))) return varDbCandidate;
+
   const homeCandidate = path.join(defaultDbDir, dbFileName);
   const homeDir = path.dirname(homeCandidate);
   if (canWriteDir(homeDir)) return homeCandidate;
 
-  return path.join(packageDir, 'var', 'db', dbFileName);
+  return varDbCandidate;
 }
 
 function warnSplitBrain(dbPath, config = getEnvConfig()) {

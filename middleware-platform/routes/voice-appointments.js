@@ -1779,6 +1779,14 @@ app.post('/voice/insurance/collect', async (req, res) => {
     const insuranceSessionId = resolveVoiceSessionIdForGuard(args, req);
     if (!enforceVoiceTriageGuardrailsForSession(insuranceSessionId, args, res, 'insurance')) return;
 
+    const { resolveInsuranceSpineForRequest, applySpineResolvedToArgs } = require('../services/voice-insurance-spine-handler');
+    const adminOverride = String(req.headers['x-admin-coding-override'] || '') === '1';
+    const spineResult = resolveInsuranceSpineForRequest(insuranceSessionId, args, { adminOverride });
+    if (!spineResult.ok) {
+      return res.status(spineResult.httpStatus).json(spineResult.body);
+    }
+    applySpineResolvedToArgs(args, spineResult.spineResolved);
+
     // Optional: patient_id to link insurance to patient
     const patientId = args.patient_id || args.patientId || null;
     // Bug 5: Normalize phone for consistent lookups (getFHIRPatientByPhone, findOrCreatePatient)
@@ -2180,25 +2188,11 @@ app.post('/voice/insurance/collect', async (req, res) => {
           console.warn('⚠️  Skipping eligibility — patient birthDate required (no default DOB)');
         }
 
-        // W3-S4.6: Use resolved CPT from triage when call_id provided
-        let serviceCode = args.service_code;
-        if (!serviceCode && args.call_id) {
-          try {
-            const TriageRAGService = require('../services/triage-rag-service');
-            const { getCptCodeForVisit } = require('./utils/cpt-helper');
-            const triage = TriageRAGService.getLatestForSession(args.call_id);
-            if (triage?.target_specialty) {
-              serviceCode = getCptCodeForVisit({
-                specialty: triage.target_specialty,
-                isNewPatient: true,
-                urgency: triage.urgency || 'routine'
-              });
-            }
-          } catch (_) {}
-        }
-        serviceCode = serviceCode || (() => { try { return require('./utils/cpt-helper').getCptCodeForVisit({ specialty: 'PrimaryCare', urgency: 'routine', isNewPatient: true }); } catch (_) { return '99203'; } })();
-
-        if (dateOfBirth) {
+        // Spine CPT from resolveInsuranceCodes (set above on args.service_code)
+        const serviceCode = args.service_code || spineResolved?.primary_cpt || null;
+        if (!serviceCode) {
+          console.warn('⚠️  Skipping eligibility — no spine service code');
+        } else if (dateOfBirth) {
           const eligibilityData = {
             patientId: finalPatientId,
             patientName: finalPatientName,
@@ -2349,6 +2343,21 @@ app.post('/voice/insurance/collect', async (req, res) => {
       }
     }
 
+    try {
+      const { computeVisitQuote } = require('../services/payer-quote-service');
+      response.quote = await computeVisitQuote({
+        primary_icd10: spineResolved.primary_icd10,
+        primary_cpt: spineResolved.primary_cpt,
+        payer_id: args.payer_id || payerId,
+        plan_id: args.plan_id,
+        session_id: insuranceSessionId,
+        call_id: insuranceSessionId
+      });
+      response.code_source = spineResolved.code_source;
+    } catch (quoteErr) {
+      console.warn('⚠️  Could not compute visit quote:', quoteErr.message);
+    }
+
     return res.json(response);
 
   } catch (error) {
@@ -2378,6 +2387,16 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
         error: 'Missing required fields: member_id and one of payer_id or payer_name'
       });
     }
+
+    const insuranceSessionId = resolveVoiceSessionIdForGuard(args, req);
+    if (!enforceVoiceTriageGuardrailsForSession(insuranceSessionId, args, res, 'insurance')) return;
+
+    const { resolveInsuranceSpineForRequest } = require('../services/voice-insurance-spine-handler');
+    const spineResult = resolveInsuranceSpineForRequest(insuranceSessionId, args, {});
+    if (!spineResult.ok) {
+      return res.status(spineResult.httpStatus).json(spineResult.body);
+    }
+    const spineResolved = spineResult.spineResolved;
 
     let resolverOutcome = null;
     if (resolverEnabled || resolverShadow) {
@@ -2442,8 +2461,8 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
     }
 
     // Get appointment info if appointment_id is provided
-    // W3-S4.6: Use resolved CPT from appointment.primary_cpt (triage) or getCptCodeForVisit
-    let serviceCode = args.service_code;
+    // W3-S4.6: Use resolved CPT from appointment.primary_cpt (triage spine only)
+    let serviceCode = spineResolved.primary_cpt;
     let dateOfService = args.date_of_service;
 
     if (args.appointment_id) {
@@ -2451,17 +2470,11 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
       if (appointment) {
         serviceCode = serviceCode || appointment.primary_cpt || null;
         if (!serviceCode) {
-          const apptType = appointment.appointment_type || '';
-          const specialtyNames = ['Psychiatry', 'Cardiology', 'Pulmonology', 'Gastroenterology', 'Endocrinology', 'InfectiousDisease', 'Orthopedics', 'Neurology', 'Dermatology', 'PrimaryCare', 'ENT', 'Ophthalmology', 'Urology', 'EmergencyMedicine', 'ObstetricsGynecology', 'Pediatrics', 'Oncology'];
-          if (specialtyNames.includes(apptType)) {
-            try {
-              const { getCptCodeForVisit } = require('./utils/cpt-helper');
-              serviceCode = getCptCodeForVisit({ specialty: apptType, isNewPatient: true, urgency: 'routine' });
-            } catch (_) {}
-          }
-          if (!serviceCode) {
-            serviceCode = InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type, { urgency: 'routine' });
-          }
+          return res.status(400).json({
+            success: false,
+            error: 'MISSING_SPINE_CPT',
+            message: 'Appointment requires primary_cpt from triage spine.'
+          });
         }
         dateOfService = dateOfService || appointment.date;
         patientId = patientId || appointment.patient_id;
@@ -2478,13 +2491,22 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
       });
     }
 
+    if (!serviceCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_SPINE_CPT',
+        error_code: 'MISSING_SPINE_CPT',
+        message: 'Spine CPT from triage is required for eligibility verification.'
+      });
+    }
+
     const eligibilityData = {
       patientId: patientId,
       patientName: patientName || 'Patient',
       dateOfBirth,
       memberId: args.member_id,
       payerId: args.payer_id,
-      serviceCode: serviceCode || (() => { try { const h = require('./utils/cpt-helper'); return h.getCptCodeForVisit({ specialty: 'PrimaryCare', urgency: 'routine', isNewPatient: true }); } catch (_) { return '99203'; } })(),
+      serviceCode,
       dateOfService: dateOfService || new Date().toISOString().split('T')[0]
     };
 
@@ -2627,8 +2649,15 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
     }
 
     // W3-S4.2/W3-S4.5: Use resolved CPT/ICD from triage (appointment.primary_cpt, primary_icd10)
-    const resolvedCpt = args.service_code || appointment.primary_cpt || InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type, { urgency: 'routine' });
-    const resolvedIcd = args.diagnosis_code || appointment.primary_icd10 || InsuranceService.mapAppointmentTypeToICD10(appointment.appointment_type);
+    const resolvedCpt = args.service_code || appointment.primary_cpt;
+    const resolvedIcd = args.diagnosis_code || appointment.primary_icd10;
+    if (!resolvedCpt || !resolvedIcd) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_SPINE_CODES',
+        message: 'Appointment requires primary_icd10 and primary_cpt from triage spine.'
+      });
+    }
 
     const billingEnvelope = require('../services/billing-claim-envelope-service');
     const placeOfService = billingEnvelope.resolvePlaceOfService({
@@ -2761,6 +2790,9 @@ app.post('/voice/insurance/check-claim-status', async (req, res) => {
     });
   }
 });
+  require('./voice/checkout-routes').registerVoiceCheckoutRoutes(app, deps);
+  require('./voice/appointment-routes').registerVoiceAppointmentCrudRoutes(app, deps);
+  require('./voice/insurance-routes').registerVoiceInsuranceRoutes(app, deps);
 }
 
 module.exports = { registerVoiceAppointmentRoutes };

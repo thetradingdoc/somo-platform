@@ -193,14 +193,23 @@ if (!useGcpSecrets) {
     secretOrRandom('STRIPE_WEBHOOK_SECRET', 24);
 }
 
+// Kelly Rails + gate flags apply to api.callsomo.com even when CLOUDRUN_PROFILE=staging
+// (same somo-middleware service). Omitting them breaks voice after --env-vars-file deploy.
+merged.KELLY_RAILS_V2 = parsed.KELLY_RAILS_V2 || '1';
+merged.KELLY_RAILS_ROLLOUT_PCT = parsed.KELLY_RAILS_ROLLOUT_PCT ?? '1';
+merged.KELLY_ALLOW_HYBRID_GRAPH = parsed.KELLY_ALLOW_HYBRID_GRAPH ?? '0';
 if (!isStaging) {
-  merged.KELLY_RAILS_V2 = parsed.KELLY_RAILS_V2 || '1';
-  merged.KELLY_RAILS_ROLLOUT_PCT = parsed.KELLY_RAILS_ROLLOUT_PCT ?? '1';
-  merged.KELLY_ALLOW_HYBRID_GRAPH = parsed.KELLY_ALLOW_HYBRID_GRAPH ?? '0';
-  merged.KELLY_RAILS_FAST_RAG = parsed.KELLY_RAILS_FAST_RAG ?? '1';
+  merged.KELLY_RAILS_FAST_RAG = parsed.KELLY_RAILS_FAST_RAG ?? '0';
   merged.KELLY_VOICE_FILLER_MS = parsed.KELLY_VOICE_FILLER_MS ?? '1200';
-  merged.OPQRST_FIELD_GATE_ENABLED = parsed.OPQRST_FIELD_GATE_ENABLED ?? '1';
 }
+merged.REMOTE_RAG_TIMEOUT_MS = parsed.REMOTE_RAG_TIMEOUT_MS ?? '8000';
+merged.PINECONE_MIN_SCORE = parsed.PINECONE_MIN_SCORE ?? '0.45';
+merged.EVAL_USE_SEMANTIC = parsed.EVAL_USE_SEMANTIC ?? 'false';
+merged.OPQRST_FIELD_GATE_ENABLED = parsed.OPQRST_FIELD_GATE_ENABLED ?? '1';
+merged.USE_TRIAGE_RAG_V2 = parsed.USE_TRIAGE_RAG_V2 ?? '1';
+merged.CODING_SPINE_ONLY = parsed.CODING_SPINE_ONLY ?? '1';
+merged.CODING_PROD_CI = parsed.CODING_PROD_CI ?? '1';
+merged.RAG_API_URL = parsed.RAG_API_URL || 'disabled';
 
 if (isStaging) {
   delete merged.NGROK_URL;

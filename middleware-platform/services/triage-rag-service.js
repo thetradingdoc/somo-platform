@@ -193,6 +193,7 @@ class TriageRAGService {
     clinicId = null,
     _ragResultOverride = null,
     _skipKnowledgeService = false,
+    _codingProvenance = null,
     force_rerun = false
   }) {
     // Do not overwrite the linked authoritative row after triage is complete unless explicitly forced.
@@ -233,14 +234,33 @@ class TriageRAGService {
     } else if (!_skipKnowledgeService) {
       try {
         const knowledgeService = require('./knowledge-service');
-        const ragResult = await knowledgeService.getCodeCandidates(combinedText, {
-          maxIcd10: 5,
-          maxCpt: 3,
-          clinicId,
-          callId: sessionId
-        });
+        const useDual = String(process.env.USE_TRIAGE_RAG_V2 || '1').trim() !== '0'
+          && typeof knowledgeService.getCodeCandidatesDualSource === 'function';
+        const remoteTimeoutMs = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
+        const ragResult = useDual
+          ? await knowledgeService.getCodeCandidatesDualSource(combinedText, {
+            maxIcd10: 5,
+            maxCpt: 3,
+            clinicId,
+            callId: sessionId,
+            remoteTimeoutMs,
+            useSemantic: process.env.EVAL_USE_SEMANTIC !== 'false'
+          })
+          : await knowledgeService.getCodeCandidates(combinedText, {
+            maxIcd10: 5,
+            maxCpt: 3,
+            clinicId,
+            callId: sessionId
+          });
         icdCodes = ragResult?.icd10 || [];
         cptCodes = ragResult?.cpt || [];
+        if (!_codingProvenance && ragResult?.confidence_breakdown) {
+          _codingProvenance = {
+            confidence_breakdown: ragResult.confidence_breakdown,
+            remote_source: ragResult.remote_knowledge?.metadata?.source || 'none',
+            local_source: ragResult.local_knowledge?.metadata?.source || 'local'
+          };
+        }
       } catch (e) {
         console.warn('[TriageRAG] knowledge-service unavailable, using keyword matching only:', e.message);
       }
@@ -262,7 +282,11 @@ class TriageRAGService {
       // W3-S4.1: Primary ICD-10 = differential #1's icd10; put it first for billing
       if (prim.icd10 && prim.icd10.trim()) {
         const existing = (icdCodes || []).filter(c => (c.code || '').trim() !== prim.icd10.trim());
-        icdCodes = [{ code: prim.icd10.trim(), description: prim.condition || '', confidence: 0.95 }, ...existing];
+        icdCodes = [{
+          code: prim.icd10.trim(),
+          description: prim.condition || '',
+          confidence: typeof prim.probability === 'number' ? prim.probability : 0.85
+        }, ...existing];
       }
     } else {
       const resolved = this._resolveSpecialty(combinedText, icdCodes);
@@ -317,6 +341,42 @@ class TriageRAGService {
     const isSecondPass = !!existingRow;
     const resultId = existingRow?.id || uuidv4();
 
+    // W3-S4.1: primary_icd10 / primary_cpt for billing spine
+    let primaryIcd10 = (differentials?.[0]?.icd10 || icdCodes?.[0]?.code || '').trim() || null;
+    let primaryCpt = (cptCodes?.[0]?.code || '').trim() || null;
+    let codePairValid = true;
+    if (primaryIcd10 && primaryCpt) {
+      const knowledgeService = require('./knowledge-service');
+      const pairCheck = knowledgeService.validateCodePair(primaryIcd10, primaryCpt);
+      codePairValid = pairCheck.valid;
+      if (!pairCheck.valid) {
+        try {
+          const codingReview = require('./coding-review-service');
+          codingReview.flagForReview({
+            sessionId,
+            clinicId,
+            patientId,
+            proposed_icd10: primaryIcd10,
+            proposed_cpt: primaryCpt,
+            confidence: ragConfidence,
+            reason: pairCheck.reason || 'invalid_code_pair'
+          });
+        } catch (_) {}
+        primaryIcd10 = null;
+        primaryCpt = null;
+      }
+    }
+    const provenancePayload = {
+      ...(_codingProvenance || {}),
+      code_pair_valid: codePairValid,
+      code_source: 'spine'
+    };
+    const provenanceJson = JSON.stringify(provenancePayload);
+
+    try {
+      require('../migrations/082_coding_provenance_json').up(db.db);
+    } catch (_) {}
+
     try {
       if (isSecondPass) {
         db.db.prepare(`
@@ -324,13 +384,15 @@ class TriageRAGService {
             symptom_text = ?, opqrst_json = ?, icd_codes = ?, cpt_codes = ?,
             target_specialty = ?, secondary_specialties = ?, urgency = ?, safety_level = ?,
             red_flags = ?, recommended_lane = ?, patient_friendly_summary = ?, specialist_context = ?,
-            soap_note = ?, rag_confidence = ?, differentials = ?
+            soap_note = ?, rag_confidence = ?, differentials = ?,
+            primary_icd10 = ?, primary_cpt = ?, coding_provenance_json = ?
           WHERE id = ?
         `).run(
           symptomText, JSON.stringify(opqrst), JSON.stringify(icdCodes), JSON.stringify(cptCodes),
           specialty, JSON.stringify(secondarySpecialties), urgency, safetyLevel,
           JSON.stringify(redFlags), recommendedLane, patientFriendlySummary, specialistContext,
-          soapNote, ragConfidence, JSON.stringify(differentials || []), resultId
+          soapNote, ragConfidence, JSON.stringify(differentials || []),
+          primaryIcd10, primaryCpt, provenanceJson, resultId
         );
       } else {
       db.db.prepare(`
@@ -339,8 +401,8 @@ class TriageRAGService {
           icd_codes, cpt_codes, target_specialty, secondary_specialties,
           urgency, safety_level, red_flags, recommended_lane,
           patient_friendly_summary, specialist_context, differentials,
-          soap_note, rag_confidence, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          soap_note, rag_confidence, primary_icd10, primary_cpt, coding_provenance_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
         resultId, sessionId, patientId, symptomText,
         JSON.stringify(opqrst),
@@ -348,21 +410,19 @@ class TriageRAGService {
         specialty, JSON.stringify(secondarySpecialties),
         urgency, safetyLevel, JSON.stringify(redFlags), recommendedLane,
         patientFriendlySummary, specialistContext, JSON.stringify(differentials || []),
-        soapNote, ragConfidence
+        soapNote, ragConfidence, primaryIcd10, primaryCpt, provenanceJson
       );
       }
     } catch (e) {
       console.warn('[TriageRAG] Failed to persist result:', e.message);
     }
 
-    // W3-S4.1: primary_icd10 for billing (differential #1 or first RAG hit)
-    const primaryIcd10 = (differentials?.[0]?.icd10 || icdCodes?.[0]?.code || '').trim() || null;
-
     return {
       id: resultId,
       icd_codes: icdCodes,
       cpt_codes: cptCodes,
       primary_icd10: primaryIcd10,
+      primary_cpt: primaryCpt,
       target_specialty: specialty,
       secondary_specialties: secondarySpecialties,
       differentials: differentials || [],
@@ -644,11 +704,13 @@ class TriageRAGService {
 
     // Retrieval-driven baseline when candidates include confidence.
     const retrievalAvg = retrievalConfs.length ? (retrievalConfs.reduce((a, b) => a + b, 0) / retrievalConfs.length) : null;
+    const retrievalMax = retrievalConfs.length ? Math.max(...retrievalConfs) : null;
 
     // Fallback to old keyword-ish logic only when retrieval confs are absent.
     let base;
-    if (typeof retrievalAvg === 'number') {
-      // Map ~[0..1] confidence into a safe [0.45..0.95] band.
+    if (typeof retrievalMax === 'number') {
+      base = Math.max(0.45 + 0.5 * (retrievalAvg || retrievalMax), retrievalMax);
+    } else if (typeof retrievalAvg === 'number') {
       base = 0.45 + 0.5 * retrievalAvg;
     } else {
       const hasIcd = (icdCodes || []).length > 0;
@@ -806,15 +868,18 @@ function _normalizeRagRow(row) {
   try {
     const diffs = _safeParseDifferentials(row.differentials);
     const icds = JSON.parse(row.icd_codes || '[]');
-    const primaryIcd10 = (diffs?.[0]?.icd10 || icds?.[0]?.code || '').trim() || null;
+    const primaryIcd10 = (diffs?.[0]?.icd10 || icds?.[0]?.code || row.primary_icd10 || '').trim() || null;
+    const cpts = JSON.parse(row.cpt_codes || '[]');
+    const primaryCpt = (row.primary_cpt || cpts?.[0]?.code || '').trim() || null;
     return {
       ...row,
       icd_codes: icds,
-      cpt_codes: JSON.parse(row.cpt_codes || '[]'),
+      cpt_codes: cpts,
       secondary_specialties: JSON.parse(row.secondary_specialties || '[]'),
       red_flags: JSON.parse(row.red_flags || '[]'),
       differentials: diffs,
       primary_icd10: primaryIcd10,
+      primary_cpt: primaryCpt,
       rag_confidence:
         row.rag_confidence != null && row.rag_confidence !== ''
           ? parseFloat(row.rag_confidence)
