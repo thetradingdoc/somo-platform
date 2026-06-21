@@ -225,16 +225,19 @@ function resolveLocale(input = {}) {
 function normalizeState(input = {}) {
   const convDefaults = defaultConversationFields();
   const flags = { ...convDefaults, ...defaultFlags(), ...(input.flags || {}) };
+  const activeLane = input.active_lane || KELLY_LANE.ROUTER;
   const conversationMode =
-    input.conversation_mode || flags.conversation_mode || laneToConversationMode(input.active_lane);
-  if (!flags.conversation_mode) flags.conversation_mode = conversationMode;
+    input.conversation_mode ||
+    flags.conversation_mode ||
+    (activeLane !== KELLY_LANE.ROUTER ? laneToConversationMode(activeLane) : null);
+  if (conversationMode && !flags.conversation_mode) flags.conversation_mode = conversationMode;
   return {
     session_id: String(input.session_id || input.sessionId || '').trim(),
     clinic_id: input.clinic_id || input.clinicId || null,
     patient_id: input.patient_id || input.patientId || null,
     channel: input.channel || 'chat',
     locale: resolveLocale(input),
-    active_lane: input.active_lane || KELLY_LANE.ROUTER,
+    active_lane: activeLane,
     step: input.step || 'await_intent',
     conversation_mode: conversationMode,
     active_subrail: input.active_subrail || flags.active_subrail || null,

@@ -1,0 +1,439 @@
+Add:         00503Z4 Destruction of Brain using Stereoelectroencephalographic Radiofrequency Ablation, Percutaneous Approach
+Add:         00K0XZ1 Map Brain using Connectomic Analysis, External Approach
+Add:         041309R Bypass Hepatic Artery to Lower Artery with Autologous Venous Tissue, Open Approach
+Add:         04130AR Bypass Hepatic Artery to Lower Artery with Autologous Arterial Tissue, Open Approach
+Add:         04130JR Bypass Hepatic Artery to Lower Artery with Synthetic Substitute, Open Approach
+Add:         04130KR Bypass Hepatic Artery to Lower Artery with Nonautologous Tissue Substitute, Open Approach
+Add:         04130ZR Bypass Hepatic Artery to Lower Artery, Open Approach
+Add:         041349R Bypass Hepatic Artery to Lower Artery with Autologous Venous Tissue, Percutaneous Endoscopic Approach
+Add:         04134AR Bypass Hepatic Artery to Lower Artery with Autologous Arterial Tissue, Percutaneous Endoscopic Approach
+Add:         04134JR Bypass Hepatic Artery to Lower Artery with Synthetic Substitute, Percutaneous Endoscopic Approach
+Add:         04134KR Bypass Hepatic Artery to Lower Artery with Nonautologous Tissue Substitute, Percutaneous Endoscopic Approach
+Add:         04134ZR Bypass Hepatic Artery to Lower Artery, Percutaneous Endoscopic Approach
+Add:         041409R Bypass Splenic Artery to Lower Artery with Autologous Venous Tissue, Open Approach
+Add:         04140AR Bypass Splenic Artery to Lower Artery with Autologous Arterial Tissue, Open Approach
+Add:         04140JR Bypass Splenic Artery to Lower Artery with Synthetic Substitute, Open Approach
+Add:         04140KR Bypass Splenic Artery to Lower Artery with Nonautologous Tissue Substitute, Open Approach
+Add:         04140ZR Bypass Splenic Artery to Lower Artery, Open Approach
+Add:         041449R Bypass Splenic Artery to Lower Artery with Autologous Venous Tissue, Percutaneous Endoscopic Approach
+Add:         04144AR Bypass Splenic Artery to Lower Artery with Autologous Arterial Tissue, Percutaneous Endoscopic Approach
+Add:         04144JR Bypass Splenic Artery to Lower Artery with Synthetic Substitute, Percutaneous Endoscopic Approach
+Add:         04144KR Bypass Splenic Artery to Lower Artery with Nonautologous Tissue Substitute, Percutaneous Endoscopic Approach
+Add:         04144ZR Bypass Splenic Artery to Lower Artery, Percutaneous Endoscopic Approach
+Add:         047K342 Dilation of Right Femoral Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047K352 Dilation of Right Femoral Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047K362 Dilation of Right Femoral Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047K372 Dilation of Right Femoral Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047L342 Dilation of Left Femoral Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047L352 Dilation of Left Femoral Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047L362 Dilation of Left Femoral Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047L372 Dilation of Left Femoral Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047M342 Dilation of Right Popliteal Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047M352 Dilation of Right Popliteal Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047M362 Dilation of Right Popliteal Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047M372 Dilation of Right Popliteal Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047N342 Dilation of Left Popliteal Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047N352 Dilation of Left Popliteal Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047N362 Dilation of Left Popliteal Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047N372 Dilation of Left Popliteal Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047P342 Dilation of Right Anterior Tibial Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047P352 Dilation of Right Anterior Tibial Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047P362 Dilation of Right Anterior Tibial Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047P372 Dilation of Right Anterior Tibial Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047Q342 Dilation of Left Anterior Tibial Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047Q352 Dilation of Left Anterior Tibial Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047Q362 Dilation of Left Anterior Tibial Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047Q372 Dilation of Left Anterior Tibial Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047R342 Dilation of Right Posterior Tibial Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047R352 Dilation of Right Posterior Tibial Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047R362 Dilation of Right Posterior Tibial Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047R372 Dilation of Right Posterior Tibial Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047S342 Dilation of Left Posterior Tibial Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047S352 Dilation of Left Posterior Tibial Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047S362 Dilation of Left Posterior Tibial Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047S372 Dilation of Left Posterior Tibial Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047T342 Dilation of Right Peroneal Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047T352 Dilation of Right Peroneal Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047T362 Dilation of Right Peroneal Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047T372 Dilation of Right Peroneal Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047U342 Dilation of Left Peroneal Artery with Drug-eluting Intraluminal Device, Sustained Release, Percutaneous Approach
+Add:         047U352 Dilation of Left Peroneal Artery with Two Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047U362 Dilation of Left Peroneal Artery with Three Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         047U372 Dilation of Left Peroneal Artery with Four or More Drug-eluting Intraluminal Devices, Sustained Release, Percutaneous Approach
+Add:         07100Z3 Bypass Head Lymphatic to Peripheral Vein, Open Approach
+Add:         07100Z4 Bypass Head Lymphatic to Central Vein, Open Approach
+Add:         07100Z7 Bypass Head Lymphatic to Lymphatic, Open Approach
+Add:         07100ZK Bypass Head Lymphatic to Thoracic Duct, Open Approach
+Add:         07100ZL Bypass Head Lymphatic to Cisterna Chyli, Open Approach
+Add:         07104Z3 Bypass Head Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07104Z4 Bypass Head Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07104Z7 Bypass Head Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07104ZK Bypass Head Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07104ZL Bypass Head Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07110Z3 Bypass Right Neck Lymphatic to Peripheral Vein, Open Approach
+Add:         07110Z4 Bypass Right Neck Lymphatic to Central Vein, Open Approach
+Add:         07110Z7 Bypass Right Neck Lymphatic to Lymphatic, Open Approach
+Add:         07110ZK Bypass Right Neck Lymphatic to Thoracic Duct, Open Approach
+Add:         07110ZL Bypass Right Neck Lymphatic to Cisterna Chyli, Open Approach
+Add:         07114Z3 Bypass Right Neck Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07114Z4 Bypass Right Neck Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07114Z7 Bypass Right Neck Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07114ZK Bypass Right Neck Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07114ZL Bypass Right Neck Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07120Z3 Bypass Left Neck Lymphatic to Peripheral Vein, Open Approach
+Add:         07120Z4 Bypass Left Neck Lymphatic to Central Vein, Open Approach
+Add:         07120Z7 Bypass Left Neck Lymphatic to Lymphatic, Open Approach
+Add:         07120ZK Bypass Left Neck Lymphatic to Thoracic Duct, Open Approach
+Add:         07120ZL Bypass Left Neck Lymphatic to Cisterna Chyli, Open Approach
+Add:         07124Z3 Bypass Left Neck Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07124Z4 Bypass Left Neck Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07124Z7 Bypass Left Neck Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07124ZK Bypass Left Neck Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07124ZL Bypass Left Neck Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07130Z3 Bypass Right Upper Extremity Lymphatic to Peripheral Vein, Open Approach
+Add:         07130Z4 Bypass Right Upper Extremity Lymphatic to Central Vein, Open Approach
+Add:         07130Z7 Bypass Right Upper Extremity Lymphatic to Lymphatic, Open Approach
+Add:         07130ZK Bypass Right Upper Extremity Lymphatic to Thoracic Duct, Open Approach
+Add:         07130ZL Bypass Right Upper Extremity Lymphatic to Cisterna Chyli, Open Approach
+Add:         07134Z3 Bypass Right Upper Extremity Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07134Z4 Bypass Right Upper Extremity Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07134Z7 Bypass Right Upper Extremity Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07134ZK Bypass Right Upper Extremity Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07134ZL Bypass Right Upper Extremity Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07140Z3 Bypass Left Upper Extremity Lymphatic to Peripheral Vein, Open Approach
+Add:         07140Z4 Bypass Left Upper Extremity Lymphatic to Central Vein, Open Approach
+Add:         07140Z7 Bypass Left Upper Extremity Lymphatic to Lymphatic, Open Approach
+Add:         07140ZK Bypass Left Upper Extremity Lymphatic to Thoracic Duct, Open Approach
+Add:         07140ZL Bypass Left Upper Extremity Lymphatic to Cisterna Chyli, Open Approach
+Add:         07144Z3 Bypass Left Upper Extremity Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07144Z4 Bypass Left Upper Extremity Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07144Z7 Bypass Left Upper Extremity Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07144ZK Bypass Left Upper Extremity Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07144ZL Bypass Left Upper Extremity Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07150Z3 Bypass Right Axillary Lymphatic to Peripheral Vein, Open Approach
+Add:         07150Z4 Bypass Right Axillary Lymphatic to Central Vein, Open Approach
+Add:         07150Z7 Bypass Right Axillary Lymphatic to Lymphatic, Open Approach
+Add:         07150ZK Bypass Right Axillary Lymphatic to Thoracic Duct, Open Approach
+Add:         07150ZL Bypass Right Axillary Lymphatic to Cisterna Chyli, Open Approach
+Add:         07154Z3 Bypass Right Axillary Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07154Z4 Bypass Right Axillary Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07154Z7 Bypass Right Axillary Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07154ZK Bypass Right Axillary Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07154ZL Bypass Right Axillary Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07160Z3 Bypass Left Axillary Lymphatic to Peripheral Vein, Open Approach
+Add:         07160Z4 Bypass Left Axillary Lymphatic to Central Vein, Open Approach
+Add:         07160Z7 Bypass Left Axillary Lymphatic to Lymphatic, Open Approach
+Add:         07160ZK Bypass Left Axillary Lymphatic to Thoracic Duct, Open Approach
+Add:         07160ZL Bypass Left Axillary Lymphatic to Cisterna Chyli, Open Approach
+Add:         07164Z3 Bypass Left Axillary Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07164Z4 Bypass Left Axillary Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07164Z7 Bypass Left Axillary Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07164ZK Bypass Left Axillary Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07164ZL Bypass Left Axillary Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07170Z3 Bypass Thorax Lymphatic to Peripheral Vein, Open Approach
+Add:         07170Z4 Bypass Thorax Lymphatic to Central Vein, Open Approach
+Add:         07170Z7 Bypass Thorax Lymphatic to Lymphatic, Open Approach
+Add:         07170ZK Bypass Thorax Lymphatic to Thoracic Duct, Open Approach
+Add:         07170ZL Bypass Thorax Lymphatic to Cisterna Chyli, Open Approach
+Add:         07174Z3 Bypass Thorax Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07174Z4 Bypass Thorax Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07174Z7 Bypass Thorax Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07174ZK Bypass Thorax Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07174ZL Bypass Thorax Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07180Z3 Bypass Right Internal Mammary Lymphatic to Peripheral Vein, Open Approach
+Add:         07180Z4 Bypass Right Internal Mammary Lymphatic to Central Vein, Open Approach
+Add:         07180Z7 Bypass Right Internal Mammary Lymphatic to Lymphatic, Open Approach
+Add:         07180ZK Bypass Right Internal Mammary Lymphatic to Thoracic Duct, Open Approach
+Add:         07180ZL Bypass Right Internal Mammary Lymphatic to Cisterna Chyli, Open Approach
+Add:         07184Z3 Bypass Right Internal Mammary Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07184Z4 Bypass Right Internal Mammary Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07184Z7 Bypass Right Internal Mammary Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07184ZK Bypass Right Internal Mammary Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07184ZL Bypass Right Internal Mammary Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         07190Z3 Bypass Left Internal Mammary Lymphatic to Peripheral Vein, Open Approach
+Add:         07190Z4 Bypass Left Internal Mammary Lymphatic to Central Vein, Open Approach
+Add:         07190Z7 Bypass Left Internal Mammary Lymphatic to Lymphatic, Open Approach
+Add:         07190ZK Bypass Left Internal Mammary Lymphatic to Thoracic Duct, Open Approach
+Add:         07190ZL Bypass Left Internal Mammary Lymphatic to Cisterna Chyli, Open Approach
+Add:         07194Z3 Bypass Left Internal Mammary Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         07194Z4 Bypass Left Internal Mammary Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         07194Z7 Bypass Left Internal Mammary Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         07194ZK Bypass Left Internal Mammary Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         07194ZL Bypass Left Internal Mammary Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071B0Z3 Bypass Mesenteric Lymphatic to Peripheral Vein, Open Approach
+Add:         071B0Z4 Bypass Mesenteric Lymphatic to Central Vein, Open Approach
+Add:         071B0Z7 Bypass Mesenteric Lymphatic to Lymphatic, Open Approach
+Add:         071B0ZK Bypass Mesenteric Lymphatic to Thoracic Duct, Open Approach
+Add:         071B0ZL Bypass Mesenteric Lymphatic to Cisterna Chyli, Open Approach
+Add:         071B4Z3 Bypass Mesenteric Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071B4Z4 Bypass Mesenteric Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         071B4Z7 Bypass Mesenteric Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071B4ZK Bypass Mesenteric Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071B4ZL Bypass Mesenteric Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071C0Z3 Bypass Pelvis Lymphatic to Peripheral Vein, Open Approach
+Add:         071C0Z4 Bypass Pelvis Lymphatic to Central Vein, Open Approach
+Add:         071C0Z7 Bypass Pelvis Lymphatic to Lymphatic, Open Approach
+Add:         071C0ZK Bypass Pelvis Lymphatic to Thoracic Duct, Open Approach
+Add:         071C0ZL Bypass Pelvis Lymphatic to Cisterna Chyli, Open Approach
+Add:         071C4Z3 Bypass Pelvis Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071C4Z4 Bypass Pelvis Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         071C4Z7 Bypass Pelvis Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071C4ZK Bypass Pelvis Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071C4ZL Bypass Pelvis Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071D0Z3 Bypass Aortic Lymphatic to Peripheral Vein, Open Approach
+Add:         071D0Z4 Bypass Aortic Lymphatic to Central Vein, Open Approach
+Add:         071D0Z7 Bypass Aortic Lymphatic to Lymphatic, Open Approach
+Add:         071D0ZK Bypass Aortic Lymphatic to Thoracic Duct, Open Approach
+Add:         071D0ZL Bypass Aortic Lymphatic to Cisterna Chyli, Open Approach
+Add:         071D4Z3 Bypass Aortic Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071D4Z4 Bypass Aortic Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         071D4Z7 Bypass Aortic Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071D4ZK Bypass Aortic Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071D4ZL Bypass Aortic Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071F0Z3 Bypass Right Lower Extremity Lymphatic to Peripheral Vein, Open Approach
+Add:         071F0Z4 Bypass Right Lower Extremity Lymphatic to Central Vein, Open Approach
+Add:         071F0Z7 Bypass Right Lower Extremity Lymphatic to Lymphatic, Open Approach
+Add:         071F0ZK Bypass Right Lower Extremity Lymphatic to Thoracic Duct, Open Approach
+Add:         071F0ZL Bypass Right Lower Extremity Lymphatic to Cisterna Chyli, Open Approach
+Add:         071F4Z3 Bypass Right Lower Extremity Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071F4Z4 Bypass Right Lower Extremity Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         071F4Z7 Bypass Right Lower Extremity Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071F4ZK Bypass Right Lower Extremity Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071F4ZL Bypass Right Lower Extremity Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071G0Z3 Bypass Left Lower Extremity Lymphatic to Peripheral Vein, Open Approach
+Add:         071G0Z4 Bypass Left Lower Extremity Lymphatic to Central Vein, Open Approach
+Add:         071G0Z7 Bypass Left Lower Extremity Lymphatic to Lymphatic, Open Approach
+Add:         071G0ZK Bypass Left Lower Extremity Lymphatic to Thoracic Duct, Open Approach
+Add:         071G0ZL Bypass Left Lower Extremity Lymphatic to Cisterna Chyli, Open Approach
+Add:         071G4Z3 Bypass Left Lower Extremity Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071G4Z4 Bypass Left Lower Extremity Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         071G4Z7 Bypass Left Lower Extremity Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071G4ZK Bypass Left Lower Extremity Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071G4ZL Bypass Left Lower Extremity Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071H0Z3 Bypass Right Inguinal Lymphatic to Peripheral Vein, Open Approach
+Add:         071H0Z4 Bypass Right Inguinal Lymphatic to Central Vein, Open Approach
+Add:         071H0Z7 Bypass Right Inguinal Lymphatic to Lymphatic, Open Approach
+Add:         071H0ZK Bypass Right Inguinal Lymphatic to Thoracic Duct, Open Approach
+Add:         071H0ZL Bypass Right Inguinal Lymphatic to Cisterna Chyli, Open Approach
+Add:         071H4Z3 Bypass Right Inguinal Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071H4Z4 Bypass Right Inguinal Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         071H4Z7 Bypass Right Inguinal Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071H4ZK Bypass Right Inguinal Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071H4ZL Bypass Right Inguinal Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071J0Z3 Bypass Left Inguinal Lymphatic to Peripheral Vein, Open Approach
+Add:         071J0Z4 Bypass Left Inguinal Lymphatic to Central Vein, Open Approach
+Add:         071J0Z7 Bypass Left Inguinal Lymphatic to Lymphatic, Open Approach
+Add:         071J0ZK Bypass Left Inguinal Lymphatic to Thoracic Duct, Open Approach
+Add:         071J0ZL Bypass Left Inguinal Lymphatic to Cisterna Chyli, Open Approach
+Add:         071J4Z3 Bypass Left Inguinal Lymphatic to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071J4Z4 Bypass Left Inguinal Lymphatic to Central Vein, Percutaneous Endoscopic Approach
+Add:         071J4Z7 Bypass Left Inguinal Lymphatic to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071J4ZK Bypass Left Inguinal Lymphatic to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071J4ZL Bypass Left Inguinal Lymphatic to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071K0Z3 Bypass Thoracic Duct to Peripheral Vein, Open Approach
+Add:         071K0Z4 Bypass Thoracic Duct to Central Vein, Open Approach
+Add:         071K0Z7 Bypass Thoracic Duct to Lymphatic, Open Approach
+Add:         071K0ZK Bypass Thoracic Duct to Thoracic Duct, Open Approach
+Add:         071K0ZL Bypass Thoracic Duct to Cisterna Chyli, Open Approach
+Add:         071K4Z3 Bypass Thoracic Duct to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071K4Z4 Bypass Thoracic Duct to Central Vein, Percutaneous Endoscopic Approach
+Add:         071K4Z7 Bypass Thoracic Duct to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071K4ZK Bypass Thoracic Duct to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071K4ZL Bypass Thoracic Duct to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         071L0Z3 Bypass Cisterna Chyli to Peripheral Vein, Open Approach
+Add:         071L0Z4 Bypass Cisterna Chyli to Central Vein, Open Approach
+Add:         071L0Z7 Bypass Cisterna Chyli to Lymphatic, Open Approach
+Add:         071L0ZK Bypass Cisterna Chyli to Thoracic Duct, Open Approach
+Add:         071L0ZL Bypass Cisterna Chyli to Cisterna Chyli, Open Approach
+Add:         071L4Z3 Bypass Cisterna Chyli to Peripheral Vein, Percutaneous Endoscopic Approach
+Add:         071L4Z4 Bypass Cisterna Chyli to Central Vein, Percutaneous Endoscopic Approach
+Add:         071L4Z7 Bypass Cisterna Chyli to Lymphatic, Percutaneous Endoscopic Approach
+Add:         071L4ZK Bypass Cisterna Chyli to Thoracic Duct, Percutaneous Endoscopic Approach
+Add:         071L4ZL Bypass Cisterna Chyli to Cisterna Chyli, Percutaneous Endoscopic Approach
+Add:         0FP480Z Removal of Drainage Device from Gallbladder, Via Natural or Artificial Opening Endoscopic
+Add:         0FPG80Z Removal of Drainage Device from Pancreas, Via Natural or Artificial Opening Endoscopic
+Add:         0FW480Z Revision of Drainage Device in Gallbladder, Via Natural or Artificial Opening Endoscopic
+Add:         0FWG80Z Revision of Drainage Device in Pancreas, Via Natural or Artificial Opening Endoscopic
+Add:         0HRT07B Replacement of Right Breast using Lumbar Artery Perforator Flap, Open Approach
+Add:         0HRU07B Replacement of Left Breast using Lumbar Artery Perforator Flap, Open Approach
+Add:         0HRV07B Replacement of Bilateral Breast using Lumbar Artery Perforator Flap, Open Approach
+Add:         0NPB05Z Removal of External Fixation Device from Nasal Bone, Open Approach
+Add:         0NPB35Z Removal of External Fixation Device from Nasal Bone, Percutaneous Approach
+Add:         0NPB45Z Removal of External Fixation Device from Nasal Bone, Percutaneous Endoscopic Approach
+Add:         0NPBX5Z Removal of External Fixation Device from Nasal Bone, External Approach
+Add:         0NPW05Z Removal of External Fixation Device from Facial Bone, Open Approach
+Add:         0NPW35Z Removal of External Fixation Device from Facial Bone, Percutaneous Approach
+Add:         0NPW45Z Removal of External Fixation Device from Facial Bone, Percutaneous Endoscopic Approach
+Add:         0NPWX5Z Removal of External Fixation Device from Facial Bone, External Approach
+Add:         0NWB05Z Revision of External Fixation Device in Nasal Bone, Open Approach
+Add:         0NWB35Z Revision of External Fixation Device in Nasal Bone, Percutaneous Approach
+Add:         0NWB45Z Revision of External Fixation Device in Nasal Bone, Percutaneous Endoscopic Approach
+Add:         0NWBX5Z Revision of External Fixation Device in Nasal Bone, External Approach
+Add:         0NWW05Z Revision of External Fixation Device in Facial Bone, Open Approach
+Add:         0NWW35Z Revision of External Fixation Device in Facial Bone, Percutaneous Approach
+Add:         0NWW45Z Revision of External Fixation Device in Facial Bone, Percutaneous Endoscopic Approach
+Add:         0NWWX5Z Revision of External Fixation Device in Facial Bone, External Approach
+Add:         5A05A0L Extracorporeal Peripheral Veno-venous Filtration, Intraoperative
+Add:         8E023FZ Fiber Optic 3D Guided Procedure of Circulatory System, Percutaneous Approach
+Add:         X05133A Destruction of Renal Sympathetic Nerve(s) using Radiofrequency Ablation, Percutaneous Approach, New Technology Group 10
+Delete:      X27H385 Dilation of Right Femoral Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27H395 Dilation of Right Femoral Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27H3B5 Dilation of Right Femoral Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27H3C5 Dilation of Right Femoral Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27J385 Dilation of Left Femoral Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27J395 Dilation of Left Femoral Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27J3B5 Dilation of Left Femoral Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27J3C5 Dilation of Left Femoral Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27K385 Dilation of Proximal Right Popliteal Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27K395 Dilation of Proximal Right Popliteal Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27K3B5 Dilation of Proximal Right Popliteal Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27K3C5 Dilation of Proximal Right Popliteal Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27L385 Dilation of Proximal Left Popliteal Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27L395 Dilation of Proximal Left Popliteal Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27L3B5 Dilation of Proximal Left Popliteal Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27L3C5 Dilation of Proximal Left Popliteal Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27M385 Dilation of Distal Right Popliteal Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27M395 Dilation of Distal Right Popliteal Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27M3B5 Dilation of Distal Right Popliteal Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27M3C5 Dilation of Distal Right Popliteal Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27N385 Dilation of Distal Left Popliteal Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27N395 Dilation of Distal Left Popliteal Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27N3B5 Dilation of Distal Left Popliteal Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27N3C5 Dilation of Distal Left Popliteal Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27P385 Dilation of Right Anterior Tibial Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27P395 Dilation of Right Anterior Tibial Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27P3B5 Dilation of Right Anterior Tibial Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27P3C5 Dilation of Right Anterior Tibial Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Add:         X27P3TA Dilation of Right Anterior Tibial Artery with Intraluminal Device, Everolimus-eluting Resorbable Scaffold(s), Percutaneous Approach, New Technology Group 10
+Delete:      X27Q385 Dilation of Left Anterior Tibial Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27Q395 Dilation of Left Anterior Tibial Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27Q3B5 Dilation of Left Anterior Tibial Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27Q3C5 Dilation of Left Anterior Tibial Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Add:         X27Q3TA Dilation of Left Anterior Tibial Artery with Intraluminal Device, Everolimus-eluting Resorbable Scaffold(s), Percutaneous Approach, New Technology Group 10
+Delete:      X27R385 Dilation of Right Posterior Tibial Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27R395 Dilation of Right Posterior Tibial Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27R3B5 Dilation of Right Posterior Tibial Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27R3C5 Dilation of Right Posterior Tibial Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Add:         X27R3TA Dilation of Right Posterior Tibial Artery with Intraluminal Device, Everolimus-eluting Resorbable Scaffold(s), Percutaneous Approach, New Technology Group 10
+Delete:      X27S385 Dilation of Left Posterior Tibial Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27S395 Dilation of Left Posterior Tibial Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27S3B5 Dilation of Left Posterior Tibial Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27S3C5 Dilation of Left Posterior Tibial Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Add:         X27S3TA Dilation of Left Posterior Tibial Artery with Intraluminal Device, Everolimus-eluting Resorbable Scaffold(s), Percutaneous Approach, New Technology Group 10
+Delete:      X27T385 Dilation of Right Peroneal Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27T395 Dilation of Right Peroneal Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27T3B5 Dilation of Right Peroneal Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27T3C5 Dilation of Right Peroneal Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Add:         X27T3TA Dilation of Right Peroneal Artery with Intraluminal Device, Everolimus-eluting Resorbable Scaffold(s), Percutaneous Approach, New Technology Group 10
+Delete:      X27U385 Dilation of Left Peroneal Artery with Sustained Release Drug-eluting Intraluminal Device, Percutaneous Approach, New Technology Group 5
+Delete:      X27U395 Dilation of Left Peroneal Artery with Two Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27U3B5 Dilation of Left Peroneal Artery with Three Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Delete:      X27U3C5 Dilation of Left Peroneal Artery with Four or More Sustained Release Drug-eluting Intraluminal Devices, Percutaneous Approach, New Technology Group 5
+Add:         X27U3TA Dilation of Left Peroneal Artery with Intraluminal Device, Everolimus-eluting Resorbable Scaffold(s), Percutaneous Approach, New Technology Group 10
+Add:         X28F3VA Division of Aortic Valve using Intraluminal Bioprosthetic Valve Leaflet Splitting Technology in Existing Valve, Percutaneous Approach, New Technology Group 10
+Add:         X2R50WA Replacement of Right Upper Extremity Artery using Bioengineered Human Acellular Vessel, Open Approach, New Technology Group 10
+Add:         X2R60WA Replacement of Left Upper Extremity Artery using Bioengineered Human Acellular Vessel, Open Approach, New Technology Group 10
+Add:         X2R70WA Replacement of Right Lower Extremity Artery using Bioengineered Human Acellular Vessel, Open Approach, New Technology Group 10
+Add:         X2R80WA Replacement of Left Lower Extremity Artery using Bioengineered Human Acellular Vessel, Open Approach, New Technology Group 10
+Add:         X2RJ3RA Replacement of Tricuspid Valve with Multi-plane Flex Technology Bioprosthetic Valve, Percutaneous Approach, New Technology Group 10
+Add:         X2VE3SA Restriction of Descending Thoracic Aorta and Abdominal Aorta using Branched Intraluminal Device, Manufactured Integrated System, Four or More Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XHR0XGA Replacement of Head and Neck Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XHR1XGA Replacement of Chest Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XHR2XGA Replacement of Abdomen Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XHR3XGA Replacement of Back Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XHR4XGA Replacement of Right Upper Extremity Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XHR5XGA Replacement of Left Upper Extremity Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XHR6XGA Replacement of Right Lower Extremity Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XHR7XGA Replacement of Left Lower Extremity Skin with Prademagene Zamikeracel, Genetically Engineered Autologous Cell Therapy, External Approach, New Technology Group 10
+Add:         XRGA0EA Fusion of Thoracolumbar Vertebral Joint using Facet Joint Fusion Device, Paired Titanium Cages, Open Approach, New Technology Group 10
+Add:         XRGB0EA Fusion of Lumbar Vertebral Joint using Facet Joint Fusion Device, Paired Titanium Cages, Open Approach, New Technology Group 10
+Add:         XRGC0EA Fusion of 2 or more Lumbar Vertebral Joints using Facet Joint Fusion Device, Paired Titanium Cages, Open Approach, New Technology Group 10
+Add:         XRGD0EA Fusion of Lumbosacral Joint using Facet Joint Fusion Device, Paired Titanium Cages, Open Approach, New Technology Group 10
+Add:         XRGJ0CA Fusion of Right Ankle Joint using Gyroid-Sheet Lattice Design Internal Fixation Device, Open Approach, New Technology Group 10
+Add:         XRGK0CA Fusion of Left Ankle Joint using Gyroid-Sheet Lattice Design Internal Fixation Device, Open Approach, New Technology Group 10
+Add:         XRGL0CA Fusion of Right Tarsal Joint using Gyroid-Sheet Lattice Design Internal Fixation Device, Open Approach, New Technology Group 10
+Add:         XRGM0CA Fusion of Left Tarsal Joint using Gyroid-Sheet Lattice Design Internal Fixation Device, Open Approach, New Technology Group 10
+Add:         XRH60FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Thoracic Vertebral Joint, Open Approach, New Technology Group 10
+Add:         XRH63FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Thoracic Vertebral Joint, Percutaneous Approach, New Technology Group 10
+Add:         XRH64FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Thoracic Vertebral Joint, Percutaneous Endoscopic Approach, New Technology Group 10
+Add:         XRH70FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 2 to 7 Thoracic Vertebral Joints, Open Approach, New Technology Group 10
+Add:         XRH73FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 2 to 7 Thoracic Vertebral Joints, Percutaneous Approach, New Technology Group 10
+Add:         XRH74FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 2 to 7 Thoracic Vertebral Joints, Percutaneous Endoscopic Approach, New Technology Group 10
+Add:         XRH80FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 8 or more Thoracic Vertebral Joints, Open Approach, New Technology Group 10
+Add:         XRH83FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 8 or more Thoracic Vertebral Joints, Percutaneous Approach, New Technology Group 10
+Add:         XRH84FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 8 or more Thoracic Vertebral Joints, Percutaneous Endoscopic Approach, New Technology Group 10
+Add:         XRHA0FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Thoracolumbar Vertebral Joint, Open Approach, New Technology Group 10
+Add:         XRHA3FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Thoracolumbar Vertebral Joint, Percutaneous Approach, New Technology Group 10
+Add:         XRHA4FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Thoracolumbar Vertebral Joint, Percutaneous Endoscopic Approach, New Technology Group 10
+Add:         XRHB0FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Lumbar Vertebral Joint, Open Approach, New Technology Group 10
+Add:         XRHB3FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Lumbar Vertebral Joint, Percutaneous Approach, New Technology Group 10
+Add:         XRHB4FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Lumbar Vertebral Joint, Percutaneous Endoscopic Approach, New Technology Group 10
+Add:         XRHC0FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 2 or more Lumbar Vertebral Joints, Open Approach, New Technology Group 10
+Add:         XRHC3FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 2 or more Lumbar Vertebral Joints, Percutaneous Approach, New Technology Group 10
+Add:         XRHC4FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into 2 or more Lumbar Vertebral Joints, Percutaneous Endoscopic Approach, New Technology Group 10
+Add:         XRHD0FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Lumbosacral Joint, Open Approach, New Technology Group 10
+Add:         XRHD3FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Lumbosacral Joint, Percutaneous Approach, New Technology Group 10
+Add:         XRHD4FA Insertion of Pedicle Based Carbon/PEEK Spinal Stabilization Device into Lumbosacral Joint, Percutaneous Endoscopic Approach, New Technology Group 10
+Add:         XW0136A Introduction of Dasiglucagon into Subcutaneous Tissue, Percutaneous Approach, New Technology Group 10
+Add:         XW0333A Introduction of Bentracimab, Ticagrelor Reversal Agent into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0334A Introduction of Cefepime-taniborbactam Anti-infective into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0335A Introduction of Ceftobiprole Medocaril Anti-infective into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0338A Introduction of Obecabtagene Autoleucel into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0339A Introduction of Odronextamab Antineoplastic into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW033BA Introduction of Orca-T Allogeneic T-cell Immunotherapy into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW033CA Introduction of Zanidatamab Antineoplastic into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW033DA Introduction of Donislecel-jujn Allogeneic Pancreatic Islet Cellular Suspension into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW033FA Introduction of Non-Chimeric Antigen Receptor T-cell Immune Effector Cell Therapy into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Delete:      XW033K5 Introduction of Fosfomycin Anti-infective into Peripheral Vein, Percutaneous Approach, New Technology Group 5
+Delete:      XW033N5 Introduction of Meropenem-vaborbactam Anti-infective into Peripheral Vein, Percutaneous Approach, New Technology Group 5
+Delete:      XW033U5 Introduction of Imipenem-cilastatin-relebactam Anti-infective into Peripheral Vein, Percutaneous Approach, New Technology Group 5
+Add:         XW0433A Introduction of Bentracimab, Ticagrelor Reversal Agent into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0434A Introduction of Cefepime-taniborbactam Anti-infective into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0435A Introduction of Ceftobiprole Medocaril Anti-infective into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0438A Introduction of Obecabtagene Autoleucel into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW0439A Introduction of Odronextamab Antineoplastic into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW043BA Introduction of Orca-T Allogeneic T-cell Immunotherapy into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW043CA Introduction of Zanidatamab Antineoplastic into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW043FA Introduction of Non-Chimeric Antigen Receptor T-cell Immune Effector Cell Therapy into Central Vein, Percutaneous Approach, New Technology Group 10
+Delete:      XW043K5 Introduction of Fosfomycin Anti-infective into Central Vein, Percutaneous Approach, New Technology Group 5
+Delete:      XW043N5 Introduction of Meropenem-vaborbactam Anti-infective into Central Vein, Percutaneous Approach, New Technology Group 5
+Delete:      XW043U5 Introduction of Imipenem-cilastatin-relebactam Anti-infective into Central Vein, Percutaneous Approach, New Technology Group 5
+Delete:      XW097M5 Introduction of Esketamine Hydrochloride into Nose, Via Natural or Artificial Opening, New Technology Group 5
+Delete:      XW0DXJ5 Introduction of Apalutamide Antineoplastic into Mouth and Pharynx, External Approach, New Technology Group 5
+Delete:      XW0DXL5 Introduction of Erdafitinib Antineoplastic into Mouth and Pharynx, External Approach, New Technology Group 5
+Delete:      XW0DXR5 Introduction of Venetoclax Antineoplastic into Mouth and Pharynx, External Approach, New Technology Group 5
+Delete:      XW0DXT5 Introduction of Ruxolitinib into Mouth and Pharynx, External Approach, New Technology Group 5
+Delete:      XW0DXV5 Introduction of Gilteritinib Antineoplastic into Mouth and Pharynx, External Approach, New Technology Group 5
+Add:         XW0J3HA Introduction of Paclitaxel-Coated Balloon Technology, One Balloon into Coronary Artery, One Artery, Percutaneous Approach, New Technology Group 10
+Add:         XW0J3JA Introduction of Paclitaxel-Coated Balloon Technology, Two Balloons into Coronary Artery, One Artery, Percutaneous Approach, New Technology Group 10
+Add:         XW0J3KA Introduction of Paclitaxel-Coated Balloon Technology, Three Balloons into Coronary Artery, One Artery, Percutaneous Approach, New Technology Group 10
+Add:         XW0J3LA Introduction of Paclitaxel-Coated Balloon Technology, Four or More Balloons into Coronary Artery, One Artery, Percutaneous Approach, New Technology Group 10
+Add:         XW0K3HA Introduction of Paclitaxel-Coated Balloon Technology, One Balloon into Coronary Artery, Two Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0K3JA Introduction of Paclitaxel-Coated Balloon Technology, Two Balloons into Coronary Artery, Two Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0K3KA Introduction of Paclitaxel-Coated Balloon Technology, Three Balloons into Coronary Artery, Two Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0K3LA Introduction of Paclitaxel-Coated Balloon Technology, Four or More Balloons into Coronary Artery, Two Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0L3HA Introduction of Paclitaxel-Coated Balloon Technology, One Balloon into Coronary Artery, Three Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0L3JA Introduction of Paclitaxel-Coated Balloon Technology, Two Balloons into Coronary Artery, Three Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0L3KA Introduction of Paclitaxel-Coated Balloon Technology, Three Balloons into Coronary Artery, Three Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0L3LA Introduction of Paclitaxel-Coated Balloon Technology, Four or More Balloons into Coronary Artery, Three Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0M3HA Introduction of Paclitaxel-Coated Balloon Technology, One Balloon into Coronary Artery, Four or More Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0M3JA Introduction of Paclitaxel-Coated Balloon Technology, Two Balloons into Coronary Artery, Four or More Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0M3KA Introduction of Paclitaxel-Coated Balloon Technology, Three Balloons into Coronary Artery, Four or More Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0M3LA Introduction of Paclitaxel-Coated Balloon Technology, Four or More Balloons into Coronary Artery, Four or More Arteries, Percutaneous Approach, New Technology Group 10
+Add:         XW0U0GA Introduction of Vancomycin Hydrochloride and Tobramycin Sulfate Anti-Infective, Temporary Irrigation Spacer System into Joints, Open Approach, New Technology Group 10
+Add:         XW0V3WA Introduction of AGN1 Bone Void Filler into Bones, Percutaneous Approach, New Technology Group 10
+Add:         XW1337A Transfusion of Marnetegragene Autotemcel into Peripheral Vein, Percutaneous Approach, New Technology Group 10
+Add:         XW1437A Transfusion of Marnetegragene Autotemcel into Central Vein, Percutaneous Approach, New Technology Group 10
+Add:         XX25X0A Monitoring of Blood Flow, Adhesive Ultrasound Patch Technology, New Technology Group 10
+Add:         XXA536A Circulatory Filtration, Blood Pathogens, Percutaneous Approach, New Technology Group 10
+Add:         XXE0X1A Measurement of Intracranial Cerebrospinal Fluid Flow, Computer-aided Triage and Notification, New Technology Group 10
+Add:         XXE5X2A Measurement of Infection, Phenotypic Fully Automated Rapid Susceptibility Technology with Controlled Inoculum, New Technology Group 10
+Add:         XXE5X4A Measurement of Infection, Positive Blood Culture Small Molecule Sensor Array Technology, New Technology Group 10
+Delete:      XXE5XM5 Measurement of Infection, Whole Blood Nucleic Acid-base Microbial Detection, New Technology Group 5
+
+Codes
+  78638 codes in icd10pcs_codes_2024.txt
+  78948 codes in icd10pcs_codes_2025.txt
+    371 additions
+     61 deletions
+      0 revisions

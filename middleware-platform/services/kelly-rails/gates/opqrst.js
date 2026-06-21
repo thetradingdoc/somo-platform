@@ -35,26 +35,12 @@ async function runDeterministicOpqrst(state, ctx) {
 
   if (opqrstComplete(updated)) {
     if (!updated?.rag_result_id && !state.flags.has_rag) {
-      if (process.env.KELLY_RAILS_FAST_RAG === '1') {
-        const { completeTriageRagForSession } = require('../../triage-rag-fast-complete');
-        completeTriageRagForSession(ctx.sessionId, ctx.patientId, {
-          region: updated?.region || 'leg and neck',
-          quality: updated?.quality || 'itchy rash on leg and neck',
-          patientName: argsFromMeta(ctx.sessionId, 'collected_name') || 'Tom Harris',
-          email: argsFromMeta(ctx.sessionId, 'collected_email'),
-        });
+      const rag = await KellyToolExecutor.execute('run_triage_rag', {}, ctx);
+      if (rag && !rag.error) {
         toolsUsed.push('run_triage_rag');
         state.flags.has_rag = true;
         state.flags.triage_complete = true;
         state.step = 'done';
-      } else {
-        const rag = await KellyToolExecutor.execute('run_triage_rag', {}, ctx);
-        if (rag && !rag.error) {
-          toolsUsed.push('run_triage_rag');
-          state.flags.has_rag = true;
-          state.flags.triage_complete = true;
-          state.step = 'done';
-        }
       }
     } else {
       state.flags.has_rag = true;

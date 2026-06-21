@@ -108,6 +108,52 @@ function getCptCodeForVisit(opts = {}) {
 }
 
 /**
+ * Session 3: prefer spine primary_cpt; fallback to static table with logged reason.
+ */
+const { CODING_CONFIDENCE_THRESHOLD } = require('../config/coding-thresholds');
+
+function codingSpineOnly() {
+  return process.env.CODING_SPINE_ONLY === '1'
+    || String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+}
+
+function resolveCptForVisit(opts = {}) {
+  const threshold = opts.confidenceThreshold ?? CODING_CONFIDENCE_THRESHOLD;
+  const spineCpt = opts.spineCpt || opts.primary_cpt || null;
+  const confidence = opts.confidence ?? 0;
+  const specialty = opts.specialty || 'PrimaryCare';
+  const isNewPatient = opts.isNewPatient !== false;
+  const urgency = opts.urgency || 'routine';
+
+  if (spineCpt && confidence >= threshold) {
+    return { code: spineCpt, code_source: 'spine', fallback_reason: null };
+  }
+
+  if (codingSpineOnly()) {
+    let fallback_reason = 'no_spine_cpt';
+    if (spineCpt && confidence < threshold) fallback_reason = 'low_confidence';
+    return { code: null, code_source: 'hitl_required', fallback_reason };
+  }
+
+  const code = getCptCodeForVisit({ specialty, isNewPatient, urgency });
+  let fallback_reason = 'no_spine_cpt';
+  if (spineCpt && confidence < threshold) fallback_reason = 'low_confidence';
+  if (process.env.CPT_FALLBACK_LOG !== '0') {
+    console.log('[cpt-helper] fallback CPT selected', {
+      code_source: 'fallback',
+      fallback_reason,
+      spineCpt,
+      confidence,
+      threshold,
+      selected: code
+    });
+  }
+  return { code, code_source: 'fallback', fallback_reason };
+}
+
+module.exports.codingSpineOnly = codingSpineOnly;
+
+/**
  * W3-S4.5: Map appointment type display names to specialty for getCptCodeForVisit.
  * Replaces hardcoded 90834 with resolved CPT per specialty/urgency.
  */
@@ -125,4 +171,4 @@ const APPOINTMENT_TYPE_TO_SPECIALTY = {
   'General Consult': 'PrimaryCare'
 };
 
-module.exports = { getCptCodeForVisit, CPT_TABLE, APPOINTMENT_TYPE_TO_SPECIALTY };
+module.exports = { getCptCodeForVisit, resolveCptForVisit, CPT_TABLE, APPOINTMENT_TYPE_TO_SPECIALTY };

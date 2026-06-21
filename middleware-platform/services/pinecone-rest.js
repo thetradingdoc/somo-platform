@@ -80,11 +80,23 @@ async function pineconeQuery(vector, opts = {}) {
   };
   const ns = pineconeNamespace();
   if (ns) body.namespace = ns;
-  const res = await fetch(`${base}/query`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const timeoutMs = opts.timeoutMs ?? parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  let res;
+  try {
+    res = await fetch(`${base}/query`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller?.signal
+    });
+  } catch (e) {
+    if (timer) clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error(`Pinecone query timeout after ${timeoutMs}ms`);
+    throw e;
+  }
+  if (timer) clearTimeout(timer);
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     throw new Error(`Pinecone query ${res.status}: ${t.slice(0, 300)}`);

@@ -39,7 +39,7 @@ const ALLOWLISTS = {
     medical_history: ['store_triage_rich_intake', 'get_triage_session'],
     medications: ['store_triage_rich_intake', 'get_triage_session'],
     symptoms: ['store_triage_opqrst', 'get_triage_session'],
-    triage_assessment: ['run_triage_rag', 'get_triage_session', 'store_triage_opqrst']
+    triage_assessment: ['run_triage_rag', 'collect_insurance', 'compute_visit_quote', 'get_triage_session', 'store_triage_opqrst']
   },
   booking: {
     schedule_visit: ['get_available_slots', 'get_triage_session'],
@@ -47,7 +47,7 @@ const ALLOWLISTS = {
   },
   payment: {
     pay_invoice: ['get_triage_session', 'get_patient_claims'],
-    insurance: ['collect_insurance', 'get_patient_claims'],
+    insurance: ['collect_insurance', 'compute_visit_quote', 'get_patient_claims'],
     receipt_logic: ['get_patient_claims', 'request_patient_payment']
   },
   post_payment: {

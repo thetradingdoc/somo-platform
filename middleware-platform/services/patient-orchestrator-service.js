@@ -45,6 +45,39 @@ function applyResponseConstraints(reply, channel) {
   return reply;
 }
 
+/** Load latest triage spine row for session (RAG ICD/CPT). */
+function loadTriageSpineRow(sessionId) {
+  if (!sessionId || !db.db) return null;
+  try {
+    return db.db.prepare(
+      'SELECT * FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(sessionId);
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Resolve CPT from triage spine only — no table fallback (matches Kelly collect_insurance). */
+function resolveServiceCodeFromSpine(sessionId) {
+  const triage = loadTriageSpineRow(sessionId);
+  if (!triage) return { serviceCode: null, primaryIcd10: null, confidence: 0 };
+  const { resolveCptForVisit } = require('../utils/cpt-helper');
+  const confidence = triage.rag_confidence ?? 0;
+  const resolved = resolveCptForVisit({
+    spineCpt: triage.primary_cpt || null,
+    confidence,
+    specialty: triage.target_specialty || 'PrimaryCare'
+  });
+  if (resolved.code_source !== 'spine' || !resolved.code) {
+    return { serviceCode: null, primaryIcd10: triage.primary_icd10 || null, confidence };
+  }
+  return {
+    serviceCode: resolved.code,
+    primaryIcd10: triage.primary_icd10 || null,
+    confidence
+  };
+}
+
 /**
  * Localize reply by preferred_language (orch-7). MVP: returns as-is. Set ENABLE_RESPONSE_TRANSLATION=1
  * and wire global.translateApi for production.
@@ -673,16 +706,26 @@ async function orchestrate(input) {
           console.warn('[orchestrator] getFHIRPatient parse failed:', e?.message || e);
         }
       }
-      const eligibilityData = {
-        patientName,
-        dateOfBirth: patientDob,
-        memberId: state.insurance_member_id,
-        payerId: payerId || 'BCBS',
-        serviceCode: '99213',
-        dateOfService: new Date().toISOString().slice(0, 10),
-        patientId: session.patient_id || input.patient_id
-      };
-      const eligResult = await InsuranceService.checkEligibility(eligibilityData);
+      const spineCodes = resolveServiceCodeFromSpine(session.session_id);
+      let eligResult = null;
+      if (spineCodes.serviceCode) {
+        const eligibilityData = {
+          patientName,
+          dateOfBirth: patientDob,
+          memberId: state.insurance_member_id,
+          payerId: payerId || 'BCBS',
+          serviceCode: spineCodes.serviceCode,
+          primaryIcd10: spineCodes.primaryIcd10 || undefined,
+          dateOfService: new Date().toISOString().slice(0, 10),
+          patientId: session.patient_id || input.patient_id
+        };
+        eligResult = await InsuranceService.checkEligibility(eligibilityData);
+      } else {
+        console.log('[orchestrator] deferring eligibility — triage spine CPT not ready yet', {
+          session_id: session.session_id,
+          has_triage_row: !!loadTriageSpineRow(session.session_id)
+        });
+      }
       // Phase 5: Save insurance info for patient when they have it
       if (pid && db.upsertPatientInsurance) {
         try {
@@ -701,7 +744,11 @@ async function orchestrate(input) {
       }
       const summary = eligResult?.eligible
         ? `You're eligible. Copay: $${(eligResult.copay ?? eligResult.copay_amount ?? 0).toFixed(2)}.`
-        : (eligResult?.message || 'Eligibility check completed. I can share details in your patient portal.');
+        : (eligResult
+          ? (eligResult.message || 'Eligibility check completed. I can share details in your patient portal.')
+          : (channel === 'voice'
+            ? "Thanks — I've saved your insurance. What brings you in today?"
+            : "Thanks — I've saved your insurance information. What brings you in today?"));
       state.step = 'collect_reason';
       state.current_state = 'collect_reason';
       state.insurance_started = false;

@@ -7,9 +7,19 @@ const TriageRAGService = require('./triage-rag-service');
 
 /**
  * Persist a routine dermatology RAG row when OPQRST is already on the session.
- * Used by E2E (KELLY_RAILS_FAST_RAG=1) to avoid blocking on full LLM RAG pipelines.
+ * TEST-ONLY: requires NODE_ENV=test and KELLY_RAILS_FAST_RAG=1.
  */
+function fastRagAllowed() {
+  return String(process.env.NODE_ENV || '').toLowerCase() === 'test'
+    && String(process.env.KELLY_RAILS_FAST_RAG || '').trim() === '1';
+}
+
 function completeTriageRagForSession(sessionId, patientId, opts = {}) {
+  if (!fastRagAllowed()) {
+    throw new Error(
+      'completeTriageRagForSession is test-only (NODE_ENV=test and KELLY_RAILS_FAST_RAG=1)'
+    );
+  }
   if (!sessionId) throw new Error('completeTriageRagForSession requires sessionId');
 
   const row = db.getTriageSession ? db.getTriageSession(sessionId) : null;

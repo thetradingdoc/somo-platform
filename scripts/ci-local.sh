@@ -43,6 +43,53 @@ step "Kelly golden + language"
 npm run test:kelly:rails:golden
 npm run test:kelly:rails:language
 
+step "Codebook parity (Session 2 gate)"
+cd "$MP"
+if [[ -f var/db/middleware-dev.db ]]; then
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-codebook-parity.js || {
+    echo "⚠️  Codebook parity failed — run Session 2 imports (import-icd10/cpt/hcpcs + embeddings)"
+  }
+else
+  SKIP_EMBED_CHECK=1 DB_PATH=./var/db/middleware-dev.db node scripts/verify-codebook-parity.js || {
+    echo "⚠️  Codebook parity skipped — no var/db/middleware-dev.db (Session 2)"
+  }
+fi
+
+step "Phase 1 foundation gates"
+if [[ -f var/db/middleware-dev.db ]]; then
+  DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-db-path.cjs || echo "⚠️  verify-db-path failed"
+  node scripts/verify-threshold-ssot.cjs || echo "⚠️  verify-threshold-ssot failed"
+fi
+
+step "Coding prod gates"
+node scripts/verify-no-hardcoded-coding.cjs || { echo "❌ verify-no-hardcoded-coding failed"; exit 1; }
+node scripts/verify-threshold-ssot.cjs || { echo "❌ verify-threshold-ssot failed"; exit 1; }
+if [[ -f var/db/middleware-dev.db ]]; then
+  DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-db-path.cjs || { echo "❌ verify-db-path failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-tools.cjs || { echo "❌ verify-kelly-tools failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-http-collect.cjs || { echo "❌ verify-kelly-http-collect failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-routine-path.cjs || { echo "❌ verify-routine-path failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-voice-http-spine.cjs || { echo "❌ verify-voice-http-spine failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-coding-hitl.cjs || { echo "❌ verify-coding-hitl failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-pair-validation.cjs || { echo "❌ verify-pair-validation failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db node scripts/verify-quote-eligibility-chain.cjs || { echo "❌ verify-quote-eligibility-chain failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-cpt-routing.cjs || { echo "❌ verify-cpt-routing failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-payer-model.cjs || { echo "❌ verify-payer-model failed"; exit 1; }
+  if [[ "${CODING_PROD_CI:-1}" == "1" ]]; then
+    DB_PATH=./var/db/middleware-dev.db EVAL_USE_SEMANTIC=false REMOTE_RAG_TIMEOUT_MS="${REMOTE_RAG_TIMEOUT_MS:-8000}" \
+      node scripts/verify-live-spine.cjs || { echo "❌ verify-live-spine failed"; exit 1; }
+    DB_PATH=./var/db/middleware-dev.db USE_TRIAGE_RAG_V2=1 \
+      node scripts/verify-triage-spine.cjs || { echo "❌ verify-triage-spine failed"; exit 1; }
+    if [[ -n "${GROQ_API_KEY:-}" || -n "${OPENAI_API_KEY:-}" || -n "${ANTHROPIC_API_KEY:-}" ]]; then
+      npm run test:coding:terminal-call || { echo "❌ terminal-coding-call failed"; exit 1; }
+    else
+      echo "⚠️  Skipping test:coding:terminal-call — set GROQ_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY"
+    fi
+  fi
+else
+  echo "ℹ️  DB-backed coding gates skipped (var/db/middleware-dev.db missing)"
+fi
+
 step "Jest (middleware-platform)"
 npm test -- --runInBand --forceExit
 

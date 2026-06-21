@@ -116,70 +116,12 @@ function toJsonValue(value) {
   }
 }
 
-function isSameStatus(a, b) {
-  return (a || '').toString().trim().toLowerCase() === (b || '').toString().trim().toLowerCase();
-}
-
-function canTransitionAppointmentStatus(current, next) {
-  let cur = (current || 'scheduled').toString().trim().toLowerCase();
-  let nxt = (next || '').toString().trim().toLowerCase();
-  if (cur === 'cancelled') cur = 'canceled';
-  if (nxt === 'cancelled') nxt = 'canceled';
-  if (!nxt) return false;
-  if (cur === nxt) return true;
-
-  // Canonical lifecycle (allow a few legacy states)
-  const allowed = {
-    pending: ['scheduled', 'confirmed', 'canceled'],
-    pending_payment: ['scheduled', 'confirmed', 'canceled'],
-    scheduled: ['confirmed', 'canceled', 'completed', 'arrived', 'in_room', 'no_show'],
-    confirmed: ['completed', 'canceled', 'arrived', 'in_room', 'no_show'],
-    arrived: ['in_room', 'completed', 'canceled', 'no_show'],
-    in_room: ['completed', 'canceled', 'no_show'],
-    no_show: ['completed'],
-    completed: ['documented'],
-    documented: [],
-    canceled: []
-  };
-
-  if (!allowed[cur]) {
-    // If we encounter an unknown legacy status, be conservative but don't brick prod.
-    // Allow moving to canceled/confirmed/completed only.
-    return ['canceled', 'cancelled', 'confirmed', 'completed', 'documented'].includes(nxt);
-  }
-  return allowed[cur].includes(nxt);
-}
-
-function canTransitionPaymentStatus(current, next) {
-  const cur = (current || 'unpaid').toString().trim().toLowerCase();
-  const nxt = (next || '').toString().trim().toLowerCase();
-  if (!nxt) return false;
-  if (cur === nxt) return true;
-  const allowed = {
-    unpaid: ['paid'],
-    paid: ['refunded'],
-    refunded: []
-  };
-  if (!allowed[cur]) return ['paid', 'refunded'].includes(nxt);
-  return allowed[cur].includes(nxt);
-}
-
-function canTransitionCheckoutStatus(current, next) {
-  const cur = (current || 'pending').toString().trim().toLowerCase();
-  const nxt = (next || '').toString().trim().toLowerCase();
-  if (!nxt) return false;
-  if (cur === nxt) return true;
-  const allowed = {
-    pending: ['completed', 'failed', 'cancelled', 'canceled'],
-    failed: [],
-    completed: ['refunded'],
-    refunded: [],
-    cancelled: ['completed'], // Allow recovery when payment succeeded but webhook race marked cancelled
-    canceled: ['completed']
-  };
-  if (!allowed[cur]) return ['completed', 'failed', 'refunded', 'cancelled', 'canceled'].includes(nxt);
-  return allowed[cur].includes(nxt);
-}
+const {
+  isSameStatus,
+  canTransitionAppointmentStatus,
+  canTransitionPaymentStatus,
+  canTransitionCheckoutStatus
+} = require('./database/transitions');
 
 /**
  * Enqueue failed Postgres sync for retry (Section 2.2).
@@ -15962,30 +15904,35 @@ module.exports = {
     }));
   },
 
-  insertCodingDecision({ call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason, rule_version, rule_hash }) {
+  insertCodingDecision({ call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason, rule_version, rule_hash, assignee_id, sla_deadline }) {
     const id = require('crypto').randomBytes(16).toString('hex');
     const cdInfo = db.prepare('PRAGMA table_info(coding_decisions)').all();
-    const hasRuleVersion = cdInfo.some(c => c.name === 'rule_version');
-    const hasRuleHash = cdInfo.some(c => c.name === 'rule_hash');
+    const colSet = new Set(cdInfo.map((c) => c.name));
+    const hasRuleVersion = colSet.has('rule_version');
+    const hasRuleHash = colSet.has('rule_hash');
+    const hasAssignee = colSet.has('assignee_id');
+    const hasSla = colSet.has('sla_deadline');
+
+    const cols = ['id', 'call_id', 'clinic_id', 'patient_id', 'clinical_note', 'proposed_icd10', 'proposed_cpt', 'reasoning', 'confidence_score', 'validation_status', 'validation_reason'];
+    const vals = [
+      id, call_id || null, clinic_id || null, patient_id || null, clinical_note || null,
+      proposed_icd10 || '', proposed_cpt || '', reasoning || null, confidence_score ?? null,
+      validation_status || 'unknown', validation_reason || null
+    ];
     if (hasRuleVersion && hasRuleHash) {
-      db.prepare(`
-        INSERT INTO coding_decisions (id, call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason, rule_version, rule_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id, call_id || null, clinic_id || null, patient_id || null, clinical_note || null,
-        proposed_icd10 || '', proposed_cpt || '', reasoning || null, confidence_score ?? null,
-        validation_status || 'unknown', validation_reason || null, rule_version || null, rule_hash || null
-      );
-    } else {
-      db.prepare(`
-        INSERT INTO coding_decisions (id, call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id, call_id || null, clinic_id || null, patient_id || null, clinical_note || null,
-        proposed_icd10 || '', proposed_cpt || '', reasoning || null, confidence_score ?? null,
-        validation_status || 'unknown', validation_reason || null
-      );
+      cols.push('rule_version', 'rule_hash');
+      vals.push(rule_version || null, rule_hash || null);
     }
+    if (hasAssignee) {
+      cols.push('assignee_id');
+      vals.push(assignee_id || null);
+    }
+    if (hasSla) {
+      cols.push('sla_deadline');
+      vals.push(sla_deadline || null);
+    }
+    const placeholders = cols.map(() => '?').join(', ');
+    db.prepare(`INSERT INTO coding_decisions (${cols.join(', ')}) VALUES (${placeholders})`).run(...vals);
     if (patient_id && (proposed_icd10 || proposed_cpt)) {
       try {
         const histId = require('crypto').randomBytes(12).toString('hex');

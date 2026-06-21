@@ -821,7 +821,7 @@ Caller: "I'd like to book a therapy session with a psychiatrist."
 Agent:
 - "I'd be happy to help you book a therapy session with a psychiatrist. Can I get your insurance number?"
 - [Caller provides insurance number]
-- [collect_insurance with patient_name="Emily Davis", member_id=[provided], service_code="90834" (for therapy)]
+- [collect_insurance with patient_name="Emily Davis", member_id=[provided], payer_id and plan_id as collected — do not pass service_code; codes come from triage spine]
 - "I have your insurance with [Payer Name], member ID [number]. Is that correct?"
 - "Great! Let me check your coverage for a therapy session..."
 - "Based on your insurance coverage:"
