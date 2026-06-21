@@ -67,7 +67,7 @@ const steps = {
   verify_cpt_routing: run('verify_cpt_routing', 'node scripts/verify-cpt-routing.cjs'),
   terminal_coding_call_all: run(
     'terminal_coding_call_all',
-    'node scripts/terminal-coding-call.cjs --all --no-assist',
+    'node scripts/terminal-coding-call.cjs --all',
     {
       timeout: 600000,
       skip: !hasLlmKey(),

@@ -32,7 +32,7 @@ describe('coding layer leak regression', () => {
   });
 
   it('voice HTTP insurance path uses resolveInsuranceCodes not getCptCodeForVisit fallback', () => {
-    const src = read('routes/voice-appointments.js');
+    const src = read('services/voice-insurance-spine-handler.js');
     expect(src).toMatch(/resolveInsuranceCodes/);
     expect(src).not.toMatch(/getCptCodeForVisit\s*\(/);
   });
@@ -50,10 +50,10 @@ describe('coding layer leak regression', () => {
   });
 
   it('collect_insurance POST omits service_code', () => {
-    const src = read('services/kelly-tool-executor.js');
-    const block = src.slice(src.indexOf('static async _collectInsurance'));
-    expect(block).toMatch(/Omit service_code/);
-    expect(block).not.toMatch(/service_code: serviceCode/);
+    const src = read('services/kelly-tool-executor/collect-insurance.js');
+    const block = src.slice(src.indexOf("executor._post('/voice/insurance/collect'"));
+    expect(block).not.toMatch(/service_code:\s*serviceCode/);
+    expect(block).not.toMatch(/service_code:\s*args\.service_code/);
   });
 
   it('coding thresholds SSOT exports HITL and inference constants', () => {

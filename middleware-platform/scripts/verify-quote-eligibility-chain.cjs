@@ -33,7 +33,18 @@ async function main() {
   const sessionId = `quote_chain_${Date.now()}`;
   seedTriage(sessionId);
 
-  KellyToolExecutor._post = async () => ({ success: true });
+  const { computeVisitQuote } = require('../services/payer-quote-service');
+  KellyToolExecutor._post = async (_url, body) => {
+    const quote = await computeVisitQuote({
+      payer_id: body.payer_id,
+      plan_id: body.plan_id,
+      primary_icd10: body.primary_icd10,
+      primary_cpt: body.primary_cpt,
+      session_id: sessionId,
+      call_id: sessionId
+    });
+    return { success: true, quote };
+  };
   const result = await KellyToolExecutor._collectInsurance(
     { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', member_id: 'MBR123' },
     { sessionId, patientId: 'p_qc', callerPhone: '+15555550111' }
