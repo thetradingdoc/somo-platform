@@ -16,6 +16,8 @@
 
  *      SOMO_OWNER_EMAIL (required when creating a new row)
 
+ *      DB_PATH (required when seeding a non-default database, e.g. capstone preseed)
+
  */
 
 'use strict';
@@ -157,30 +159,24 @@ function main() {
   db.updateCustomer(customer.id, patch);
 
   const { ensureOperatorTenantBootstrap } = require('../services/operator-tenant-bootstrap');
-  const boot = ensureOperatorTenantBootstrap(db, customer.id);
-  if (boot?.merchantId) {
-    console.log(`   merchant_id: ${boot.merchantId}`);
+  ensureOperatorTenantBootstrap(db, customer.id);
+  const refreshed = db.getCustomer(customer.id);
+  if (!refreshed?.merchant_id) {
+    console.error(`❌ Operator bootstrap did not set merchant_id for ${customer.id}`);
+    process.exit(1);
   }
 
-  const credits = db.getCustomerCredits(customer.id);
-
+  const credits = db.getCustomerCredits(refreshed.id);
   if (!credits) {
-
-    db.allocateFreeCredits(customer.id, 10000);
-
+    db.allocateFreeCredits(refreshed.id, 10000);
     console.log('Allocated 10000 operator minutes (enforcement paused — metering only).');
-
   }
-
-
 
   console.log('✅ Operator customer ready:');
-
-  console.log(`   customer_id: ${customer.id}`);
-
-  console.log(`   email:       ${customer.email}`);
-
-  console.log(`   Set CALLSOMO_OPERATOR_CUSTOMER_ID=${customer.id} on Cloud Run`);
+  console.log(`   customer_id: ${refreshed.id}`);
+  console.log(`   email:       ${refreshed.email}`);
+  console.log(`   merchant_id: ${refreshed.merchant_id}`);
+  console.log(`   Set CALLSOMO_OPERATOR_CUSTOMER_ID=${refreshed.id} on Cloud Run`);
 
 }
 
