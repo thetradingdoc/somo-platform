@@ -20,7 +20,8 @@ const REQUIRED_SCRIPTS = [
   'scripts/verify-live-call.cjs',
   'scripts/verify-kelly-http-collect.cjs',
   'scripts/capture-coding-prod-evidence.cjs',
-  'scripts/generate-cloudrun-env-yaml.cjs'
+  'scripts/generate-cloudrun-env-yaml.cjs',
+  'scripts/verify-tenant-site-context.cjs'
 ];
 
 async function main() {
@@ -46,6 +47,30 @@ async function main() {
     checks.push({ name: 'staging_env_checklist', pass: true });
   } catch (e) {
     checks.push({ name: 'staging_env_checklist', pass: false, error: e.message });
+  }
+
+  if (process.env.DB_PATH || process.env.GCS_DB_BUCKET) {
+    try {
+      execSync('node scripts/verify-tenant-site-context.cjs --json', {
+        cwd: mp,
+        stdio: 'pipe',
+        env: { ...process.env }
+      });
+      checks.push({ name: 'tenant_site_context', pass: true });
+    } catch (e) {
+      checks.push({
+        name: 'tenant_site_context',
+        pass: false,
+        error: (e.stdout || e.stderr || e.message || '').toString().slice(0, 500)
+      });
+    }
+  } else {
+    checks.push({
+      name: 'tenant_site_context',
+      pass: true,
+      skipped: true,
+      note: 'Set DB_PATH or GCS_DB_BUCKET to verify tenant DID bind'
+    });
   }
 
   const stagingUrl = process.env.CODING_STAGING_URL || process.env.STAGING_API_URL;
