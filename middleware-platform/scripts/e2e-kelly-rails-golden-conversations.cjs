@@ -18,7 +18,7 @@ if (process.env.KELLY_GOLDEN_LOCALE === 'es') {
 
 /** Stub payment tool in harness so copay conv does not depend on Stripe/network. */
 function installGoldenPaymentStub() {
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   if (KellyToolExecutor.__goldenPaymentStubbed) return;
   const orig = KellyToolExecutor.execute.bind(KellyToolExecutor);
   KellyToolExecutor.execute = async function goldenExecute(name, args, ctx) {
@@ -40,9 +40,9 @@ const golden =
   process.env.KELLY_GOLDEN_LOCALE === 'es'
     ? require('../tests/fixtures/kelly-rails-golden-conversations-es.json')
     : require('../tests/fixtures/kelly-rails-golden-conversations.json');
-const { routeOrchestratorLane, KELLY_LANE } = require('../services/kelly-rails/state-schema');
-const { executeTurn } = require('../services/kelly-rails/execute-turn');
-const { getAllowedToolNames } = require('../services/kelly-rails/tool-allowlists');
+const { routeOrchestratorLane, KELLY_LANE } = require('../services/kelly/rails/state-schema');
+const { executeTurn } = require('../services/kelly/rails/execute-turn');
+const { getAllowedToolNames } = require('../services/kelly/rails/tool-allowlists');
 
 let passed = 0;
 let failed = 0;
@@ -156,7 +156,7 @@ async function runConversation(conv) {
   }
 
   const sessionId = `golden-${conv.id}`;
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   if (conv.sessionMeta) {
     for (const [k, v] of Object.entries(conv.sessionMeta)) {
       KellyToolExecutor._setSessionMeta(sessionId, k, v);

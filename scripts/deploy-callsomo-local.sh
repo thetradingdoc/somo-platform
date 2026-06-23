@@ -70,8 +70,8 @@ deploy_api() {
 }
 
 if [[ "$SKIP_CI" -eq 0 ]]; then
-  echo "==> Local CI gate (npm run ci:gate)..."
-  npm run ci:gate
+  echo "==> Local CI gate (npm run ci:fast)..."
+  npm run ci:fast
 fi
 
 # UI first so callsomo.com updates even if Cloud Build / API deploy is slow or fails.

@@ -6,9 +6,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const UsageMonitor = require('../services/usage-monitor');
+const UsageMonitor = require('../services/platform/usage-monitor');
 const { requireAdminAuth, hasValidSession } = require('../middleware/admin-auth');
-const { hasCapability } = require('../services/customer-capabilities');
+const { hasCapability } = require('../services/platform/customer-capabilities');
 
 // Middleware to get customer from session
 function getCustomerFromSession(req) {
@@ -348,7 +348,7 @@ router.post('/check-low-credits', (req, res) => {
     
     // Get customers needing alerts
     const customersNeedingAlerts = db.getCustomersNeedingLowCreditAlert();
-    const EmailService = require('../services/email-service');
+    const EmailService = require('../services/platform/email-service');
     
     const alertsSent = [];
     const alertsFailed = [];

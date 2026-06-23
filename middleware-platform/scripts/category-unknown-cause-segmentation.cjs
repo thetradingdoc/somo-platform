@@ -7,7 +7,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createGunzip } = require('zlib');
 const { parse } = require('csv-parse');
-const { resolveCategoryRoute, normalizeTags } = require('../services/category-route-resolver');
+const { resolveCategoryRoute, normalizeTags } = require('../services/catalog/category-route-resolver');
 
 const DEFAULT_GCS_OBF =
   process.env.OBF_GCS_BASELINE_URI ||

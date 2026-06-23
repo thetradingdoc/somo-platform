@@ -3,8 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const ImpactLedgerService = require('../services/impact-ledger-service');
-const PrivacyGovernanceService = require('../services/privacy-governance-service');
+const ImpactLedgerService = require('../services/platform/impact-ledger-service');
+const PrivacyGovernanceService = require('../services/platform/privacy-governance-service');
 
 router.use((req, res, next) => {
   const started = Date.now();

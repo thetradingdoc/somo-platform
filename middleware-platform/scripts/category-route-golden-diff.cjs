@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveCategoryRoute } = require('../services/category-route-resolver');
+const { resolveCategoryRoute } = require('../services/catalog/category-route-resolver');
 
 function parseArgs(argv) {
   const out = {

@@ -13,7 +13,7 @@ const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const InsuranceService = require('../services/insurance-service');
+const InsuranceService = require('../services/rcm/insurance-service');
 
 function getArg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);

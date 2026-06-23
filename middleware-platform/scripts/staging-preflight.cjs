@@ -107,7 +107,7 @@ async function main() {
   recordOwnerFromDb(manifest);
 
   console.log('\n==> Kelly Rails v2 env');
-  const kellyEnv = spawnSync('node', ['scripts/verify-kelly-rails-env.cjs'], {
+  const kellyEnv = spawnSync('node', ['scripts/verify/verify-kelly-rails-env.cjs'], {
     cwd: mpRoot,
     stdio: 'pipe',
     encoding: 'utf8',

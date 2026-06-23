@@ -7,7 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const AITemplateGenerator = require('../services/ai-template-generator-service');
+const AITemplateGenerator = require('../services/platform/ai-template-generator-service');
 const { requireAdminAuth } = require('../middleware/admin-auth');
 const rateLimit = require('express-rate-limit');
 

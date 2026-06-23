@@ -49,7 +49,7 @@ async function main() {
 
   run('ensure:somo-owner', process.execPath, ['scripts/ensure-somo-owner-account.cjs']);
 
-  run('seed:operator-customer', process.execPath, ['scripts/seed-operator-customer.cjs']);
+  run('seed:operator-customer', process.execPath, ['scripts/data/seed-operator-customer.cjs']);
 
   const db = require('../database');
   const email = (process.env.SOMO_OWNER_EMAIL || 'richard@callsomo.com').trim();

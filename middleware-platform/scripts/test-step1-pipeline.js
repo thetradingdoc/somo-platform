@@ -13,8 +13,8 @@
  */
 
 const path = require('path');
-const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
-const KellyToolExecutor = require('../services/kelly-tool-executor');
+const KellyOrchestratorPhase = require('../services/kelly/kelly-orchestrator-phase');
+const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
 const db = require('../database');
 const cases = require('./test-cases');
 

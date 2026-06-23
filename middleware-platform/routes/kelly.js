@@ -3,10 +3,10 @@ const router = express.Router();
 
 const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
-const TwilioPhoneService = require('../services/twilio-phone-service');
-const { updateAgentLifecycleState } = require('../services/agent-lifecycle');
+const TwilioPhoneService = require('../services/voice/twilio-phone-service');
+const { updateAgentLifecycleState } = require('../services/platform/agent-lifecycle');
 const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
-const { listActivityForClinic } = require('../services/kelly-activity-feed-service');
+const { listActivityForClinic } = require('../services/kelly/kelly-activity-feed-service');
 
 function normalizeLifecycle(customer) {
   const status = String(customer.kelly_status || customer.retell_agent_status || 'pending').toLowerCase();

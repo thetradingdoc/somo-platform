@@ -9,7 +9,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 process.chdir(path.join(__dirname, '..'));
 
-const { evaluateTurn } = require('../services/conversation-mode/pivot-engine');
+const { evaluateTurn } = require('../services/conversation/pivot-engine');
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -48,7 +48,7 @@ function main() {
     }
   });
   assert(v8.mode === 'tenant_billing', `V8 expected tenant_billing, got ${v8.mode}`);
-  const { applyPivotToSession } = require('../services/conversation-mode/pivot-engine');
+  const { applyPivotToSession } = require('../services/conversation/pivot-engine');
   const merged = applyPivotToSession(
     { conversation_mode: 'tenant_inbound_clinical', active_subrail: 'opqrst', opqrst_resume_field: 'provocation' },
     v8
@@ -58,7 +58,7 @@ function main() {
   console.log('✅ V8 clinical→billing pivot preserves opqrst_resume_field');
 
   process.env.OPQRST_FIELD_GATE_ENABLED = '1';
-  const OpqrstFieldGate = require('../services/opqrst-field-gate');
+  const OpqrstFieldGate = require('../services/clinical/opqrst-field-gate');
   const v9 = OpqrstFieldGate.resolve({
     triageRow: {
       onset: 'yesterday',

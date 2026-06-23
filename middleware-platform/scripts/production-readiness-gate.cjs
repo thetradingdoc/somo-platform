@@ -558,7 +558,7 @@ function verifyE2EScanChatGate() {
   add(
     'PASS',
     'E2E_SCAN_CHAT_GATE_RETIRED',
-    'Legacy littlelab scan-chat Playwright removed; use npm run test:reasoning-regression and npm run eval:reasoning:harness --prefix middleware-platform'
+    'Legacy littlelab scan-chat Playwright removed; use npm run eval:reasoning:harness --prefix middleware-platform and verify scripts (see docs/VERIFY_GATES.md)'
   );
 }
 

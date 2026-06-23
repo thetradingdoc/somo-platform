@@ -513,7 +513,7 @@ router.post('/:id/tracking', apiLimiter, requireCustomerAuth, requireMerchant, a
     if (latitude !== undefined && longitude !== undefined && 
         (delivery_status === 'out_for_delivery' || delivery_status === 'in_transit')) {
       try {
-        const DeliveryConfirmation = require('../services/delivery-confirmation-service');
+        const DeliveryConfirmation = require('../services/voice/delivery-confirmation-service');
         const confirmationResult = await DeliveryConfirmation.checkAndConfirmDelivery(id);
         
         if (confirmationResult.confirmed) {
@@ -608,7 +608,7 @@ router.post('/:id/confirm-delivery', requireCustomerAuth, requireMerchant, async
     }
 
     // Use delivery confirmation service
-    const DeliveryConfirmation = require('../services/delivery-confirmation-service');
+    const DeliveryConfirmation = require('../services/voice/delivery-confirmation-service');
     const result = await DeliveryConfirmation.manualConfirmDelivery(id, {
       confirmedBy: 'tenant',
       notes: 'Manually confirmed via dashboard'

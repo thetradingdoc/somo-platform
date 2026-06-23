@@ -17,7 +17,7 @@ fi
 
 CSV=""
 if [[ -z "${ZIP}" ]]; then
-  CSV="$(node -e "const { findPreferredNppesCsvPath } = require('./scripts/payor-data-sources.cjs'); const p = findPreferredNppesCsvPath(); process.stdout.write(p || '');")"
+  CSV="$(node -e "const { findPreferredNppesCsvPath } = require('./payor/payor-data-sources'); const p = findPreferredNppesCsvPath(); process.stdout.write(p || '');")"
 fi
 
 export DB_PATH="${DB_PATH:-./middleware-dev.db}"
@@ -31,11 +31,11 @@ if [[ -n "${ZIP}" ]]; then
   fi
   echo "NPPES full import: zip=$(basename "$ZIP") member=$MEMBER -> DB_PATH=$DB_PATH"
   echo "Tip: stop npm start / DB browsers using this file, or set SQLITE_BUSY_TIMEOUT_MS=120000 (see database.js)."
-  unzip -p "$ZIP" "$MEMBER" | node "$ROOT/scripts/import-nppes-directory.cjs" --stdin
+  unzip -p "$ZIP" "$MEMBER" | node "$ROOT/scripts/data/import-nppes-directory.cjs" --stdin
 elif [[ -n "${CSV}" ]] && [[ -f "${CSV}" ]]; then
   echo "NPPES full import: csv=$(basename "$CSV") dir=$NPPES_DIR -> DB_PATH=$DB_PATH"
   echo "Tip: stop npm start / DB browsers using this file, or set SQLITE_BUSY_TIMEOUT_MS=120000 (see database.js)."
-  node "$ROOT/scripts/import-nppes-directory.cjs" "$CSV"
+  node "$ROOT/scripts/data/import-nppes-directory.cjs" "$CSV"
 else
   echo "No NPPES input found under: $NPPES_DIR" >&2
   echo "Expected either:" >&2

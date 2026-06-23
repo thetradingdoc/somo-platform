@@ -14,7 +14,7 @@ if (process.env.POSTGRES_URL || process.env.DATABASE_URL) {
 }
 
 const db = require('../database');
-const CodingGraph = require('../services/coding-graph');
+const CodingGraph = require('../services/clinical/coding-graph');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const limitArg = process.argv.find(a => a.startsWith('--limit='));

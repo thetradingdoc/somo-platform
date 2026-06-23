@@ -7,7 +7,7 @@ const zlib = require('zlib');
 const { Readable } = require('stream');
 const { Storage } = require('@google-cloud/storage');
 const db = require('../database');
-const Metrics = require('../services/metrics');
+const Metrics = require('../services/shared/metrics');
 const { normalizeObfDocument } = require('./obf-normalize-record.cjs');
 
 const DEFAULT_SOURCE_URL = 'https://static.openbeautyfacts.org/data/en.openbeautyfacts.org.products.csv.gz';

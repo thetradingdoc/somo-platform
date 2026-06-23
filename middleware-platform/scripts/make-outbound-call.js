@@ -7,12 +7,12 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const db = require('../database');
-const { getOperatorCustomerId } = require('../services/voice-account-resolution');
-const { initiateOutboundCall } = require('../services/outbound-call-service');
+const { getOperatorCustomerId } = require('../services/voice/voice-account-resolution');
+const { initiateOutboundCall } = require('../services/platform/outbound-call-service');
 const {
   ensureOperatorTenantBootstrap,
   resolveVoiceMerchantId
-} = require('../services/operator-tenant-bootstrap');
+} = require('../services/shared/operator-tenant-bootstrap');
 
 const phoneNumber = process.argv[2];
 const appointmentIdArg = (() => {

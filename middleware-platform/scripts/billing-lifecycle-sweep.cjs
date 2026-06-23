@@ -9,15 +9,15 @@
 'use strict';
 
 const db = require('../database');
-const { isPastDueGraceExpired, getNumberRetentionDays } = require('../services/billing-access');
-const TwilioPhoneService = require('../services/twilio-phone-service');
+const { isPastDueGraceExpired, getNumberRetentionDays } = require('../services/rcm/billing-access');
+const TwilioPhoneService = require('../services/voice/twilio-phone-service');
 
 const dryRun = process.argv.includes('--dry-run');
 
 async function pauseRetellAgent(customer) {
   if (!customer.retell_agent_id) return;
   try {
-    const RetellService = require('../services/retell-service');
+    const RetellService = require('../services/voice/retell-service');
     await new RetellService().applyAgentSettings({
       agentId: customer.retell_agent_id,
       enabled: false

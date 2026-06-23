@@ -12,9 +12,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveSkinType } = require('../services/skin-type-resolver');
-const { resolveSkinConditions } = require('../services/skin-condition-resolver');
-const { resolveSkinConflicts } = require('../services/skin-conflict-resolver');
+const { resolveSkinType } = require('../services/clinical/skin-type-resolver');
+const { resolveSkinConditions } = require('../services/shared/skin-condition-resolver');
+const { resolveSkinConflicts } = require('../services/shared/skin-conflict-resolver');
 
 function parseArgs(argv) {
   const out = {};

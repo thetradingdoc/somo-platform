@@ -408,10 +408,10 @@ router.get('/customers/me', async (req, res) => {
         merchant_id: customer.merchant_id || null,
         password_updated_at: customer.password_updated_at || null,
         created_at: customer.created_at,
-        capabilities: require('../services/customer-capabilities').getCapabilities(customer),
+        capabilities: require('../services/platform/customer-capabilities').getCapabilities(customer),
         feature_flags: {
-          outbound: require('../services/plan-catalog').hasOutboundFeature(customer.plan_tier) ||
-            require('../services/customer-capabilities').hasCapability(customer, 'voice.outbound')
+          outbound: require('../services/platform/plan-catalog').hasOutboundFeature(customer.plan_tier) ||
+            require('../services/platform/customer-capabilities').hasCapability(customer, 'voice.outbound')
         }
       }
     });
@@ -971,7 +971,7 @@ router.post('/customers/me/feature-requests', async (req, res) => {
     // Send email notification to admin if requests were created
     if (createdRequests.length > 0) {
       try {
-        const EmailService = require('../services/email-service');
+        const EmailService = require('../services/platform/email-service');
         await EmailService.sendFeatureRequestNotification(
           customer.email,
           customer.name || customer.company_name || 'Customer',

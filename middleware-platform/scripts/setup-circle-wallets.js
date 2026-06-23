@@ -11,7 +11,7 @@
 
 require('dotenv').config();
 const db = require('../database');
-const CircleService = require('../services/circle-service');
+const CircleService = require('../services/platform/circle-service');
 
 async function setupCircleWallets() {
     console.log('🚀 Setting up Circle wallets for test accounts...\n');

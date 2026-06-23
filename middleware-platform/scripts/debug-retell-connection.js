@@ -19,7 +19,7 @@ require('dotenv').config({
 });
 
 const axios = require('axios');
-const retellService = require('../services/retell-service');
+const retellService = require('../services/voice/retell-service');
 
 // Colors
 const colors = {

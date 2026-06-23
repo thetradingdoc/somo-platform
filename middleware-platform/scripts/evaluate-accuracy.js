@@ -32,8 +32,8 @@ if (!fs.existsSync(casesPath)) {
 }
 const { cases } = JSON.parse(fs.readFileSync(casesPath, 'utf8'));
 
-const { detectRedFlags, checkBeforeScheduling } = require('../services/triage-service');
-const knowledgeService = require('../services/knowledge-service');
+const { detectRedFlags, checkBeforeScheduling } = require('../services/clinical/triage-service');
+const knowledgeService = require('../services/shared/knowledge-service');
 
 function codeMatchesPrefix(actualCodes, expectedPrefixes) {
   const norm = (actualCodes || []).map((c) => String(c).replace(/\./g, '').toUpperCase());

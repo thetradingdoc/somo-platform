@@ -7,10 +7,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const EscrowOrchestrator = require('../services/escrow-orchestrator-service');
-const SettlementService = require('../services/settlement-service');
-const ProofOfCareService = require('../services/proof-of-care-service');
-const { evaluateAndRecord, enqueueFraudReview } = require('../services/anti-sybil-service');
+const EscrowOrchestrator = require('../services/platform/escrow-orchestrator-service');
+const SettlementService = require('../services/platform/settlement-service');
+const ProofOfCareService = require('../services/platform/proof-of-care-service');
+const { evaluateAndRecord, enqueueFraudReview } = require('../services/platform/anti-sybil-service');
 
 function antiSybilRouteGuard(scope, identityBuilder, amountBuilder = null) {
   return (req, res, next) => {

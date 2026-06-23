@@ -7,7 +7,7 @@
  */
 
 const visionEncoder = require('./vision-encoder');
-const frameStorage = require('../frame-storage-service');
+const frameStorage = require('../platform/frame-storage-service');
 const textEncoder = require('./text-encoder');
 const crossAttention = require('./cross-attention');
 

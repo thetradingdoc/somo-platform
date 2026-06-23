@@ -60,7 +60,8 @@ const dbFileName = _connConfig.dbFileName;
 const defaultDbDir = _connConfig.defaultDbDir;
 
 const dbPath = resolveDbPath(_connConfig);
-console.log(`📁 Database path: ${dbPath} (environment: ${env})`);
+const { dbLog } = require('./database/log');
+dbLog(`📁 Database path: ${dbPath} (environment: ${env})`);
 warnSplitBrain(dbPath, _connConfig);
 
 const _pg = initPostgresPoolIfConfigured();
@@ -84,7 +85,7 @@ db.isProduction = isProduction;
 db.isStaging = isStaging;
 db.getEnvironment = () => env;
 
-console.log(`🌍 Environment: ${env} | Production: ${isProduction()} | Staging: ${isStaging()}`);
+dbLog(`🌍 Environment: ${env} | Production: ${isProduction()} | Staging: ${isStaging()}`);
 
 /** Payor/CLI scripts set SKIP_STARTUP_MIGRATIONS=1 to skip the large inline migration batch; also suppresses early per-table "migration complete" noise. */
 const SKIP_STARTUP_MIGRATIONS = ['1', 'true', 'yes'].includes(
@@ -138,7 +139,7 @@ function enqueuePostgresSyncRetry(entityType, payload, priority = 2, errorMessag
       INSERT INTO postgres_sync_retry (id, entity_type, payload_json, priority, last_error, created_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'))
     `).run(id, entityType, payloadJson, Math.min(3, Math.max(1, priority)), errorMessage || null);
-    console.log(`📥 Postgres sync queued for retry: ${entityType} (priority ${priority})`);
+    dbLog(`📥 Postgres sync queued for retry: ${entityType} (priority ${priority})`);
   } catch (e) {
     console.error('❌ Failed to enqueue postgres sync retry:', e.message);
   }
@@ -1130,15 +1131,15 @@ try {
     const tableInfo = db.prepare(`PRAGMA table_info(voice_checkouts)`).all();
     const hasAppointmentId = tableInfo.some(col => col.name === 'appointment_id');
     if (!hasAppointmentId) {
-      console.log('📦 Adding appointment_id column to voice_checkouts table...');
+      dbLog('📦 Adding appointment_id column to voice_checkouts table...');
       db.exec(`ALTER TABLE voice_checkouts ADD COLUMN appointment_id TEXT;`);
-      console.log('✅ Migration complete: appointment_id column added');
+      dbLog('✅ Migration complete: appointment_id column added');
     }
     const hasCheckoutClinic = tableInfo.some(col => col.name === 'clinic_id');
     if (!hasCheckoutClinic) {
-      console.log('📦 Adding clinic_id column to voice_checkouts table...');
+      dbLog('📦 Adding clinic_id column to voice_checkouts table...');
       db.exec(`ALTER TABLE voice_checkouts ADD COLUMN clinic_id TEXT;`);
-      console.log('✅ Migration complete: clinic_id column added to voice_checkouts');
+      dbLog('✅ Migration complete: clinic_id column added to voice_checkouts');
     }
     // Create index after column is added (or if it already exists)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_checkouts_appointment_id ON voice_checkouts(appointment_id);`);
@@ -1249,14 +1250,14 @@ try {
         );
         console.warn(`⚠️  B-1 slot dedupe audit: ${JSON.stringify({ duplicate_groups: duplicateGroups, samples: audit })}`);
       }
-      console.log('📦 B-1: Creating unique index on appointments (clinic_id, start_time) for active slots...');
+      dbLog('📦 B-1: Creating unique index on appointments (clinic_id, start_time) for active slots...');
       db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot_unique
         ON appointments(clinic_id, start_time)
         WHERE deleted_at IS NULL
           AND (status IS NULL OR status NOT IN ('cancelled','no_show'))
       `);
-      console.log('✅ B-1: Slot booking constraint added');
+      dbLog('✅ B-1: Slot booking constraint added');
     }
   }
 } catch (migrationError) {
@@ -1276,15 +1277,15 @@ try {
     const hasVerificationCodeExpires = paymentTokensInfo.some(col => col.name === 'verification_code_expires');
 
     if (!hasVerificationCode) {
-      console.log('📦 Adding verification_code column to payment_tokens table...');
+      dbLog('📦 Adding verification_code column to payment_tokens table...');
       db.exec(`ALTER TABLE payment_tokens ADD COLUMN verification_code TEXT;`);
-      console.log('✅ Migration complete: verification_code column added');
+      dbLog('✅ Migration complete: verification_code column added');
     }
 
     if (!hasVerificationCodeExpires) {
-      console.log('📦 Adding verification_code_expires column to payment_tokens table...');
+      dbLog('📦 Adding verification_code_expires column to payment_tokens table...');
       db.exec(`ALTER TABLE payment_tokens ADD COLUMN verification_code_expires DATETIME;`);
-      console.log('✅ Migration complete: verification_code_expires column added');
+      dbLog('✅ Migration complete: verification_code_expires column added');
     }
   }
 } catch (migrationError) {
@@ -1297,11 +1298,11 @@ try {
   if (productsExists) {
     const pinfo = db.prepare(`PRAGMA table_info(products)`).all();
     if (!pinfo.some((c) => c.name === 'tags')) {
-      console.log('📦 Adding tags column to products table...');
+      dbLog('📦 Adding tags column to products table...');
       db.exec(`ALTER TABLE products ADD COLUMN tags TEXT;`);
     }
     if (!pinfo.some((c) => c.name === 'protocol_stage')) {
-      console.log('📦 Adding protocol_stage column to products table...');
+      dbLog('📦 Adding protocol_stage column to products table...');
       db.exec(`ALTER TABLE products ADD COLUMN protocol_stage TEXT;`);
     }
   }
@@ -1404,7 +1405,7 @@ try {
     const info4 = db.prepare(`PRAGMA table_info(insurance_claims)`).all();
     if (!info4.some(c => c.name === 'proof_of_care_hash')) {
       db.exec(`ALTER TABLE insurance_claims ADD COLUMN proof_of_care_hash TEXT;`);
-      console.log('✅ Migration complete: proof_of_care_hash added to insurance_claims');
+      dbLog('✅ Migration complete: proof_of_care_hash added to insurance_claims');
     }
   }
 } catch (migrationError) {
@@ -1463,29 +1464,29 @@ try {
     const needPrimaryIcd10 = !info.some(c => c.name === 'primary_icd10');
     const needPrimaryCpt = !info.some(c => c.name === 'primary_cpt');
     if (needEhrSynced) {
-      console.log('📦 Adding ehr_synced column to appointments table...');
+      dbLog('📦 Adding ehr_synced column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN ehr_synced BOOLEAN DEFAULT 0;`);
     }
     if (needPrimaryIcd10) {
-      console.log('📦 Adding primary_icd10 column to appointments table...');
+      dbLog('📦 Adding primary_icd10 column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN primary_icd10 TEXT;`);
     }
     if (needPrimaryCpt) {
-      console.log('📦 Adding primary_cpt column to appointments table...');
+      dbLog('📦 Adding primary_cpt column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN primary_cpt TEXT;`);
     }
     const needPlaceOfService = !info.some(c => c.name === 'place_of_service');
     const needCptModifiers = !info.some(c => c.name === 'cpt_modifiers');
     if (needPlaceOfService) {
-      console.log('📦 Adding place_of_service column to appointments table...');
+      dbLog('📦 Adding place_of_service column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN place_of_service TEXT;`);
     }
     if (needCptModifiers) {
-      console.log('📦 Adding cpt_modifiers column to appointments table...');
+      dbLog('📦 Adding cpt_modifiers column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN cpt_modifiers TEXT;`);
     }
     if (needEhrSynced || needPrimaryIcd10 || needPrimaryCpt || needPlaceOfService || needCptModifiers) {
-      console.log('✅ Migration complete: EHR columns added to appointments');
+      dbLog('✅ Migration complete: EHR columns added to appointments');
     }
     try {
       db.exec(`
@@ -1499,9 +1500,9 @@ try {
     }
     const needVideoRoom = !info.some(c => c.name === 'video_room_name');
     if (needVideoRoom) {
-      console.log('📦 Adding video_room_name column to appointments table...');
+      dbLog('📦 Adding video_room_name column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN video_room_name TEXT;`);
-      console.log('✅ Migration complete: video_room_name added to appointments');
+      dbLog('✅ Migration complete: video_room_name added to appointments');
     }
     // Backfill: every appointment gets a stable video room (appt-{id} or id if already appt-*)
     try {
@@ -1512,7 +1513,7 @@ try {
         END WHERE video_room_name IS NULL
       `).run();
       if (backfill.changes > 0) {
-        console.log('✅ Migration complete: video_room_name backfilled for', backfill.changes, 'appointments');
+        dbLog('✅ Migration complete: video_room_name backfilled for', backfill.changes, 'appointments');
       }
     } catch (e) {
       console.warn('⚠️  video_room_name backfill skipped:', e.message);
@@ -1528,7 +1529,7 @@ try {
   const addColumnIfMissing = (columnName, sql) => {
     if (!usersInfo.some(c => c.name === columnName)) {
       if (!SKIP_STARTUP_MIGRATIONS) {
-      console.log(`📦 Adding ${columnName} column to users table...`);
+      dbLog(`📦 Adding ${columnName} column to users table...`);
       }
       db.exec(sql);
     }
@@ -1547,7 +1548,7 @@ try {
   addColumnIfMissing('google_calendar_last_error', `ALTER TABLE users ADD COLUMN google_calendar_last_error TEXT;`);
 
   if (!SKIP_STARTUP_MIGRATIONS) {
-  console.log('✅ Migration complete: Google Calendar columns ensured on users');
+  dbLog('✅ Migration complete: Google Calendar columns ensured on users');
   }
 } catch (migrationError) {
   console.warn('⚠️  Users Google Calendar migration failed:', migrationError.message);
@@ -1709,9 +1710,9 @@ try {
   const clinicInfo = db.prepare(`PRAGMA table_info(clinics)`).all();
   const hasSurgeEnabled = clinicInfo.some(c => c.name === 'surge_enabled');
   if (!hasSurgeEnabled) {
-    console.log('📦 Adding surge_enabled column to clinics table...');
+    dbLog('📦 Adding surge_enabled column to clinics table...');
     db.exec(`ALTER TABLE clinics ADD COLUMN surge_enabled BOOLEAN DEFAULT 0;`);
-    console.log('✅ Migration complete: surge_enabled added to clinics');
+    dbLog('✅ Migration complete: surge_enabled added to clinics');
   }
 } catch (migrationError) {
   console.warn('⚠️  Clinics surge_enabled migration failed:', migrationError.message);
@@ -1723,7 +1724,7 @@ try {
   const addCol = (name, sql) => {
     if (!clinicCols.some(c => c.name === name)) {
       db.exec(`ALTER TABLE clinics ADD COLUMN ${name} ${sql}`);
-      console.log(`✅ Migration: clinics.${name} added`);
+      dbLog(`✅ Migration: clinics.${name} added`);
     }
   };
   addCol('timezone', "TEXT DEFAULT 'America/New_York'");
@@ -1742,7 +1743,7 @@ try {
   const apptInfo = db.prepare(`PRAGMA table_info(appointments)`).all();
   if (!apptInfo.some(c => c.name === 'reminder_24h_sent')) {
     db.exec(`ALTER TABLE appointments ADD COLUMN reminder_24h_sent BOOLEAN DEFAULT 0;`);
-    console.log('✅ Migration: appointments.reminder_24h_sent added');
+    dbLog('✅ Migration: appointments.reminder_24h_sent added');
   }
 } catch (e) {
   console.warn('⚠️  appointments reminder_24h_sent migration failed:', e.message);
@@ -1755,11 +1756,11 @@ try {
   const hasCalendarConfidence = apptInfo.some(c => c.name === 'calendar_confidence');
   if (!hasCalendarSource) {
     db.exec(`ALTER TABLE appointments ADD COLUMN calendar_source TEXT`);
-    console.log('✅ Migration: appointments.calendar_source added');
+    dbLog('✅ Migration: appointments.calendar_source added');
   }
   if (!hasCalendarConfidence) {
     db.exec(`ALTER TABLE appointments ADD COLUMN calendar_confidence TEXT`);
-    console.log('✅ Migration: appointments.calendar_confidence added');
+    dbLog('✅ Migration: appointments.calendar_confidence added');
   }
 } catch (e) {
   console.warn('⚠️  appointments calendar metadata migration failed:', e.message);
@@ -1771,7 +1772,7 @@ try {
   const addIfMissing = (col, sql) => {
     if (!apptInfo.some(c => c.name === col)) {
       db.exec(sql);
-      console.log(`✅ Migration: appointments.${col} added`);
+      dbLog(`✅ Migration: appointments.${col} added`);
     }
   };
 
@@ -1834,9 +1835,9 @@ try {
   const usersInfo = db.pragma('table_info(users)');
   const hasClinicId = usersInfo.some(c => c.name === 'clinic_id');
   if (!hasClinicId) {
-    console.log('📦 Adding clinic_id column to users table...');
+    dbLog('📦 Adding clinic_id column to users table...');
     db.exec('ALTER TABLE users ADD COLUMN clinic_id TEXT;');
-    console.log('✅ Migration complete: clinic_id added to users');
+    dbLog('✅ Migration complete: clinic_id added to users');
   }
 } catch (migrationError) {
   console.warn('⚠️  Users clinic_id migration failed:', migrationError.message);
@@ -1849,9 +1850,9 @@ tablesToMigrate.forEach(tableName => {
     const tableInfo = db.pragma(`table_info(${tableName})`);
     const hasClinicId = tableInfo.some(c => c.name === 'clinic_id');
     if (!hasClinicId) {
-      console.log(`📦 Adding clinic_id column to ${tableName} table...`);
+      dbLog(`📦 Adding clinic_id column to ${tableName} table...`);
       db.exec(`ALTER TABLE ${tableName} ADD COLUMN clinic_id TEXT;`);
-      console.log(`✅ Migration complete: clinic_id added to ${tableName}`);
+      dbLog(`✅ Migration complete: clinic_id added to ${tableName}`);
     }
   } catch (migrationError) {
     console.warn(`⚠️  ${tableName} clinic_id migration failed:`, migrationError.message);
@@ -1869,13 +1870,13 @@ try {
   `).get();
 
   if (DEFAULT_CLINIC_ID && missingClinicRows && missingClinicRows.count > 0) {
-    console.log(`📦 Backfilling clinic_id for ${missingClinicRows.count} legacy appointments...`);
+    dbLog(`📦 Backfilling clinic_id for ${missingClinicRows.count} legacy appointments...`);
     db.prepare(`
       UPDATE appointments
       SET clinic_id = ?
       WHERE clinic_id IS NULL OR clinic_id = ''
     `).run(DEFAULT_CLINIC_ID);
-    console.log('✅ Legacy appointments now scoped to default clinic');
+    dbLog('✅ Legacy appointments now scoped to default clinic');
   }
 } catch (migrationError) {
   console.warn('⚠️  Appointment clinic backfill failed:', migrationError.message);
@@ -3144,149 +3145,21 @@ db.pragma('foreign_keys = ON');
  * This handles the case where the table was created before circle_transfer_id, payment_status, and payment_amount were added
  */
 function migrateInsuranceClaimsTable() {
-  try {
-    // Temporarily disable foreign keys for migration
-    db.pragma('foreign_keys = OFF');
-
-    // Get table info to check existing columns
-    const tableInfo = db.prepare("PRAGMA table_info(insurance_claims)").all();
-    const columnNames = tableInfo.map(col => col.name);
-
-    // Check and add circle_transfer_id if missing
-    if (!columnNames.includes('circle_transfer_id')) {
-      console.log('🔄 Migrating: Adding circle_transfer_id column to insurance_claims table');
-      db.prepare("ALTER TABLE insurance_claims ADD COLUMN circle_transfer_id TEXT").run();
-    }
-
-    // Check and add payment_status if missing
-    if (!columnNames.includes('payment_status')) {
-      console.log('🔄 Migrating: Adding payment_status column to insurance_claims table');
-      db.prepare("ALTER TABLE insurance_claims ADD COLUMN payment_status TEXT DEFAULT 'pending'").run();
-    }
-
-    // Check and add payment_amount if missing
-    if (!columnNames.includes('payment_amount')) {
-      console.log('🔄 Migrating: Adding payment_amount column to insurance_claims table');
-      db.prepare("ALTER TABLE insurance_claims ADD COLUMN payment_amount REAL").run();
-    }
-
-    // Impact-weighted escrow: salted SHA-256 hash linking Octopi scan to blockchain (PHI-safe)
-    if (!columnNames.includes('data_integrity_hash')) {
-      console.log('🔄 Migrating: Adding data_integrity_hash column to insurance_claims table');
-      db.prepare("ALTER TABLE insurance_claims ADD COLUMN data_integrity_hash TEXT").run();
-    }
-
-    if (!columnNames.includes('impact_tier')) {
-      console.log('🔄 Migrating: Adding impact_tier column to insurance_claims table');
-      db.prepare("ALTER TABLE insurance_claims ADD COLUMN impact_tier INTEGER DEFAULT 1").run();
-    }
-
-    if (!columnNames.includes('escrow_hash')) {
-      console.log('🔄 Migrating: Adding escrow_hash column to insurance_claims table');
-      db.prepare("ALTER TABLE insurance_claims ADD COLUMN escrow_hash TEXT").run();
-    }
-
-    if (!columnNames.includes('healthcare_staff_address')) {
-      console.log('🔄 Migrating: Adding healthcare_staff_address column to insurance_claims table');
-      db.prepare("ALTER TABLE insurance_claims ADD COLUMN healthcare_staff_address TEXT").run();
-    }
-
-    // Re-enable foreign keys after migration
-    db.pragma('foreign_keys = ON');
-  } catch (error) {
-    console.warn('⚠️  Insurance claims migration failed:', error.message);
-    // Re-enable foreign keys even if migration fails
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-insurance-claims-table.js')(db);
 }
-
-// Migration: Add email column to patient_portal_sessions if it doesn't exist
 function migratePatientPortalSessionsEmail() {
-  try {
-    // Temporarily disable foreign keys for migration
-    db.pragma('foreign_keys = OFF');
-
-    const portalSessionsInfo = db.prepare(`PRAGMA table_info(patient_portal_sessions)`).all();
-    const hasEmail = portalSessionsInfo.some(col => col.name === 'email');
-
-    if (!hasEmail) {
-      console.log('📦 Adding email column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN email TEXT;`);
-      // Create index for email column
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_portal_sessions_email ON patient_portal_sessions(email);`);
-      console.log('✅ Migration complete: email column added to patient_portal_sessions');
-    } else {
-      // Ensure index exists even if column already exists
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_portal_sessions_email ON patient_portal_sessions(email);`);
-    }
-
-    // Re-enable foreign keys after migration
-    db.pragma('foreign_keys = ON');
-  } catch (migrationError) {
-    console.warn('⚠️  Patient portal sessions email migration failed:', migrationError.message);
-    // Re-enable foreign keys even if migration fails
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-patient-portal-sessions-email.js')(db);
 }
-
-// Migration: Add security metadata columns to patient_portal_sessions if they don't exist
 function migratePatientPortalSessionsSecurityMeta() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    const cols = db.prepare(`PRAGMA table_info(patient_portal_sessions)`).all();
-    const hasIp = cols.some((c) => c.name === 'ip_address');
-    const hasUa = cols.some((c) => c.name === 'user_agent');
-    const hasFailed = cols.some((c) => c.name === 'failed_attempts');
-    const hasLocked = cols.some((c) => c.name === 'locked_until');
-    const hasLastSeen = cols.some((c) => c.name === 'last_seen_at');
-    const hasRevokedAt = cols.some((c) => c.name === 'revoked_at');
-    const hasRotatedTo = cols.some((c) => c.name === 'rotated_to');
-
-    if (!hasIp) {
-      console.log('📦 Adding ip_address column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN ip_address TEXT;`);
-    }
-    if (!hasUa) {
-      console.log('📦 Adding user_agent column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN user_agent TEXT;`);
-    }
-    if (!hasFailed) {
-      console.log('📦 Adding failed_attempts column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN failed_attempts INTEGER DEFAULT 0;`);
-    }
-    if (!hasLocked) {
-      console.log('📦 Adding locked_until column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN locked_until DATETIME;`);
-    }
-    if (!hasLastSeen) {
-      console.log('📦 Adding last_seen_at column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN last_seen_at DATETIME;`);
-    }
-    if (!hasRevokedAt) {
-      console.log('📦 Adding revoked_at column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN revoked_at DATETIME;`);
-    }
-    if (!hasRotatedTo) {
-      console.log('📦 Adding rotated_to column to patient_portal_sessions table...');
-      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN rotated_to TEXT;`);
-    }
-
-    db.pragma('foreign_keys = ON');
-  } catch (e) {
-    console.warn('⚠️  Patient portal sessions security meta migration failed:', e.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-patient-portal-sessions-security-meta.js')(db);
 }
-
-// Migration: Add status column to patient_documents (mvp-41)
 function migratePatientDocumentsStatus() {
   try {
     const info = db.prepare('PRAGMA table_info(patient_documents)').all();
     if (!info.some(c => c.name === 'status')) {
       db.exec(`ALTER TABLE patient_documents ADD COLUMN status TEXT DEFAULT 'available'`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_patient_documents_status ON patient_documents(status)`);
-      console.log('✅ Migration: patient_documents.status added');
+      dbLog('✅ Migration: patient_documents.status added');
     }
     if (!info.some(c => c.name === 'storage_provider')) {
       db.exec(`ALTER TABLE patient_documents ADD COLUMN storage_provider TEXT DEFAULT 'local'`);
@@ -3322,7 +3195,7 @@ function migratePatientDocumentDownloadTokens() {
       CREATE INDEX IF NOT EXISTS idx_doc_tokens_patient ON patient_document_download_tokens(patient_id);
       CREATE INDEX IF NOT EXISTS idx_doc_tokens_expires ON patient_document_download_tokens(expires_at);
     `);
-    console.log('✅ Migration: patient_document_download_tokens ensured');
+    dbLog('✅ Migration: patient_document_download_tokens ensured');
   } catch (e) {
     console.warn('⚠️  patient_document_download_tokens migration failed:', e.message);
   }
@@ -3330,118 +3203,14 @@ function migratePatientDocumentDownloadTokens() {
 
 // Migration: Add job call revenue columns to monthly_invoices table
 function migrateMonthlyInvoicesJobCalls() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    const tableInfo = db.prepare("PRAGMA table_info(monthly_invoices)").all();
-    const columnNames = tableInfo.map(col => col.name);
-
-    if (!columnNames.includes('job_calls_count')) {
-      console.log('🔄 Migrating: Adding job_calls_count column to monthly_invoices table');
-      db.prepare("ALTER TABLE monthly_invoices ADD COLUMN job_calls_count INTEGER DEFAULT 0").run();
-    }
-
-    if (!columnNames.includes('job_calls_revenue')) {
-      console.log('🔄 Migrating: Adding job_calls_revenue column to monthly_invoices table');
-      db.prepare("ALTER TABLE monthly_invoices ADD COLUMN job_calls_revenue REAL DEFAULT 0").run();
-    }
-
-    if (!columnNames.includes('job_calls_cost')) {
-      console.log('🔄 Migrating: Adding job_calls_cost column to monthly_invoices table');
-      db.prepare("ALTER TABLE monthly_invoices ADD COLUMN job_calls_cost REAL DEFAULT 0").run();
-    }
-
-    db.pragma('foreign_keys = ON');
-    console.log('✅ Migration complete: job call columns added to monthly_invoices');
-  } catch (error) {
-    console.warn('⚠️  Monthly invoices job calls migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-monthly-invoices-job-calls.js')(db);
 }
-
-// Migration: Add delivery tracking fields to merchant_orders table
 function migrateOrderTracking() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    const tableInfo = db.prepare("PRAGMA table_info(merchant_orders)").all();
-    const columnNames = tableInfo.map(col => col.name);
-
-    const trackingFields = {
-      'delivery_status': "TEXT DEFAULT 'pending'",
-      'driver_name': 'TEXT',
-      'driver_phone': 'TEXT',
-      'current_latitude': 'REAL',
-      'current_longitude': 'REAL',
-      'current_address': 'TEXT',
-      'estimated_arrival': 'DATETIME',
-      'last_location_update': 'DATETIME',
-      'tracking_events': 'TEXT', // JSON array of tracking events
-      'pickup_address': 'TEXT', // Pickup/from location (store/warehouse)
-      'pickup_latitude': 'REAL', // Pickup location coordinates
-      'pickup_longitude': 'REAL',
-      'drop_point': 'TEXT', // Drop point/delivery address (same as shipping_address but explicit)
-      commerce_quote_id: 'TEXT',
-      voice_checkout_id: 'TEXT',
-      stripe_payment_intent_id: 'TEXT'
-    };
-
-    let addedCount = 0;
-    for (const [fieldName, fieldType] of Object.entries(trackingFields)) {
-      if (!columnNames.includes(fieldName)) {
-        console.log(`📦 Adding ${fieldName} column to merchant_orders table...`);
-        db.prepare(`ALTER TABLE merchant_orders ADD COLUMN ${fieldName} ${fieldType}`).run();
-        addedCount++;
-      }
-    }
-
-    if (addedCount > 0) {
-      console.log(`✅ Migration complete: ${addedCount} tracking columns added to merchant_orders`);
-    }
-
-    db.pragma('foreign_keys = ON');
-  } catch (error) {
-    console.warn('⚠️  Order tracking migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-order-tracking.js')(db);
 }
-
-// Migration: external_order_id + partial unique indexes for commerce idempotency (PI / voice checkout)
 function migrateMerchantOrderCommerceIdempotency() {
-  try {
-    db.pragma('foreign_keys = OFF');
-    const tableInfo = db.prepare('PRAGMA table_info(merchant_orders)').all();
-    const columnNames = tableInfo.map((col) => col.name);
-    if (!columnNames.includes('external_order_id')) {
-      console.log('📦 Adding external_order_id column to merchant_orders...');
-      db.prepare('ALTER TABLE merchant_orders ADD COLUMN external_order_id TEXT').run();
-    }
-    try {
-      db.prepare(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_merchant_orders_pi_unique
-        ON merchant_orders(stripe_payment_intent_id)
-        WHERE stripe_payment_intent_id IS NOT NULL AND length(trim(stripe_payment_intent_id)) > 0
-      `).run();
-    } catch (e) {
-      console.warn('⚠️  merchant_orders stripe_payment_intent_id unique index:', e.message);
-    }
-    try {
-      db.prepare(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_merchant_orders_vc_unique
-        ON merchant_orders(voice_checkout_id)
-        WHERE voice_checkout_id IS NOT NULL AND length(trim(voice_checkout_id)) > 0
-      `).run();
-    } catch (e) {
-      console.warn('⚠️  merchant_orders voice_checkout_id unique index:', e.message);
-    }
-    db.pragma('foreign_keys = ON');
-  } catch (error) {
-    console.warn('⚠️  merchant_orders commerce idempotency migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-merchant-order-commerce-idempotency.js')(db);
 }
-
-// Migration: Add merchant_id column to customers table
 function migrateCustomerMerchantId() {
   try {
     db.pragma('foreign_keys = OFF');
@@ -3450,16 +3219,16 @@ function migrateCustomerMerchantId() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('merchant_id')) {
-      console.log('🔄 Migrating: Adding merchant_id column to customers table');
+      dbLog('🔄 Migrating: Adding merchant_id column to customers table');
       db.prepare("ALTER TABLE customers ADD COLUMN merchant_id TEXT").run();
 
       // Create index for performance
-      console.log('🔄 Migrating: Creating index on customers.merchant_id');
+      dbLog('🔄 Migrating: Creating index on customers.merchant_id');
       db.prepare("CREATE INDEX IF NOT EXISTS idx_customers_merchant ON customers(merchant_id)").run();
 
-      console.log('✅ Migration complete: merchant_id column added to customers table');
+      dbLog('✅ Migration complete: merchant_id column added to customers table');
     } else {
-      console.log('✅ Migration skipped: merchant_id column already exists in customers table');
+      dbLog('✅ Migration skipped: merchant_id column already exists in customers table');
     }
 
     db.pragma('foreign_keys = ON');
@@ -3486,12 +3255,12 @@ function migrateMerchantsSubdomain() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('subdomain')) {
-      console.log('🔄 Migrating: Adding subdomain column to merchants table');
+      dbLog('🔄 Migrating: Adding subdomain column to merchants table');
       // SQLite doesn't support UNIQUE in ALTER TABLE ADD COLUMN, so add without constraint first
       db.prepare("ALTER TABLE merchants ADD COLUMN subdomain TEXT").run();
 
       // Generate subdomains for existing merchants that don't have one
-      console.log('🔄 Migrating: Generating subdomains for existing merchants');
+      dbLog('🔄 Migrating: Generating subdomains for existing merchants');
       const existingMerchants = db.prepare('SELECT id, name FROM merchants WHERE subdomain IS NULL').all();
       // Use lazy require to avoid circular dependency - pass db instance
       const { generateSubdomain } = require('./utils/subdomain-generator');
@@ -3499,33 +3268,33 @@ function migrateMerchantsSubdomain() {
       for (const merchant of existingMerchants) {
         const subdomain = generateSubdomain(merchant.name, merchant.id, db);
         db.prepare('UPDATE merchants SET subdomain = ? WHERE id = ?').run(subdomain, merchant.id);
-        console.log(`   Generated subdomain "${subdomain}" for merchant ${merchant.id}`);
+        dbLog(`   Generated subdomain "${subdomain}" for merchant ${merchant.id}`);
       }
 
       // Create unique index (this enforces uniqueness)
-      console.log('🔄 Migrating: Creating unique index on merchants.subdomain');
+      dbLog('🔄 Migrating: Creating unique index on merchants.subdomain');
       db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_merchants_subdomain_unique ON merchants(subdomain) WHERE subdomain IS NOT NULL").run();
 
       // Also create regular index for performance
-      console.log('🔄 Migrating: Creating index on merchants.subdomain');
+      dbLog('🔄 Migrating: Creating index on merchants.subdomain');
       db.prepare("CREATE INDEX IF NOT EXISTS idx_merchants_subdomain ON merchants(subdomain)").run();
 
-      console.log('✅ Migration complete: subdomain column added to merchants table');
+      dbLog('✅ Migration complete: subdomain column added to merchants table');
     } else {
-      console.log('✅ Migration skipped: subdomain column already exists in merchants table');
+      dbLog('✅ Migration skipped: subdomain column already exists in merchants table');
 
       // Ensure unique index exists (in case migration was partially run)
       try {
         db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_merchants_subdomain_unique ON merchants(subdomain) WHERE subdomain IS NOT NULL").run();
       } catch (indexError) {
         // Index might already exist, that's okay
-        console.log('   Unique index already exists or could not be created');
+        dbLog('   Unique index already exists or could not be created');
       }
     }
 
     // Migration: Add tenant_type column to merchants table
     if (!columnNames.includes('tenant_type')) {
-      console.log('🔄 Migrating: Adding tenant_type column to merchants table');
+      dbLog('🔄 Migrating: Adding tenant_type column to merchants table');
       db.prepare("ALTER TABLE merchants ADD COLUMN tenant_type TEXT DEFAULT 'clinic'").run();
 
       // Set 'shop' for akin-dunbar (backward compatibility)
@@ -3534,12 +3303,12 @@ function migrateMerchantsSubdomain() {
       const akinDunbarMerchant = db.prepare('SELECT id FROM merchants WHERE subdomain = ?').get(defaultSubdomain);
       if (akinDunbarMerchant) {
         db.prepare('UPDATE merchants SET tenant_type = ? WHERE subdomain = ?').run('shop', defaultSubdomain);
-        console.log(`   Set tenant_type='shop' for merchant with subdomain '${defaultSubdomain}'`);
+        dbLog(`   Set tenant_type='shop' for merchant with subdomain '${defaultSubdomain}'`);
       }
 
-      console.log('✅ Migration complete: tenant_type column added to merchants table');
+      dbLog('✅ Migration complete: tenant_type column added to merchants table');
     } else {
-      console.log('✅ Migration skipped: tenant_type column already exists in merchants table');
+      dbLog('✅ Migration skipped: tenant_type column already exists in merchants table');
     }
 
     db.pragma('foreign_keys = ON');
@@ -3566,17 +3335,17 @@ function migrateCustomerCreditsExpiration() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('free_credits_expires_at')) {
-      console.log('🔄 Migrating: Adding free_credits_expires_at column to customer_credits table');
+      dbLog('🔄 Migrating: Adding free_credits_expires_at column to customer_credits table');
       db.prepare("ALTER TABLE customer_credits ADD COLUMN free_credits_expires_at DATETIME").run();
     }
 
     if (!columnNames.includes('low_credit_alert_sent_at')) {
-      console.log('🔄 Migrating: Adding low_credit_alert_sent_at column to customer_credits table');
+      dbLog('🔄 Migrating: Adding low_credit_alert_sent_at column to customer_credits table');
       db.prepare("ALTER TABLE customer_credits ADD COLUMN low_credit_alert_sent_at DATETIME").run();
     }
 
     db.pragma('foreign_keys = ON');
-    console.log('✅ Migration complete: customer_credits expiration columns added');
+    dbLog('✅ Migration complete: customer_credits expiration columns added');
   } catch (error) {
     console.error('❌ Customer credits expiration migration failed:', error.message);
     db.pragma('foreign_keys = ON');
@@ -3605,7 +3374,7 @@ function migrateVoiceSubscriptionBilling() {
     };
     Object.keys(customerAdds).forEach((col) => {
       if (!customerCols.includes(col)) {
-        console.log(`🔄 Migrating: customers.${col}`);
+        dbLog(`🔄 Migrating: customers.${col}`);
         db.prepare(`ALTER TABLE customers ADD COLUMN ${col} ${customerAdds[col]}`).run();
       }
     });
@@ -3637,7 +3406,7 @@ function migrateVoiceSubscriptionBilling() {
     `);
 
     db.pragma('foreign_keys = ON');
-    console.log('✅ Migration complete: voice subscription billing schema');
+    dbLog('✅ Migration complete: voice subscription billing schema');
   } catch (error) {
     console.error('❌ Voice subscription billing migration failed:', error.message);
     db.pragma('foreign_keys = ON');
@@ -3666,7 +3435,7 @@ function migrateProviderTrialSim() {
     };
     Object.keys(customerAdds).forEach((col) => {
       if (!customerCols.includes(col)) {
-        console.log(`🔄 Migrating: customers.${col}`);
+        dbLog(`🔄 Migrating: customers.${col}`);
         db.prepare(`ALTER TABLE customers ADD COLUMN ${col} ${customerAdds[col]}`).run();
       }
     });
@@ -3687,7 +3456,7 @@ function migrateProviderTrialSim() {
     `);
 
     db.pragma('foreign_keys = ON');
-    console.log('✅ Migration complete: provider SIM trial schema');
+    dbLog('✅ Migration complete: provider SIM trial schema');
   } catch (error) {
     console.error('❌ Provider SIM trial migration failed:', error.message);
     db.pragma('foreign_keys = ON');
@@ -3778,7 +3547,7 @@ function migrateSomoDemoRequests() {
       DELETE FROM somo_demo_phone_window_lock
       WHERE locked_until <= datetime('now');
     `);
-    console.log('✅ Migration complete: somo_demo_requests');
+    dbLog('✅ Migration complete: somo_demo_requests');
   } catch (error) {
     console.error('❌ Somo demo migration failed:', error.message);
   }
@@ -3786,226 +3555,17 @@ function migrateSomoDemoRequests() {
 
 // Migration: Add pipeline fields to leads table
 function migrateLeadsPipeline() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    const tableInfo = db.prepare("PRAGMA table_info(leads)").all();
-    const columnNames = tableInfo.map(col => col.name);
-
-    if (!columnNames.includes('pipeline_stage')) {
-      console.log('🔄 Migrating: Adding pipeline_stage column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN pipeline_stage TEXT DEFAULT 'new'").run();
-    }
-
-    if (!columnNames.includes('is_qualified')) {
-      console.log('🔄 Migrating: Adding is_qualified column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN is_qualified INTEGER DEFAULT 0").run();
-
-      // Auto-qualify existing leads that have phone + email
-      db.prepare(`
-        UPDATE leads 
-        SET is_qualified = 1 
-        WHERE clinic_phone IS NOT NULL 
-          AND clinic_phone != '' 
-          AND clinic_email IS NOT NULL 
-          AND clinic_email != ''
-      `).run();
-    }
-
-    if (!columnNames.includes('lead_score')) {
-      console.log('🔄 Migrating: Adding lead_score column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN lead_score INTEGER DEFAULT 0").run();
-    }
-
-    if (!columnNames.includes('follow_up_date')) {
-      console.log('🔄 Migrating: Adding follow_up_date column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN follow_up_date DATETIME").run();
-    }
-
-    if (!columnNames.includes('next_action')) {
-      console.log('🔄 Migrating: Adding next_action column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN next_action TEXT").run();
-    }
-
-    if (!columnNames.includes('estimated_value')) {
-      console.log('🔄 Migrating: Adding estimated_value column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN estimated_value REAL").run();
-    }
-
-    if (!columnNames.includes('owner_id')) {
-      console.log('🔄 Migrating: Adding owner_id column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN owner_id TEXT").run();
-    }
-
-    if (!columnNames.includes('opening_hours')) {
-      console.log('🔄 Migrating: Adding opening_hours column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN opening_hours TEXT").run();
-    }
-
-    if (!columnNames.includes('is_test')) {
-      console.log('🔄 Migrating: Adding is_test column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN is_test INTEGER DEFAULT 0").run();
-    }
-
-    if (!columnNames.includes('lead_type')) {
-      console.log('🔄 Migrating: Adding lead_type column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN lead_type TEXT DEFAULT 'sales'").run();
-
-      // Set lead_type based on source field for existing leads
-      // Sales leads: source = 'google_search' or 'job_search'
-      // Customer leads: source = 'self_signup'
-      db.prepare(`
-        UPDATE leads 
-        SET lead_type = CASE 
-          WHEN source = 'self_signup' THEN 'customer'
-          ELSE 'sales'
-        END
-      `).run();
-    }
-
-    if (!columnNames.includes('required_languages')) {
-      console.log('🔄 Migrating: Adding required_languages column to leads table');
-      db.prepare('ALTER TABLE leads ADD COLUMN required_languages TEXT').run();
-    }
-
-    if (!columnNames.includes('preferred_language')) {
-      console.log('🔄 Migrating: Adding preferred_language column to leads table');
-      db.prepare('ALTER TABLE leads ADD COLUMN preferred_language TEXT').run();
-    }
-
-    db.pragma('foreign_keys = ON');
-    console.log('✅ Migration complete: pipeline columns added to leads');
-  } catch (error) {
-    console.warn('⚠️  Leads pipeline migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-leads-pipeline.js')(db);
 }
-
-// Migration: Add Phase 2 qualification rules table
 function migrateQualificationRules() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    // Check if qualification_rules table exists
-    const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qualification_rules'").get();
-    if (!table) {
-      console.log('🔄 Migrating: Creating qualification_rules table');
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS qualification_rules (
-          id TEXT PRIMARY KEY,
-          merchant_id TEXT,
-          name TEXT NOT NULL,
-          description TEXT,
-          rules_json TEXT NOT NULL,
-          enabled INTEGER DEFAULT 1,
-          priority INTEGER DEFAULT 5,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (merchant_id) REFERENCES merchants(id)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_qualification_rules_merchant_id ON qualification_rules(merchant_id);
-        CREATE INDEX IF NOT EXISTS idx_qualification_rules_enabled ON qualification_rules(enabled);
-        CREATE INDEX IF NOT EXISTS idx_qualification_rules_priority ON qualification_rules(priority);
-      `);
-      console.log('✅ Migration complete: qualification_rules table created');
-    } else {
-      console.log('✅ Migration skipped: qualification_rules table already exists');
-    }
-
-    db.pragma('foreign_keys = ON');
-  } catch (error) {
-    console.warn('⚠️  Qualification rules migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-qualification-rules.js')(db);
 }
-
-// Migration: Add Phase 2 sequences tables
 function migrateSequences() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    // Check if sequences table exists
-    const sequencesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sequences'").get();
-    if (!sequencesTable) {
-      console.log('🔄 Migrating: Creating sequences and sequence_executions tables');
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS sequences (
-          id TEXT PRIMARY KEY,
-          merchant_id TEXT,
-          name TEXT NOT NULL,
-          description TEXT,
-          steps_json TEXT NOT NULL,
-          enabled INTEGER DEFAULT 1,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (merchant_id) REFERENCES merchants(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS sequence_executions (
-          id TEXT PRIMARY KEY,
-          sequence_id TEXT NOT NULL,
-          lead_id TEXT NOT NULL,
-          current_step INTEGER DEFAULT 0,
-          status TEXT DEFAULT 'active',
-          started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          completed_at DATETIME,
-          paused_at DATETIME,
-          metadata TEXT,
-          FOREIGN KEY (sequence_id) REFERENCES sequences(id),
-          FOREIGN KEY (lead_id) REFERENCES leads(id)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_sequences_merchant_id ON sequences(merchant_id);
-        CREATE INDEX IF NOT EXISTS idx_sequences_enabled ON sequences(enabled);
-        CREATE INDEX IF NOT EXISTS idx_sequence_executions_sequence_id ON sequence_executions(sequence_id);
-        CREATE INDEX IF NOT EXISTS idx_sequence_executions_lead_id ON sequence_executions(lead_id);
-        CREATE INDEX IF NOT EXISTS idx_sequence_executions_status ON sequence_executions(status);
-      `);
-      console.log('✅ Migration complete: sequences tables created');
-    } else {
-      console.log('✅ Migration skipped: sequences tables already exist');
-    }
-
-    db.pragma('foreign_keys = ON');
-  } catch (error) {
-    console.warn('⚠️  Sequences migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-sequences.js')(db);
 }
-
-// Migration: Add Phase 1 admin portal columns to leads table
 function migrateLeadsPhase1() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    const tableInfo = db.prepare("PRAGMA table_info(leads)").all();
-    const columnNames = tableInfo.map(col => col.name);
-
-    if (!columnNames.includes('auto_qualified')) {
-      console.log('🔄 Migrating: Adding auto_qualified column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN auto_qualified INTEGER DEFAULT 0").run();
-    }
-
-    if (!columnNames.includes('qualified_at')) {
-      console.log('🔄 Migrating: Adding qualified_at column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN qualified_at DATETIME").run();
-    }
-
-    if (!columnNames.includes('last_score_update')) {
-      console.log('🔄 Migrating: Adding last_score_update column to leads table');
-      db.prepare("ALTER TABLE leads ADD COLUMN last_score_update DATETIME").run();
-    }
-
-    db.pragma('foreign_keys = ON');
-    console.log('✅ Migration complete: Phase 1 columns added to leads');
-  } catch (error) {
-    console.warn('⚠️  Leads Phase 1 migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-leads-phase1.js')(db);
 }
-
-// Migration: Add password_hash column to customers table
 function migrateCustomersPasswordHash() {
   try {
     db.pragma('foreign_keys = OFF');
@@ -4014,13 +3574,13 @@ function migrateCustomersPasswordHash() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('password_hash')) {
-      console.log('🔄 Migrating: Adding password_hash column to customers table');
+      dbLog('🔄 Migrating: Adding password_hash column to customers table');
       db.prepare("ALTER TABLE customers ADD COLUMN password_hash TEXT").run();
 
       // Create index for faster lookups (though we'll primarily query by email)
-      console.log('✅ Migration complete: password_hash column added to customers table');
+      dbLog('✅ Migration complete: password_hash column added to customers table');
     } else {
-      console.log('✅ Migration skipped: password_hash column already exists in customers table');
+      dbLog('✅ Migration skipped: password_hash column already exists in customers table');
     }
 
     db.pragma('foreign_keys = ON');
@@ -4046,13 +3606,13 @@ function migrateAppointmentsCustomerId() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('customer_id')) {
-      console.log('🔄 Migrating: Adding customer_id column to appointments table');
+      dbLog('🔄 Migrating: Adding customer_id column to appointments table');
       db.prepare("ALTER TABLE appointments ADD COLUMN customer_id TEXT").run();
 
       // Create index for faster queries
       db.prepare("CREATE INDEX IF NOT EXISTS idx_appointments_customer_id ON appointments(customer_id)").run();
 
-      console.log('✅ Migration complete: customer_id added to appointments table');
+      dbLog('✅ Migration complete: customer_id added to appointments table');
     }
 
     db.pragma('foreign_keys = ON');
@@ -4064,172 +3624,17 @@ function migrateAppointmentsCustomerId() {
 
 // Migration: Add missing columns to customers table
 function migrateCustomersTable() {
-  try {
-    db.pragma('foreign_keys = OFF');
-    const tableInfo = db.prepare("PRAGMA table_info(customers)").all();
-    const columnNames = tableInfo.map(col => col.name);
-
-    const newColumns = {
-      phone_number: 'TEXT',
-      business_size: 'TEXT',
-      use_case: 'TEXT',
-      api_features: 'TEXT',
-      email_verified: 'BOOLEAN DEFAULT 0',
-      email_verified_at: 'DATETIME',
-      updated_at: 'DATETIME DEFAULT CURRENT_TIMESTAMP',
-      retell_agent_id: 'TEXT',
-      retell_agent_status: "TEXT DEFAULT 'pending'",
-      stripe_customer_id: 'TEXT',
-      stripe_payment_method_id: 'TEXT',
-      card_last4: 'TEXT',
-      card_brand: 'TEXT',
-      card_verified: 'BOOLEAN DEFAULT 0',
-      card_verified_at: 'DATETIME',
-      customer_type: "TEXT DEFAULT 'saas'",
-      twilio_phone_number: 'TEXT',
-      twilio_phone_sid: 'TEXT',
-      kelly_status: "TEXT DEFAULT 'pending'",
-      provisioning_state: "TEXT DEFAULT 'requested'",
-      pricing_tier: "TEXT DEFAULT 'starter'",
-      custom_prompt: 'TEXT',
-      prompt_updated_at: 'DATETIME',
-      fhir_patient_id: 'TEXT',
-      provider_profile: 'TEXT'
-    };
-
-    Object.keys(newColumns).forEach(colName => {
-      if (!columnNames.includes(colName)) {
-        console.log(`📦 Adding ${colName} column to customers table...`);
-        db.prepare(`ALTER TABLE customers ADD COLUMN ${colName} ${newColumns[colName]}`).run();
-      }
-    });
-
-    // Create index for fhir_patient_id if it was just added
-    if (!columnNames.includes('fhir_patient_id')) {
-      console.log('📦 Creating index on customers.fhir_patient_id...');
-      db.prepare("CREATE INDEX IF NOT EXISTS idx_customers_fhir_patient_id ON customers(fhir_patient_id)").run();
-    }
-
-    db.pragma('foreign_keys = ON');
-    console.log('✅ Migration complete: customers table updated');
-  } catch (migrationError) {
-    console.warn('⚠️  Customers table migration failed:', migrationError.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-customers-table.js')(db);
 }
-
-// Migration: Canonical provider links (provider_id) for status + availability
 function migrateProviderCanonicalLinks() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    const statusCols = db.prepare("PRAGMA table_info(provider_status)").all().map((c) => c.name);
-    if (!statusCols.includes('provider_id')) {
-      db.exec('ALTER TABLE provider_status ADD COLUMN provider_id TEXT');
-      console.log('✅ Migration: provider_status.provider_id added');
-    }
-    if (!statusCols.includes('last_seen_at')) {
-      db.exec('ALTER TABLE provider_status ADD COLUMN last_seen_at DATETIME');
-      console.log('✅ Migration: provider_status.last_seen_at added');
-    }
-    if (!statusCols.includes('heartbeat_expires_at')) {
-      db.exec('ALTER TABLE provider_status ADD COLUMN heartbeat_expires_at DATETIME');
-      console.log('✅ Migration: provider_status.heartbeat_expires_at added');
-    }
-    db.exec('CREATE INDEX IF NOT EXISTS idx_provider_status_provider_id ON provider_status(provider_id)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_provider_status_heartbeat_expiry ON provider_status(heartbeat_expires_at)');
-
-    const blockCols = db.prepare("PRAGMA table_info(provider_availability_blocks)").all().map((c) => c.name);
-    if (!blockCols.includes('provider_id')) {
-      db.exec('ALTER TABLE provider_availability_blocks ADD COLUMN provider_id TEXT');
-      console.log('✅ Migration: provider_availability_blocks.provider_id added');
-    }
-    db.exec('CREATE INDEX IF NOT EXISTS idx_availability_blocks_provider_id ON provider_availability_blocks(provider_id)');
-
-    // Backfill provider_id by provider email
-    db.exec(`
-      UPDATE provider_status
-      SET provider_id = (
-        SELECT pp.id
-        FROM provider_profiles pp
-        WHERE lower(pp.email) = lower(provider_status.email)
-        LIMIT 1
-      )
-      WHERE provider_id IS NULL
-    `);
-
-    db.exec(`
-      UPDATE provider_availability_blocks
-      SET provider_id = (
-        SELECT pp.id
-        FROM provider_profiles pp
-        WHERE lower(pp.email) = lower(provider_availability_blocks.provider_email)
-        LIMIT 1
-      )
-      WHERE provider_id IS NULL
-    `);
-
-    db.pragma('foreign_keys = ON');
-  } catch (e) {
-    console.warn('⚠️  provider canonical links migration failed:', e.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-provider-canonical-links.js')(db);
 }
-
-// Migration: persist booking persona in triage session for reconnect/restart resilience
 function migrateTriageSessionBookingFor() {
-  try {
-    const info = db.prepare("PRAGMA table_info(triage_sessions)").all();
-    const cols = info.map((c) => c.name);
-    if (!cols.includes('booking_for')) {
-      db.exec('ALTER TABLE triage_sessions ADD COLUMN booking_for TEXT');
-      console.log('✅ Migration: triage_sessions.booking_for added');
-    }
-  } catch (e) {
-    console.warn('⚠️  triage_sessions.booking_for migration failed:', e.message);
-  }
+  return require('./database/migrations/startup/migrate-triage-session-booking-for.js')(db);
 }
-
-// ============================================
-// MIGRATION: Add cost columns to voice_call_log
-// ============================================
 function migrateVoiceCallLogCosts() {
-  try {
-    const voiceCallLogColumns = db.pragma('table_info(voice_call_log)');
-    const columnNames = voiceCallLogColumns.map(col => col.name);
-
-    const costColumns = {
-      'twilio_call_sid': 'TEXT',
-      'twilio_cost_usd': 'REAL',
-      'retell_cost_usd': 'REAL',
-      'total_cost_usd': 'REAL',
-      'twilio_cost_calculated_usd': 'REAL',
-      'retell_cost_calculated_usd': 'REAL',
-      'cost_source': 'TEXT',
-      'cost_updated_at': 'DATETIME'
-    };
-
-    Object.keys(costColumns).forEach(colName => {
-      if (!columnNames.includes(colName)) {
-        console.log(`📦 Adding ${colName} column to voice_call_log table...`);
-        db.exec(`ALTER TABLE voice_call_log ADD COLUMN ${colName} ${costColumns[colName]};`);
-        console.log(`✅ Migration complete: ${colName} column added`);
-      }
-    });
-
-    // Create indexes for cost tracking
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_call_log_twilio_sid ON voice_call_log(twilio_call_sid);`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_call_log_created_at ON voice_call_log(created_at);`);
-
-    console.log('✅ Migration complete: voice_call_log cost columns ensured');
-  } catch (migrationError) {
-    console.warn('⚠️  voice_call_log cost columns migration failed:', migrationError.message);
-  }
+  return require('./database/migrations/startup/migrate-voice-call-log-costs.js')(db);
 }
-
-// ============================================
-// MIGRATION: Voice call state tables (medical coding agent)
-// ============================================
 function migrateVoiceCallStateTables() {
   try {
     db.exec(`
@@ -4275,7 +3680,7 @@ function migrateVoiceCallStateTables() {
       );
       CREATE INDEX IF NOT EXISTS idx_decision_log_call_id ON decision_log(call_id);
     `);
-    console.log('✅ Migration complete: voice call state tables ensured');
+    dbLog('✅ Migration complete: voice call state tables ensured');
   } catch (migrationError) {
     console.warn('⚠️  Voice call state tables migration failed:', migrationError.message);
   }
@@ -4297,7 +3702,7 @@ function migrateIcd10CodesTable() {
       );
       CREATE INDEX IF NOT EXISTS idx_icd10_codes_description ON icd10_codes(description);
     `);
-    console.log('✅ Migration complete: icd10_codes table ensured');
+    dbLog('✅ Migration complete: icd10_codes table ensured');
   } catch (migrationError) {
     console.warn('⚠️  icd10_codes table migration failed:', migrationError.message);
   }
@@ -4322,7 +3727,7 @@ function migrateHcpcsCodesTable() {
       CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_long_desc ON hcpcs_codes(long_desc);
       CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_short_desc ON hcpcs_codes(short_desc);
     `);
-    console.log('✅ Migration complete: hcpcs_codes table ensured');
+    dbLog('✅ Migration complete: hcpcs_codes table ensured');
   } catch (migrationError) {
     console.warn('⚠️  hcpcs_codes table migration failed:', migrationError.message);
   }
@@ -4376,7 +3781,7 @@ function migrateBillingReferenceTables() {
     `);
     for (const row of modRows) modStmt.run(...row);
 
-    console.log('✅ Migration complete: billing reference tables (POS, modifiers) ensured');
+    dbLog('✅ Migration complete: billing reference tables (POS, modifiers) ensured');
   } catch (migrationError) {
     console.warn('⚠️  billing reference tables migration failed:', migrationError.message);
   }
@@ -4406,7 +3811,7 @@ function migrateCodingDecisionsTable() {
       CREATE INDEX IF NOT EXISTS idx_coding_decisions_clinic_id ON coding_decisions(clinic_id);
       CREATE INDEX IF NOT EXISTS idx_coding_decisions_created_at ON coding_decisions(created_at);
     `);
-    console.log('✅ Migration complete: coding_decisions table ensured');
+    dbLog('✅ Migration complete: coding_decisions table ensured');
     // Tiba Phase 5.4: rule_version, rule_hash for audit
     try {
       const cdInfo = db.prepare('PRAGMA table_info(coding_decisions)').all();
@@ -4449,10 +3854,10 @@ function migrateLlmUsageLogTable() {
       const info = db.prepare("PRAGMA table_info(llm_usage_log)").all();
       if (!info.some(c => c.name === 'confidence_score')) {
         db.exec('ALTER TABLE llm_usage_log ADD COLUMN confidence_score REAL');
-        console.log('✅ Migration: llm_usage_log confidence_score column added');
+        dbLog('✅ Migration: llm_usage_log confidence_score column added');
       }
     } catch (_) { /* column may already exist */ }
-    console.log('✅ Migration complete: llm_usage_log table ensured');
+    dbLog('✅ Migration complete: llm_usage_log table ensured');
   } catch (migrationError) {
     console.warn('⚠️  llm_usage_log table migration failed:', migrationError.message);
   }
@@ -4480,7 +3885,7 @@ function migrateClinicMonthlyLlmCostTable() {
       db.exec('ALTER TABLE llm_usage_log ADD COLUMN clinic_id TEXT');
       db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_log_clinic_id ON llm_usage_log(clinic_id)');
     }
-    console.log('✅ Migration complete: clinic_monthly_llm_cost + llm_usage_log.clinic_id');
+    dbLog('✅ Migration complete: clinic_monthly_llm_cost + llm_usage_log.clinic_id');
   } catch (e) {
     console.warn('⚠️  clinic_monthly_llm_cost migration failed:', e.message);
   }
@@ -4491,15 +3896,15 @@ function migrateClinicsMonthlyCostCap() {
     const info = db.prepare('PRAGMA table_info(clinics)').all();
     if (!info.some(c => c.name === 'monthly_cost_cap')) {
       db.exec('ALTER TABLE clinics ADD COLUMN monthly_cost_cap REAL');
-      console.log('✅ Migration: clinics.monthly_cost_cap added');
+      dbLog('✅ Migration: clinics.monthly_cost_cap added');
     }
     if (!info.some(c => c.name === 'region')) {
       db.exec('ALTER TABLE clinics ADD COLUMN region TEXT');
-      console.log('✅ Migration: clinics.region added');
+      dbLog('✅ Migration: clinics.region added');
     }
     if (!info.some(c => c.name === 'country_code')) {
       db.exec('ALTER TABLE clinics ADD COLUMN country_code TEXT');
-      console.log('✅ Migration: clinics.country_code added');
+      dbLog('✅ Migration: clinics.country_code added');
     }
   } catch (e) {
     console.warn('⚠️  clinics monthly_cost_cap migration failed:', e.message);
@@ -4533,7 +3938,7 @@ function migrateLongTermMemoryTables() {
         PRIMARY KEY (provider_id, preference_key)
       );
     `);
-    console.log('✅ Migration complete: patient_coding_history + provider_preferences');
+    dbLog('✅ Migration complete: patient_coding_history + provider_preferences');
   } catch (e) {
     console.warn('⚠️  Long-term memory tables migration failed:', e.message);
   }
@@ -4563,9 +3968,9 @@ function migrateHipaaAccessLogTable() {
     if (!info.some(c => c.name === 'patient_id')) {
       db.exec('ALTER TABLE hipaa_access_log ADD COLUMN patient_id TEXT');
       db.exec('CREATE INDEX IF NOT EXISTS idx_hipaa_access_log_patient ON hipaa_access_log(patient_id)');
-      console.log('✅ Migration: hipaa_access_log patient_id column added');
+      dbLog('✅ Migration: hipaa_access_log patient_id column added');
     }
-    console.log('✅ Migration complete: hipaa_access_log table');
+    dbLog('✅ Migration complete: hipaa_access_log table');
   } catch (e) {
     console.warn('⚠️  hipaa_access_log migration failed:', e.message);
   }
@@ -4584,7 +3989,7 @@ function migrateClinicSettingsTable() {
       );
       CREATE INDEX IF NOT EXISTS idx_clinic_settings_clinic ON clinic_settings(clinic_id);
     `);
-    console.log('✅ Migration complete: clinic_settings');
+    dbLog('✅ Migration complete: clinic_settings');
   } catch (e) {
     console.warn('⚠️  clinic_settings migration failed:', e.message);
   }
@@ -4619,7 +4024,7 @@ function migratePostgresSyncRetryTable() {
       );
       CREATE INDEX IF NOT EXISTS idx_postgres_sync_dlq_entity ON postgres_sync_dlq(entity_type);
     `);
-    console.log('✅ Migration complete: postgres_sync_retry + postgres_sync_dlq tables ensured');
+    dbLog('✅ Migration complete: postgres_sync_retry + postgres_sync_dlq tables ensured');
   } catch (migrationError) {
     console.warn('⚠️  postgres_sync_retry table migration failed:', migrationError.message);
   }
@@ -4644,7 +4049,7 @@ function migrateDlqToolCallsTable() {
       CREATE INDEX IF NOT EXISTS idx_dlq_tool_calls_function ON dlq_tool_calls(function_name);
       CREATE INDEX IF NOT EXISTS idx_dlq_tool_calls_created ON dlq_tool_calls(created_at);
     `);
-    console.log('✅ Migration complete: dlq_tool_calls table ensured');
+    dbLog('✅ Migration complete: dlq_tool_calls table ensured');
   } catch (migrationError) {
     console.warn('⚠️  dlq_tool_calls table migration failed:', migrationError.message);
   }
@@ -4664,7 +4069,7 @@ function migrateFeatureFlagsTable() {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('✅ Migration complete: feature_flags table ensured');
+    dbLog('✅ Migration complete: feature_flags table ensured');
   } catch (e) {
     console.warn('⚠️  feature_flags migration failed:', e.message);
   }
@@ -4680,7 +4085,7 @@ function migrateVoiceCallLogClinicId() {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN clinic_id TEXT');
       db.exec('UPDATE voice_call_log SET clinic_id = customer_id WHERE clinic_id IS NULL AND customer_id IS NOT NULL');
       db.exec('CREATE INDEX IF NOT EXISTS idx_voice_call_log_clinic_id ON voice_call_log(clinic_id)');
-      console.log('✅ Migration complete: voice_call_log.clinic_id added');
+      dbLog('✅ Migration complete: voice_call_log.clinic_id added');
     }
   } catch (e) {
     console.warn('⚠️  voice_call_log clinic_id migration failed:', e.message);
@@ -4693,46 +4098,46 @@ function migrateVoiceAgentUx() {
     if (!callCols.some((c) => c.name === 'outcome')) {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN outcome TEXT');
       db.exec('CREATE INDEX IF NOT EXISTS idx_voice_call_log_outcome ON voice_call_log(outcome)');
-      console.log('✅ Migration complete: voice_call_log.outcome added');
+      dbLog('✅ Migration complete: voice_call_log.outcome added');
     }
     const customerCols = db.prepare('PRAGMA table_info(customers)').all().map((c) => c.name);
     if (!customerCols.includes('voice_setup_completed_at')) {
       db.prepare('ALTER TABLE customers ADD COLUMN voice_setup_completed_at DATETIME').run();
-      console.log('✅ Migration complete: customers.voice_setup_completed_at added');
+      dbLog('✅ Migration complete: customers.voice_setup_completed_at added');
     }
     const vasCols = db.prepare('PRAGMA table_info(voice_agent_settings)').all();
     if (!vasCols.some((c) => c.name === 'customer_id')) {
       db.exec('ALTER TABLE voice_agent_settings ADD COLUMN customer_id TEXT');
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_agent_settings_customer_id ON voice_agent_settings(customer_id) WHERE customer_id IS NOT NULL');
-      console.log('✅ Migration complete: voice_agent_settings.customer_id added');
+      dbLog('✅ Migration complete: voice_agent_settings.customer_id added');
     }
     if (!callCols.some((c) => c.name === 'caller_label')) {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN caller_label TEXT');
-      console.log('✅ Migration complete: voice_call_log.caller_label added');
+      dbLog('✅ Migration complete: voice_call_log.caller_label added');
     }
     if (!callCols.some((c) => c.name === 'caller_phone')) {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN caller_phone TEXT');
-      console.log('✅ Migration complete: voice_call_log.caller_phone added');
+      dbLog('✅ Migration complete: voice_call_log.caller_phone added');
     }
     if (!callCols.some((c) => c.name === 'direction')) {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN direction TEXT');
-      console.log('✅ Migration complete: voice_call_log.direction added');
+      dbLog('✅ Migration complete: voice_call_log.direction added');
     }
     if (!callCols.some((c) => c.name === 'opener_used')) {
       db.exec('ALTER TABLE voice_call_log ADD COLUMN opener_used TEXT');
-      console.log('✅ Migration complete: voice_call_log.opener_used added');
+      dbLog('✅ Migration complete: voice_call_log.opener_used added');
     }
     if (!customerCols.includes('onboarding_state')) {
       db.prepare('ALTER TABLE customers ADD COLUMN onboarding_state TEXT').run();
-      console.log('✅ Migration complete: customers.onboarding_state added');
+      dbLog('✅ Migration complete: customers.onboarding_state added');
     }
     if (!customerCols.includes('onboarding_state_updated_at')) {
       db.prepare('ALTER TABLE customers ADD COLUMN onboarding_state_updated_at DATETIME').run();
-      console.log('✅ Migration complete: customers.onboarding_state_updated_at added');
+      dbLog('✅ Migration complete: customers.onboarding_state_updated_at added');
     }
     if (!customerCols.includes('onboarding_meta_json')) {
       db.prepare('ALTER TABLE customers ADD COLUMN onboarding_meta_json TEXT').run();
-      console.log('✅ Migration complete: customers.onboarding_meta_json added');
+      dbLog('✅ Migration complete: customers.onboarding_meta_json added');
     }
     const vasColNames = vasCols.map((c) => c.name);
     const vasMigrations = [
@@ -4749,7 +4154,7 @@ function migrateVoiceAgentUx() {
     for (const [col, type] of vasMigrations) {
       if (!vasColNames.includes(col)) {
         db.exec(`ALTER TABLE voice_agent_settings ADD COLUMN ${col} ${type}`);
-        console.log(`✅ Migration complete: voice_agent_settings.${col} added`);
+        dbLog(`✅ Migration complete: voice_agent_settings.${col} added`);
       }
     }
     db.exec(`
@@ -4791,7 +4196,7 @@ function migrateIdempotencyKeysTable() {
         db.exec('ALTER TABLE idempotency_keys ADD COLUMN status TEXT DEFAULT \'pending\'');
       }
     } catch (_) { /* column may exist */ }
-    console.log('✅ Migration complete: idempotency_keys table ensured');
+    dbLog('✅ Migration complete: idempotency_keys table ensured');
   } catch (migrationError) {
     console.warn('⚠️  idempotency_keys table migration failed:', migrationError.message);
   }
@@ -4818,9 +4223,9 @@ function migrateCodeEmbeddingsTable() {
     if (!hasSpecialty) {
       db.prepare('ALTER TABLE code_embeddings ADD COLUMN specialty TEXT').run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_code_embeddings_specialty ON code_embeddings(specialty)').run();
-      console.log('✅ Migration complete: code_embeddings.specialty column added');
+      dbLog('✅ Migration complete: code_embeddings.specialty column added');
     } else {
-      console.log('✅ Migration complete: code_embeddings table ensured');
+      dbLog('✅ Migration complete: code_embeddings table ensured');
     }
   } catch (migrationError) {
     console.warn('⚠️  code_embeddings table migration failed:', migrationError.message);
@@ -4836,16 +4241,16 @@ function migrateFHIRPatientsMerchantId() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('merchant_id')) {
-      console.log('🔄 Migrating: Adding merchant_id column to fhir_patients table');
+      dbLog('🔄 Migrating: Adding merchant_id column to fhir_patients table');
       db.prepare("ALTER TABLE fhir_patients ADD COLUMN merchant_id TEXT").run();
 
       // Create index for performance
-      console.log('🔄 Migrating: Creating index on fhir_patients.merchant_id');
+      dbLog('🔄 Migrating: Creating index on fhir_patients.merchant_id');
       db.prepare("CREATE INDEX IF NOT EXISTS idx_fhir_patients_merchant ON fhir_patients(merchant_id)").run();
 
-      console.log('✅ Migration complete: merchant_id column added to fhir_patients table');
+      dbLog('✅ Migration complete: merchant_id column added to fhir_patients table');
     } else {
-      console.log('✅ Migration skipped: merchant_id column already exists in fhir_patients table');
+      dbLog('✅ Migration skipped: merchant_id column already exists in fhir_patients table');
     }
 
     db.pragma('foreign_keys = ON');
@@ -4857,27 +4262,8 @@ function migrateFHIRPatientsMerchantId() {
 
 // Migration: Add patient_wallet_address (HSA) to fhir_patients for impact-weighted escrow
 function migrateFHIRPatientsWalletAddress() {
-  try {
-    db.pragma('foreign_keys = OFF');
-
-    const tableInfo = db.prepare("PRAGMA table_info(fhir_patients)").all();
-    const columnNames = tableInfo.map(col => col.name);
-
-    if (!columnNames.includes('patient_wallet_address')) {
-      console.log('🔄 Migrating: Adding patient_wallet_address column to fhir_patients table');
-      db.prepare("ALTER TABLE fhir_patients ADD COLUMN patient_wallet_address TEXT").run();
-      db.prepare("CREATE INDEX IF NOT EXISTS idx_fhir_patients_wallet ON fhir_patients(patient_wallet_address)").run();
-      console.log('✅ Migration complete: patient_wallet_address added for HSA escrow flow');
-    }
-
-    db.pragma('foreign_keys = ON');
-  } catch (error) {
-    console.error('❌ FHIR patients wallet migration failed:', error.message);
-    db.pragma('foreign_keys = ON');
-  }
+  return require('./database/migrations/startup/migrate-fhir-patients-wallet-address.js')(db);
 }
-
-// Migration: Add merged_into marker for patient merges (helps unify identity)
 function migrateFHIRPatientsMergedInto() {
   try {
     db.pragma('foreign_keys = OFF');
@@ -4885,15 +4271,15 @@ function migrateFHIRPatientsMergedInto() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('merged_into')) {
-      console.log('🔄 Migrating: Adding merged_into column to fhir_patients table');
+      dbLog('🔄 Migrating: Adding merged_into column to fhir_patients table');
       db.prepare("ALTER TABLE fhir_patients ADD COLUMN merged_into TEXT").run();
       db.prepare("CREATE INDEX IF NOT EXISTS idx_fhir_patients_merged_into ON fhir_patients(merged_into)").run();
-      console.log('✅ Migration complete: merged_into column added to fhir_patients table');
+      dbLog('✅ Migration complete: merged_into column added to fhir_patients table');
     }
     if (!columnNames.includes('merged_at')) {
-      console.log('🔄 Migrating: Adding merged_at column to fhir_patients table');
+      dbLog('🔄 Migrating: Adding merged_at column to fhir_patients table');
       db.prepare("ALTER TABLE fhir_patients ADD COLUMN merged_at DATETIME").run();
-      console.log('✅ Migration complete: merged_at column added to fhir_patients table');
+      dbLog('✅ Migration complete: merged_at column added to fhir_patients table');
     }
 
     db.pragma('foreign_keys = ON');
@@ -4912,16 +4298,16 @@ function migrateCircleAccountsMerchantId() {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes('merchant_id')) {
-      console.log('🔄 Migrating: Adding merchant_id column to circle_accounts table');
+      dbLog('🔄 Migrating: Adding merchant_id column to circle_accounts table');
       db.prepare("ALTER TABLE circle_accounts ADD COLUMN merchant_id TEXT").run();
 
       // Create index for performance
-      console.log('🔄 Migrating: Creating index on circle_accounts.merchant_id');
+      dbLog('🔄 Migrating: Creating index on circle_accounts.merchant_id');
       db.prepare("CREATE INDEX IF NOT EXISTS idx_circle_accounts_merchant ON circle_accounts(merchant_id)").run();
 
-      console.log('✅ Migration complete: merchant_id column added to circle_accounts table');
+      dbLog('✅ Migration complete: merchant_id column added to circle_accounts table');
     } else {
-      console.log('✅ Migration skipped: merchant_id column already exists in circle_accounts table');
+      dbLog('✅ Migration skipped: merchant_id column already exists in circle_accounts table');
     }
 
     db.pragma('foreign_keys = ON');
@@ -4943,7 +4329,7 @@ function migrateLeadLabels() {
     `).get();
 
     if (!tableExists) {
-      console.log('🔄 Migrating: Creating lead_labels and lead_label_assignments tables');
+      dbLog('🔄 Migrating: Creating lead_labels and lead_label_assignments tables');
 
       db.exec(`
         CREATE TABLE IF NOT EXISTS lead_labels (
@@ -4985,9 +4371,9 @@ function migrateLeadLabels() {
         }
       }
 
-      console.log('✅ Migration complete: lead_labels tables created');
+      dbLog('✅ Migration complete: lead_labels tables created');
     } else {
-      console.log('✅ Migration skipped: lead_labels tables already exist');
+      dbLog('✅ Migration skipped: lead_labels tables already exist');
     }
 
     db.pragma('foreign_keys = ON');
@@ -5019,7 +4405,7 @@ function migrateIntakeEventStream() {
       CREATE INDEX IF NOT EXISTS idx_intake_event_stream_type ON intake_event_stream(event_type);
       CREATE INDEX IF NOT EXISTS idx_intake_event_stream_created ON intake_event_stream(created_at);
     `);
-    console.log('✅ Migration complete: intake_event_stream table ensured');
+    dbLog('✅ Migration complete: intake_event_stream table ensured');
   } catch (e) {
     console.warn('⚠️  intake_event_stream migration failed:', e.message);
   }
@@ -5050,7 +4436,7 @@ function migrateSessionStateProjection() {
       CREATE INDEX IF NOT EXISTS idx_session_state_projection_trace ON session_state_projection(trace_id);
       CREATE INDEX IF NOT EXISTS idx_session_state_projection_updated ON session_state_projection(updated_at);
     `);
-    console.log('✅ Migration complete: session_state_projection table ensured');
+    dbLog('✅ Migration complete: session_state_projection table ensured');
   } catch (e) {
     console.warn('⚠️  session_state_projection migration failed:', e.message);
   }
@@ -5099,7 +4485,7 @@ function migrateBackfillSessionStateFromTriage() {
       if (Number(r.referred_to_911 || 0) === 1) riskFlags.push('referred_to_911');
       upsert.run(id, sid, complaint, r.severity ?? null, timeline, JSON.stringify(riskFlags));
     }
-    console.log('✅ Migration complete: session_state_projection backfill from triage_sessions');
+    dbLog('✅ Migration complete: session_state_projection backfill from triage_sessions');
   } catch (e) {
     console.warn('⚠️  session_state_projection backfill failed:', e.message);
   }
@@ -5162,7 +4548,7 @@ function migrateCosmeticKnowledgeTables() {
       CREATE INDEX IF NOT EXISTS idx_cosmetic_restrictions_inci ON cosmetic_restrictions(inci_name);
       CREATE INDEX IF NOT EXISTS idx_cosmetic_restrictions_annex ON cosmetic_restrictions(annex);
     `);
-    console.log('✅ Migration complete: cosmetic knowledge tables ensured');
+    dbLog('✅ Migration complete: cosmetic knowledge tables ensured');
   } catch (e) {
     console.warn('⚠️  cosmetic knowledge migration failed:', e.message);
   }
@@ -5192,7 +4578,7 @@ function migrateCasePatternsStore() {
       CREATE INDEX IF NOT EXISTS idx_case_patterns_safety ON case_patterns(safety_level);
       CREATE INDEX IF NOT EXISTS idx_case_patterns_created ON case_patterns(created_at);
     `);
-    console.log('✅ Migration complete: case_patterns table ensured');
+    dbLog('✅ Migration complete: case_patterns table ensured');
   } catch (e) {
     console.warn('⚠️  case_patterns migration failed:', e.message);
   }
@@ -5220,7 +4606,7 @@ function migrateFinalAssessmentArtifacts() {
       CREATE INDEX IF NOT EXISTS idx_final_artifacts_retrieval ON final_assessment_artifacts(retrieval_key);
       CREATE INDEX IF NOT EXISTS idx_final_artifacts_created ON final_assessment_artifacts(created_at);
     `);
-    console.log('✅ Migration complete: final_assessment_artifacts table ensured');
+    dbLog('✅ Migration complete: final_assessment_artifacts table ensured');
   } catch (e) {
     console.warn('⚠️  final_assessment_artifacts migration failed:', e.message);
   }
@@ -5278,7 +4664,7 @@ function migratePayorRawIngestTables() {
     if (!batchCols.has('file_size_bytes')) {
       db.exec(`ALTER TABLE payor_ingest_batches ADD COLUMN file_size_bytes INTEGER;`);
     }
-    console.log('✅ Migration complete: payor raw ingest tables ensured');
+    dbLog('✅ Migration complete: payor raw ingest tables ensured');
   } catch (e) {
     console.warn('⚠️  payor raw ingest migration failed:', e.message);
   }
@@ -5326,7 +4712,7 @@ function migratePayorNormalizationTables() {
       CREATE INDEX IF NOT EXISTS idx_payor_norm_prefix ON payor_normalized_records(prefix_key);
       CREATE INDEX IF NOT EXISTS idx_payor_norm_version ON payor_normalized_records(normalization_version);
     `);
-    console.log('✅ Migration complete: payor normalization tables ensured');
+    dbLog('✅ Migration complete: payor normalization tables ensured');
   } catch (e) {
     console.warn('⚠️  payor normalization migration failed:', e.message);
   }
@@ -5357,7 +4743,7 @@ function migratePayorBlockingTables() {
       CREATE INDEX IF NOT EXISTS idx_payor_match_candidates_right ON payor_match_candidates(right_normalized_id);
       CREATE INDEX IF NOT EXISTS idx_payor_match_candidates_hard ON payor_match_candidates(hard_match);
     `);
-    console.log('✅ Migration complete: payor blocking tables ensured');
+    dbLog('✅ Migration complete: payor blocking tables ensured');
   } catch (e) {
     console.warn('⚠️  payor blocking migration failed:', e.message);
   }
@@ -5381,7 +4767,7 @@ function migratePayorSimilarityTables() {
       CREATE INDEX IF NOT EXISTS idx_payor_similarity_candidate ON payor_similarity_scores(candidate_id);
       CREATE INDEX IF NOT EXISTS idx_payor_similarity_version ON payor_similarity_scores(scorer_version);
     `);
-    console.log('✅ Migration complete: payor similarity tables ensured');
+    dbLog('✅ Migration complete: payor similarity tables ensured');
   } catch (e) {
     console.warn('⚠️  payor similarity migration failed:', e.message);
   }
@@ -5416,7 +4802,7 @@ function migratePayorResolutionTables() {
       CREATE INDEX IF NOT EXISTS idx_payor_resolution_decisions_policy ON payor_resolution_decisions(policy_version);
       CREATE INDEX IF NOT EXISTS idx_payor_resolution_decisions_decision ON payor_resolution_decisions(decision);
     `);
-    console.log('✅ Migration complete: payor resolution tables ensured');
+    dbLog('✅ Migration complete: payor resolution tables ensured');
   } catch (e) {
     console.warn('⚠️  payor resolution migration failed:', e.message);
   }
@@ -5479,7 +4865,7 @@ function migratePayorCanonicalTables() {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS uq_payor_entity_relationship ON payor_entity_relationships(parent_entity_id, child_entity_id, relationship_type);
     `);
-    console.log('✅ Migration complete: payor canonical tables ensured');
+    dbLog('✅ Migration complete: payor canonical tables ensured');
   } catch (e) {
     console.warn('⚠️  payor canonical migration failed:', e.message);
   }
@@ -5547,7 +4933,7 @@ function migratePayorReviewTables() {
       CREATE INDEX IF NOT EXISTS idx_payor_audit_event_type ON payor_audit_log(event_type, created_at);
       CREATE INDEX IF NOT EXISTS idx_payor_audit_decision ON payor_audit_log(decision_id, created_at);
     `);
-    console.log('✅ Migration complete: payor review queue tables ensured');
+    dbLog('✅ Migration complete: payor review queue tables ensured');
   } catch (e) {
     console.warn('⚠️  payor review queue migration failed:', e.message);
   }
@@ -5711,7 +5097,7 @@ function migrateProviderRegistryCoreTables() {
       CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_enrollment_field_mapping
         ON provider_enrollment_field_mappings(enrollment_field, source_table, source_field);
     `);
-    console.log('✅ Migration complete: provider registry core tables ensured');
+    dbLog('✅ Migration complete: provider registry core tables ensured');
   } catch (e) {
     console.warn('⚠️  provider registry core migration failed:', e.message);
   }
@@ -5719,8 +5105,9 @@ function migrateProviderRegistryCoreTables() {
 
 // Run migrations on startup (optionally skipped in constrained boot environments)
 const { runStartupMigrations } = require('./database/migrations/run-startup-migrations');
+const { buildStartupMigrationBatch } = require('./database/migrations/startup/migration-batch');
 runStartupMigrations(
-  [
+  buildStartupMigrationBatch({
     migrateInsuranceClaimsTable,
     migrateFHIRPatientsWalletAddress,
     migratePatientPortalSessionsEmail,
@@ -5787,8 +5174,8 @@ runStartupMigrations(
     migratePayorResolutionTables,
     migratePayorCanonicalTables,
     migratePayorReviewTables,
-    migrateProviderRegistryCoreTables
-  ],
+    migrateProviderRegistryCoreTables,
+  }),
   { skip: SKIP_STARTUP_MIGRATIONS }
 );
 
@@ -5802,7 +5189,7 @@ function migrateEmpiTables() {
   try {
     const empiExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='empi_persons'`).get();
     if (!empiExists) {
-      console.log('🔄 Migrating: Creating EMPI tables (empi_persons, empi_links)');
+      dbLog('🔄 Migrating: Creating EMPI tables (empi_persons, empi_links)');
       db.exec(`
         CREATE TABLE IF NOT EXISTS empi_persons (
           id TEXT PRIMARY KEY,
@@ -5823,7 +5210,7 @@ function migrateEmpiTables() {
         CREATE UNIQUE INDEX IF NOT EXISTS idx_empi_link_source ON empi_links(source_system, source_id);
         CREATE INDEX IF NOT EXISTS idx_empi_link_empi ON empi_links(empi_id);
       `);
-      console.log('✅ Migration complete: EMPI tables created');
+      dbLog('✅ Migration complete: EMPI tables created');
     }
   } catch (e) {
     console.warn('⚠️  EMPI migration failed:', e.message);
@@ -5840,7 +5227,7 @@ function migrateRcmAiDecisions() {
   try {
     const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='ai_decisions_rcm'`).get();
     if (!exists) {
-      console.log('🔄 Migrating: Creating ai_decisions_rcm audit table');
+      dbLog('🔄 Migrating: Creating ai_decisions_rcm audit table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS ai_decisions_rcm (
           id TEXT PRIMARY KEY,
@@ -5865,7 +5252,7 @@ function migrateRcmAiDecisions() {
         CREATE INDEX IF NOT EXISTS idx_ai_rcm_agent_created ON ai_decisions_rcm(agent_type, created_at);
         CREATE INDEX IF NOT EXISTS idx_ai_rcm_empi_created ON ai_decisions_rcm(empi_id, created_at);
       `);
-      console.log('✅ Migration complete: ai_decisions_rcm table created');
+      dbLog('✅ Migration complete: ai_decisions_rcm table created');
     }
 
     // HITL assignment + resolution fields (add columns without recreating the table).
@@ -5894,7 +5281,7 @@ function migrateRcmPremiumTables() {
   try {
     const obExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='rcm_premium_obligations'`).get();
     if (!obExists) {
-      console.log('🔄 Migrating: Creating rcm_premium_obligations / rcm_premium_payments');
+      dbLog('🔄 Migrating: Creating rcm_premium_obligations / rcm_premium_payments');
       db.exec(`
         CREATE TABLE IF NOT EXISTS rcm_premium_obligations (
           id TEXT PRIMARY KEY,
@@ -5923,7 +5310,7 @@ function migrateRcmPremiumTables() {
         );
         CREATE INDEX IF NOT EXISTS idx_rcm_premium_pay_empi_month ON rcm_premium_payments(empi_id, billing_month);
       `);
-      console.log('✅ Migration complete: RCM premium tables created');
+      dbLog('✅ Migration complete: RCM premium tables created');
     }
   } catch (e) {
     console.warn('⚠️  RCM premium tables migration failed:', e.message);
@@ -5939,7 +5326,7 @@ function migrateVideoConsultSessions() {
 
     const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_sessions'`).get();
     if (!exists) {
-      console.log('🔄 Migrating: Creating video_consult_sessions table');
+      dbLog('🔄 Migrating: Creating video_consult_sessions table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS video_consult_sessions (
           id TEXT PRIMARY KEY,
@@ -5960,12 +5347,12 @@ function migrateVideoConsultSessions() {
         CREATE INDEX IF NOT EXISTS idx_video_consult_sessions_status ON video_consult_sessions(session_status);
         CREATE INDEX IF NOT EXISTS idx_video_consult_sessions_created ON video_consult_sessions(created_at);
       `);
-      console.log('✅ Migration complete: video_consult_sessions table created');
+      dbLog('✅ Migration complete: video_consult_sessions table created');
     }
 
     const aiExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_ai_decisions'`).get();
     if (!aiExists) {
-      console.log('🔄 Migrating: Creating video_consult_ai_decisions audit table');
+      dbLog('🔄 Migrating: Creating video_consult_ai_decisions audit table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS video_consult_ai_decisions (
           id TEXT PRIMARY KEY,
@@ -5981,12 +5368,12 @@ function migrateVideoConsultSessions() {
         CREATE INDEX IF NOT EXISTS idx_video_consult_ai_room ON video_consult_ai_decisions(room_id);
         CREATE INDEX IF NOT EXISTS idx_video_consult_ai_created ON video_consult_ai_decisions(created_at);
       `);
-      console.log('✅ Migration complete: video_consult_ai_decisions table created');
+      dbLog('✅ Migration complete: video_consult_ai_decisions table created');
     }
 
     const reviewExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_review_tasks'`).get();
     if (!reviewExists) {
-      console.log('🔄 Migrating: Creating video_consult_review_tasks table');
+      dbLog('🔄 Migrating: Creating video_consult_review_tasks table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS video_consult_review_tasks (
           id TEXT PRIMARY KEY,
@@ -6001,7 +5388,7 @@ function migrateVideoConsultSessions() {
         CREATE INDEX IF NOT EXISTS idx_video_consult_review_room ON video_consult_review_tasks(room_id);
         CREATE INDEX IF NOT EXISTS idx_video_consult_review_status ON video_consult_review_tasks(status);
       `);
-      console.log('✅ Migration complete: video_consult_review_tasks table created');
+      dbLog('✅ Migration complete: video_consult_review_tasks table created');
     }
 
     // vc-db-4: Composite indexes for common queries
@@ -6017,7 +5404,7 @@ function migrateVideoConsultSessions() {
     // vc-p0-1: fhir_diagnostic_reports for video consult AI assessment
     const drExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='fhir_diagnostic_reports'`).get();
     if (!drExists) {
-      console.log('🔄 Migrating: Creating fhir_diagnostic_reports table');
+      dbLog('🔄 Migrating: Creating fhir_diagnostic_reports table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS fhir_diagnostic_reports (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6033,13 +5420,13 @@ function migrateVideoConsultSessions() {
         CREATE INDEX IF NOT EXISTS idx_fhir_diagnostic_reports_patient ON fhir_diagnostic_reports(patient_id);
         CREATE INDEX IF NOT EXISTS idx_fhir_diagnostic_reports_encounter ON fhir_diagnostic_reports(encounter_id);
       `);
-      console.log('✅ Migration complete: fhir_diagnostic_reports table created');
+      dbLog('✅ Migration complete: fhir_diagnostic_reports table created');
     }
 
     // vc-db-5: Incremental transcript storage (real-time persistence)
     const transcriptsExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_transcripts'`).get();
     if (!transcriptsExists) {
-      console.log('🔄 Migrating: Creating video_consult_transcripts table');
+      dbLog('🔄 Migrating: Creating video_consult_transcripts table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS video_consult_transcripts (
           id TEXT PRIMARY KEY,
@@ -6057,13 +5444,13 @@ function migrateVideoConsultSessions() {
         CREATE INDEX IF NOT EXISTS idx_vc_transcripts_speaker ON video_consult_transcripts(speaker);
         CREATE INDEX IF NOT EXISTS idx_vc_transcripts_timestamp ON video_consult_transcripts(timestamp);
       `);
-      console.log('✅ Migration complete: video_consult_transcripts table created');
+      dbLog('✅ Migration complete: video_consult_transcripts table created');
     }
 
     // vc-db-6: Frame-level visual data storage
     const framesExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_frames'`).get();
     if (!framesExists) {
-      console.log('🔄 Migrating: Creating video_consult_frames table');
+      dbLog('🔄 Migrating: Creating video_consult_frames table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS video_consult_frames (
           id TEXT PRIMARY KEY,
@@ -6079,7 +5466,7 @@ function migrateVideoConsultSessions() {
         CREATE INDEX IF NOT EXISTS idx_vc_frames_appointment ON video_consult_frames(appointment_id);
         CREATE INDEX IF NOT EXISTS idx_vc_frames_timestamp ON video_consult_frames(timestamp);
       `);
-      console.log('✅ Migration complete: video_consult_frames table created');
+      dbLog('✅ Migration complete: video_consult_frames table created');
     }
 
     // vc-db-7: Add appointment_id links to video_consult_sessions
@@ -6087,10 +5474,10 @@ function migrateVideoConsultSessions() {
       const vcInfo = db.prepare(`PRAGMA table_info(video_consult_sessions)`).all();
       const hasAppointmentId = vcInfo.some(c => c.name === 'appointment_id');
       if (!hasAppointmentId) {
-        console.log('🔄 Migrating: Adding appointment_id to video_consult_sessions');
+        dbLog('🔄 Migrating: Adding appointment_id to video_consult_sessions');
         db.exec(`ALTER TABLE video_consult_sessions ADD COLUMN appointment_id TEXT;`);
         db.exec(`CREATE INDEX IF NOT EXISTS idx_vc_sessions_appointment ON video_consult_sessions(appointment_id);`);
-        console.log('✅ Migration complete: appointment_id added to video_consult_sessions');
+        dbLog('✅ Migration complete: appointment_id added to video_consult_sessions');
       }
     } catch (e) {
       if (!e.message?.includes('duplicate column')) console.warn('⚠️  appointment_id migration:', e.message);
@@ -6101,7 +5488,7 @@ function migrateVideoConsultSessions() {
       const apptInfo = db.prepare(`PRAGMA table_info(appointments)`).all();
       const addIfMissing = (col, sql) => {
         if (!apptInfo.some(c => c.name === col)) {
-          console.log(`📦 Adding ${col} column to appointments table...`);
+          dbLog(`📦 Adding ${col} column to appointments table...`);
           db.exec(sql);
         }
       };
@@ -6116,7 +5503,7 @@ function migrateVideoConsultSessions() {
       addIfMissing('slot_state', `ALTER TABLE appointments ADD COLUMN slot_state TEXT DEFAULT 'soft_reserved';`);
       addIfMissing('stripe_payment_intent_id', `ALTER TABLE appointments ADD COLUMN stripe_payment_intent_id TEXT;`);
       addIfMissing('tech_check_sent', `ALTER TABLE appointments ADD COLUMN tech_check_sent BOOLEAN DEFAULT 0;`);
-      console.log('✅ Migration complete: Appointment outcome fields added');
+      dbLog('✅ Migration complete: Appointment outcome fields added');
     } catch (e) {
       if (!e.message?.includes('duplicate column')) console.warn('⚠️  Appointment outcome fields migration:', e.message);
     }
@@ -6124,7 +5511,7 @@ function migrateVideoConsultSessions() {
     // Phase 8: visit_feedbacks table
     const visitFeedbacksExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='visit_feedbacks'`).get();
     if (!visitFeedbacksExists) {
-      console.log('🔄 Migrating: Creating visit_feedbacks table');
+      dbLog('🔄 Migrating: Creating visit_feedbacks table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS visit_feedbacks (
           id TEXT PRIMARY KEY,
@@ -6137,13 +5524,13 @@ function migrateVideoConsultSessions() {
         );
         CREATE INDEX IF NOT EXISTS idx_visit_feedbacks_appointment ON visit_feedbacks(appointment_id);
       `);
-      console.log('✅ Migration complete: visit_feedbacks table created');
+      dbLog('✅ Migration complete: visit_feedbacks table created');
     }
 
     // vc-db-9: Risk events (symptom triage audit)
     const riskEventsExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_risk_events'`).get();
     if (!riskEventsExists) {
-      console.log('🔄 Migrating: Creating video_consult_risk_events table');
+      dbLog('🔄 Migrating: Creating video_consult_risk_events table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS video_consult_risk_events (
           id TEXT PRIMARY KEY,
@@ -6160,7 +5547,7 @@ function migrateVideoConsultSessions() {
         CREATE INDEX IF NOT EXISTS idx_vc_risk_room ON video_consult_risk_events(room_id);
         CREATE INDEX IF NOT EXISTS idx_vc_risk_timestamp ON video_consult_risk_events(timestamp);
       `);
-      console.log('✅ Migration complete: video_consult_risk_events table created');
+      dbLog('✅ Migration complete: video_consult_risk_events table created');
     }
 
     db.pragma('foreign_keys = ON');
@@ -6177,7 +5564,7 @@ function migrateEncounterVitals() {
   try {
     const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='encounter_vitals'`).get();
     if (!exists) {
-      console.log('🔄 Migrating: Creating encounter_vitals table');
+      dbLog('🔄 Migrating: Creating encounter_vitals table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS encounter_vitals (
           id TEXT PRIMARY KEY,
@@ -6197,7 +5584,7 @@ function migrateEncounterVitals() {
         CREATE INDEX IF NOT EXISTS idx_encounter_vitals_appointment ON encounter_vitals(appointment_id);
         CREATE INDEX IF NOT EXISTS idx_encounter_vitals_room ON encounter_vitals(room_id);
       `);
-      console.log('✅ Migration complete: encounter_vitals table created');
+      dbLog('✅ Migration complete: encounter_vitals table created');
     }
   } catch (e) {
     console.error('❌ encounter_vitals migration failed:', e.message);
@@ -6213,7 +5600,7 @@ function migrateResearchBounties() {
 
     const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='research_bounties'`).get();
     if (!exists) {
-      console.log('🔄 Migrating: Creating research_bounties table');
+      dbLog('🔄 Migrating: Creating research_bounties table');
       db.exec(`
         CREATE TABLE IF NOT EXISTS research_bounties (
           id TEXT PRIMARY KEY,
@@ -6235,7 +5622,7 @@ function migrateResearchBounties() {
         CREATE INDEX IF NOT EXISTS idx_research_bounties_status ON research_bounties(status);
         CREATE INDEX IF NOT EXISTS idx_research_bounties_escrow ON research_bounties(escrow_hash);
       `);
-      console.log('✅ Migration complete: research_bounties table created');
+      dbLog('✅ Migration complete: research_bounties table created');
     }
 
     db.pragma('foreign_keys = ON');
@@ -6255,56 +5642,11 @@ function safeStringify(data) {
 }
 
 /**
- * Task 23: Run versioned migrations from middleware-platform/migrations/
+ * Task 23: Run versioned migrations from database/migrations/
  */
+const { runVersionedMigrations } = require('./database/versioned-migrations');
 function runMigrations() {
-  const migrationsDir = path.join(__dirname, 'migrations');
-  if (!fs.existsSync(migrationsDir)) return;
-  db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-  // mvp-76: optional backup-before-migrate (prod)
-  try {
-    const strictEnvRaw = String(process.env.MIGRATIONS_STRICT || '').toLowerCase().trim();
-    const strict =
-      strictEnvRaw
-        ? (strictEnvRaw === '1' || strictEnvRaw === 'true' || strictEnvRaw === 'yes')
-        : isProdEnv;
-    const wantBackup = (process.env.BACKUP_BEFORE_MIGRATE === '1' || process.env.BACKUP_BEFORE_MIGRATE === 'true') && isProdEnv;
-    if (wantBackup && fs.existsSync(dbPath)) {
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const backupDir = process.env.DB_BACKUP_DIR || path.join(path.dirname(dbPath), 'backups');
-      try { fs.mkdirSync(backupDir, { recursive: true }); } catch (_) {}
-      const backupPath = path.join(backupDir, `${path.basename(dbPath)}.bak-${ts}`);
-      fs.copyFileSync(dbPath, backupPath);
-      console.log(`✅ DB backup created: ${backupPath}`);
-    }
-
-    const files = fs.readdirSync(migrationsDir).filter(f => /^\d+_.*\.js$/.test(f)).sort();
-    for (const f of files) {
-      const version = f.replace(/\.js$/, '');
-      const applied = db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version);
-      if (applied) continue;
-      try {
-        const m = require(path.join(migrationsDir, f));
-        if (typeof m.up === 'function') {
-          m.up(db);
-          db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)').run(version);
-          console.log(`✅ Migration applied: ${version}`);
-        }
-      } catch (e) {
-        console.warn(`⚠️  Migration ${version} failed:`, e.message);
-        if (strict) {
-          console.error('❌ Migration failed with MIGRATIONS_STRICT enabled; refusing to start.');
-          process.exit(1);
-        }
-      }
-    }
-    return;
-  } catch (e) {
-    if (isProdEnv) {
-      console.error('❌ Migration runner crashed in production:', e.message);
-      process.exit(1);
-    }
-  }
+  runVersionedMigrations({ db, dbPath, isProdEnv, dbLog });
 }
 runMigrations();
 
@@ -6316,7 +5658,7 @@ function ensureBillingTables() {
 if (String(process.env.SQLITE_FOREIGN_KEYS || '').trim() === '1') {
   try {
     db.pragma('foreign_keys = ON');
-    console.log('SQLite foreign_keys=ON (SQLITE_FOREIGN_KEYS=1)');
+    dbLog('SQLite foreign_keys=ON (SQLITE_FOREIGN_KEYS=1)');
   } catch (e) {
     console.warn('SQLite foreign_keys pragma failed:', e.message);
   }
@@ -6351,8 +5693,8 @@ try {
   const missing = requiredRichIntakeCols.filter(c => !existingCols.has(c));
   if (missing.length) {
     console.warn(`[migration] triage_sessions missing rich-intake cols: ${missing.join(', ')}. Applying 011 + 015...`);
-    require('./migrations/011_triage_rich_intake').up(db);
-    require('./migrations/015_triage_rich_intake_phase1_columns').up(db);
+    require('./database/migrations/011_triage_rich_intake').up(db);
+    require('./database/migrations/015_triage_rich_intake_phase1_columns').up(db);
   }
 } catch (e) {
   console.warn('[migration] triage_sessions column safeguard failed:', e.message);
@@ -6446,6 +5788,11 @@ function migrateSoftDeleteColumns() {
 }
 try { migrateSoftDeleteColumns(); } catch (_) {}
 
+const { createPatientSessionsRepository } = require('./database/repositories/patient-sessions');
+const { createOrchestrateSessionsRepository } = require('./database/repositories/orchestrate-sessions');
+const _patientSessionsRepo = createPatientSessionsRepository(db);
+const _orchestrateSessionsRepo = createOrchestrateSessionsRepository(db);
+
 module.exports = {
   // Expose the database instance for direct access when needed
   db: db,
@@ -6497,132 +5844,12 @@ module.exports = {
   // ============================================
   // PATIENT SESSIONS (email → FHIR patient_id mapping)
   // ============================================
-  createPatientSession: ({ session_id, email, patient_id = null, expires_at }) => {
-    if (!session_id || !email || !expires_at) return;
-    try {
-      db.prepare(`
-        INSERT INTO patient_sessions (session_id, email, patient_id, expires_at, created_at, last_used)
-        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
-      `).run(session_id, email.toLowerCase().trim(), patient_id || null, expires_at);
-    } catch (e) {
-      console.error('❌ Failed to create patient_session:', e.message);
-    }
-  },
-  getPatientSession: (session_id) => {
-    if (!session_id) return null;
-    try {
-      return db.prepare(`
-        SELECT * FROM patient_sessions
-        WHERE session_id = ?
-      `).get(session_id) || null;
-    } catch (_) {
-      return null;
-    }
-  },
-  updatePatientSession: (session_id, fields = {}) => {
-    if (!session_id || !fields || Object.keys(fields).length === 0) return;
-    const sets = [];
-    const values = [];
-    if (fields.email !== undefined) {
-      sets.push('email = ?');
-      values.push(fields.email.toLowerCase().trim());
-    }
-    if (fields.patient_id !== undefined) {
-      sets.push('patient_id = ?');
-      values.push(fields.patient_id || null);
-    }
-    if (fields.expires_at !== undefined) {
-      sets.push('expires_at = ?');
-      values.push(fields.expires_at);
-    }
-    // Always bump last_used when we update
-    sets.push('last_used = datetime(\'now\')');
-    if (sets.length === 0) return;
-    values.push(session_id);
-    try {
-      db.prepare(`
-        UPDATE patient_sessions
-        SET ${sets.join(', ')}
-        WHERE session_id = ?
-      `).run(...values);
-    } catch (e) {
-      console.error('❌ Failed to update patient_session:', e.message);
-    }
-  },
+  ..._patientSessionsRepo,
 
   // ============================================
   // PATIENT ORCHESTRATE SESSIONS (Step 1 - Multi-Modal Front Door)
   // ============================================
-  getOrchestrateSessionBySessionId: (session_id) => {
-    if (!session_id) return null;
-    try {
-      const row = db.prepare('SELECT * FROM patient_orchestrate_sessions WHERE session_id = ?').get(session_id);
-      return row ? { ...row, conversation_history: row.conversation_history ? JSON.parse(row.conversation_history) : [], flow_state: row.flow_state ? JSON.parse(row.flow_state) : {} } : null;
-    } catch (_) { return null; }
-  },
-  getOrchestrateSessionByCallerPhone: (caller_phone, opts = {}) => {
-    if (!caller_phone) return null;
-    try {
-      const norm = String(caller_phone).replace(/\D/g, '');
-      if (norm.length < 6) return null;
-      const clinicId = opts.clinicId || opts.clinic_id || null;
-      const customerId = opts.customerId || opts.customer_id || null;
-      const requireClinicScope = opts.requireClinicScope === true;
-      if (requireClinicScope && !clinicId) return null;
-
-      let sql = `SELECT * FROM patient_orchestrate_sessions
-        WHERE REPLACE(REPLACE(REPLACE(caller_phone, '-', ''), ' ', ''), '+', '') LIKE ?
-        AND status = ?`;
-      const params = ['%' + norm.slice(-10) + '%', 'active'];
-      if (clinicId) {
-        sql += ' AND clinic_id = ?';
-        params.push(clinicId);
-      }
-      if (customerId) {
-        sql += ' AND (flow_state LIKE ? OR flow_state IS NULL)';
-        params.push(`%"customer_id":"${customerId}"%`);
-      }
-      sql += ' ORDER BY last_activity_at DESC LIMIT 1';
-      const rows = db.prepare(sql).all(...params);
-      const row = rows && rows[0];
-      return row ? { ...row, conversation_history: row.conversation_history ? JSON.parse(row.conversation_history) : [], flow_state: row.flow_state ? JSON.parse(row.flow_state) : {} } : null;
-    } catch (_) { return null; }
-  },
-  upsertOrchestrateSession: (data) => {
-    try {
-      const id = data.id || require('uuid').v4();
-      const session_id = data.session_id || id;
-      const now = new Date().toISOString();
-      const history = JSON.stringify(data.conversation_history || []);
-      const flow_state = JSON.stringify(data.flow_state || {});
-      const case_id = data.case_id || (data.flow_state && data.flow_state.case_id) || null;
-      const forceClinicSync = !!(data.force_clinic_sync || data.verified_site_upsert);
-      const clinicUpdate = forceClinicSync
-        ? 'clinic_id = excluded.clinic_id,'
-        : 'clinic_id = COALESCE(excluded.clinic_id, patient_orchestrate_sessions.clinic_id),';
-      db.prepare(`
-        INSERT INTO patient_orchestrate_sessions (id, session_id, channel, patient_id, caller_phone, portal_session_id, clinic_id, preferred_language, turn_count, conversation_history, flow_state, case_id, status, created_at, updated_at, last_activity_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(session_id) DO UPDATE SET
-          patient_id = COALESCE(excluded.patient_id, patient_orchestrate_sessions.patient_id),
-          caller_phone = COALESCE(excluded.caller_phone, patient_orchestrate_sessions.caller_phone),
-          portal_session_id = COALESCE(excluded.portal_session_id, patient_orchestrate_sessions.portal_session_id),
-          ${clinicUpdate}
-          preferred_language = COALESCE(excluded.preferred_language, patient_orchestrate_sessions.preferred_language),
-          turn_count = excluded.turn_count,
-          conversation_history = excluded.conversation_history,
-          flow_state = excluded.flow_state,
-          case_id = COALESCE(excluded.case_id, patient_orchestrate_sessions.case_id),
-          status = COALESCE(excluded.status, patient_orchestrate_sessions.status),
-          updated_at = excluded.updated_at,
-          last_activity_at = excluded.last_activity_at
-      `).run(id, session_id, data.channel || 'chat', data.patient_id || null, data.caller_phone || null, data.portal_session_id || null, data.clinic_id || null, data.preferred_language || 'en', data.turn_count || 0, history, flow_state, case_id, data.status || 'active', now, now, now);
-      return { id, session_id };
-    } catch (e) {
-      console.error('❌ Failed to upsert orchestrate session:', e.message);
-      throw e;
-    }
-  },
+  ..._orchestrateSessionsRepo,
 
   /**
    * Clear triage/RAG/Kelly rows for a chat session_id before the first persisted orchestrate turn.
@@ -8233,7 +7460,7 @@ module.exports = {
       VALUES (?, ?, ?, ?, ?)
     `).run(row.id, row.entity_type, row.payload_json, row.attempt_count, row.last_error);
     db.prepare('DELETE FROM postgres_sync_retry WHERE id = ?').run(id);
-    console.log(`📤 Postgres sync moved to DLQ: ${row.entity_type} (id=${id})`);
+    dbLog(`📤 Postgres sync moved to DLQ: ${row.entity_type} (id=${id})`);
   },
   getRetryQueueDepth: () => {
     try {
@@ -8263,7 +7490,7 @@ module.exports = {
         typeof payload.parameters === 'string' ? payload.parameters : JSON.stringify(payload.parameters || {}),
         payload.error_message || null
       );
-      console.log(`📥 Tool call moved to DLQ: ${payload.function_name} (call_id=${payload.call_id})`);
+      dbLog(`📥 Tool call moved to DLQ: ${payload.function_name} (call_id=${payload.call_id})`);
       return id;
     } catch (e) {
       console.error('❌ Failed to enqueue tool call DLQ:', e.message);
@@ -11938,7 +11165,7 @@ module.exports = {
   // Create new appointment
   async createAppointment(appointment) {
     try {
-      const { enforceCanonicalPatientPhone } = require('./services/patient-contact-canonical');
+      const { enforceCanonicalPatientPhone } = require('./services/patient/patient-contact-canonical');
       enforceCanonicalPatientPhone(appointment, { logTag: '[createAppointment]' });
     } catch (e) {
       console.warn('[createAppointment] Canonical patient phone skipped:', e.message);
@@ -15410,7 +14637,7 @@ module.exports = {
       total += r5.changes;
     } catch (_) {}
     if (total > 0) {
-      console.log(`🧹 Cleaned ${total} voice call state records (older than ${retentionDays} days)`);
+      dbLog(`🧹 Cleaned ${total} voice call state records (older than ${retentionDays} days)`);
     }
     return { deleted: total, retentionDays, cutoff: cutoffStr };
   },
@@ -15439,7 +14666,7 @@ module.exports = {
       if (e.message && !e.message.includes('no such table')) console.warn('⚠️  cleanupVideoConsultData review_tasks:', e.message);
     }
     if (total > 0) {
-      console.log(`🧹 Cleaned ${total} video consult records (sessions/decisions: ${retentionDays}d, resolved tasks: ${reviewDays}d)`);
+      dbLog(`🧹 Cleaned ${total} video consult records (sessions/decisions: ${retentionDays}d, resolved tasks: ${reviewDays}d)`);
     }
     return { deleted: total, retentionDays, cutoff: cutoffStr };
   },
@@ -17014,6 +16241,11 @@ module.exports = {
   insertKellyCallEvent(event = {}) {
     if (!event.event_type) return null;
 
+    const defaultRate = process.env.NODE_ENV === 'test' ? '0' : '1';
+    const rate = parseFloat(process.env.KELLY_CALL_EVENT_SAMPLE_RATE ?? defaultRate);
+    if (Number.isFinite(rate) && rate <= 0) return null;
+    if (Number.isFinite(rate) && rate < 1 && Math.random() > rate) return null;
+
     const payload = event.payload_json || {};
     const clinicId =
       event.clinic_id ||
@@ -17043,6 +16275,19 @@ module.exports = {
       console.warn('[kelly_call_events] insert failed:', e.message);
       return null;
     }
+    try {
+      const { mirrorKellyCallEventToPostgres } = require('./database/postgres-hot-path');
+      mirrorKellyCallEventToPostgres({
+        id,
+        session_id: event.session_id || null,
+        call_id: event.call_id || null,
+        event_type: event.event_type,
+        payload_json: payload,
+        clinic_id: clinicId,
+        customer_id: customerId,
+        created_at: event.created_at || new Date().toISOString()
+      }).catch(() => {});
+    } catch (_) {}
     return id;
   },
 
@@ -17887,7 +17132,7 @@ module.exports = {
     if (!columnNames.includes('description')) {
       try {
         db.prepare('ALTER TABLE leads ADD COLUMN description TEXT').run();
-        console.log('✅ Added description column to leads table');
+        dbLog('✅ Added description column to leads table');
       } catch (err) {
         // Column might already exist, ignore
       }
@@ -17897,7 +17142,7 @@ module.exports = {
     if (!columnNames.includes('salary')) {
       try {
         db.prepare('ALTER TABLE leads ADD COLUMN salary TEXT').run();
-        console.log('✅ Added salary column to leads table');
+        dbLog('✅ Added salary column to leads table');
       } catch (err) {
         // Column might already exist, ignore
       }
@@ -17907,7 +17152,7 @@ module.exports = {
     if (!columnNames.includes('specialty')) {
       try {
         db.prepare('ALTER TABLE leads ADD COLUMN specialty TEXT').run();
-        console.log('✅ Added specialty column to leads table');
+        dbLog('✅ Added specialty column to leads table');
       } catch (err) {
         // Column might already exist, ignore
       }
@@ -19853,7 +19098,7 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
   const { v4: uuidv4 } = require('uuid');
   if (session?.session_id) {
     try {
-      const { ensureUniqueTriageSessionId } = require('./services/kelly-rails/session-ssot');
+      const { ensureUniqueTriageSessionId } = require('./services/kelly/rails/session-ssot');
       ensureUniqueTriageSessionId(session.session_id);
     } catch (_) {}
   }
@@ -20530,7 +19775,7 @@ module.exports.upsertIngredientAlias = function upsertIngredientAlias(
 };
 
 module.exports.replaceProductIngredientsFromInciText = function replaceProductIngredientsFromInciText(productId, inciText) {
-  const { resolveInciTextToRows } = require('./services/inci-resolve');
+  const { resolveInciTextToRows } = require('./services/clinical/inci-resolve');
   const rows = resolveInciTextToRows(inciText, {
     getCosingIngredientByInci: module.exports.getCosingIngredientByInci,
     getAliasCanonical: module.exports.getIngredientAliasCanonical,
@@ -20541,13 +19786,13 @@ module.exports.replaceProductIngredientsFromInciText = function replaceProductIn
 
 /** Layer B: deterministic conflicts from `ingredient_interactions` (migration 028). */
 module.exports.createIngredientConflictGraph = function createIngredientConflictGraph() {
-  const { createConflictGraph } = require('./services/ingredient-conflict-graph');
+  const { createConflictGraph } = require('./services/catalog/ingredient-conflict-graph');
   return createConflictGraph(db);
 };
 
 /** Catalog quality: % resolved + top unresolved tokens (for ops / Kelly tool). */
 module.exports.getIngredientResolutionMetricsSnapshot = function getIngredientResolutionMetricsSnapshot() {
-  const m = require('./services/ingredient-resolution-metrics');
+  const m = require('./services/catalog/ingredient-resolution-metrics');
   return {
     ...m.getIngredientResolutionMetrics(),
     top_unresolved_tokens: m.getTopUnresolvedInciTokens(25)

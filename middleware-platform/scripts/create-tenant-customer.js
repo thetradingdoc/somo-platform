@@ -19,7 +19,7 @@ const projectRoot = path.join(__dirname, '..');
 process.chdir(projectRoot);
 
 const db = require('../database');
-const EmailService = require('../services/email-service');
+const EmailService = require('../services/platform/email-service');
 
 async function main() {
     const [subdomain, email, nameArg] = process.argv.slice(2);

@@ -16,9 +16,9 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const { verifyUploadToken } = require('../utils/upload-token');
 const { isAllowedMime, getDetectedType } = require('../utils/mime-validate');
-const blobService = require('../services/patient-upload-blob');
-const EmailService = require('../services/email-service');
-const AntivirusService = require('../services/antivirus-service');
+const blobService = require('../services/patient/patient-upload-blob');
+const EmailService = require('../services/platform/email-service');
+const AntivirusService = require('../services/platform/antivirus-service');
 
 const MAX_FILES = 10;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB

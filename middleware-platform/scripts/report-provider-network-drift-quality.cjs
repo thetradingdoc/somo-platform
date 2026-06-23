@@ -6,7 +6,7 @@ const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const { computeProviderNetworkDriftQuality } = require('../services/provider-network-drift-quality-service');
+const { computeProviderNetworkDriftQuality } = require('../services/platform/provider-network-drift-quality-service');
 
 function main() {
   const payload = computeProviderNetworkDriftQuality(db.db);

@@ -17,7 +17,7 @@ const RAG_RETRIES = parseInt(process.env.RAG_EDUCATION_RETRIES || process.env.RA
 
 let logger;
 try {
-  logger = require('../logger');
+  logger = require('../shared/logger');
 } catch (_) {
   logger = { info: (...a) => console.log(...a), warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) };
 }

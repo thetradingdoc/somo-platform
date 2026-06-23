@@ -34,7 +34,7 @@ router.post('/web-call-token', chatLimiter, requireCustomerAuth, async (req, res
       });
     }
 
-    const ElevenLabsService = require('../services/elevenlabs-service');
+    const ElevenLabsService = require('../services/platform/elevenlabs-service');
     const elevenLabsService = new ElevenLabsService();
 
     const result = await elevenLabsService.getSignedUrl();

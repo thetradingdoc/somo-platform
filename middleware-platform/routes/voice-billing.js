@@ -4,12 +4,12 @@
 
 const express = require('express');
 const db = require('../database');
-const { listTiers, listTopupPacks } = require('../services/plan-catalog');
+const { listTiers, listTopupPacks } = require('../services/platform/plan-catalog');
 const {
   createSubscriptionCheckout,
   createTopupCheckout,
   getBillingStatus
-} = require('../services/voice-billing-stripe');
+} = require('../services/voice/voice-billing-stripe');
 const { authLimiter } = require('../middleware/rate-limiter');
 
 const router = express.Router();

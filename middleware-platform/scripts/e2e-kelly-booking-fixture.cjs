@@ -25,7 +25,7 @@ const API_BASE = (process.env.BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/
 const CLINIC_ID = process.env.TEST_CLINIC_ID || 'clinic-default';
 const PATIENT_PHONE = process.env.TEST_PATIENT_PHONE || '+15550009991';
 
-const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
+const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
 
 const C = { reset: '\x1b[0m', green: '\x1b[32m', red: '\x1b[31m', bold: '\x1b[1m', cyan: '\x1b[36m' };
 const green = (s) => `${C.green}${s}${C.reset}`;
@@ -103,7 +103,7 @@ async function main() {
     patientId: patient.resource_id,
     patientName,
     patientPhone: PATIENT_PHONE,
-    KellyAgent: require('../services/kelly-agent-service'),
+    KellyAgent: require('../services/kelly/kelly-agent-service'),
   };
 
   console.log(`${C.cyan}▶ S0-3 seedBookingReady${C.reset}`);

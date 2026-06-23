@@ -10,7 +10,7 @@ const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 
 const Database = require('better-sqlite3');
-const dbPath = process.env.DB_PATH || 'middleware-dev.db';
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'var', 'db', 'middleware-dev.db');
 const db = new Database(dbPath, { readonly: true });
 
 function hasView(name) {

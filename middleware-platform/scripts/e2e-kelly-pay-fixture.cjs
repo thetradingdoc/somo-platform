@@ -23,7 +23,7 @@ const API_BASE = (process.env.BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/
 const CLINIC_ID = process.env.TEST_CLINIC_ID || 'clinic-default';
 const PATIENT_PHONE = process.env.TEST_PATIENT_PHONE || '+15550009991';
 
-const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
+const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
 
 async function main() {
   if (!process.env.RCM_E2E_USE_EXISTING_SERVER) {
@@ -57,7 +57,7 @@ async function main() {
   }
 
   const sessionId = fixtures.newE2eSessionId('e2e_pay');
-  const KellyAgent = require('../services/kelly-agent-service');
+  const KellyAgent = require('../services/kelly/kelly-agent-service');
   const KellyToolExecutor = fixtures.getKellyToolExecutor();
 
   const paySeed = fixtures.seedPayReady(sessionId, patient.resource_id, CLINIC_ID);

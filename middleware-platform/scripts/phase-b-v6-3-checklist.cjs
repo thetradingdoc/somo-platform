@@ -14,7 +14,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 process.env.DB_PATH =
   process.env.DB_PATH || path.join(__dirname, '..', 'middleware-dev.db');
-const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
+const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
 
 const API_BASE = (process.env.BASE_URL || process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(
   /\/$/,

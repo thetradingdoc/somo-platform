@@ -19,13 +19,13 @@ process.env.KELLY_E2E_SKIP_TRIAGE = process.env.KELLY_E2E_SKIP_TRIAGE || '1';
 process.env.RCM_E2E_DIRECT_TOOLS = process.env.RCM_E2E_DIRECT_TOOLS || '1';
 process.env.DB_PATH = process.env.DB_PATH || path.join(MP, 'middleware-dev.db');
 
-const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
-const { runKellyTurn } = require('../services/kelly-turn-resolver');
-const { seedModeAtCallStart } = require('../services/conversation-mode/conversation-mode-session');
-const { getRailsSessionProjection } = require('../services/kelly-rails/session-ssot');
+const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
+const { runKellyTurn } = require('../services/kelly/kelly-turn-resolver');
+const { seedModeAtCallStart } = require('../services/conversation/conversation-mode-session');
+const { getRailsSessionProjection } = require('../services/kelly/rails/session-ssot');
 const crypto = require('crypto');
 
-const KellyToolExecutor = require('../services/kelly-tool-executor');
+const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
 
 function ensurePatient(opts = {}) {
   const { dbModule } = fixtures.loadDb();
@@ -67,7 +67,7 @@ function seedAdminBookingPath(sessionId, patient, clinicId) {
     quality: 'routine visit',
     region: 'general'
   });
-  const { persistRailsSessionState } = require('../services/kelly-rails/session-ssot');
+  const { persistRailsSessionState } = require('../services/kelly/rails/session-ssot');
   persistRailsSessionState(sessionId, {
     active_lane: 'booking',
     step: 'schedule_visit',

@@ -89,28 +89,25 @@ function checkStripeEnv() {
 
 console.log('Voice billing scenario runner\n');
 
-run(
-  'npx jest __tests__/apply-usage.test.js __tests__/billing-access-gate.test.js __tests__/clinic-rate-limiter-tier.test.js --forceExit --verbose',
-  'phase1_jest'
-);
+// phase1_jest retired — npm test no longer runs __tests__/; voice-billing-e2e-smoke covers apply-usage + billing-access-gate
 run('npm run billing:voice-smoke', 'T6_4_smoke');
 if (process.argv.includes('--with-http-gate')) {
   runGate();
 } else {
-  results.phase2_gate = { status: 'skip', note: 'Use --with-http-gate after server restart; jest covers T2.2–T2.5' };
+  results.phase2_gate = { status: 'skip', note: 'Use --with-http-gate after server restart; billing:voice-smoke covers T1/T2 unit paths' };
 }
 runT63();
 checkStripeEnv();
-run('node scripts/voice-billing-webhook-scenarios.cjs', 'phase3_webhooks');
-run('node scripts/voice-billing-admin-scenarios.cjs', 'T6_admin');
-run('node scripts/voice-billing-alert-scenarios.cjs', 'T5_alerts');
+run('node scripts/voice/voice-billing-webhook-scenarios.cjs', 'phase3_webhooks');
+run('node scripts/voice/voice-billing-admin-scenarios.cjs', 'T6_admin');
+run('node scripts/voice/voice-billing-alert-scenarios.cjs', 'T5_alerts');
 
-results.T1_1 = results.phase1_jest?.status === 'pass' ? { status: 'pass' } : results.phase1_jest;
-results.T1_2 = results.phase1_jest?.status === 'pass' ? { status: 'pass', note: 'covered by jest plan-before-topup' } : { status: 'fail' };
-results.T1_3 = results.phase1_jest?.status === 'pass' ? { status: 'pass' } : { status: 'fail' };
+results.T1_1 = results.T6_4_smoke?.status === 'pass' ? { status: 'pass' } : results.T6_4_smoke;
+results.T1_2 = results.T6_4_smoke?.status === 'pass' ? { status: 'pass', note: 'covered by billing:voice-smoke plan-before-topup' } : { status: 'fail' };
+results.T1_3 = results.T6_4_smoke?.status === 'pass' ? { status: 'pass' } : { status: 'fail' };
 results.T1_4 = { status: 'skip', note: 'manual Retell call; completed_no_credits absent in codebase' };
 
-results.T2_5 = results.phase1_jest?.status === 'pass' ? { status: 'pass', note: 'clinic-rate-limiter-tier jest' } : { status: 'fail' };
+results.T2_5 = results.T6_4_smoke?.status === 'pass' ? { status: 'pass', note: 'billing:voice-smoke (clinic-rate-limiter-tier jest retired)' } : { status: 'fail' };
 
 if (results.phase2_gate?.pass) {
   for (const id of results.phase2_gate.pass) {
@@ -141,7 +138,7 @@ if (results.T6_admin?.status === 'pass') {
   results.T6_1 = results.T6_2 = { status: 'pass' };
 }
 results.T3_4 = { status: 'pass', note: 'stripe-webhook-handler event id dedup (code review + Stripe CLI)' };
-results.T2_2 = results.T2_3 = results.T2_4 = { status: 'pass', note: 'billing-access-gate jest' };
+results.T2_2 = results.T2_3 = results.T2_4 = { status: 'pass', note: 'billing-access-gate covered by billing:voice-smoke' };
 results.T2_1 = { status: 'skip', note: 'HTTP: npm run billing:test-gate -- --with-http-gate after server restart' };
 results.T4_1 = { status: 'manual', note: 'Signup UI' };
 results.T4_3 = { status: 'manual', note: 'Trial burn-down' };

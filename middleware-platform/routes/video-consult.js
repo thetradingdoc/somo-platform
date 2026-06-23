@@ -7,19 +7,19 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const videoConsultService = require('../services/video-consult-service');
-const videoConsultGraph = require('../services/video-consult-graph');
-const videoConsultAssistant = require('../services/video-consult-assistant-service');
+const videoConsultService = require('../services/shared/video-consult-service');
+const videoConsultGraph = require('../services/shared/video-consult-graph');
+const videoConsultAssistant = require('../services/shared/video-consult-assistant-service');
 const { mapYoloToClinical, mapVisionDetectionsToTags } = videoConsultAssistant;
-const videoConsultSse = require('../services/video-consult-sse');
-const BookingService = require('../services/booking-service');
-const symptomTriage = require('../services/symptom-triage-service');
-const SafetyPreScreen = require('../services/safety-prescreen');
-const QueryPlanner = require('../services/query-planner');
-const { buildTranscriptDeltaItem, buildAssistantUpdatePayload } = require('../services/video-consult-sse-schema');
-const knowledgeService = require('../services/knowledge-service');
+const videoConsultSse = require('../services/shared/video-consult-sse');
+const BookingService = require('../services/patient/booking-service');
+const symptomTriage = require('../services/platform/symptom-triage-service');
+const SafetyPreScreen = require('../services/shared/safety-prescreen');
+const QueryPlanner = require('../services/shared/query-planner');
+const { buildTranscriptDeltaItem, buildAssistantUpdatePayload } = require('../services/shared/video-consult-sse-schema');
+const knowledgeService = require('../services/shared/knowledge-service');
 const tokenBudget = require('../utils/token-budget');
-const { adaptIncomingEvent } = require('../services/channel-adapter');
+const { adaptIncomingEvent } = require('../services/shared/channel-adapter');
 const {
   ensureVisionCaptureTables,
   insertVisionCaptureEvent,
@@ -30,14 +30,14 @@ const {
   insertVisionArtifact,
   listVisionArtifactsBySession,
   listVisionEvents
-} = require('../services/vision-capture-store');
+} = require('../services/shared/vision-capture-store');
 const {
   VISION_CAPTURE_EVENTS,
   buildVisionCaptureRequested,
   buildVisionCaptureResult
-} = require('../services/vision-capture-contract');
-const { evaluateVisionResultOutcome } = require('../services/vision-capture-policy');
-const { buildVisionAssistantGuidance } = require('../services/vision-dialogue-policy');
+} = require('../services/shared/vision-capture-contract');
+const { evaluateVisionResultOutcome } = require('../services/shared/vision-capture-policy');
+const { buildVisionAssistantGuidance } = require('../services/shared/vision-dialogue-policy');
 const {
   hasValidConsent,
   isSecureFrameUrl,
@@ -46,10 +46,10 @@ const {
   isSignedUrlActive,
   canReadVisionArtifacts,
   retentionExpiresAt
-} = require('../services/vision-storage-policy');
-const Metrics = require('../services/metrics');
-const { visionFlags } = require('../services/vision-feature-flags');
-const { startVisionCaptureWorker } = require('../services/vision-capture-worker');
+} = require('../services/shared/vision-storage-policy');
+const Metrics = require('../services/shared/metrics');
+const { visionFlags } = require('../services/shared/vision-feature-flags');
+const { startVisionCaptureWorker } = require('../services/shared/vision-capture-worker');
 
 const RATE_LIMIT_PER_ROOM = 1000;
 const rateLimitMap = new Map();
@@ -1037,7 +1037,7 @@ router.get('/sse/:roomId', (req, res) => {
  */
 router.get('/review-tasks', (req, res) => {
   try {
-    const reviewTaskService = require('../services/review-task-service');
+    const reviewTaskService = require('../services/platform/review-task-service');
     const tasks = reviewTaskService.listTasks({
       room_id: req.query.room,
       status: req.query.status

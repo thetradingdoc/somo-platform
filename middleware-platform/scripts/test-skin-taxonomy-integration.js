@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const SessionStateStore = require('../services/session-state-store');
-const { resolveSkinType } = require('../services/skin-type-resolver');
-const { resolveSkinConditions } = require('../services/skin-condition-resolver');
+const SessionStateStore = require('../services/shared/session-state-store');
+const { resolveSkinType } = require('../services/clinical/skin-type-resolver');
+const { resolveSkinConditions } = require('../services/shared/skin-condition-resolver');
 
 function assert(name, cond) {
   if (!cond) throw new Error(`Assertion failed: ${name}`);

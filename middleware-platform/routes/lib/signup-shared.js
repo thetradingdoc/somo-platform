@@ -6,10 +6,10 @@
 const express = require('express');
 const crypto = require('crypto');
 const db = require('../../database');
-const EmailService = require('../../services/email-service');
-const ProviderService = require('../../services/provider-service');
-const RetellService = require('../../services/retell-service');
-const TwilioPhoneService = require('../../services/twilio-phone-service');
+const EmailService = require('../../services/platform/email-service');
+const ProviderService = require('../../services/platform/provider-service');
+const RetellService = require('../../services/voice/retell-service');
+const TwilioPhoneService = require('../../services/voice/twilio-phone-service');
 const { v4: uuidv4 } = require('uuid');
 const {
   authLimiter,
@@ -25,7 +25,7 @@ const {
   ensureClaimSessionTables,
   claimLandingSessionToCustomer,
   listCustomerProducts
-} = require('../../services/landing-session-claim-service');
+} = require('../../services/platform/landing-session-claim-service');
 
 let bcrypt;
 try {

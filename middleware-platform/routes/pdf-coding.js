@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const PDFCodingService = require('../services/pdf-coding-service');
+const PDFCodingService = require('../services/platform/pdf-coding-service');
 
 // Configure multer for PDF uploads
 const upload = multer({

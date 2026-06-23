@@ -3,8 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireServiceScope } = require('../middleware/service-auth');
-const PaymentReliabilityMonitor = require('../services/payment-reliability-monitor');
-const SecretManager = require('../services/secret-manager');
+const PaymentReliabilityMonitor = require('../services/commerce/payment-reliability-monitor');
+const SecretManager = require('../services/platform/secret-manager');
 
 // Service-to-service endpoint with scoped token enforcement.
 router.get('/payment-alerts', requireServiceScope('payment:alerts:read'), (req, res) => {

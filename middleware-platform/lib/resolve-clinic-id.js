@@ -21,7 +21,7 @@ function resolveClinicIdFromRequest(req, args = {}) {
     try {
       let normalized = fromPhone;
       try {
-        const SMSService = require('../services/sms-service');
+        const SMSService = require('../services/platform/sms-service');
         normalized = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(fromPhone) : fromPhone.replace(/\D/g, '');
       } catch {
         normalized = fromPhone.replace(/\D/g, '');

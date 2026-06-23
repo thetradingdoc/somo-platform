@@ -12,7 +12,7 @@
  *   15,30,45,0 * * * * cd /path/to/middleware-platform && node scripts/scheduled-recover-escrow.js
  */
 
-const EscrowRecoveryService = require('../services/escrow-recovery-service');
+const EscrowRecoveryService = require('../services/platform/escrow-recovery-service');
 
 const olderThanHours = parseFloat(process.argv[2] || '1');
 

@@ -24,7 +24,7 @@ function checkFile(rel) {
   if (!fs.existsSync(p)) failures.push(`missing file ${rel}`);
 }
 
-checkFile('services/kelly-rails/language.js');
+checkFile('services/kelly/rails/language.js');
 checkFile('config/clinical-opqrst/es.json');
 
 requireEnv('KELLY_RAILS_V2');
@@ -39,13 +39,13 @@ if (process.env.KELLY_ALLOW_HYBRID_GRAPH === '1') {
   failures.push('KELLY_ALLOW_HYBRID_GRAPH must be 0 on staging');
 }
 
-const { evaluateFirstTurnLanguage } = require('../services/kelly-rails/language');
+const { evaluateFirstTurnLanguage } = require('../services/kelly/rails/language');
 const es = evaluateFirstTurnLanguage('Tengo un sarpullido en la pierna');
 if (es.language !== 'es') {
   failures.push(`language detector expected es, got ${es.language}`);
 }
 
-const { isOpqrstEsPackActive } = require('../services/kelly-rails/config');
+const { isOpqrstEsPackActive } = require('../services/kelly/rails/config');
 if (process.env.KELLY_OPQRST_ES_PACK === 'v1' && !isOpqrstEsPackActive()) {
   failures.push('KELLY_OPQRST_ES_PACK=v1 but isOpqrstEsPackActive() is false');
 }

@@ -12,11 +12,11 @@ const path = require('path');
 
 process.chdir(path.join(__dirname, '..'));
 
-const { classifyDermPatientQA } = require('../services/derm-patient-qa-triage');
+const { classifyDermPatientQA } = require('../services/shared/derm-patient-qa-triage');
 const { retrievePatientEducationForDermQA } = require('../services/layer2-rag/patient-education-client');
-const { buildRetrievalFacingText } = require('../services/derm-patient-qa-image');
-const { composeFromParts } = require('../services/derm-patient-qa-answer');
-const { runDermPatientQAPipeline } = require('../services/derm-patient-qa-pipeline');
+const { buildRetrievalFacingText } = require('../services/shared/derm-patient-qa-image');
+const { composeFromParts } = require('../services/shared/derm-patient-qa-answer');
+const { runDermPatientQAPipeline } = require('../services/shared/derm-patient-qa-pipeline');
 
 /** Inspired by golden_stratified_slice_v1.json (post_id 1mtwit5, vague titles, family concern). */
 const SCENARIO = {
@@ -171,7 +171,7 @@ async function main() {
   console.log('Phase 5 — Full pipeline (same final turn, skip_llm)');
   process.env.DERM_EDUCATION_PIPELINE_ENABLED = process.env.DERM_EDUCATION_PIPELINE_ENABLED || 'true';
   process.env.DERM_QA_SKIP_LLM = 'true';
-  const { isDermEducationPipelineEnabled } = require('../services/derm-patient-qa-pipeline');
+  const { isDermEducationPipelineEnabled } = require('../services/shared/derm-patient-qa-pipeline');
   const pipelineOut = await runDermPatientQAPipeline({
     message: SCENARIO.turns[SCENARIO.turns.length - 1].message,
     skip_llm: true

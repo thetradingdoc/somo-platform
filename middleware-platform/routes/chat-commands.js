@@ -9,8 +9,8 @@ const router = express.Router();
 const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
 const { chatLimiter } = require('../middleware/rate-limiter');
-const ChatLLMService = require('../services/chat-llm-service');
-const CommandHandler = require('../services/command-handler');
+const ChatLLMService = require('../services/platform/chat-llm-service');
+const CommandHandler = require('../services/platform/command-handler');
 const promotionCommands = require('../services/commands/promotion-commands');
 const { normalizeToE164 } = require('../utils/phone-e164');
 
@@ -188,7 +188,7 @@ async function handleCallCommand(target, merchantId, customerId) {
 
   // Initiate outbound call
   try {
-    const RetellService = require('../services/retell-service');
+    const RetellService = require('../services/voice/retell-service');
     const retellService = new RetellService();
     const merchant = db.getMerchant(merchantId);
 

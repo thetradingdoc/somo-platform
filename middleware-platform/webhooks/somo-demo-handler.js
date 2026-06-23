@@ -1,20 +1,20 @@
 'use strict';
 
 const db = require('../database');
-const { isDemoEnabled } = require('../services/somo-demo-service');
-const { resolveTemplate } = require('../services/somo-demo-template-registry');
-const { USE_CASES } = require('../services/somo-demo-use-cases');
-const orchestrator = require('../services/somo-demo-orchestrator');
-const somoDemoSms = require('../services/somo-demo-sms');
-const somoDemoEmail = require('../services/somo-demo-email');
-const sheetsSync = require('../services/somo-demo-sheets-sync');
-const { evaluateFirstTurnLanguage } = require('../services/kelly-rails/language');
+const { isDemoEnabled } = require('../services/platform/somo-demo-service');
+const { resolveTemplate } = require('../services/shared/somo-demo-template-registry');
+const { USE_CASES } = require('../services/shared/somo-demo-use-cases');
+const orchestrator = require('../services/shared/somo-demo-orchestrator');
+const somoDemoSms = require('../services/voice/somo-demo-sms');
+const somoDemoEmail = require('../services/shared/somo-demo-email');
+const sheetsSync = require('../services/shared/somo-demo-sheets-sync');
+const { evaluateFirstTurnLanguage } = require('../services/kelly/rails/language');
 const {
   emergencyReply,
   getEmergencyResponseIfNeeded: getEmergencyResponseCore
-} = require('../services/emergency-safety');
-const { primaryIntent } = require('../services/conversation-mode/intent-detector');
-const { UserIntent } = require('../services/conversation-mode/conversation-mode-types');
+} = require('../services/shared/emergency-safety');
+const { primaryIntent } = require('../services/conversation/intent-detector');
+const { UserIntent } = require('../services/conversation/conversation-mode-types');
 const twilio = require('twilio');
 const { getMaxDurationSec } = require('../lib/somo-demo-env');
 
@@ -51,7 +51,7 @@ function isSomoDemoDemoConnection(connection) {
     'inbound';
   if (toNumber && String(direction).toLowerCase() !== 'outbound') {
     try {
-      const { isDemoLineToNumber } = require('../services/voice-routing-world');
+      const { isDemoLineToNumber } = require('../services/voice/voice-routing-world');
       if (isDemoLineToNumber(toNumber)) {
         connection._isSomoDemoDemo = true;
         connection._demoCallType = 'somo_demo';
@@ -239,7 +239,7 @@ async function logCallEnded(ctx, connection, outcome) {
       await somoDemoEmail.sendSignupEmail(email, { prospectName: row?.name || ctx.prospect_name });
       db.updateSomoDemoRequest(demoId, { signup_link_sent: 1, cta_offered_at: endAt });
     }
-    const { upsertLeadFromDemoRequest } = require('../services/somo-demo-service');
+    const { upsertLeadFromDemoRequest } = require('../services/platform/somo-demo-service');
     upsertLeadFromDemoRequest({
       demoRequestId: demoId,
       name: row?.name || ctx.prospect_name,
@@ -367,7 +367,7 @@ async function executeDemoTool(name, args, ctx, connection) {
         console.warn('Somo demo Sheets qualification_captured failed:', e.message);
       }
       try {
-        const { upsertLeadFromDemoRequest } = require('../services/somo-demo-service');
+        const { upsertLeadFromDemoRequest } = require('../services/platform/somo-demo-service');
         upsertLeadFromDemoRequest({
           demoRequestId: demoId,
           name: row?.name || ctx.prospect_name,
@@ -651,7 +651,7 @@ async function handleDemoMessage(callId, connection, message, handlers) {
   if (callMeta) {
     connection.callMetadata = callMeta;
     if (callMeta.from_number) {
-      const SMSService = require('../services/sms-service');
+      const SMSService = require('../services/platform/sms-service');
       connection.customerPhone = SMSService.formatPhoneNumber(callMeta.from_number);
     }
     const dv =

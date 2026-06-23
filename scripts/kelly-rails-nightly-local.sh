@@ -27,4 +27,8 @@ fi
 
 GCP_PROJECT=somo-callsomo npm run verify:kelly-rails-cloudrun
 
+echo "==> Slow CI tier (live spine + coding DB gates)"
+cd "$ROOT"
+npm run ci:slow
+
 echo "✅ Kelly nightly verify complete"

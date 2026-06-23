@@ -79,7 +79,7 @@ async function main() {
   // H2: required artifacts
   const artifacts = [
     'tests/fixtures/kelly-rails-golden-utterances.json',
-    'scripts/verify-kelly-rails-env.cjs',
+    'scripts/verify/verify-kelly-rails-env.cjs',
     'scripts/e2e-kelly-rails-golden-conversations.cjs',
     '__tests__/kelly-rails-tool-allowlists.test.js',
     '__tests__/kelly-turn-resolver.test.js'
@@ -116,8 +116,8 @@ async function main() {
   }
 
   // H4: pay-before-book executeTurn (not just router)
-  const { executeTurn } = require('../services/kelly-rails/execute-turn');
-  const { KELLY_LANE } = require('../services/kelly-rails/state-schema');
+  const { executeTurn } = require('../services/kelly/rails/execute-turn');
+  const { KELLY_LANE } = require('../services/kelly/rails/state-schema');
   executeTurn({
     sessionId: 'gap-audit-pay-before-book',
     message: 'I want to pay my copay now',
@@ -140,7 +140,7 @@ async function main() {
     }
 
     // H5: Switch 3 scope — no portal/video tools
-    const postTools = require('../services/kelly-rails/tool-allowlists').getAllowedToolNames(
+    const postTools = require('../services/kelly/rails/tool-allowlists').getAllowedToolNames(
       'post_payment',
       'confirmation'
     );
@@ -178,7 +178,7 @@ async function main() {
     const yamlGen = fs.readFileSync(path.join(mpRoot, 'scripts/generate-cloudrun-env-yaml.cjs'), 'utf8');
     const hybridDefault = /KELLY_ALLOW_HYBRID_GRAPH.*['"]1['"]/.test(yamlGen);
     dbg('H7', 'audit:deploy', 'hybrid in yaml gen', { hybridDefault });
-    const cloudRun = spawnSync('node', ['scripts/verify-kelly-rails-cloudrun-env.cjs'], {
+    const cloudRun = spawnSync('node', ['scripts/verify/verify-kelly-rails-cloudrun-env.cjs'], {
       cwd: mpRoot,
       encoding: 'utf8'
     });

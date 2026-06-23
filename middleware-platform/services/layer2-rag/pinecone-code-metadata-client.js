@@ -6,8 +6,8 @@
  */
 
 const db = require('../../database');
-const { pineconeQuery, isPineconeConfigured } = require('../pinecone-rest');
-const { embedText } = require('../semantic-search-service');
+const { pineconeQuery, isPineconeConfigured } = require('../platform/pinecone-rest');
+const { embedText } = require('../shared/semantic-search-service');
 
 function splitMetadataCodes(value) {
   if (!value) return [];

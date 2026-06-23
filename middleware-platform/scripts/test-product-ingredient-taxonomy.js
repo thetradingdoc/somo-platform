@@ -2,7 +2,7 @@
 'use strict';
 
 const db = require('../database').db;
-const { resolveIngredientFacts, enrichBiochemFacts } = require('../services/ingredient-ontology-resolver');
+const { resolveIngredientFacts, enrichBiochemFacts } = require('../services/catalog/ingredient-ontology-resolver');
 
 function printRows(label, rows) {
   console.log(`\n== ${label} (${rows.length}) ==`);

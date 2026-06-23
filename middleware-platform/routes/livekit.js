@@ -15,7 +15,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const PatientPortalService = require('../services/patient-portal-service');
+const PatientPortalService = require('../services/patient/patient-portal-service');
 
 /** Verbose token-route logs: dev by default; set DEBUG_LIVEKIT=1 to enable in production. */
 function livekitTokenDebugEnabled() {

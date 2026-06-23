@@ -13,7 +13,7 @@ require('dotenv').config();
 // - "📧 Email sent via SMTP:"  (real delivery attempt via SMTP)
 // - "📧 EMAIL (SIMULATED):"    (no provider configured / could not send)
 
-const EmailVerificationService = require('../services/email-verification-service');
+const EmailVerificationService = require('../services/platform/email-verification-service');
 
 async function main() {
   const email = String(process.env.EMAIL || '').trim();

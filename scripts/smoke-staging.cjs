@@ -34,7 +34,7 @@ run('npm', ['run', 'verify:prod:routing-smoke', '--prefix', 'middleware-platform
 });
 run('node', ['scripts/verify-staging-hosting.cjs'], root);
 
-const voiceEnv = spawnSync(process.execPath, ['scripts/verify-voice-env.cjs'], {
+const voiceEnv = spawnSync(process.execPath, ['scripts/verify/verify-voice-env.cjs'], {
   stdio: 'inherit',
   cwd: mp
 });

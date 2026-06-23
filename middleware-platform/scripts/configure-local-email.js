@@ -138,7 +138,7 @@ API_BASE_URL=${baseUrl}
     // Test email configuration
     console.log('\n🧪 Testing email configuration...');
     try {
-        const EmailService = require('../services/email-service');
+        const EmailService = require('../services/platform/email-service');
         const transporter = EmailService.getTransporter();
         
         if (transporter) {

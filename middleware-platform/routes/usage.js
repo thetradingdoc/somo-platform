@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const UsageTracker = require('../services/usage-tracker');
+const UsageTracker = require('../services/platform/usage-tracker');
 
 /**
  * Get usage summary for a customer

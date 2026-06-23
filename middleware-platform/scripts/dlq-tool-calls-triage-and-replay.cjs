@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const db = require('../database');
-const KellyToolExecutor = require('../services/kelly-tool-executor');
+const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
 
 const OUT_DIR = path.resolve(__dirname, '..', '..', 'docs', 'runbooks');
 const OUT_FILE = path.resolve(OUT_DIR, 'DLQ_TOOL_CALLS_INCIDENT_NOTE.md');

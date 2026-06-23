@@ -4,7 +4,7 @@
 
 const db = require('../database');
 const { normalizeObfDocument } = require('./obf-normalize-record.cjs');
-const Metrics = require('../services/metrics');
+const Metrics = require('../services/shared/metrics');
 
 function parseArgs(argv) {
   const out = { limit: Number(process.env.OBF_DLQ_RETRY_LIMIT || 200) || 200 };

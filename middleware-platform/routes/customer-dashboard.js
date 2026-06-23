@@ -358,7 +358,7 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
         const hasOutcomeCol = db.db.prepare('PRAGMA table_info(voice_call_log)').all()
             .some((c) => c.name === 'outcome');
 
-        const VoiceAgentRuntime = require('../services/voice-agent-runtime');
+        const VoiceAgentRuntime = require('../services/voice/voice-agent-runtime');
 
         const recentCalls = calls.slice(0, 10).map(call => {
             let outcome = hasOutcomeCol ? call.outcome : null;

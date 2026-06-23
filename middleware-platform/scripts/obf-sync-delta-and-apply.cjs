@@ -7,7 +7,7 @@ const readline = require('readline');
 const { Readable } = require('stream');
 const { Storage } = require('@google-cloud/storage');
 const db = require('../database');
-const Metrics = require('../services/metrics');
+const Metrics = require('../services/shared/metrics');
 const { normalizeObfDocument } = require('./obf-normalize-record.cjs');
 
 const DELTA_INDEX_URL = process.env.OBF_DELTA_INDEX_URL || 'https://static.openbeautyfacts.org/data/delta/index.txt';

@@ -75,7 +75,7 @@ async function listStediPatients() {
     
     // Create test eligibility data for existing patients
     const { v4: uuidv4 } = require('uuid');
-    const InsuranceService = require('../services/insurance-service');
+    const InsuranceService = require('../services/rcm/insurance-service');
     
     for (const patient of existingPatients) {
       try {

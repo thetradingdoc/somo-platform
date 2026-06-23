@@ -5,7 +5,7 @@
 
 const db = require('../../database');
 const { v4: uuidv4 } = require('uuid');
-const EmailService = require('../email-service');
+const EmailService = require('../platform/email-service');
 
 class PromotionCommands {
     /**

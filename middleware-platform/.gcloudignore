@@ -19,6 +19,13 @@ __tests__/
 test-results/
 uploads/
 data/
+var/
+e2e-artifacts/
+screenshots/
+playwright-report/
+scripts/verify/
+scripts/harness/
+scripts/data/
 .DS_Store
 *.md
 !package.json

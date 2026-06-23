@@ -60,13 +60,13 @@ function loadSignupSession(req, res) {
 }
 
 async function assignLineAndStartTrial(db, customer, phoneInput) {
-  const { normalizePhone } = require('../services/twilio-verify-service');
+  const { normalizePhone } = require('../services/voice/twilio-verify-service');
   const {
     TrialProvisionError,
     isTrialSimEnabledForCustomer,
     startTrialTenant,
     canStartTrial
-  } = require('../services/trial-lifecycle');
+  } = require('../services/platform/trial-lifecycle');
 
   const phone = phoneInput || customer.phone_number;
   if (!phone) {
@@ -126,7 +126,7 @@ async function assignLineAndStartTrial(db, customer, phoneInput) {
   const refreshed = db.getCustomer(customer.id);
   if (!refreshed.merchant_id && (refreshed.customer_type || 'saas') === 'saas') {
     try {
-      const { provisionSaasTenant } = require('../services/saas-tenant-provision');
+      const { provisionSaasTenant } = require('../services/shared/saas-tenant-provision');
       provisionSaasTenant(db, {
         customerId: refreshed.id,
         clinicName: refreshed.company_name || refreshed.name,
@@ -149,7 +149,7 @@ async function assignLineAndStartTrial(db, customer, phoneInput) {
     } catch (err) {
       if (err instanceof TrialProvisionError) {
         try {
-          const { transitionState } = require('../services/voice-onboarding-state');
+          const { transitionState } = require('../services/voice/voice-onboarding-state');
           transitionState(db, customer.id, 'provisioning_failed', { error: err.message });
         } catch (_) {}
         return {
@@ -188,7 +188,7 @@ async function assignLineAndStartTrial(db, customer, phoneInput) {
 
   const afterTrial = db.getCustomer(customer.id);
   try {
-    const { transitionState } = require('../services/voice-onboarding-state');
+    const { transitionState } = require('../services/voice/voice-onboarding-state');
     if (afterTrial.twilio_phone_number) {
       transitionState(db, customer.id, 'line_assigned');
     }
@@ -426,7 +426,7 @@ router.post('/signup', signupFlowLimiter, async (req, res) => {
     }
     db.updateCustomer(customerId, postCreatePatch);
     try {
-      const { transitionState } = require('../services/voice-onboarding-state');
+      const { transitionState } = require('../services/voice/voice-onboarding-state');
       transitionState(db, customerId, 'signup_started');
     } catch (stateErr) {
       console.warn('⚠️  onboarding state signup_started:', stateErr.message);
@@ -684,7 +684,7 @@ router.post('/signup/verify-email', signupFlowLimiter, async (req, res) => {
     // Log customer_type for debugging
     console.log(`✅ Email verified for customer ${customer.id}, customer_type in DB: ${customer.customer_type || 'null'}`);
 
-    const { isTrialSimEnabledForCustomer } = require('../services/trial-lifecycle');
+    const { isTrialSimEnabledForCustomer } = require('../services/platform/trial-lifecycle');
     const trialSimFlow =
       (customer.customer_type || 'saas') === 'saas' && isTrialSimEnabledForCustomer(customer);
 
@@ -740,8 +740,8 @@ router.post('/signup/verify-phone/send', signupFlowLimiter, async (req, res) => 
       return res.status(400).json({ success: false, error: 'Phone number required' });
     }
 
-    const { normalizePhone, sendPhoneVerification } = require('../services/twilio-verify-service');
-    const { canStartTrial } = require('../services/trial-lifecycle');
+    const { normalizePhone, sendPhoneVerification } = require('../services/voice/twilio-verify-service');
+    const { canStartTrial } = require('../services/platform/trial-lifecycle');
     const e164 = normalizePhone(phone);
     const gate = canStartTrial(db, customer.id, e164);
     if (!gate.allowed && gate.reason === 'phone_trial_in_use') {
@@ -778,7 +778,7 @@ router.post('/signup/verify-phone/check', signupFlowLimiter, async (req, res) =>
       return res.status(400).json({ success: false, error: 'Verification code required' });
     }
 
-    const { normalizePhone, checkPhoneVerification } = require('../services/twilio-verify-service');
+    const { normalizePhone, checkPhoneVerification } = require('../services/voice/twilio-verify-service');
     const e164 = normalizePhone(phone_number || customer.phone_number);
     const check = await checkPhoneVerification(e164, code);
     if (!check.approved) {
@@ -861,7 +861,7 @@ router.get('/signup/session', signupSessionReadLimiter, async (req, res) => {
       });
     }
 
-    const { isTrialSimEnabledForCustomer } = require('../services/trial-lifecycle');
+    const { isTrialSimEnabledForCustomer } = require('../services/platform/trial-lifecycle');
     const trialSimFlow =
       (customer.customer_type || 'saas') === 'saas' && isTrialSimEnabledForCustomer(customer);
 
@@ -1070,7 +1070,7 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
     let clinicId = null;
     if (!merchantId || customerType === 'saas') {
       try {
-        const { provisionSaasTenant } = require('../services/saas-tenant-provision');
+        const { provisionSaasTenant } = require('../services/shared/saas-tenant-provision');
         const enabledPlatforms = customerType === 'saas'
           ? ['voice']
           : ['acp', 'ap2', 'voice'];
@@ -1110,18 +1110,18 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
       console.log(`✅ Customer ${customer.id} already has merchant ${merchantId}`);
     }
 
-    const { isTrialSimEnabledForCustomer } = require('../services/trial-lifecycle');
+    const { isTrialSimEnabledForCustomer } = require('../services/platform/trial-lifecycle');
     const simTrialOn = customerType === 'saas' && isTrialSimEnabledForCustomer(customer);
 
     // Allocate free credits based on customer type (skip if SIM trial already granted on phone verify)
     try {
       if (customerType === 'saas' && !simTrialOn) {
-        const { getSignupTrialMinutes } = require('../services/plan-catalog');
+        const { getSignupTrialMinutes } = require('../services/platform/plan-catalog');
         const trialMin = getSignupTrialMinutes();
         db.allocateFreeCredits(customer.id, trialMin);
         console.log(`✅ Allocated ${trialMin} free minutes (SaaS) to customer ${customer.id}`);
       } else if (customerType === 'saas' && simTrialOn && customer.trial_status !== 'active') {
-        const { getSignupTrialMinutes } = require('../services/plan-catalog');
+        const { getSignupTrialMinutes } = require('../services/platform/plan-catalog');
         db.allocateFreeCredits(customer.id, getSignupTrialMinutes());
       } else if (customerType !== 'saas') {
         // API customers get 100 free minutes (one-time)
@@ -1171,7 +1171,7 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
 
     if (customerType === 'saas' && !customer.twilio_phone_number && !simTrialOn) {
       try {
-        const { canProvisionNumber } = require('../services/billing-access');
+        const { canProvisionNumber } = require('../services/rcm/billing-access');
         const provisionGate = canProvisionNumber(db, customer.id);
         if (!provisionGate.allowed) {
           console.log(`📞 Deferring Twilio provision until payment (${provisionGate.reason})`);
@@ -1242,7 +1242,7 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
 
     // Determine redirect URL based on customer type
     let redirectUrl;
-    const { getSignupTrialMinutes } = require('../services/plan-catalog');
+    const { getSignupTrialMinutes } = require('../services/platform/plan-catalog');
     const creditsAllocated = customerType === 'saas' ? getSignupTrialMinutes() : 100;
 
     const refreshedCustomer = db.getCustomer(customer.id);
@@ -1274,7 +1274,7 @@ router.post('/signup/accept-terms', signupFlowLimiter, async (req, res) => {
     }
 
     try {
-      const { transitionState } = require('../services/voice-onboarding-state');
+      const { transitionState } = require('../services/voice/voice-onboarding-state');
       transitionState(db, customer.id, 'terms_accepted');
     } catch (stateErr) {
       console.warn('⚠️  onboarding state terms_accepted:', stateErr.message);

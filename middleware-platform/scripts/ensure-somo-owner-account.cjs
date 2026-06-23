@@ -99,7 +99,7 @@ See local/README.md
     let updated = await updateExisting(existing, passwordHash, cfg.phone);
     if (!updated.merchant_id && cfg.phone) {
       console.log('Provisioning merchant + clinic for existing customer…');
-      const { provisionSaasTenant } = require('../services/saas-tenant-provision');
+      const { provisionSaasTenant } = require('../services/shared/saas-tenant-provision');
       provisionSaasTenant(db, {
         customerId: updated.id,
         phone: cfg.phone.replace(/\s+/g, ''),
@@ -119,7 +119,7 @@ See local/README.md
       console.log(`  line:        ${updated.twilio_phone_number}`);
     }
     if (!updated.retell_agent_id) {
-      const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent');
+      const { ensureCustomerRetellAgent } = require('../services/shared/ensure-retell-agent');
       const retell = await ensureCustomerRetellAgent(db, updated.id);
       if (retell.agentId) {
         updated = db.getCustomer(updated.id);
@@ -131,7 +131,7 @@ See local/README.md
       console.log(`  retell_agent_id: ${updated.retell_agent_id}`);
     }
     console.log(`\nSign in: ${process.env.BASE_URL || 'http://localhost:4000'}/login`);
-    console.log('\nNext: node scripts/seed-operator-customer.cjs');
+    console.log('\nNext: node scripts/data/seed-operator-customer.cjs');
     return;
   }
 

@@ -1,7 +1,7 @@
 'use strict';
 
 const db = require('../../database');
-const TriageRAGService = require('../triage-rag-service');
+const TriageRAGService = require('../clinical/triage-rag-service');
 
 /**
  * Kelly collect_insurance tool — session gates, resolver, HTTP collect (quote from HTTP only).
@@ -36,8 +36,8 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     };
   }
 
-  const { resolveInsuranceCodes } = require('../resolve-insurance-codes');
-  const codingReviewSvc = require('../coding-review-service');
+  const { resolveInsuranceCodes } = require('../shared/resolve-insurance-codes');
+  const codingReviewSvc = require('../clinical/coding-review-service');
   const resolved = resolveInsuranceCodes(sessionId, {
     service_code: args.service_code,
     adminOverride: args.admin_coding_override === true || args.admin_coding_override === 'true',
