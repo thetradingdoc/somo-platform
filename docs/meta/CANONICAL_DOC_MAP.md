@@ -6,6 +6,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 
 | Topic | Read first | Companion / depth |
 |-------|------------|-------------------|
+| **Clinician / product map** | [`START_HERE_CLINICIAN.md`](../START_HERE_CLINICIAN.md) | [`solution-design/CODEBASE_REORGANIZATION.md`](../solution-design/CODEBASE_REORGANIZATION.md) |
 | **Repo overview** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
 | **Deploy / CI / GCP (live)** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#callsomo-gcp-cutover) | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md), [`deployment/README.md`](../deployment/README.md) (historical) |
 | **Retell agent inventory** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#retell-agent-inventory) + [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) | `npm run verify:agent-config` |
@@ -19,8 +20,8 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Staging profile** | [`meta/README.md`](./README.md#staging-profile) | [`testing/README.md`](../testing/README.md) |
 | **Somo demo (landing outbound)** | [`agent/somo-demo/RUNBOOK.md`](../agent/somo-demo/RUNBOOK.md#phase-a-go-recovery-runbook) | [`agent/somo-demo/README.md`](../agent/somo-demo/README.md) |
 | **Kelly agentic orchestration** | [`architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md) | [`ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md), [`TURN_COMPLETION_CONTRACT.md`](../architecture/TURN_COMPLETION_CONTRACT.md) |
-| **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`kelly-rails/`](../../middleware-platform/services/kelly-rails/) in code |
-| **Conversation mode rails** | [`conversation/CONVERSATION_MODE_MATRIX.md`](../conversation/CONVERSATION_MODE_MATRIX.md) | [`runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md), `services/conversation-mode/*` |
+| **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`services/kelly/rails/`](../../middleware-platform/services/kelly/rails/) in code |
+| **Conversation mode rails** | [`conversation/CONVERSATION_MODE_MATRIX.md`](../conversation/CONVERSATION_MODE_MATRIX.md) | [`runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md), `services/conversation/*` |
 | **Kelly front-desk UX** | [`product/KELLY_FRONT_DESK_UX.md`](../product/KELLY_FRONT_DESK_UX.md) | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md), `call-opener-resolver.js` |
 | **Tenant portal audit** | [`testing/TESTING.md`](../testing/TESTING.md#tenant-front-desk-audit) | `e2e/tenant-front-desk-audit.spec.cjs`, `test-results/tenant-front-desk-audit.md` |
 | **Kelly Phase C (language + voice)** | [`runbooks/KELLY_PHASE_C_STAGING.md`](../runbooks/KELLY_PHASE_C_STAGING.md) | [`DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md`](../agent/kelly-rails/DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md), [`todos/PENDING.md`](../../todos/PENDING.md) (Phase C section) |
@@ -32,7 +33,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
 | **Middleware depth** | [`middleware-platform/README.md`](../middleware-platform/README.md) | TOC anchors — do not duplicate |
 | **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
-| **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
+| **Testing / verify gates** | [`testing/README.md`](../testing/README.md) | [`testing/VERIFY_SCRIPT_CATALOG.md`](../testing/VERIFY_SCRIPT_CATALOG.md), [VERIFY_GATES.md](../../middleware-platform/docs/VERIFY_GATES.md) |
 | **Active work** | [`todos/PENDING.md`](../../todos/PENDING.md) | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) (CR/FE detail) |
 | **Customer-ready gates** | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) | [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md) |
 

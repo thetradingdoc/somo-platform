@@ -11,13 +11,29 @@
 
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
 
+> **Clinicians & practice managers:** Start with **[`docs/START_HERE_CLINICIAN.md`](docs/START_HERE_CLINICIAN.md)** — where things live without reading code.
+
+> **Codebase reorganization plan:** **[`docs/solution-design/CODEBASE_REORGANIZATION.md`](docs/solution-design/CODEBASE_REORGANIZATION.md)** — layer-by-layer target architecture and cleanup backlog.
+
 > **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.
 
 > **Architecture notes:** [Patient timeline & billing](docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md) · [Route ownership](docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) · [`server.js` decomposition](docs/architecture/SERVER_DECOMPOSITION.md) · [Architecture index](docs/architecture/README.md) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
 
 ---
 
-## 📋 Overview
+## Repository layout
+
+| Package | Purpose |
+|---------|---------|
+| `middleware-platform/` | Main API (Node 20) |
+| `unified-dashboard/` | Web UI (provider portal, marketing) |
+| `patient-app/` | Legacy Expo app — see `patient-app/README.md` |
+| `docs/` | Documentation SSOT |
+| `scripts/` | Repo-level CI (`ci-local.sh`, doc stale checks) |
+
+**Root `node_modules/`:** Required for repo-level npm scripts (`npm run ci:fast`) without `cd middleware-platform`. Middleware has its own `middleware-platform/node_modules/`.
+
+## Clinician / product map
 
 **Somo** is an agentic AI front desk and revenue cycle platform for healthcare and business. Somo front desk handles inbound calls; Somo pay runs eligibility, claims, and patient collections. Production runs on **callsomo.com** — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
@@ -364,14 +380,17 @@ The system automatically migrates the database schema on startup. The `database.
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing / verification
 
 ```bash
-cd middleware-platform
-npm test    # Jest (see package.json for focused suites)
+# Pre-push gate (repo root)
+npm run ci:fast
+
+# Prod spine import check (middleware-platform)
+cd middleware-platform && npm test
 ```
 
-Playwright (landing + prod smoke): see **[docs/testing/README.md](docs/testing/README.md)** and **`middleware-platform/package.json`** scripts (`test:e2e-landing`, `test:prod:smoke`, etc.).
+Verify scripts replace Jest/Playwright (removed 2026-06-22). See **[docs/testing/VERIFY_SCRIPT_CATALOG.md](docs/testing/VERIFY_SCRIPT_CATALOG.md)** and **[middleware-platform/docs/VERIFY_GATES.md](middleware-platform/docs/VERIFY_GATES.md)**.
 
 ---
 

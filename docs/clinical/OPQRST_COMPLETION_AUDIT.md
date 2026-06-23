@@ -24,11 +24,11 @@ Default: onset + quality + severity + timing
 |------|--------|--------|
 | `services/opqrst-field-gate.js` | Canonical implementation | Done |
 | `services/kelly-tool-executor.js` `_storeTriageOpqrst` | Import gate `opqrstComplete` | Done |
-| `services/kelly-rails/gates/shared.js` | Re-export from gate | Done |
-| `services/kelly-rails/execute-turn.js` | Remove local fn; import shared; policy via `opqrstCompleteForSession` | Done |
-| `services/kelly-rails/state-schema.js` `routeOrchestratorLane` | Use `opqrstCompleteForSession` with clinic context | Done |
-| `services/kelly-rails/gates/opqrst.js` | Via shared import | Done |
-| `services/kelly-rails/gates/clinical.js` | Via shared import | Done |
+| `services/kelly/rails/gates/shared.js` | Re-export from gate | Done |
+| `services/kelly/rails/execute-turn.js` | Remove local fn; import shared; policy via `opqrstCompleteForSession` | Done |
+| `services/kelly/rails/state-schema.js` `routeOrchestratorLane` | Use `opqrstCompleteForSession` with clinic context | Done |
+| `services/kelly/rails/gates/opqrst.js` | Via shared import | Done |
+| `services/kelly/rails/gates/clinical.js` | Via shared import | Done |
 | `services/voice-triage-guards.js` | Trust DB `opqrst_complete` flag from store | Verified |
 | `services/kelly-orchestrator-phase.js` | Reads DB flag only | Verified |
 | `services/kelly-agent-service.js` | Gate capture when flag on; reads DB `opqrst_complete` for RAG trigger | Done |

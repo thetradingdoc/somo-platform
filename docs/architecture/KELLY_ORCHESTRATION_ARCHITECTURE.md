@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-06-18  
 **Status:** As-built — P0 gates shipped; enforce-routing on production (`api.callsomo.com`)  
-**Code:** [`middleware-platform/services/conversation-mode/`](../../middleware-platform/services/conversation-mode/), [`middleware-platform/services/kelly-rails/`](../../middleware-platform/services/kelly-rails/)
+**Code:** [`middleware-platform/services/conversation/`](../../middleware-platform/services/conversation/), [`middleware-platform/services/kelly/rails/`](../../middleware-platform/services/kelly/rails/)
 
 **Deep-dive docs (narrative):**
 

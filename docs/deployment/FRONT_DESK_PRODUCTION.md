@@ -216,7 +216,8 @@ node scripts/rollout-voice-outbound-opener.cjs --apply-db
 ```bash
 cd middleware-platform
 npm run test:kelly:rails:golden
-npx jest --testPathPattern='conversation-mode'
+npm run verify:kelly-rails-env
+npm run smoke:voice-routing-matrix
 npm run test:rails:conversation-sandbox
 npm run test:e2e:tenant-audit:safe
 ```

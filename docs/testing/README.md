@@ -27,7 +27,12 @@
 
 Browse by anchor above. Each section notes the former file path.
 
-**Middleware unit tests (Jest):** [`middleware-platform/__tests__/README.md`](../../middleware-platform/__tests__/README.md) — what `npm test` runs in `middleware-platform`, Node harnesses excluded from Jest, Playwright vs `test:eval-engine`.
+**Verification (2026-06-22):** Jest and Playwright were removed. Pre-deploy gates use **verify scripts** — see [VERIFY_SCRIPT_CATALOG.md](./VERIFY_SCRIPT_CATALOG.md) and [middleware-platform/docs/VERIFY_GATES.md](../../middleware-platform/docs/VERIFY_GATES.md).
+
+```bash
+npm run ci:fast                    # repo root — pre-push gate
+cd middleware-platform && npm test # prod-spine-imports only
+```
 
 **Medical coding accuracy eval:** from `middleware-platform/`, `SKIP_STARTUP_MIGRATIONS=1 RAG_API_URL=disabled EVAL_USE_SEMANTIC=false npm run eval:coding` — see [docs/Medical Coding/OPERATIONS.md](../Medical%20Coding/OPERATIONS.md).
 
@@ -134,11 +139,11 @@ Use this when validating **landing → login → checkout-chat → quote → pay
 
 <a id="e2e-status"></a>
 
-## Browser E2E status
+## Browser E2E status (legacy)
 
-**Playwright:** specs live in [`middleware-platform/e2e/`](../../middleware-platform/e2e/) (e.g. `landing-pipeline.spec.cjs`, `landing-find-provider.spec.cjs`, `prod-smoke.spec.cjs`). Config: [`middleware-platform/playwright.config.cjs`](../../middleware-platform/playwright.config.cjs) (local landing build) and [`middleware-platform/playwright.prod.config.cjs`](../../middleware-platform/playwright.prod.config.cjs) (prod).
+> **2026-06-22:** Playwright specs and `playwright.prod.config.cjs` were removed. Use verify scripts for deploy gates. Historical Playwright commands below are archival.
 
-**Common commands:** `npm run test:e2e-landing --prefix middleware-platform`, `npm run test:e2e-landing:find-provider --prefix middleware-platform`, `npm run test:prod:smoke --prefix middleware-platform`. Full matrix: [PROD_PLAYWRIGHT_SUITES.md](./PROD_PLAYWRIGHT_SUITES.md).
+**Verify gates (current):** `npm run ci:fast` (repo root). Voice/Kelly: `verify:kelly-rails-env`, `smoke:voice-routing-matrix`. Catalog: [VERIFY_SCRIPT_CATALOG.md](./VERIFY_SCRIPT_CATALOG.md).
 
 **Manual / staging flows:** [AGENTIC_CHECKOUT_E2E_CHECKLIST.md](./README.md#agentic-checkout-e2e-checklist), [STAGING_PRODUCT_VERIFICATION.md](./README.md#staging-product-verification).
 
@@ -154,19 +159,22 @@ Use this when validating **landing → login → checkout-chat → quote → pay
 
 Test results, test suites, and testing guides.
 
-## Automated tests
+## Automated tests (verify scripts)
 
-Jest suites live under `middleware-platform/__tests__/` (e.g. reasoning-map, session orchestration, security redaction). Playwright E2E specs live under `middleware-platform/e2e/`.
-
-## Running tests
+Jest and Playwright were removed 2026-06-22. Use verify scripts under `middleware-platform/scripts/verify/`. See [VERIFY_SCRIPT_CATALOG.md](./VERIFY_SCRIPT_CATALOG.md).
 
 ```bash
+npm run ci:fast   # repo root
+```
+
+## Running verification
+
+```bash
+npm run ci:fast                  # repo root — pre-push gate
 cd middleware-platform
-npm test                         # jest --passWithNoTests (all __tests__)
-npm run test:reasoning-map       # focused Jest suite
-npm run test:session-orchestration
-npm run test:e2e-landing         # build landing + Playwright project landing
-npm run medicaid:smoke          # provider search HTTP smoke (requires API on :4000 by default)
+npm test                         # prod-spine-imports
+npm run verify:kelly-rails-env   # Kelly + conversation mode env
+npm run medicaid:smoke           # provider search HTTP smoke (API on :4000)
 ```
 
 ## Related documentation

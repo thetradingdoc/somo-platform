@@ -24,6 +24,6 @@ Retell voice WebSocket connections can drop and reconnect mid-call. On reconnect
 ## References
 
 - `services/call-site-context.js`
-- `services/kelly-rails/hydrate.js` — `hydrateSessionForTurn()`
+- `services/kelly/rails/hydrate.js` — `hydrateSessionForTurn()`
 - `webhooks/retell-websocket.js` — hydration block
 - Epic: `todos/VOICE-SITE-ESC-EPIC.md`

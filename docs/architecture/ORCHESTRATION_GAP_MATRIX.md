@@ -141,12 +141,12 @@ flowchart TD
 
 Shipped modules:
 
-- `services/conversation-mode/asr-normalize.js`
+- `services/conversation/asr-normalize.js`
 - `services/voice-identity-admission.js`
-- `services/kelly-rails/confirm-utterance.js`
-- `services/kelly-rails/slot-time-parse.js`
-- `services/kelly-rails/turn-planner.js`
-- `services/kelly-rails/gate-registry.js`
-- `services/conversation-mode/opqrst-accumulator.js`
+- `services/kelly/rails/confirm-utterance.js`
+- `services/kelly/rails/slot-time-parse.js`
+- `services/kelly/rails/turn-planner.js`
+- `services/kelly/rails/gate-registry.js`
+- `services/conversation/opqrst-accumulator.js`
 - `scripts/debug-booking-deadend.cjs`
 - `scripts/verify-p0-telemetry.cjs`

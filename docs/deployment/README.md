@@ -2,6 +2,8 @@
 
 > **Production (front-desk):** Start with **[`FRONT_DESK_PRODUCTION.md`](./FRONT_DESK_PRODUCTION.md)** — Firebase UI + Cloud Run API deploy, DNS order, smoke.
 >
+> **Legacy deploy:** Root [`netlify.toml`](../../netlify.toml) is **not** the production path. GCP Cloud Run + Firebase is SSOT — see [`FRONT_DESK_PRODUCTION.md`](./FRONT_DESK_PRODUCTION.md).
+>
 > **Historical:** Sections below may reference Azure App Service or other retired infra paths. **Do not follow them for current production.**
 
 **Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-06-14
@@ -628,14 +630,27 @@ Middleware triggers the service with:
 
 ## Continuous integration
 
-Workflow file: **`.github/workflows/ci.yml`**
+Workflow file: **`.github/workflows/ci.yml`** (optional — billing may disable GitHub Actions).
 
-- **Triggers:** push/PR to `main`, `master`, `develop`; manual `workflow_dispatch`.
-- **Test job:** runs on **Node 18.x and 20.x** (matrix). Steps include middleware `npm ci`, `node --check` on all `.js` files, Jest, repo-root scripts (perf budgets, auth UI guardrails, retention dry-run), **agentic checkout static verify**, **patient-app `tsc`**, optional Cypress (only if `middleware-platform/cypress/` exists), clinical prep gate when configured.
-- **Security job:** `npm audit` (non-blocking today) and a heuristic grep for secrets (non-blocking).
-- **Build job:** Starts `server.js` briefly under timeout.
+**Local CI tiers** (source of truth when Actions is off):
 
-**Local parity:** run the commands in **root `CONTRIBUTING.md`** before opening a PR.
+| Tier | Command | Contents | Target time |
+|------|---------|----------|-------------|
+| **fast** / **gate** | `npm run ci:fast` | Repo guardrails, Kelly env/golden, Jest unit tests, voice smokes, hosting verify | &lt;3 min |
+| **slow** | `npm run ci:slow` | Coding DB gates, live spine, triage spine, terminal-call, tenant column preflight | nightly / pre-release |
+| **full** | `npm run ci:full` | fast + slow + reasoning regression + Playwright landing | major releases |
+
+```bash
+npm run ci:fast          # before push / deploy
+npm run ci:slow          # when var/db/middleware-dev.db + API keys available
+./scripts/ci-timing.sh fast   # per-step duration log
+```
+
+Pre-push hook (`./scripts/install-git-hooks.sh`) runs **fast** tier only. Deploy scripts (`deploy-callsomo-local.sh`, `ship-customer-ready-prod.sh`) default to **fast**.
+
+When GitHub Actions is enabled, `ci.yml` runs **Node 20** and `npm run ci:fast`.
+
+**Local parity:** run `npm run ci:fast` before opening a PR (see root `CONTRIBUTING.md`).
 
 ## Deployment
 
