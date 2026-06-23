@@ -22,9 +22,9 @@ Map image tag (e.g. `gcr.io/somo-callsomo/somo-middleware:7768521`) → `git rev
 
 | Field | Value |
 |-------|-------|
-| Git `main` SHA | _(after Phase 0 commit — `git rev-parse --short HEAD`)_ |
-| Deployed image tag | _(run gcloud after `gcloud auth login`)_ |
-| Cloud Run revision | Last known: `somo-middleware-00113-5gn` (image ~`7768521`) — refresh with gcloud |
+| Git `main` SHA | `24aaf83` (pushed to `origin/main`) |
+| Deployed image tag | Pending deploy — target `gcr.io/somo-callsomo/somo-middleware:24aaf83` |
+| Cloud Run revision | Last known: `somo-middleware-00113-5gn` (pre-Phase-0) — run gcloud after `gcloud auth login` |
 | `ci:phase0` at deploy | pass |
 | Provision smoke | `npm run ci:phase0` includes `saas-tenant-provision`; live: `trial:provision-smoke` |
 
