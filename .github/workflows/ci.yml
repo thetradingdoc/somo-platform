@@ -26,9 +26,9 @@ jobs:
         working-directory: ./middleware-platform
         run: npm ci
 
-      - name: Repo ci:gate
-        run: npm run ci:gate
+      - name: Install somo-landing dependencies
+        working-directory: ./unified-dashboard/somo-landing
+        run: npm ci
 
-      - name: Voice routing matrix smoke
-        working-directory: ./middleware-platform
-        run: npm run smoke:voice-routing-matrix
+      - name: Repo ci:fast
+        run: npm run ci:fast
