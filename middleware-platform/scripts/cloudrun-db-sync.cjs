@@ -39,6 +39,23 @@ function shouldBlockUpload() {
   } catch (err) {
     return `refusing upload: preflight failed (${err.message})`;
   }
+
+  try {
+    const { checkTenantSiteContextUploadPreflight } = require('./lib/stamp-tenant-site-context.cjs');
+    const did = process.env.CAPSTONE_TENANT_DID || '+18622307479';
+    const clinicId = process.env.CAPSTONE_CLINIC_ID || process.env.DEFAULT_CLINIC_ID || 'clinic-default';
+    const bindBlock = checkTenantSiteContextUploadPreflight(DB_PATH, {
+      customerId: operatorId,
+      clinicId,
+      did
+    });
+    if (bindBlock) {
+      return `refusing upload: ${bindBlock}`;
+    }
+  } catch (err) {
+    return `refusing upload: tenant site-context preflight failed (${err.message})`;
+  }
+
   return null;
 }
 
@@ -74,15 +91,47 @@ async function upload() {
     console.error('[cloudrun-db-sync]', blockReason);
     return;
   }
+  const snap = `${DB_PATH}.upload-snapshot.db`;
+  try {
+    await snapshotDbForUpload(DB_PATH, snap);
+  } catch (e) {
+    console.error('[cloudrun-db-sync] snapshot failed:', e.message);
+    return;
+  }
   const remote = `gs://${BUCKET}/${OBJECT}`;
   try {
     const storage = new Storage();
-    await storage.bucket(BUCKET).upload(DB_PATH, { destination: OBJECT, resumable: false });
-    console.log('[cloudrun-db-sync] Uploaded %s -> %s', DB_PATH, remote);
+    await storage.bucket(BUCKET).upload(snap, { destination: OBJECT, resumable: false });
+    console.log('[cloudrun-db-sync] Uploaded snapshot %s -> %s', snap, remote);
   } catch (e) {
     console.warn('[cloudrun-db-sync] Node GCS upload failed (%s) — trying gcloud storage', e.message);
-    gcsCp(DB_PATH, remote);
-    console.log('[cloudrun-db-sync] Uploaded via CLI %s -> %s', DB_PATH, remote);
+    gcsCp(snap, remote);
+    console.log('[cloudrun-db-sync] Uploaded via CLI %s -> %s', snap, remote);
+  } finally {
+    for (const suffix of ['', '-wal', '-shm']) {
+      try {
+        fs.unlinkSync(snap + suffix);
+      } catch (_) {}
+    }
+  }
+}
+
+/** Consistent SQLite snapshot safe while the live DB may be open (WAL). */
+async function snapshotDbForUpload(srcPath, destPath) {
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  for (const suffix of ['', '-wal', '-shm']) {
+    try {
+      fs.unlinkSync(destPath + suffix);
+    } catch (_) {}
+  }
+  const Database = require('better-sqlite3');
+  const src = new Database(srcPath, { readonly: true });
+  try {
+    await src.backup(destPath);
+  } finally {
+    try {
+      src.close();
+    } catch (_) {}
   }
 }
 
@@ -134,7 +183,11 @@ async function main() {
   process.exit(1);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
+
+module.exports = { snapshotDbForUpload, upload, download };

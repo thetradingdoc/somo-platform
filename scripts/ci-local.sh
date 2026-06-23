@@ -100,7 +100,7 @@ step "Voice routing matrix smoke"
 npm run smoke:voice-routing-matrix
 
 step "Site + escalation unit tests"
-META_KV_POLICY_STRICT=1 npm test -- --runInBand --forceExit __tests__/call-site-context.test.js __tests__/escalation-service.test.js __tests__/transfer-call.test.js __tests__/voice-inbound-tenant-twiml.test.js __tests__/retell-unidentified-emergency.test.js __tests__/retell-transfer.test.js __tests__/triage-site-context.test.js __tests__/fhir-patient-clinic-scope.test.js __tests__/case-records-tenant.test.js __tests__/voice-settings-clinic.test.js __tests__/meta-kv-policy.test.js __tests__/voice-call-context.test.js __tests__/ws-reconnect-site-context.test.js __tests__/outbound-safety.test.js __tests__/conversation-mode-site-context.test.js __tests__/kelly-booking-avail-probe.test.js __tests__/somo-demo-handler.test.js
+META_KV_POLICY_STRICT=1 npm test -- --runInBand --forceExit __tests__/call-site-context.test.js __tests__/stamp-tenant-site-context.test.js __tests__/escalation-service.test.js __tests__/transfer-call.test.js __tests__/voice-inbound-tenant-twiml.test.js __tests__/retell-unidentified-emergency.test.js __tests__/retell-transfer.test.js __tests__/triage-site-context.test.js __tests__/fhir-patient-clinic-scope.test.js __tests__/case-records-tenant.test.js __tests__/voice-settings-clinic.test.js __tests__/meta-kv-policy.test.js __tests__/voice-call-context.test.js __tests__/ws-reconnect-site-context.test.js __tests__/outbound-safety.test.js __tests__/conversation-mode-site-context.test.js __tests__/kelly-booking-avail-probe.test.js __tests__/somo-demo-handler.test.js
 
 step "Voice tenant contract smoke"
 node "$ROOT/scripts/voice-tenant-contract-smoke.cjs"

@@ -58,6 +58,7 @@
         "verify:kelly-http-collect": "DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-http-collect.cjs",
         "verify:staging-coding-deploy": "node scripts/verify-staging-coding-deploy.cjs",
         "verify:ops-live-call-readiness": "node scripts/verify-ops-live-call-readiness.cjs",
+        "verify:tenant-site-context": "node scripts/verify-tenant-site-context.cjs",
         "verify:no-hardcoded-coding": "node scripts/verify-no-hardcoded-coding.cjs",
         "verify:terminal-call": "DB_PATH=./var/db/middleware-dev.db node scripts/verify-terminal-call.cjs",
         "test:coding:terminal-call": "DB_PATH=./var/db/middleware-dev.db node scripts/terminal-coding-call.cjs --all --no-assist",
