@@ -6,7 +6,10 @@ try {
   const isProduction = nodeEnv === 'production' || nodeEnv === 'prod';
   // In local/dev test runs, prefer .env values over inherited shell exports.
   const dotenvPath = process.env.AUDIT_MIDDLEWARE === '1' ? '.env.audit' : undefined;
-  require('dotenv').config({ path: dotenvPath, override: !isProduction });
+  require('dotenv').config({
+    path: dotenvPath,
+    override: !isProduction && process.env.VERIFY_SERVER_BOOT !== '1'
+  });
 } catch (e) {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
 }
