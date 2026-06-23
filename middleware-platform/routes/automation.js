@@ -460,7 +460,7 @@ router.post('/send-email', requireCustomerAuth, async (req, res) => {
     }
 
     // Send email
-    const EmailService = require('../services/email-service');
+    const EmailService = require('../services/platform/email-service');
     await EmailService.sendEmail({
       to: recipient,
       subject,
@@ -541,7 +541,7 @@ router.post('/send-sms', requireCustomerAuth, async (req, res) => {
     }
 
     // Send SMS
-    const SMSService = require('../services/sms-service');
+    const SMSService = require('../services/platform/sms-service');
     const result = await SMSService.sendSMS(phone_number, content);
 
     // Log to message history

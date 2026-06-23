@@ -13,7 +13,7 @@ const crypto = require('crypto');
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const ProviderService = require('../services/provider-service');
+const ProviderService = require('../services/platform/provider-service');
 
 const EMAIL = process.argv[2] || 'provider@callsomo.com';
 const TZ = process.env.GOOGLE_CALENDAR_TIMEZONE || 'America/New_York';

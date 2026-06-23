@@ -6,13 +6,13 @@
 
 const express = require('express');
 const db = require('../database');
-const RetellService = require('../services/retell-service');
+const RetellService = require('../services/voice/retell-service');
 const { authLimiter } = require('../middleware/rate-limiter');
 const constants = require('../utils/constants');
 
 const router = express.Router();
 const retellService = new RetellService();
-const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent');
+const { ensureCustomerRetellAgent } = require('../services/shared/ensure-retell-agent');
 
 /**
  * Helper to determine tenant type (shop vs clinic)

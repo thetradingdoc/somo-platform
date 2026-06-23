@@ -85,38 +85,38 @@ restore \
   "middleware-platform/utils/cpt-helper.js" \
   "middleware-platform/webhooks/retell-websocket.js" \
   "middleware-platform/scripts/generate-cloudrun-env-yaml.cjs" \
-  "middleware-platform/scripts/populate-code-embeddings.js" \
-  "middleware-platform/scripts/import-billing-reference-codes.js" \
-  "middleware-platform/scripts/import-icd10-pcs-codes.js" \
-  "middleware-platform/scripts/capture-coding-prod-evidence.cjs" \
-  "middleware-platform/scripts/capture-paul-demo-evidence.cjs" \
-  "middleware-platform/scripts/capture-phase1-evidence.cjs" \
-  "middleware-platform/scripts/capture-session1-voice-evidence.cjs" \
-  "middleware-platform/scripts/capture-sessions4567-evidence.cjs" \
+  "middleware-platform/scripts/data/populate-code-embeddings.js" \
+  "middleware-platform/scripts/data/import-billing-reference-codes.js" \
+  "middleware-platform/scripts/data/import-icd10-pcs-codes.js" \
+  "middleware-platform/scripts/harness/capture-coding-prod-evidence.cjs" \
+  "middleware-platform/scripts/harness/capture-paul-demo-evidence.cjs" \
+  "middleware-platform/scripts/harness/capture-phase1-evidence.cjs" \
+  "middleware-platform/scripts/harness/capture-session1-voice-evidence.cjs" \
+  "middleware-platform/scripts/harness/capture-sessions4567-evidence.cjs" \
   "middleware-platform/scripts/archive-legacy-dev-db.cjs" \
-  "middleware-platform/scripts/verify-codebook-parity.js" \
-  "middleware-platform/scripts/verify-coding-hitl.cjs" \
-  "middleware-platform/scripts/verify-cpt-routing.cjs" \
-  "middleware-platform/scripts/verify-db-path.cjs" \
-  "middleware-platform/scripts/verify-kelly-tools.cjs" \
-  "middleware-platform/scripts/verify-live-spine.cjs" \
-  "middleware-platform/scripts/verify-no-hardcoded-coding.cjs" \
-  "middleware-platform/scripts/verify-pair-validation.cjs" \
-  "middleware-platform/scripts/verify-payer-model.cjs" \
-  "middleware-platform/scripts/verify-quote-eligibility-chain.cjs" \
-  "middleware-platform/scripts/verify-session1-paths.cjs" \
-  "middleware-platform/scripts/verify-session1-staging.cjs" \
-  "middleware-platform/scripts/verify-session1-triage-evidence.cjs" \
-  "middleware-platform/scripts/verify-threshold-ssot.cjs" \
-  "middleware-platform/scripts/verify-triage-spine.cjs" \
-  "middleware-platform/scripts/phase1-live-call-runner.cjs" \
-  "middleware-platform/scripts/session1-closeout.cjs" \
-  "middleware-platform/scripts/session1-spine-harness.cjs" \
-  "middleware-platform/scripts/session2-codebook-harness.cjs" \
-  "middleware-platform/scripts/session3-insurance-spine-harness.cjs" \
-  "middleware-platform/scripts/session4-kelly-quote-evidence.cjs" \
-  "middleware-platform/scripts/session4-quote-harness.cjs" \
-  "middleware-platform/scripts/session5-gates-harness.cjs" \
+  "middleware-platform/scripts/verify/verify-codebook-parity.js" \
+  "middleware-platform/scripts/verify/verify-coding-hitl.cjs" \
+  "middleware-platform/scripts/verify/verify-cpt-routing.cjs" \
+  "middleware-platform/scripts/verify/verify-db-path.cjs" \
+  "middleware-platform/scripts/verify/verify-kelly-tools.cjs" \
+  "middleware-platform/scripts/verify/verify-live-spine.cjs" \
+  "middleware-platform/scripts/verify/verify-no-hardcoded-coding.cjs" \
+  "middleware-platform/scripts/verify/verify-pair-validation.cjs" \
+  "middleware-platform/scripts/verify/verify-payer-model.cjs" \
+  "middleware-platform/scripts/verify/verify-quote-eligibility-chain.cjs" \
+  "middleware-platform/scripts/verify/verify-session1-paths.cjs" \
+  "middleware-platform/scripts/verify/verify-session1-staging.cjs" \
+  "middleware-platform/scripts/verify/verify-session1-triage-evidence.cjs" \
+  "middleware-platform/scripts/verify/verify-threshold-ssot.cjs" \
+  "middleware-platform/scripts/verify/verify-triage-spine.cjs" \
+  "middleware-platform/scripts/harness/phase1-live-call-runner.cjs" \
+  "middleware-platform/scripts/harness/session1-closeout.cjs" \
+  "middleware-platform/scripts/harness/session1-spine-harness.cjs" \
+  "middleware-platform/scripts/harness/session2-codebook-harness.cjs" \
+  "middleware-platform/scripts/harness/session3-insurance-spine-harness.cjs" \
+  "middleware-platform/scripts/harness/session4-kelly-quote-evidence.cjs" \
+  "middleware-platform/scripts/harness/session4-quote-harness.cjs" \
+  "middleware-platform/scripts/harness/session5-gates-harness.cjs" \
   "middleware-platform/scripts/simulate_paul_journey.js" \
   "middleware-platform/scripts/lib/paul-harness-seed.js" \
   "scripts/ci-local.sh" \
@@ -145,14 +145,14 @@ restore \
   "middleware-platform/scripts/lib/verify-args.cjs" \
   "middleware-platform/scripts/lib/verify-assert.cjs" \
   "middleware-platform/scripts/lib/verify-migrations.cjs" \
-  "middleware-platform/scripts/verify-routine-path.cjs" \
-  "middleware-platform/scripts/verify-voice-http-spine.cjs"
+  "middleware-platform/scripts/verify/verify-routine-path.cjs" \
+  "middleware-platform/scripts/verify/verify-voice-http-spine.cjs"
 git add middleware-platform/scripts/lib/verify-env.cjs \
   middleware-platform/scripts/lib/verify-args.cjs \
   middleware-platform/scripts/lib/verify-assert.cjs \
   middleware-platform/scripts/lib/verify-migrations.cjs \
-  middleware-platform/scripts/verify-routine-path.cjs \
-  middleware-platform/scripts/verify-voice-http-spine.cjs
+  middleware-platform/scripts/verify/verify-routine-path.cjs \
+  middleware-platform/scripts/verify/verify-voice-http-spine.cjs
 commit_msg "refactor(verify): add shared verify-env, args, assert, migrations libs
 
 Canonical DB_PATH for verify scripts; migrate routine-path and voice-http-spine."
@@ -164,11 +164,11 @@ restore \
   "middleware-platform/scripts/lib/seed-triage.cjs" \
   "middleware-platform/scripts/lib/seed-payer-rules.cjs" \
   "middleware-platform/scripts/lib/kelly-test-harness.cjs" \
-  "middleware-platform/scripts/verify-kelly-http-collect.cjs"
+  "middleware-platform/scripts/verify/verify-kelly-http-collect.cjs"
 git add middleware-platform/scripts/lib/seed-triage.cjs \
   middleware-platform/scripts/lib/seed-payer-rules.cjs \
   middleware-platform/scripts/lib/kelly-test-harness.cjs \
-  middleware-platform/scripts/verify-kelly-http-collect.cjs
+  middleware-platform/scripts/verify/verify-kelly-http-collect.cjs
 commit_msg "refactor(verify): consolidate seed-triage and Kelly _post test harness
 
 Single seedTriage helper and withMockPost for collect_insurance HTTP contract tests."
@@ -178,9 +178,9 @@ git checkout refactor/pr3-seed-harness
 git checkout -B refactor/pr4-verify-db
 restore \
   "middleware-platform/scripts/lib/verify-db.cjs" \
-  "middleware-platform/scripts/verify-live-shared.cjs"
+  "middleware-platform/scripts/verify/verify-live-shared.cjs"
 git add middleware-platform/scripts/lib/verify-db.cjs \
-  middleware-platform/scripts/verify-live-shared.cjs
+  middleware-platform/scripts/verify/verify-live-shared.cjs
 commit_msg "refactor(verify): unify DB access for live-call and integration scripts
 
 Add verify-db.cjs; align verify-live-shared with canonical DB path."
@@ -190,12 +190,12 @@ git checkout refactor/pr4-verify-db
 git checkout -B refactor/pr5-spine-checks
 restore \
   "middleware-platform/scripts/lib/coding-spine-checks.cjs" \
-  "middleware-platform/scripts/verify-live-call.cjs" \
-  "middleware-platform/scripts/verify-terminal-call.cjs" \
+  "middleware-platform/scripts/verify/verify-live-call.cjs" \
+  "middleware-platform/scripts/verify/verify-terminal-call.cjs" \
   "middleware-platform/scripts/terminal-coding-call.cjs"
 git add middleware-platform/scripts/lib/coding-spine-checks.cjs \
-  middleware-platform/scripts/verify-live-call.cjs \
-  middleware-platform/scripts/verify-terminal-call.cjs \
+  middleware-platform/scripts/verify/verify-live-call.cjs \
+  middleware-platform/scripts/verify/verify-terminal-call.cjs \
   middleware-platform/scripts/terminal-coding-call.cjs
 commit_msg "refactor(verify): extract coding-spine-checks for live and terminal verifiers
 
@@ -206,11 +206,11 @@ git checkout refactor/pr5-spine-checks
 git checkout -B refactor/pr6-deploy-dedup
 restore \
   "middleware-platform/scripts/lib/deploy-readiness.cjs" \
-  "middleware-platform/scripts/verify-staging-coding-deploy.cjs" \
-  "middleware-platform/scripts/verify-ops-live-call-readiness.cjs"
+  "middleware-platform/scripts/verify/verify-staging-coding-deploy.cjs" \
+  "middleware-platform/scripts/verify/verify-ops-live-call-readiness.cjs"
 git add middleware-platform/scripts/lib/deploy-readiness.cjs \
-  middleware-platform/scripts/verify-staging-coding-deploy.cjs \
-  middleware-platform/scripts/verify-ops-live-call-readiness.cjs
+  middleware-platform/scripts/verify/verify-staging-coding-deploy.cjs \
+  middleware-platform/scripts/verify/verify-ops-live-call-readiness.cjs
 commit_msg "refactor(verify): shared deploy-readiness checks for staging and ops scripts"
 
 # --- PR8+9: Kelly module extraction (PR7 gates already in foundation kelly file) ---

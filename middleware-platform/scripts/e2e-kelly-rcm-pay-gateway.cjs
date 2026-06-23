@@ -61,7 +61,7 @@ function request(method, path, body) {
 }
 
 async function kellyPaymentRequest(amount, patientId) {
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   const result = await KellyToolExecutor.execute(
     'request_patient_payment',
     {

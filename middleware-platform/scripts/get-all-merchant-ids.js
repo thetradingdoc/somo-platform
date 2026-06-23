@@ -17,22 +17,23 @@ const allMerchants = new Map(); // Use Map to deduplicate by ID
 
 // Find all SQLite database files
 const dbFiles = [];
+const MP_ROOT = path.join(__dirname, '..');
 const searchPaths = [
-  '/Users/jeremiahrichie',
-  '/Users/jeremiahrichie/agentic-commerce-platform',
-  '/Users/jeremiahrichie/agentic-commerce-platform/middleware-platform',
+  MP_ROOT,
+  path.join(MP_ROOT, 'var', 'db'),
   process.cwd(),
-  path.join(process.cwd(), '..')
+  path.join(process.cwd(), 'var', 'db'),
 ];
 
-searchPaths.forEach(basePath => {
-  ['middleware-dev.db', 'middleware-prod.db', 'middleware-test.db'].forEach(dbName => {
-    const dbPath = path.join(basePath, dbName);
-    if (fs.existsSync(dbPath)) {
-      dbFiles.push({ path: dbPath, name: dbName });
+for (const basePath of searchPaths) {
+  for (const dbName of ['middleware-dev.db', 'middleware-prod.db', 'middleware-test.db']) {
+    for (const dbPath of [path.join(basePath, dbName), path.join(basePath, 'var', 'db', dbName)]) {
+      if (fs.existsSync(dbPath)) {
+        dbFiles.push({ path: dbPath, name: dbName });
+      }
     }
-  });
-});
+  }
+}
 
 // Remove duplicates
 const uniqueDbFiles = [...new Map(dbFiles.map(f => [f.path, f])).values()];

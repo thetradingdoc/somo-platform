@@ -5,7 +5,7 @@ require('dotenv').config();
 const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 
-const { listProviderSearchResults } = require('../services/provider-search-service');
+const { listProviderSearchResults } = require('../services/platform/provider-search-service');
 
 function getArg(name, fallback = null) {
   const prefix = `--${name}=`;

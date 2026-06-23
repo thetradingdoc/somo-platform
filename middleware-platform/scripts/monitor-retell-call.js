@@ -12,7 +12,7 @@ require('dotenv').config({
   override: false
 });
 
-const RetellService = require('../services/retell-service');
+const RetellService = require('../services/voice/retell-service');
 
 const CALL_ID = process.argv[2];
 

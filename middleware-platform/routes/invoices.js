@@ -6,7 +6,7 @@
 
 const express = require('express');
 const db = require('../database');
-const EmailService = require('../services/email-service');
+const EmailService = require('../services/platform/email-service');
 const rateLimiter = require('../middleware/rate-limiter').authLimiter;
 const { requireAdminAuth } = require('../middleware/admin-auth');
 

@@ -7,7 +7,7 @@
 const express = require('express');
 const db = require('../database');
 const constants = require('../utils/constants');
-const { getEffectiveTenantPolicy } = require('../services/prompt-profile-templates');
+const { getEffectiveTenantPolicy } = require('../services/platform/prompt-profile-templates');
 
 const router = express.Router();
 

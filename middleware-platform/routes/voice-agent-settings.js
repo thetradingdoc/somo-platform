@@ -2,25 +2,25 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const constants = require('../utils/constants');
-const RetellService = require('../services/retell-service');
+const RetellService = require('../services/voice/retell-service');
 const { hasValidSession } = require('../middleware/admin-auth');
 const { optionalCustomerAuth } = require('../middleware/customer-auth');
-const { updateAgentLifecycleState } = require('../services/agent-lifecycle');
-const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent');
+const { updateAgentLifecycleState } = require('../services/platform/agent-lifecycle');
+const { ensureCustomerRetellAgent } = require('../services/shared/ensure-retell-agent');
 const {
   getOnboardingState,
   transitionState,
   resolveOnboardingDestination
-} = require('../services/voice-onboarding-state');
+} = require('../services/voice/voice-onboarding-state');
 const {
   resolveCallOpeners,
   resolvePracticeDisplayName
-} = require('../services/call-opener-resolver');
+} = require('../services/voice/call-opener-resolver');
 const {
   saveAndSyncVoiceSettings,
   normalizeSettingsRow
-} = require('../services/voice-settings-sync');
-const { resolveVoiceMerchantId } = require('../services/operator-tenant-bootstrap');
+} = require('../services/voice/voice-settings-sync');
+const { resolveVoiceMerchantId } = require('../services/shared/operator-tenant-bootstrap');
 
 const retellService = new RetellService();
 
@@ -395,7 +395,7 @@ router.post('/setup-complete', optionalCustomerAuth, requireVoiceSettingsAccess,
         };
         if (!customer.custom_prompt) {
             try {
-                const VoicePromptTemplates = require('../services/voice-prompt-templates');
+                const VoicePromptTemplates = require('../services/voice/voice-prompt-templates');
                 const defaultPrompt = VoicePromptTemplates.getDefaultCustomPrompt(customer);
                 if (defaultPrompt) {
                     updates.custom_prompt = defaultPrompt;

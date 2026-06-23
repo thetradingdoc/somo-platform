@@ -7,7 +7,7 @@
 
 const express = require('express');
 const router = express.Router();
-const FHIRService = require('../services/fhir-service');
+const FHIRService = require('../services/shared/fhir-service');
 const FHIRAdapter = require('../adapters/fhir-adapter');
 const db = require('../database');
 const { jwtFhirAuth } = require('../middleware/jwt-fhir-auth');

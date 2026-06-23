@@ -14,9 +14,9 @@ process.env.SKIP_STARTUP_MIGRATIONS = '1';
 
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
-const KellyToolExecutor = require('../services/kelly-tool-executor');
-const { computeVisitQuote } = require('../services/payer-quote-service');
-const journeyGates = require('../services/journey-gates-service');
+const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
+const { computeVisitQuote } = require('../services/payor/payer-quote-service');
+const journeyGates = require('../services/platform/journey-gates-service');
 const { seedPaulTriage } = require('./lib/paul-harness-seed');
 
 const scenario = (process.argv.find((a) => a.startsWith('--scenario=')) || '--scenario=copay_due').split('=')[1];
@@ -115,7 +115,7 @@ async function main() {
   }
 
   // Step 13: codes validate against SQLite codebook (no live Pinecone)
-  const knowledgeService = require('../services/knowledge-service');
+  const knowledgeService = require('../services/shared/knowledge-service');
   const validation = knowledgeService.validateCodesExist({
     icd10: [triage.primary_icd10].filter(Boolean),
     cpt: [triage.primary_cpt || triage.cpt_codes?.[0]?.code].filter(Boolean)

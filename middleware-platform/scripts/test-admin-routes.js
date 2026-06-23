@@ -24,18 +24,18 @@ function layerHasMethod(router, method, pathFragment) {
   return false;
 }
 
-const scrape = require('../routes/admin-scrape');
+const scrape = require('../routes/admin/admin-scrape');
 assert.ok(layerHasMethod(scrape, 'get', '/status'), 'scrape GET /status');
 assert.ok(layerHasMethod(scrape, 'get', '/leads/pipeline'), 'scrape GET /leads/pipeline');
 assert.ok(layerHasMethod(scrape, 'post', '/run'), 'scrape POST /run');
 
-const enrich = require('../routes/admin-enrich');
+const enrich = require('../routes/admin/admin-enrich');
 assert.ok(layerHasMethod(enrich, 'post', '/batch'), 'enrich POST /batch');
 
-const tenants = require('../routes/admin-tenants');
+const tenants = require('../routes/admin/admin-tenants');
 assert.ok(layerHasMethod(tenants, 'get', '/alerts'), 'tenants GET /alerts');
 
-const facade = require('../services/admin-lead-facade');
+const facade = require('../services/platform/admin-lead-facade');
 assert.strictEqual(facade.normalizeStage('closed_won'), 'won');
 assert.strictEqual(facade.denormalizeStage('won'), 'closed_won');
 assert.strictEqual(facade.getContactStatus({ clinic_phone: '+15551234567' }), 'verified');
@@ -51,7 +51,7 @@ assert.strictEqual(
 );
 assert.throws(() => facade.assertCallableLead({ clinic_phone: '123' }), /verified phone/i);
 
-const jobTracker = require('../services/admin-job-tracker');
+const jobTracker = require('../services/platform/admin-job-tracker');
 jobTracker.ensureTable();
 const state = jobTracker.getSchedulerState();
 assert.ok('is_running' in state);

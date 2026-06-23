@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-require('./scripts/verify-rapidapi-key.js');
+require('./scripts/verify/verify-rapidapi-key');

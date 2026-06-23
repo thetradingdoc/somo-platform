@@ -8,9 +8,9 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
 
 const db = require('../database');
-const { hasValidPhone, buildNotesWithJobPosting } = require('../services/lead-ingestion');
-const { isJobBoardUrl } = require('../services/contact-extractor');
-const { extractLanguagesFromJob } = require('../services/lead-language-extractor');
+const { hasValidPhone, buildNotesWithJobPosting } = require('../services/shared/lead-ingestion');
+const { isJobBoardUrl } = require('../services/platform/contact-extractor');
+const { extractLanguagesFromJob } = require('../services/shared/lead-language-extractor');
 
 const dryRun = process.argv.includes('--dry-run');
 

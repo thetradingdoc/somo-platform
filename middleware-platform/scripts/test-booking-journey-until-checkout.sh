@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PORT="${PORT:-4000}"
-DB_FILE="${DB_FILE:-middleware-dev.db}"
+DB_FILE="${DB_FILE:-var/db/middleware-dev.db}"
 API_URL="${API_URL:-http://localhost:${PORT}/api/patient/triage/message}"
 API_BASE_URL="${API_BASE_URL:-http://localhost:${PORT}}"
 

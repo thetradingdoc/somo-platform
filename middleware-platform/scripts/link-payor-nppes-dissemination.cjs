@@ -13,7 +13,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { getPayorDataSourcesRoot, disseminationDirNameOk } = require('./payor-data-sources.cjs');
+const { getPayorDataSourcesRoot, disseminationDirNameOk } = require('./payor/payor-data-sources');
 
 process.chdir(path.join(__dirname, '..'));
 

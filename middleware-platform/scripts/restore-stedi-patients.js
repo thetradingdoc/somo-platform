@@ -9,7 +9,7 @@
 
 require('dotenv').config();
 const db = require('../database').db;
-const FHIRService = require('../services/fhir-service');
+const FHIRService = require('../services/shared/fhir-service');
 const { v4: uuidv4 } = require('uuid');
 
 async function restoreStediPatients() {

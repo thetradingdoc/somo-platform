@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const { normalizeAlias } = require('../services/payor-canonicalization-service');
+const { normalizeAlias } = require('../services/payor/payor-canonicalization-service');
 
 function toNetworkStatus(value) {
   const v = String(value || '').toLowerCase();

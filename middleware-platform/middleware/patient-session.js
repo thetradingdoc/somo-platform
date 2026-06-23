@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 const db = require('../database');
-const PatientPortalService = require('../services/patient-portal-service');
+const PatientPortalService = require('../services/patient/patient-portal-service');
 const { ensurePatientPortalEventsTable } = require('../lib/patient-portal-events');
 
 function requirePatientSession(req, res, next) {

@@ -1,7 +1,7 @@
 'use strict';
 
 const db = require('../database');
-const { hasCapability } = require('../services/customer-capabilities');
+const { hasCapability } = require('../services/platform/customer-capabilities');
 
 function requireCapability(capability) {
   return (req, res, next) => {

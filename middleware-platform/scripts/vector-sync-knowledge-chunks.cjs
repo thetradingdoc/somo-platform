@@ -13,11 +13,11 @@
 
 const path = require('path');
 const Database = require('better-sqlite3');
-const { splitTextForEmbedding } = require('../services/text-chunking');
-const { embedTexts, getEmbeddingRuntimeConfig } = require('../services/embedding-provider');
-const { pineconeUpsert, isPineconeConfigured } = require('../services/pinecone-rest');
-const { recordVectorSyncStats } = require('../services/vector-index-ops');
-const { up: m035 } = require('../migrations/035_knowledge_vector_index_meta');
+const { splitTextForEmbedding } = require('../services/shared/text-chunking');
+const { embedTexts, getEmbeddingRuntimeConfig } = require('../services/shared/embedding-provider');
+const { pineconeUpsert, isPineconeConfigured } = require('../services/platform/pinecone-rest');
+const { recordVectorSyncStats } = require('../services/shared/vector-index-ops');
+const { up: m035 } = require('../database/migrations/035_knowledge_vector_index_meta');
 
 function parseArgs() {
   const out = { db: null, maxRows: 0, batch: 16 };

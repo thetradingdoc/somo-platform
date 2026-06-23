@@ -10,8 +10,8 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const db = require('../database');
-const { expireTrial, getTrialInactivityReleaseDays } = require('../services/trial-lifecycle');
-const { maybeSendTrialLifecycleNudges } = require('../services/trial-alerts');
+const { expireTrial, getTrialInactivityReleaseDays } = require('../services/platform/trial-lifecycle');
+const { maybeSendTrialLifecycleNudges } = require('../services/platform/trial-alerts');
 
 const dryRun = process.argv.includes('--dry-run');
 
@@ -45,7 +45,7 @@ async function main() {
   }
 
   if (!dryRun) {
-    const { runScheduledTrialNudges } = require('../services/trial-alerts');
+    const { runScheduledTrialNudges } = require('../services/platform/trial-alerts');
     await runScheduledTrialNudges();
   }
 

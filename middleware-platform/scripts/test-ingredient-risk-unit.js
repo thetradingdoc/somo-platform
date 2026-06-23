@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-const { resolveIngredientRisks } = require('../services/ingredient-risk-resolver');
-const { resolveIngredientFacts } = require('../services/ingredient-ontology-resolver');
+const { resolveIngredientRisks } = require('../services/catalog/ingredient-risk-resolver');
+const { resolveIngredientFacts } = require('../services/catalog/ingredient-ontology-resolver');
 
 function assert(name, cond) {
   if (!cond) throw new Error(`FAIL: ${name}`);

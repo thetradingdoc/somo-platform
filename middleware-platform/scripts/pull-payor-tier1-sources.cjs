@@ -21,8 +21,8 @@ const { parse } = require('csv-parse/sync');
 const {
   uploadRawArtifactToGcs,
   emitIngestMetrics
-} = require('./payor-ingest-utils.cjs');
-const { getPayorDataSourcesRoot } = require('./payor-data-sources.cjs');
+} = require('./payor/payor-ingest-utils');
+const { getPayorDataSourcesRoot } = require('./payor/payor-data-sources');
 
 process.chdir(path.join(__dirname, '..'));
 const db = require('../database');

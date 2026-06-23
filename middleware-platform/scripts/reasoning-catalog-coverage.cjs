@@ -7,7 +7,7 @@
  *   node scripts/reasoning-catalog-coverage.cjs /path/to/data.sqlite
  */
 const Database = require('better-sqlite3');
-const { getCatalogCoverageMetrics } = require('../services/catalog-coverage-metrics');
+const { getCatalogCoverageMetrics } = require('../services/catalog/catalog-coverage-metrics');
 
 function main() {
   const dbPath = process.argv[2];

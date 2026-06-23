@@ -2,7 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 
-const knowledgeService = require('../services/knowledge-service');
+const knowledgeService = require('../services/shared/knowledge-service');
 
 const searchLimiter = rateLimit({
   windowMs: 60 * 1000,

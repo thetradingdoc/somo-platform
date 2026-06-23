@@ -58,7 +58,7 @@ const crypto = require('crypto');
 const http = require('http');
 const https = require('https');
 
-const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
+const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
 
 const MP = path.join(__dirname, '..');
 process.chdir(MP);
@@ -228,7 +228,7 @@ function parseE2eTime(value) {
 }
 
 function resolvePayTokenFromSession(ctx, opts = {}) {
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   const sinceMs = opts.sinceIso ? parseE2eTime(opts.sinceIso) : 0;
 
   if (ctx.db && ctx.patientId && ctx.clinicId) {
@@ -359,12 +359,12 @@ async function main() {
     if (missing.length) throw new Error(`Missing DB tables: ${missing.join(', ')}`);
 
     if (!useExisting) {
-      const orchestrator = require('../services/rcm-journey-orchestrator');
+      const orchestrator = require('../services/rcm/rcm-journey-orchestrator');
       orchestrator.ensureKellyRcmTables();
     }
 
-    ctx.KellyAgent = require('../services/kelly-agent-service');
-    const { runKellyTurn } = require('../services/kelly-turn-resolver');
+    ctx.KellyAgent = require('../services/kelly/kelly-agent-service');
+    const { runKellyTurn } = require('../services/kelly/kelly-turn-resolver');
     ctx.runKellyTurn = runKellyTurn;
 
     const hasStripe = !!process.env.STRIPE_SECRET_KEY;
@@ -435,7 +435,7 @@ async function main() {
       copaySource = 'live Stedi (not seeded)';
     }
 
-    const orchestrator = require('../services/rcm-journey-orchestrator');
+    const orchestrator = require('../services/rcm/rcm-journey-orchestrator');
     const open = ctx.db
       .prepare(
         `SELECT id FROM rcm_journeys WHERE clinic_id = ? AND patient_id = ? AND status = 'open' ORDER BY updated_at DESC LIMIT 1`
@@ -703,7 +703,7 @@ async function main() {
 
     let body;
     if (inProcessPay) {
-      const settlement = require('../services/rcm-payment-settlement');
+      const settlement = require('../services/rcm/rcm-payment-settlement');
       body = await settlement.getPaymentContext(ctx.payToken);
       if (!body?.success) throw new Error(body?.error || 'getPaymentContext failed');
     } else {
@@ -727,7 +727,7 @@ async function main() {
     await runStage('Payment gateway — POST create-intent', async () => {
       let body;
       if (inProcessPay) {
-        const settlement = require('../services/rcm-payment-settlement');
+        const settlement = require('../services/rcm/rcm-payment-settlement');
         body = await settlement.createStripeIntent(ctx.payToken);
       } else {
         const res = await Promise.race([
@@ -760,7 +760,7 @@ async function main() {
         throw new Error(`Stripe PI status=${intent.status}`);
       }
 
-      const settlement = require('../services/rcm-payment-settlement');
+      const settlement = require('../services/rcm/rcm-payment-settlement');
       const settled = await settlement.settleStripe(ctx.payToken, ctx.stripeIntentId);
       if (!settled?.success) {
         throw new Error(`settleStripe failed: ${JSON.stringify(settled)}`);
@@ -796,7 +796,7 @@ async function main() {
     await runStage('Pay link idempotency — already_paid=true', async () => {
       let body;
       if (inProcessPay) {
-        const settlement = require('../services/rcm-payment-settlement');
+        const settlement = require('../services/rcm/rcm-payment-settlement');
         body = await settlement.getPaymentContext(ctx.payToken);
       } else {
         const res = await apiRequest('GET', `/api/public/rcm/pay/${encodeURIComponent(ctx.payToken)}`);

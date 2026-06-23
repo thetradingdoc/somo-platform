@@ -72,7 +72,7 @@ class VoiceAdapter {
         }
 
         // CRITICAL: Normalize phone number to +1 format for US customers
-        const SMSService = require('../services/sms-service');
+        const SMSService = require('../services/platform/sms-service');
         const normalizedPhone = data.customer_phone
             ? SMSService.formatPhoneNumber(data.customer_phone)
             : null;

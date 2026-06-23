@@ -5,10 +5,10 @@
 const fs = require('fs');
 const path = require('path');
 const dbModule = require('../database');
-const { resolveCategoryRoute } = require('../services/category-route-resolver');
-const { buildScanSummary, buildResultSummary, applyReasoningPatch } = require('../services/product-summary-service');
-const ReasoningService = require('../services/result-summary-reasoning-service');
-const { buildNycMetalContext } = require('../services/nyc-metal-context-service');
+const { resolveCategoryRoute } = require('../services/catalog/category-route-resolver');
+const { buildScanSummary, buildResultSummary, applyReasoningPatch } = require('../services/catalog/product-summary-service');
+const ReasoningService = require('../services/shared/result-summary-reasoning-service');
+const { buildNycMetalContext } = require('../services/shared/nyc-metal-context-service');
 
 const OUT_DIR = path.resolve(__dirname, '..', 'test-results');
 const MANIFEST_PATH = path.resolve(__dirname, '..', 'test-fixtures', 'results-reasoning-sample-50.json');

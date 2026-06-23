@@ -6,12 +6,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
-const { canInitiateOutboundCall } = require('../services/billing-access');
-const { initiateOutboundCall } = require('../services/outbound-call-service');
+const { canInitiateOutboundCall } = require('../services/rcm/billing-access');
+const { initiateOutboundCall } = require('../services/platform/outbound-call-service');
 const {
   resolveVoiceMerchantId,
   resolveOutboundCallTypeForCustomer
-} = require('../services/operator-tenant-bootstrap');
+} = require('../services/shared/operator-tenant-bootstrap');
 
 /**
  * POST /api/voice/outbound/call

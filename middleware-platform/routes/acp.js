@@ -9,7 +9,7 @@ const axios = require('axios');
 const db = require('../database');
 const AP2Adapter = require('../adapters/ap2-adapter');
 const UniversalAdapter = require('../adapters/universal-adapter');
-const CartService = require('../services/cart-service');
+const CartService = require('../services/commerce/cart-service');
 
 const router = express.Router();
 

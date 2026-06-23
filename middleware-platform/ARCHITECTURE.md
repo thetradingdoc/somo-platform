@@ -77,3 +77,17 @@ Scripts: `npm run eval:coding`, `npm run verify:prod-codebook`, `npm run audit:e
 ## Refactor phases
 
 See plan: monolith refactor — Phase 1 (structure + medical codes + catalog routes) complete; Phase 2+ migrations by domain, more repositories, thin `server.js`.
+
+### 2026-06-22 refactor status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 0 Hygiene | Done | gitignore evidence, docs, dockerignore |
+| 1 Scripts | Done | `scripts/{verify,harness,data,payor,voice,opqrst}/` + shims |
+| 2 Services | Done | Domain subfolders + shims; `kelly/rails`, `conversation/` |
+| 3 Database | In progress | `database/migrations/`, `repositories/{commerce-checkout,voice-calls}` |
+| 4 Monoliths | In progress | `app/env-validation`, `app/register-routes`, `webhooks/retell/*` |
+| 5 Routes/tests | In progress | `routes/{admin,patient,public,voice,rcm,commerce}/`, `playwright/` |
+| 6 Enforce | In progress | Multi-stage Dockerfile, `.eslintrc.cjs` boundaries |
+
+See [docs/ONBOARDING.md](docs/ONBOARDING.md) and [docs/REFACTOR_LOG.md](docs/REFACTOR_LOG.md).

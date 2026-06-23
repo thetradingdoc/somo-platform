@@ -9,7 +9,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const db = require('../database');
-const TwilioPhoneService = require('../services/twilio-phone-service');
+const TwilioPhoneService = require('../services/voice/twilio-phone-service');
 
 const dryRun = process.argv.includes('--dry-run');
 

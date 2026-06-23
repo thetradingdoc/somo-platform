@@ -26,7 +26,7 @@ const {
   fetchKellyEvents,
   findToolCompleted,
   printReportAndExit
-} = require('./verify-live-shared.cjs');
+} = require('./verify/verify-live-shared');
 
 const PLATFORM_DID = process.env.CALLSOMO_OPERATOR_TWILIO_NUMBER || '+13639990205';
 const GCS_BUCKET = process.env.GCS_DB_BUCKET || 'somo-staging-db-somo-callsomo';

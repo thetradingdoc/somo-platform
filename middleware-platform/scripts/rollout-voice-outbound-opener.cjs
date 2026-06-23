@@ -41,7 +41,7 @@ const baseUrl = (() => {
 
 function operatorInDb() {
   const db = require('../database');
-  const { getOperatorCustomerId } = require('../services/voice-account-resolution');
+  const { getOperatorCustomerId } = require('../services/voice/voice-account-resolution');
   const operatorId = getOperatorCustomerId();
   return operatorId && db.getCustomer(operatorId) ? operatorId : null;
 }

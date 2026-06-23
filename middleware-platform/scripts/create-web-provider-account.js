@@ -131,7 +131,7 @@ Optional: --subdomain=my-brand   SKIP_RETELL=1
   });
   console.log(`  customer_id: ${customerId}`);
 
-  const { provisionSaasTenant } = require('../services/saas-tenant-provision');
+  const { provisionSaasTenant } = require('../services/shared/saas-tenant-provision');
   const provisioned = provisionSaasTenant(db, {
     customerId,
     clinicName,
@@ -159,7 +159,7 @@ Optional: --subdomain=my-brand   SKIP_RETELL=1
   let retellAgentId = null;
   if (!skipRetell) {
     try {
-      const RetellService = require('../services/retell-service');
+      const RetellService = require('../services/voice/retell-service');
       const retellService = new RetellService();
       const agentResult = await retellService.createAgent({
         name: clinicName,
@@ -184,7 +184,7 @@ Optional: --subdomain=my-brand   SKIP_RETELL=1
   }
 
   try {
-    const ProviderService = require('../services/provider-service');
+    const ProviderService = require('../services/platform/provider-service');
     ProviderService.ensureProviderProfileForEmail(email, clinicId);
     ProviderService.setProviderOnline(email, true);
     console.log('  provider availability: enabled (online)');

@@ -22,7 +22,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const { OPERATOR_CAPABILITIES } = require('../services/customer-capabilities');
+const { OPERATOR_CAPABILITIES } = require('../services/platform/customer-capabilities');
 
 const TARGET_EMAIL = (process.env.SOMO_OWNER_EMAIL || 'richard@callsomo.com').trim().toLowerCase();
 const LEGACY_EMAIL = 'drlittlekids@gmail.com';

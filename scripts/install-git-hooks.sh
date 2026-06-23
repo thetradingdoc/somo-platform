@@ -13,8 +13,8 @@ if [[ "${SKIP_CI:-}" == "1" ]]; then
   exit 0
 fi
 ROOT="$(git rev-parse --show-toplevel)"
-exec "$ROOT/scripts/ci-local.sh" gate
+exec "$ROOT/scripts/ci-local.sh" fast
 EOF
 
 chmod +x "$HOOKS"
-echo "Installed pre-push hook → npm run ci:gate (skip with SKIP_CI=1 git push)"
+echo "Installed pre-push hook → npm run ci:fast (skip with SKIP_CI=1 git push)"

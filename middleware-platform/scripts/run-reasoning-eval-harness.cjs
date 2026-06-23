@@ -21,8 +21,8 @@ const {
   buildScanSummary,
   buildResultSummary,
   applyReasoningPatch,
-} = require('../services/product-summary-service');
-const ReasoningService = require('../services/result-summary-reasoning-service');
+} = require('../services/catalog/product-summary-service');
+const ReasoningService = require('../services/shared/result-summary-reasoning-service');
 
 const OUT_DIR = path.resolve(__dirname, '..', 'test-results');
 const DEFAULT_OUT_FILE = path.resolve(OUT_DIR, `reasoning-eval-baseline-${Date.now()}.json`);

@@ -2,8 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const ReasoningService = require('../services/result-summary-reasoning-service');
-const ProductSummaryService = require('../services/product-summary-service');
+const ReasoningService = require('../services/shared/result-summary-reasoning-service');
+const ProductSummaryService = require('../services/catalog/product-summary-service');
 
 const fixturePath = path.join(__dirname, '..', 'tests', 'fixtures', 'result-summary-reasoning-eval-set.json');
 const fixtures = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));

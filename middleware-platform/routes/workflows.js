@@ -7,9 +7,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const SequenceEngineService = require('../services/sequence-engine-service');
-const LeadIntelligenceService = require('../services/lead-intelligence-service');
-const AITemplateGeneratorService = require('../services/ai-template-generator-service');
+const SequenceEngineService = require('../services/platform/sequence-engine-service');
+const LeadIntelligenceService = require('../services/platform/lead-intelligence-service');
+const AITemplateGeneratorService = require('../services/platform/ai-template-generator-service');
 const { requireAdminAuth } = require('../middleware/admin-auth');
 const { adminLimiter } = require('../middleware/rate-limiter');
 

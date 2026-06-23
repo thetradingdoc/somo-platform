@@ -115,7 +115,7 @@ function auditSqlite(dbPath) {
 }
 
 async function auditGcsObfCsv(gcsUri) {
-  const { resolveCategoryRoute } = require('../services/category-route-resolver');
+  const { resolveCategoryRoute } = require('../services/catalog/category-route-resolver');
   console.log(`\n=== GCS OBF baseline CSV stream (${gcsUri}) ===\n`);
   const gs = spawn('gsutil', ['cat', gcsUri], { stdio: ['ignore', 'pipe', 'inherit'] });
   const gunzip = createGunzip();

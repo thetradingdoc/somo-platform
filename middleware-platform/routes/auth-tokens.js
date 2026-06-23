@@ -16,7 +16,7 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 
 const db = require('../database');
-const PatientPortalService = require('../services/patient-portal-service');
+const PatientPortalService = require('../services/patient/patient-portal-service');
 
 // Reuse the same JWT secret and semantics as jwt-fhir-auth
 const { JWT_SECRET } = require('../middleware/jwt-fhir-auth');

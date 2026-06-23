@@ -43,8 +43,12 @@ fi
 
 gcloud config set project "$PROJECT" >/dev/null
 
-echo "==> Building container (Cloud Build)..."
-gcloud builds submit "$MP" --tag "$IMAGE" --project "$PROJECT"
+if [[ "${CLOUDRUN_SKIP_BUILD:-}" == "1" ]]; then
+  echo "==> Skipping Cloud Build (CLOUDRUN_SKIP_BUILD=1); using image: $IMAGE"
+else
+  echo "==> Building container (Cloud Build)..."
+  gcloud builds submit "$MP" --tag "$IMAGE" --project "$PROJECT"
+fi
 
 PRESERVE_ENV="${CLOUDRUN_PRESERVE_ENV:-}"
 if [[ "$PROFILE" == "production" && -z "$PRESERVE_ENV" ]]; then
@@ -65,7 +69,7 @@ DEPLOY_ARGS=(
   --cpu "${CLOUDRUN_CPU:-2}"
   --timeout "${CLOUDRUN_TIMEOUT:-300}"
   --ingress all
-  --startup-probe "httpGet.path=/health/live,initialDelaySeconds=60,timeoutSeconds=10,periodSeconds=10,failureThreshold=60"
+  --startup-probe "httpGet.path=/health/live,initialDelaySeconds=${CLOUDRUN_STARTUP_INITIAL_DELAY:-30},timeoutSeconds=10,periodSeconds=10,failureThreshold=60"
 )
 
 if [[ "$PRESERVE_ENV" == "1" ]]; then

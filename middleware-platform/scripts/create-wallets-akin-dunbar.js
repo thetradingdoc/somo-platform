@@ -1,6 +1,6 @@
 require('dotenv').config();
 const db = require('../database');
-const CircleService = require('../services/circle-service');
+const CircleService = require('../services/platform/circle-service');
 const FHIRResources = require('../models/fhir-resources');
 const { v4: uuidv4 } = require('uuid');
 

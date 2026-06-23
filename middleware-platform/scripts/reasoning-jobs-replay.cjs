@@ -2,8 +2,8 @@
 'use strict';
 /* eslint-disable no-console */
 
-const Queue = require('../services/reasoning-job-queue-service');
-const ReasoningService = require('../services/result-summary-reasoning-service');
+const Queue = require('../services/shared/reasoning-job-queue-service');
+const ReasoningService = require('../services/shared/result-summary-reasoning-service');
 
 function parseArg(flag, fallback = '') {
   const idx = process.argv.indexOf(flag);

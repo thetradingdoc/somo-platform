@@ -8,7 +8,7 @@ const { v4: uuidv4 } = require('uuid');
  */
 function seedPaulTriage(db, sessionId, patientId = 'patient_paul') {
   try {
-    require('../migrations/081_seeded_for_harness').up(db.db);
+    require('../database/migrations/081_seeded_for_harness').up(db.db);
   } catch (_) {}
   const primaryIcd10 = 'K29.70';
   const primaryCpt = '99213';

@@ -20,8 +20,8 @@ process.chdir(path.join(__dirname, '..'));
 delete require.cache[require.resolve('../database')];
 
 const db = require('../database');
-const { applyUsage } = require('../services/apply-usage');
-const { getOperatorCustomerId } = require('../services/voice-account-resolution');
+const { applyUsage } = require('../services/platform/apply-usage');
+const { getOperatorCustomerId } = require('../services/voice/voice-account-resolution');
 const { v4: uuidv4 } = require('uuid');
 
 function assert(cond, msg) {

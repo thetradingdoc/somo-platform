@@ -44,7 +44,7 @@ const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const BookingService = require('../services/booking-service');
+const BookingService = require('../services/patient/booking-service');
 
 // ─── Config ────────────────────────────────────────────────────────────────
 

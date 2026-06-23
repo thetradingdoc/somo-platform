@@ -5,7 +5,7 @@
  * Uses medical-text-extraction-service + medical-abbreviations for abbreviation expansion.
  */
 
-const medicalTextExtraction = require('../medical-text-extraction-service');
+const medicalTextExtraction = require('../clinical/medical-text-extraction-service');
 const path = require('path');
 const fs = require('fs');
 

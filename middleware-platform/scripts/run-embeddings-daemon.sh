@@ -53,7 +53,7 @@ cmd_start() {
   } >>"$LOG_FILE"
 
   # caffeinate -i: block system idle sleep while this job runs (lid closed may still sleep)
-  nohup bash -c "exec caffeinate -i node \"$ROOT/scripts/populate-code-embeddings.js\" --until-done --batch-size 5000" \
+  nohup bash -c "exec caffeinate -i node \"$ROOT/scripts/data/populate-code-embeddings.js\" --until-done --batch-size 5000" \
     >>"$LOG_FILE" 2>&1 &
   local wrapper_pid=$!
   disown 2>/dev/null || true

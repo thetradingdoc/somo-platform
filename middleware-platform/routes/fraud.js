@@ -5,7 +5,7 @@
 
 const express = require('express');
 const db = require('../database');
-const FraudDetector = require('../services/fraud-detector');
+const FraudDetector = require('../services/platform/fraud-detector');
 
 const router = express.Router();
 

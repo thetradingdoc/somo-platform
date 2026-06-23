@@ -25,7 +25,7 @@ if (fs.existsSync(envPath)) {
 }
 
 process.env.PORT = String(process.env.TEST_PORT || '4010');
-process.env.DB_PATH = process.env.DB_PATH || './middleware-dev.db';
+process.env.DB_PATH = process.env.DB_PATH || './var/db/middleware-dev.db';
 
 const dotenv = require('dotenv');
 dotenv.config = () => ({ parsed: {} });

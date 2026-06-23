@@ -12,7 +12,7 @@ process.env.KELLY_RAILS_FAST_RAG = process.env.KELLY_RAILS_FAST_RAG || '1';
 const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 
-const { runKellyTurn } = require('../services/kelly-turn-resolver');
+const { runKellyTurn } = require('../services/kelly/kelly-turn-resolver');
 
 const MESSAGES = [
   'I have an itchy rash on my leg and neck for two days.',

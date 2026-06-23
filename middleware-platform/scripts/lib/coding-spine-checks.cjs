@@ -1,6 +1,6 @@
 'use strict';
 
-const knowledgeService = require('../../services/knowledge-service');
+const knowledgeService = require('../../services/shared/knowledge-service');
 const { CODING_CONFIDENCE_THRESHOLD } = require('../../config/coding-thresholds');
 const { assert, parseJson } = require('./verify-assert.cjs');
 const { fetchKellyEventsUnified } = require('./verify-db.cjs');

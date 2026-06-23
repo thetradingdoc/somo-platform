@@ -8,9 +8,9 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const db = require('../database');
-const facade = require('../services/admin-lead-facade');
-const { searchJobs } = require('../services/job-scraper');
-const { extractContactInfo } = require('../services/contact-extractor');
+const facade = require('../services/platform/admin-lead-facade');
+const { searchJobs } = require('../services/platform/job-scraper');
+const { extractContactInfo } = require('../services/platform/contact-extractor');
 
 const args = process.argv.slice(2);
 const shouldSeed = args.includes('--seed');

@@ -48,7 +48,7 @@ function ensureSlotBundles(result, date, practitionerId = null) {
 }
 
 async function postDirect(path, body = {}) {
-  const BookingService = require('../booking-service');
+  const BookingService = require('../patient/booking-service');
   const p = String(path || '');
   if (p.includes('available-slots')) {
     const resultRaw = await BookingService.getAvailableSlots(

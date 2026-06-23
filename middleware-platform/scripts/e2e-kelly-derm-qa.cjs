@@ -86,7 +86,7 @@ async function main() {
   let sawDermTool = false;
 
   if (hasLlmEnv()) {
-    const KellyAgentService = require('../services/kelly-agent-service');
+    const KellyAgentService = require('../services/kelly/kelly-agent-service');
 
     for (let i = 0; i < TURNS.length; i++) {
       const t = TURNS[i];
@@ -154,7 +154,7 @@ async function runDirectToolProbe(sessionId, clinicId) {
   console.log('Phase B — KellyToolExecutor.execute(run_derm_patient_qa) — production executor path');
   console.log('═'.repeat(76));
 
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   const ctx = {
     sessionId: `${sessionId}_tool_probe`,
     clinicId,

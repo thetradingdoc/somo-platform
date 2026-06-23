@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { resolveSkinConditions } = require('../services/skin-condition-resolver');
+const { resolveSkinConditions } = require('../services/shared/skin-condition-resolver');
 
 function assert(name, cond) {
   if (!cond) throw new Error(`Assertion failed: ${name}`);

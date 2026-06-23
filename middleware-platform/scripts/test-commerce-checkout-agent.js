@@ -48,7 +48,7 @@ function internalJobHeaders() {
 }
 
 const database = require('../database');
-const KellyAgentService = require('../services/kelly-agent-service');
+const KellyAgentService = require('../services/kelly/kelly-agent-service');
 
 let _passed = 0;
 let _failed = 0;
