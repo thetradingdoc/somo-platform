@@ -4769,6 +4769,15 @@ function migrateVoiceAgentUx() {
   }
 }
 
+function migrateVoiceAgentSettingsClinic() {
+  try {
+    require('./migrations/072_voice_agent_settings_clinic').up(db);
+    console.log('✅ Migration complete: voice_agent_settings clinic override (072)');
+  } catch (e) {
+    console.warn('⚠️  voice_agent_settings clinic migration (072) failed:', e.message);
+  }
+}
+
 // ============================================
 // MIGRATION: idempotency_keys table (Section 22 - prevent double-billing)
 // ============================================
@@ -5748,6 +5757,7 @@ runStartupMigrations(
     migrateFeatureFlagsTable,
     migrateVoiceCallLogClinicId,
     migrateVoiceAgentUx,
+    migrateVoiceAgentSettingsClinic,
     migrateClinicMonthlyLlmCostTable,
     migrateClinicsMonthlyCostCap,
     migrateLongTermMemoryTables,
@@ -9963,33 +9973,65 @@ module.exports = {
       }
     })();
 
+    const extraInsertCols = optionalCols.filter((c) => payload[c] !== undefined);
+    const pgOptionalSets = extraInsertCols.map((c) => `${c} = EXCLUDED.${c}`);
+
     if (usePostgres && pgPool) {
       if (hasIdCol) {
-        return pgPool`
-          INSERT INTO voice_agent_settings (
-            id, merchant_id, clinic_id, customer_id, retell_agent_id, enabled, greeting,
-            after_hours_message, business_hours, updated_at
-          ) VALUES (
-            ${rowId},
-            ${resolvedMerchantId},
-            ${payload.clinic_id},
-            ${payload.customer_id},
-            ${payload.retell_agent_id},
-            ${payload.enabled},
-            ${payload.greeting},
-            ${payload.after_hours_message},
-            ${payload.business_hours},
-            NOW()
-          )
+        const pgBaseCols = [
+          'id',
+          'merchant_id',
+          'clinic_id',
+          'customer_id',
+          'retell_agent_id',
+          'enabled',
+          'greeting',
+          'after_hours_message',
+          'business_hours'
+        ];
+        const pgInsertCols = [...pgBaseCols, ...extraInsertCols, 'updated_at'];
+        const pgVals = [
+          rowId,
+          resolvedMerchantId,
+          payload.clinic_id,
+          payload.customer_id,
+          payload.retell_agent_id,
+          payload.enabled,
+          payload.greeting,
+          payload.after_hours_message,
+          payload.business_hours,
+          ...extraInsertCols.map((c) => payload[c])
+        ];
+        const pgPlaceholders = [
+          ...pgVals.map((_, i) => `$${i + 1}`),
+          'NOW()'
+        ].join(', ');
+        const pgValCount = pgVals.length;
+        const pgUpdateSets = [
+          'merchant_id = EXCLUDED.merchant_id',
+          'clinic_id = EXCLUDED.clinic_id',
+          'customer_id = COALESCE(EXCLUDED.customer_id, voice_agent_settings.customer_id)',
+          'retell_agent_id = EXCLUDED.retell_agent_id',
+          'enabled = EXCLUDED.enabled',
+          'greeting = EXCLUDED.greeting',
+          'after_hours_message = EXCLUDED.after_hours_message',
+          'business_hours = EXCLUDED.business_hours',
+          ...pgOptionalSets,
+          'updated_at = NOW()'
+        ];
+        const pgSql = `
+          INSERT INTO voice_agent_settings (${pgInsertCols.join(', ')})
+          VALUES (${pgPlaceholders})
           ON CONFLICT (id) DO UPDATE SET
-            customer_id = COALESCE(EXCLUDED.customer_id, voice_agent_settings.customer_id),
-            retell_agent_id = EXCLUDED.retell_agent_id,
-            enabled = EXCLUDED.enabled,
-            greeting = EXCLUDED.greeting,
-            after_hours_message = EXCLUDED.after_hours_message,
-            business_hours = EXCLUDED.business_hours,
-            updated_at = NOW()
+            ${pgUpdateSets.join(', ')}
         `;
+        return pgPool.unsafe(pgSql, pgVals.slice(0, pgValCount));
+      }
+      if (!module.exports._voiceSettingsLegacyConflictWarned) {
+        console.warn(
+          '⚠️  voice_agent_settings: using legacy ON CONFLICT(merchant_id) — run migration 072'
+        );
+        module.exports._voiceSettingsLegacyConflictWarned = true;
       }
       return pgPool`
         INSERT INTO voice_agent_settings (
@@ -10071,7 +10113,14 @@ module.exports = {
       `).run(...allInsertVals);
     }
 
-    const extraInsertCols = optionalCols.filter((c) => payload[c] !== undefined);
+    if (!module.exports._voiceSettingsLegacyConflictWarned) {
+      console.warn(
+        '⚠️  voice_agent_settings: using legacy ON CONFLICT(merchant_id) — run migration 072'
+      );
+      module.exports._voiceSettingsLegacyConflictWarned = true;
+    }
+
+    const legacyExtraInsertCols = optionalCols.filter((c) => payload[c] !== undefined);
     const allInsertCols = [
       'merchant_id',
       'customer_id',
@@ -10080,7 +10129,7 @@ module.exports = {
       'greeting',
       'after_hours_message',
       'business_hours',
-      ...extraInsertCols,
+      ...legacyExtraInsertCols,
       'updated_at'
     ];
     const allInsertVals = [
@@ -10091,7 +10140,7 @@ module.exports = {
       payload.greeting,
       payload.after_hours_message,
       payload.business_hours,
-      ...extraInsertCols.map((c) => payload[c])
+      ...legacyExtraInsertCols.map((c) => payload[c])
     ];
     const placeholders = allInsertCols
       .map((c) => (c === 'updated_at' ? 'CURRENT_TIMESTAMP' : '?'))

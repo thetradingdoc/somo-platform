@@ -39,6 +39,10 @@ function getEnvConfig(packageDir = __dirname) {
 function resolveDbPath(config = getEnvConfig()) {
   const { isProdEnv, defaultDbDir, dbFileName, packageDir } = config;
 
+  if (process.env.DB_PATH === ':memory:') {
+    return ':memory:';
+  }
+
   if (process.env.DB_PATH) {
     return path.resolve(process.cwd(), process.env.DB_PATH);
   }
@@ -78,6 +82,7 @@ function warnSplitBrain(dbPath, config = getEnvConfig()) {
 }
 
 function ensureDbDirectory(dbPath) {
+  if (dbPath === ':memory:') return;
   try {
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Local production deploy: Firebase Hosting UI + Cloud Run API (no GitHub Actions).
-# Usage: ./scripts/deploy-callsomo-local.sh [--skip-ci] [--skip-api] [--skip-ui] [--skip-smoke]
+# Usage: ./scripts/deploy-callsomo-local.sh [--skip-api] [--skip-ui] [--skip-smoke]
+# CI gate: npm run ci:phase0 (override only with ALLOW_SKIP_CI=1)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +22,14 @@ SKIP_UI=0
 SKIP_SMOKE=0
 for arg in "$@"; do
   case "$arg" in
-    --skip-ci) SKIP_CI=1 ;;
+    --skip-ci)
+      if [[ "${ALLOW_SKIP_CI:-}" != "1" ]]; then
+        echo "ERROR: --skip-ci disabled. Set ALLOW_SKIP_CI=1 to override Phase 0 gate." >&2
+        exit 1
+      fi
+      SKIP_CI=1
+      echo "WARN: ALLOW_SKIP_CI=1 — skipping ci:phase0" >&2
+      ;;
     --skip-api) SKIP_API=1 ;;
     --skip-ui) SKIP_UI=1 ;;
     --skip-smoke) SKIP_SMOKE=1 ;;
@@ -70,8 +78,8 @@ deploy_api() {
 }
 
 if [[ "$SKIP_CI" -eq 0 ]]; then
-  echo "==> Local CI gate (npm run ci:gate)..."
-  npm run ci:gate
+  echo "==> Phase 0 CI gate (npm run ci:phase0)..."
+  npm run ci:phase0
 fi
 
 # UI first so callsomo.com updates even if Cloud Build / API deploy is slow or fails.

@@ -124,6 +124,9 @@ middleware-platform/data/payor-sources/*
 /step0.md
 /step1b
 middleware-platform/reports/
+middleware-platform/var/evidence/
+middleware-platform/scripts/lib/refactor-*.cjs
+scripts/tmp-retention.cjs
 .pr-worktrees/
 .pr-patches/
 .sandbox-trial/
@@ -136,7 +139,23 @@ middleware-platform/reports/
 # tests/
 # *.test.js
 
-# Embedded git repo (use submodule or clone separately)
-medical-rag-api/
+# Local WIP / scratch (Phase 0 — keep tree clean)
+/data/
+/docs/solution-design/
+/docs/archive/
+/docs/design/
+/docs/START_HERE_CLINICIAN.md
+/docs/architecture/SURFACE_STATUS.md
+/docs/architecture/assets/
+/docs/runbooks/CR-001-005-OPERATOR-CHECKLIST.md
+/middleware-platform/.eslintrc.cjs
+/middleware-platform/docs/
+/middleware-platform/scripts/README.md
+/middleware-platform/scripts/capstone-identity-smoke.cjs
+/middleware-platform/scripts/lib/kelly-conversation-fixtures.cjs
+/middleware-platform/scripts/lib/remove-shims.cjs
+/patient-app/README.md
+/patient-app/RETIREMENT.md
+/unified-dashboard/patients/RETIREMENT.md
 teamkelly/
 :memory:-*

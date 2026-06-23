@@ -1,17 +1,17 @@
-# GitHub Actions (optional — billing may disable)
+# GitHub Actions (not used — no billing)
 
-Minimal gate restored in `ci.yml`: `npm run ci:gate` + `smoke:voice-routing-matrix`.
+**Phase 0 gate is local.** Do not rely on GitHub Actions for deploy safety.
 
-**GitHub Actions is disabled** (billing). Use local CI instead:
+## Required before push or deploy
 
 ```bash
-npm run ci:gate          # before push / deploy (~5–15 min)
-npm run ci:full          # deeper check before major releases
-./scripts/install-git-hooks.sh   # optional: auto-run ci:gate on git push
+npm run ci:phase0          # Jest canaries + full suite + voice-routing smoke (~2–5 min)
+npm run ci:gate            # full pre-deploy gate (~5–15 min)
+./scripts/install-git-hooks.sh   # optional: auto-run ci:phase0 on git push
 ```
 
-Deploy scripts run `ci:gate` by default (`SKIP_CI=1` or `--skip-ci` to bypass).
+Deploy scripts run `ci:phase0` by default. Override only with `ALLOW_SKIP_CI=1` (discouraged).
 
-The archived workflow definition is in `ci.yml.disabled` (manual `workflow_dispatch` only if you re-enable billing later).
+The archived workflow definition is in `ci.yml.disabled` if billing is enabled later.
 
-Nightly Kelly prod checks: `npm run verify:kelly:nightly` (replaces `kelly-rails-prod-nightly.yml.disabled`). Schedule via cron on your machine if desired.
+Nightly Kelly prod checks: `npm run verify:kelly:nightly`.

@@ -271,49 +271,45 @@ function provisionSaasTenant(dbModule, options = {}) {
 
 function seedVoiceAgentSettings(dbModule, { customerId, merchantId, customer, clinicName }) {
   if (!dbModule.upsertVoiceAgentSettings || !customerId) return null;
-  try {
-    const existing = dbModule.getVoiceAgentSettingsForProvider({
-      merchantId: merchantId || dbModule.customerVoiceSettingsMerchantKey(customerId),
-      customerId
-    });
-    if (existing?.greeting && existing?.outbound_opener) return existing;
 
-    const VoiceAgentRuntime = require('./voice-agent-runtime');
-    const {
-      resolvePracticeDisplayName,
-      buildDefaultInboundGreeting,
-      buildDefaultOutboundOpener
-    } = require('./call-opener-resolver');
-    const company = resolvePracticeDisplayName(dbModule, {
-      customerId,
-      customer: customer || dbModule.getCustomer(customerId)
-    });
-    const effectiveMerchantId =
-      merchantId || customer?.merchant_id || dbModule.customerVoiceSettingsMerchantKey(customerId);
-    const seedSettings = {
-      retell_agent_id: customer?.retell_agent_id || null,
-      enabled: true,
-      greeting: existing?.greeting || buildDefaultInboundGreeting(company, 'warm'),
-      outbound_opener: existing?.outbound_opener || buildDefaultOutboundOpener(company, 'warm'),
-      outbound_enabled: existing?.outbound_enabled ?? 0,
-      after_hours_message: existing?.after_hours_message || VoiceAgentRuntime.buildAfterHoursMessage({}),
-      business_hours: existing?.business_hours || {
-        mon: '09:00-17:00',
-        tue: '09:00-17:00',
-        wed: '09:00-17:00',
-        thu: '09:00-17:00',
-        fri: '09:00-17:00'
-      },
-      tone_preset: 'warm',
-      sync_status: 'synced'
-    };
-    dbModule.upsertVoiceAgentSettings(effectiveMerchantId, seedSettings, customerId);
-    console.log(`✅ [provision] Seeded voice_agent_settings for ${customerId}`);
-    return seedSettings;
-  } catch (err) {
-    console.warn('⚠️  [provision] Failed to seed voice_agent_settings:', err.message);
-    return null;
-  }
+  const existing = dbModule.getVoiceAgentSettingsForProvider({
+    merchantId: merchantId || dbModule.customerVoiceSettingsMerchantKey(customerId),
+    customerId
+  });
+  if (existing?.greeting && existing?.outbound_opener) return existing;
+
+  const VoiceAgentRuntime = require('./voice-agent-runtime');
+  const {
+    resolvePracticeDisplayName,
+    buildDefaultInboundGreeting,
+    buildDefaultOutboundOpener
+  } = require('./call-opener-resolver');
+  const company = resolvePracticeDisplayName(dbModule, {
+    customerId,
+    customer: customer || dbModule.getCustomer(customerId)
+  });
+  const effectiveMerchantId =
+    merchantId || customer?.merchant_id || dbModule.customerVoiceSettingsMerchantKey(customerId);
+  const seedSettings = {
+    retell_agent_id: customer?.retell_agent_id || null,
+    enabled: true,
+    greeting: existing?.greeting || buildDefaultInboundGreeting(company, 'warm'),
+    outbound_opener: existing?.outbound_opener || buildDefaultOutboundOpener(company, 'warm'),
+    outbound_enabled: existing?.outbound_enabled ?? 0,
+    after_hours_message: existing?.after_hours_message || VoiceAgentRuntime.buildAfterHoursMessage({}),
+    business_hours: existing?.business_hours || {
+      mon: '09:00-17:00',
+      tue: '09:00-17:00',
+      wed: '09:00-17:00',
+      thu: '09:00-17:00',
+      fri: '09:00-17:00'
+    },
+    tone_preset: 'warm',
+    sync_status: 'synced'
+  };
+  dbModule.upsertVoiceAgentSettings(effectiveMerchantId, seedSettings, customerId);
+  console.log(`✅ [provision] Seeded voice_agent_settings for ${customerId}`);
+  return seedSettings;
 }
 
 module.exports = {

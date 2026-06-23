@@ -217,6 +217,7 @@
         "test:e2e-kelly-derm": "node scripts/e2e-kelly-derm-qa.cjs",
         "test:e2e-middleware-smoke": "node scripts/e2e-middleware-http-smoke.cjs",
         "smoke:voice-routing-matrix": "node scripts/voice-routing-matrix-smoke.cjs",
+        "ci:phase0": "jest --runInBand --forceExit __tests__/saas-tenant-provision.test.js __tests__/kelly-rails-router.test.js __tests__/kelly-rails-execute-turn.test.js && jest --runInBand --forceExit && npm run smoke:voice-routing-matrix",
         "verify:voice-routing-matrix-live": "node scripts/voice-routing-matrix-live.cjs --smoke-only",
         "backfill:site-context-tenant": "node scripts/backfill-site-context-tenant-columns.cjs",
         "callsomo:deploy-api": "npm run callsomo:deploy-api --prefix ..",

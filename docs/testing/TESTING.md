@@ -111,6 +111,33 @@ Estimated time: 45–90 minutes (SMS + one PSTN call).
 
 ---
 
+## Phase 0 — Stabilization gate (code + deploy)
+
+**Exit gate before new feature work.** No GitHub Actions — enforce locally and in deploy scripts.
+
+```bash
+# Fast gate (~2–5 min): 3 canary suites + full Jest + voice-routing smoke
+npm run ci:phase0
+
+# Full pre-deploy gate (~5–15 min)
+npm run ci:gate
+
+# Install pre-push hook (runs ci:phase0)
+npm run install:git-hooks --prefix ..
+```
+
+| Check | Pass when |
+|-------|-----------|
+| Jest | `npm test --prefix middleware-platform -- --runInBand --forceExit` → 0 failed |
+| Canaries | `saas-tenant-provision`, `kelly-rails-router`, `kelly-rails-execute-turn` green |
+| Voice smoke | `smoke:voice-routing-matrix` exit 0 |
+| Deploy | `./scripts/deploy-callsomo-local.sh` runs `ci:phase0` (no `ALLOW_SKIP_CI=1`) |
+| Git | `main` HEAD matches deployed image tag (`gcr.io/.../somo-middleware:<short-sha>`) |
+
+Provision roundtrip: `saas-tenant-provision.test.js` + `npm run trial:provision-smoke --prefix middleware-platform` (local server).
+
+---
+
 ## Phase 0 — Preflight (P0)
 
 ```bash

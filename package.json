@@ -18,6 +18,7 @@
     "verify:agentic-checkout": "node scripts/verify-agentic-checkout.cjs",
     "ci:gate": "bash scripts/ci-local.sh gate",
     "ci:full": "bash scripts/ci-local.sh full",
+    "ci:phase0": "npm run ci:phase0 --prefix middleware-platform",
     "ci:local": "npm run ci:gate",
     "install:git-hooks": "bash scripts/install-git-hooks.sh",
     "verify:kelly:nightly": "bash scripts/kelly-rails-nightly-local.sh",

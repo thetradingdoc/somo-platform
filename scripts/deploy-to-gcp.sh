@@ -41,6 +41,13 @@ if ! command -v gcloud >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ "${ALLOW_SKIP_CI:-}" != "1" ]]; then
+  echo "==> Phase 0 CI gate (npm run ci:phase0)..."
+  npm run ci:phase0 --prefix "$ROOT"
+else
+  echo "WARN: ALLOW_SKIP_CI=1 — skipping ci:phase0 before Cloud Build" >&2
+fi
+
 gcloud config set project "$PROJECT" >/dev/null
 
 echo "==> Building container (Cloud Build)..."
