@@ -72,8 +72,8 @@ async function main() {
     process.env.DB_PATH = path.isAbsolute(dbPath) ? dbPath : path.join(process.cwd(), dbPath);
     delete require.cache[require.resolve('../database')];
     const db = require('../database');
-    const { getOperatorCustomerId } = require('../services/voice-account-resolution');
-    const { resolveVoiceMerchantId } = require('../services/operator-tenant-bootstrap');
+    const { getOperatorCustomerId } = require('../services/voice/voice-account-resolution');
+    const { resolveVoiceMerchantId } = require('../services/shared/operator-tenant-bootstrap');
     const operatorId = getOperatorCustomerId();
     const customer = operatorId && db.getCustomer(operatorId);
     if (!customer) {

@@ -29,7 +29,7 @@ function resolveRagApiUrl() {
 
 let logger;
 try {
-  logger = require('../logger');
+  logger = require('../shared/logger');
 } catch (_) {
   logger = { info: (...a) => console.log(...a), warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) };
 }

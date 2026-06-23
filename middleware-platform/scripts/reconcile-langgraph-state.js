@@ -75,7 +75,7 @@ async function main() {
 
   if (REPAIR && inDbNotCheckpoint.length && checkpointThreads) {
     console.log(`\n   🔧 Repair: seeding checkpointer from DB (run migrate-to-langgraph.js for full seed)`);
-    const CodingGraph = require('../services/coding-graph');
+    const CodingGraph = require('../services/clinical/coding-graph');
     let seeded = 0;
     for (const callId of inDbNotCheckpoint.slice(0, 50)) {
       const state = db.getCallState(callId);

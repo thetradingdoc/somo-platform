@@ -16,7 +16,7 @@
 
 const crypto = require('crypto');
 const db = require('../database').db;
-const Queue = require('../services/reasoning-job-queue-service');
+const Queue = require('../services/shared/reasoning-job-queue-service');
 
 function main() {
   const n = Math.max(10, Math.min(5000, Number(process.env.REASONING_LOAD_ITERATIONS || 200)));

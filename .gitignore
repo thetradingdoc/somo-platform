@@ -115,6 +115,10 @@ temp/
 # Middleware artifacts (local runs)
 middleware-platform/test-results/
 middleware-platform/uploads/
+middleware-platform/var/evidence/
+middleware-platform/e2e-artifacts/
+middleware-platform/screenshots/
+middleware-platform/playwright-report/
 
 # Payor / NPPES bulk inputs (symlinks + data; keep README.md tracked)
 middleware-platform/data/payor-sources/*

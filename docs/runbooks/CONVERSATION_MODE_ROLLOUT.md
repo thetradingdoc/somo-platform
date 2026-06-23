@@ -106,7 +106,8 @@ Before scaling SaaS voice to many clinics, onboard **one** staging tenant end-to
 ```bash
 cd middleware-platform
 npm run test:kelly:rails:golden          # 50 unit tests
-npx jest --testPathPattern='conversation-mode'   # 19 acceptance tests
+npm run verify:kelly-rails-env --prefix middleware-platform
+npm run smoke:voice-routing-matrix --prefix middleware-platform
 npm run test:rails:conversation-sandbox  # 7 multi-turn dialogs (enforce mode)
 npm run smoke:operator-outbound
 npm run smoke:tenant-billing-pivot
@@ -139,7 +140,7 @@ If enforce mode causes regressions on live tenants:
 
 ## Post-deploy checklist
 
-1. Cloud Run image includes conversation-mode stack (`services/conversation-mode/*`).
+1. Cloud Run image includes conversation-mode stack (`services/conversation/*`).
 2. Env vars set per staged table above (shadow + scoped enforce, then global enforce when green).
 3. `kelly_call_events` shows `mode_resolved`, `pivot_evaluated`, `opener_used`, and on failure paths `identity_invalid`.
 4. Firebase UI deployed if provider portal or voice-setup pages changed.

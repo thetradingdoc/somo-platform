@@ -48,4 +48,3 @@ for (const file of files.sort()) {
   if (html.includes('ppKellyLive')) console.log('    kelly widget in HTML: yes');
 }
 
-console.log('\nRun live inventory: PW_API_BASE_URL=http://127.0.0.1:4000 node scripts/playwright-provider-portal-inventory.cjs\n');

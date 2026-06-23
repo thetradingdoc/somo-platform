@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const CircleService = require('../services/circle-service');
+const CircleService = require('../services/platform/circle-service');
 const { requireCustomerAuth, requireMerchant } = require('../middleware/customer-auth');
 const dailyLimit = 2000; // simple daily cap
 const maxPerTxn = 1000;

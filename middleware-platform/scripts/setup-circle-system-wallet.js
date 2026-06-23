@@ -9,7 +9,7 @@
  */
 
 require('dotenv').config();
-const CircleService = require('../services/circle-service');
+const CircleService = require('../services/platform/circle-service');
 const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
 

@@ -14,8 +14,8 @@ const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const InsuranceService = require('../services/insurance-service');
-const billingEnvelope = require('../services/billing-claim-envelope-service');
+const InsuranceService = require('../services/rcm/insurance-service');
+const billingEnvelope = require('../services/rcm/billing-claim-envelope-service');
 
 function hasFlag(name) {
   return process.argv.includes(`--${name}`);

@@ -1,6 +1,6 @@
 'use strict';
 
-const { createVoiceIncomingHandler } = require('../services/voice-incoming-handler');
+const { createVoiceIncomingHandler } = require('../services/voice/voice-incoming-handler');
 
 /**
  * Register POST /voice/incoming (Twilio webhook).

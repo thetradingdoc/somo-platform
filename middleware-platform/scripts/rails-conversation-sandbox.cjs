@@ -33,15 +33,16 @@ process.env.KELLY_RAILS_ROLLOUT_PCT = process.env.KELLY_RAILS_ROLLOUT_PCT || '1'
 process.env.KELLY_ALLOW_HYBRID_GRAPH = process.env.KELLY_ALLOW_HYBRID_GRAPH || '0';
 process.env.LANGGRAPH_KELLY_ROLLOUT_PCT = process.env.LANGGRAPH_KELLY_ROLLOUT_PCT || '0';
 process.env.CONVERSATION_MODE_ROUTING = process.env.CONVERSATION_MODE_ROUTING || 'enforce';
+process.env.OPQRST_FIELD_GATE_ENABLED = process.env.OPQRST_FIELD_GATE_ENABLED ?? '1';
 process.env.KELLY_RAILS_ES_ENABLED = process.env.KELLY_RAILS_ES_ENABLED || '1';
 process.env.KELLY_E2E_SKIP_TRIAGE = process.env.KELLY_E2E_SKIP_TRIAGE || '1';
 process.env.RCM_E2E_DIRECT_TOOLS = process.env.RCM_E2E_DIRECT_TOOLS || '1';
 process.env.DB_PATH = process.env.DB_PATH || path.join(MP, 'middleware-dev.db');
 
-const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
-const { runKellyTurn } = require('../services/kelly-turn-resolver');
-const { seedModeAtCallStart } = require('../services/conversation-mode/conversation-mode-session');
-const { resolveDispositionFromState } = require('../services/conversation-mode/disposition-taxonomy');
+const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
+const { runKellyTurn } = require('../services/kelly/kelly-turn-resolver');
+const { seedModeAtCallStart } = require('../services/conversation/conversation-mode-session');
+const { resolveDispositionFromState } = require('../services/conversation/disposition-taxonomy');
 
 const CLINIC_ID = process.env.TEST_CLINIC_ID || 'clinic-default';
 const ADMIN_TENANT_POLICY = {
@@ -60,7 +61,7 @@ function seedAdminBookingPath(sessionId, patient, clinicId) {
     quality: 'routine visit',
     region: 'general'
   });
-  const { persistRailsSessionState } = require('../services/kelly-rails/session-ssot');
+  const { persistRailsSessionState } = require('../services/kelly/rails/session-ssot');
   persistRailsSessionState(sessionId, {
     active_lane: 'booking',
     step: 'schedule_visit',
@@ -80,7 +81,7 @@ function seedAdminBookingPath(sessionId, patient, clinicId) {
 
 function seedRebookAfterCancel(sessionId, patient, clinicId) {
   seedAdminBookingPath(sessionId, patient, clinicId);
-  const { persistRailsSessionState } = require('../services/kelly-rails/session-ssot');
+  const { persistRailsSessionState } = require('../services/kelly/rails/session-ssot');
   persistRailsSessionState(sessionId, {
     active_lane: 'booking',
     step: 'schedule_visit',
@@ -99,7 +100,7 @@ function seedRebookAfterCancel(sessionId, patient, clinicId) {
 }
 
 function bindAppointmentToSession(sessionId, apptId) {
-  const { persistRailsSessionState } = require('../services/kelly-rails/session-ssot');
+  const { persistRailsSessionState } = require('../services/kelly/rails/session-ssot');
   persistRailsSessionState(sessionId, {
     appointment_id: apptId,
     flags: { appointment_id: apptId, last_appointment_id: apptId }
@@ -245,7 +246,7 @@ async function turn(ctx, userMsg, extra = {}) {
   const latencyMs = Date.now() - t0;
   let modeFromProjection = out?.conversation_mode;
   try {
-    const { getRailsSessionProjection } = require('../services/kelly-rails/session-ssot');
+    const { getRailsSessionProjection } = require('../services/kelly/rails/session-ssot');
     const projection = getRailsSessionProjection(ctx.sessionId);
     if (projection?.flags_json) {
       const flags = JSON.parse(projection.flags_json);
@@ -543,7 +544,7 @@ async function scenarioBooking() {
   seedAdminBookingPath(sessionId, patient, CLINIC_ID);
 
   const slotDay = uniqueTomorrowSlot(0, 30);
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_date', slotDay.dateStr);
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_time', '12:00');
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_id', `sandbox_book_${sessionId.slice(-8)}`);
@@ -1050,7 +1051,7 @@ async function scenarioSpanishBooking() {
   });
   seedAdminBookingPath(sessionId, patient, CLINIC_ID);
 
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_date', slotDay.dateStr);
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_time', '12:00');
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_id', `sandbox_es_${sessionId.slice(-8)}`);
@@ -1298,7 +1299,7 @@ async function scenarioRescheduleAppointment() {
   };
 
   fixtures.seedE2eBookableProvider(CLINIC_ID, { targetSpecialty: 'Dermatology' });
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
+  const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_date', newSlot.dateStr);
   KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_time', newSlot.time);
 
@@ -1632,7 +1633,7 @@ async function scenarioProviderMismatchRebook() {
 async function scenarioAsrLanguageHandoff() {
   const id = 'asr_language_handoff';
   const sessionId = fixtures.newE2eSessionId('rail_asr_handoff');
-  const { handleTurn } = require('../services/kelly-rails/orchestrator');
+  const { handleTurn } = require('../services/kelly/rails/orchestrator');
 
   const out = await handleTurn({
     sessionId,

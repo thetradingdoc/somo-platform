@@ -1,7 +1,16 @@
 # Somo Platform Documentation
-> Last reviewed: 2026-06-16
+> Last reviewed: 2026-06-22
 
-**Last Updated:** 2026-06-16
+**Last Updated:** 2026-06-22
+
+### Start here (by role)
+
+| Role | Read first |
+|------|------------|
+| **Clinicians & practice managers** | **[START_HERE_CLINICIAN.md](./START_HERE_CLINICIAN.md)** — phone, portal, billing, what to ignore |
+| **Engineering / reorg planning** | **[solution-design/CODEBASE_REORGANIZATION.md](./solution-design/CODEBASE_REORGANIZATION.md)** — target layers, folder tree, cleanup phases |
+| **Surface status** | [architecture/SURFACE_STATUS.md](../architecture/SURFACE_STATUS.md) | Active vs legacy surfaces |
+| **Verify catalog** | [testing/VERIFY_SCRIPT_CATALOG.md](../testing/VERIFY_SCRIPT_CATALOG.md) | All deploy gate scripts |
 
 ### Front-desk production (callsomo.com)
 

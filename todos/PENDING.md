@@ -1,6 +1,6 @@
 # Somo — all pending work
 
-**Last updated:** 2026-06-18  
+**Last updated:** 2026-06-22  
 **Engineering status:** Demo Phase 1, RS-0/1, most CR gates complete. Open: operator prod verify, Kelly Phase C, RS-2 deferred refactors, P2 polish.
 
 **Active epic:** [VOICE-SITE-ESC-EPIC.md](./VOICE-SITE-ESC-EPIC.md) — CallSiteContext (L1.5), escalation ladder, migrations 061–074, post-epic review train.
@@ -27,12 +27,14 @@ These require live prod/staging access, human QA, or clinical sign-off:
 
 - **UI-07, Q-17, Q-18** — visual + live call sign-off on callsomo.com
 - **Kelly Phase C (C-P0-01…C-F-02)** — clinical OPQRST review + staging voice cohorts → [R-09](./VOICE-REMEDIATION-TRAIN.md#r-09--p1-spanish--kelly-phase-c-c-p0-01-07-cr-025)
-- **CR-001–005** — run `verify:kelly-rails-cloudrun` on live Cloud Run + flip enforce flags after telemetry
+- **CR-001–005** — engineering prep done (`npm run operator:cr-001-005`); operator must run on live Cloud Run
 - **CR-029–037, CR-030–032** — execute live verify scripts against prod (`docs/deployment/OPERATIONS.md`)
 - **CR-024–025** — Spanish prod flake: run `sandbox-spanish-green` 3× on staging
-- **CR-047, FE-019** — prod portal smoke with `PW_PROVIDER_EMAIL` / `PW_PROVIDER_PASS`
+- **CR-047** — `test:prod:provider-portal` wired; needs `PW_PROVIDER_EMAIL` / `PW_PROVIDER_PASSWORD` at run time
+- **RS-2-07** — parity verify + ops checklist done; dual-write cutover still needs ops sign-off
+- **Commerce deletion** — telemetry script + RETIREMENT.md; product sign-off + 90d zero traffic before delete
 - **GCP deploy smoke, photo-to-bill key rotation, payor vendor exports** — operator runbooks
-- **RS-2-02…RS-2-07** — multi-week refactors (deferred)
+- **RS-2-02…RS-2-07** — batch migration extract + patient routes + Kelly split in progress (see Phase 2 below)
 
 
 ## P0 — Revenue (demo Phase 1 conversion)
@@ -107,15 +109,39 @@ These require live prod/staging access, human QA, or clinical sign-off:
 - [x] **RS-1-07** Move `phase0-verify.cjs` → `scripts/phase0-verify.cjs`
 - [x] **RS-1-08** `migrate-merchant-shop.js` uses `var/db/` + `MERCHANT_SHOP_DB_PATH` env override
 
+### Phase 2 — Codebase reorganization (2026-06-22)
+
+- [x] Doc/test drift fixed; `check-docs-stale-strings.cjs` extended
+- [x] Clinician map + solution design published
+- [x] 439 shims removed (scripts, routes, services)
+- [x] `retell-websocket.js` → thin entry + `webhooks/retell/handler.js`
+- [x] `registerVoiceRcmRoutes` extracted; repository slices started
+- [x] Commerce legacy banners + `FEATURE_AGENTIC_CHECKOUT` gate
+- [x] **RS-2-02** startup migrations registry (`database/migrations/startup/migration-batch.js`)
+- [x] **RS-2-05** `data/knowledge/datasets` → `Knowledge/` symlink + README
+- [x] **RS-2-06** flat `services/*.js` moved to domain folders (0 at root)
+- [x] **RS-2-07** engineering — `verify:postgres-primary-parity`, ops checklist in `POSTGRES_MIGRATION.md` (ops cutover still gated)
+- [x] Kelly `kelly-agent-service.js` modular split → `services/kelly/agent/*` (10-line facade; prod rollout still follows CR-001–005)
+
+### Phase 2 — Blocked items engineering pass (2026-06-22)
+
+- [x] **CR-001–005 prep** — `docs/runbooks/CR-001-005-OPERATOR-CHECKLIST.md`, `npm run operator:cr-001-005`
+- [x] **CR-047 prep** — `e2e/provider-portal-journey-prod.spec.cjs`, `npm run test:prod:provider-portal`
+- [x] **Commerce prep** — `verify:commerce-traffic-zero`, `patient-app/RETIREMENT.md` (no deletion)
+- [x] **Kelly Phase C prep** — `OPQRST_ES_SIGNOFF_TEMPLATE.md`, `es.json` scaffold, `verify:kelly-phase-c-bundle`
+- [x] **RS-2-04** — `app/register-patient-routes.js` (`server.js` ~10,137 lines)
+- [x] **RS-2-02** — 15 startup migrate bodies → `database/migrations/startup/*.js` (`database.js` ~20,519 lines)
+- [x] **RS-2-03** — `repositories/patient-sessions.js`, `orchestrate-sessions.js`
+
 ### Phase 2 — Longer-term refactors (RS-2)
 
 - [x] **RS-2-01** `database/connection.js` — path resolution, WAL, Postgres pool init (query helpers still in `database.js`)
-- [ ] **RS-2-02** `deferred` — Move inline `migrate*()` batch to `database/migrations/startup/*.js`
-- [ ] **RS-2-03** `deferred` — Move query helpers to `database/repositories/<domain>.js` per `ARCHITECTURE.md` Phase 2
-- [ ] **RS-2-04** `deferred` — Split `server.js` per `docs/architecture/SERVER_DECOMPOSITION.md`
-- [ ] **RS-2-05** `deferred` — Formalize `Knowledge/` boundary (`@somo/knowledge` workspace or `data/knowledge` symlink)
-- [ ] **RS-2-06** `deferred` — Consolidate `middleware-platform/scripts/` into `payor/`, `verify/`, `seed/` subdirs
-- [ ] **RS-2-07** `deferred` — Continue Postgres-primary path per `docs/Database/OPERATIONS.md` — reduce dual-write complexity
+- [x] **RS-2-02** `partial` — 15 migrate bodies extracted; registry + ~53 remain in `database.js`
+- [x] **RS-2-03** `partial` — `patient-sessions`, `orchestrate-sessions` + existing slices
+- [x] **RS-2-04** `partial` — `registerPatientPortalRoutes`; `server.js` ~10,137 lines (target &lt;3k)
+- [ ] **RS-2-05** `done` — `data/knowledge/datasets` symlink to `Knowledge/`
+- [ ] **RS-2-06** `done` — 0 flat `services/*.js`; scripts organized under `scripts/{verify,harness,data,...}`
+- [ ] **RS-2-07** `partial` — Ops sign-off for prod `POSTGRES_PRIMARY` cutover (engineering checklist done)
 
 ---
 
@@ -125,7 +151,7 @@ Full detail + file paths: [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_RE
 
 ### P0-A Production enforcement
 
-- [ ] **CR-001** `operator` — Run `verify:kelly-rails-cloudrun` on live `somo-middleware`; doc template in `docs/deployment/OPERATIONS.md`
+- [x] **CR-001** `engineering` — Runbook + `npm run operator:cr-001-005` (operator: run on live Cloud Run)
 - [ ] **CR-002** `operator` — Confirm `CONVERSATION_MODE_ROUTING=enforce` (not `shadow`) on prod Cloud Run
 - [ ] **CR-003** `operator` — Enable `CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN=1` after 48h clean shadow telemetry
 - [ ] **CR-004** `operator` — Confirm `KELLY_RAILS_V2=1`, `KELLY_RAILS_ROLLOUT_PCT=1`, `KELLY_ALLOW_HYBRID_GRAPH=0`
@@ -188,7 +214,7 @@ Full detail + file paths: [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_RE
 - [x] **CR-044** `done` — Activity feed: cancel + reschedule + payment events consistently
 - [x] **CR-045** `done` — Calendar reflects voice-booked appts within 30s (`ppStartAppointmentPoll`)
 - [x] **CR-046** `done` — Revenue tab: `voice_checkouts` + RCM payments scoped to clinic
-- [ ] **CR-047** `operator` — `test:prod:provider-portal` — run with prod credentials
+- [x] **CR-047** `engineering` — `test:prod:provider-portal` wired (operator: run with prod credentials)
 - [x] **FE-008** `patient-case.html` provider shell + `?patient_id=` auto-load
 - [x] **FE-010** `done` — "Booked by Kelly" badge on Today + calendar board/list
 - [x] **FE-019** Prod Playwright smoke — `provider-portal-journey-prod.spec.cjs` (login + Today + Kelly panel)
@@ -250,8 +276,8 @@ Engineering ~complete; human/staging proof required. Reference: [`docs/runbooks/
 
 - [x] **C-P0-04-en-auto** EN automated cohort (10/10 gate scenarios) — `npm run smoke:opqrst-phase-c-en --prefix middleware-platform`
 - [ ] **C-P0-01** Complete OPQRST review packet; Spanish copy for `config/clinical-opqrst/es.json`
-- [ ] **C-P0-02** Add `docs/clinical/OPQRST_ES_SIGNOFF_<date>.md`
-- [ ] **C-P0-03** Populate `es.json` from approved text (no auto-translate in prod)
+- [x] **C-P0-02** Template: `docs/clinical/OPQRST_ES_SIGNOFF_TEMPLATE.md` (clinical: copy to dated sign-off)
+- [x] **C-P0-03** `es.json` scaffold with `PENDING_CLINICAL_REVIEW` placeholders
 - [ ] **C-P0-04** EN cohort: 10 happy-path calls per scorecard _(automated 10/10 done; optional live Retell perceptual)_
 - [ ] **C-P0-05** ES cohort: 10 happy + 5 noisy + 5 low-confidence opener
 - [ ] **C-P0-06** Demo dry-run EN + ES per healthcare specialist scenario

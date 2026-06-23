@@ -7,7 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const LeadIntelligenceService = require('../services/lead-intelligence-service');
+const LeadIntelligenceService = require('../services/platform/lead-intelligence-service');
 const { requireAdminAuth } = require('../middleware/admin-auth');
 const rateLimit = require('express-rate-limit');
 

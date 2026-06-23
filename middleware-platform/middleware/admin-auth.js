@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const db = require('../database');
-const EmailService = require('../services/email-service');
-const { isOperatorCustomer } = require('../services/customer-capabilities');
+const EmailService = require('../services/platform/email-service');
+const { isOperatorCustomer } = require('../services/platform/customer-capabilities');
 const { getSessionCookieOptions } = require('../routes/lib/signup-shared');
 
 const COOKIE_NAME = 'admin_session';
@@ -348,7 +348,7 @@ function requireAdminOrCapability(capability) {
       if (custSession) {
         const customer = db.getCustomer(custSession.customer_id);
         if (customer) {
-          const { hasCapability } = require('../services/customer-capabilities');
+          const { hasCapability } = require('../services/platform/customer-capabilities');
           if (hasCapability(customer, capability)) {
             req.customer = customer;
             return next();

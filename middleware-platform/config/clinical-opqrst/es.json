@@ -1,7 +1,8 @@
 {
   "pack_version": "v1",
   "locale": "es",
-  "status": "pending_translator_signoff",
+  "status": "PENDING_CLINICAL_REVIEW",
+  "review_note": "Populate from approved Spanish copy only. Do not auto-translate in production paths.",
   "core_sequence": [
     "opqrst_onset",
     "opqrst_provocation",
@@ -10,6 +11,51 @@
     "opqrst_severity",
     "opqrst_timing"
   ],
-  "questions": {},
-  "specialty_notes": {}
+  "questions": {
+    "opqrst_onset": {
+      "text": "[PENDING_CLINICAL_REVIEW] When did this start?",
+      "voice_max_words": 12,
+      "store_field": "onset"
+    },
+    "opqrst_provocation": {
+      "text": "[PENDING_CLINICAL_REVIEW] What makes it better or worse?",
+      "voice_max_words": 14,
+      "store_field": "provocation"
+    },
+    "opqrst_quality": {
+      "text": "[PENDING_CLINICAL_REVIEW] Can you describe what it feels like?",
+      "voice_max_words": 14,
+      "store_field": "quality"
+    },
+    "opqrst_radiation": {
+      "text": "[PENDING_CLINICAL_REVIEW] Does it spread anywhere?",
+      "voice_max_words": 10,
+      "store_field": "radiation"
+    },
+    "opqrst_severity": {
+      "text": "[PENDING_CLINICAL_REVIEW] On a scale of 1 to 10, how bad is it?",
+      "voice_max_words": 16,
+      "store_field": "severity"
+    },
+    "opqrst_timing": {
+      "text": "[PENDING_CLINICAL_REVIEW] Is it constant or does it come and go?",
+      "voice_max_words": 14,
+      "store_field": "timing"
+    },
+    "safety_q1": {
+      "text": "[PENDING_CLINICAL_REVIEW] In the past month, have you wished you were dead?",
+      "voice_max_words": 18,
+      "store_field": "safety_screen_q1"
+    },
+    "safety_q2": {
+      "text": "[PENDING_CLINICAL_REVIEW] Have you had thoughts of killing yourself?",
+      "voice_max_words": 16,
+      "store_field": "safety_screen_q2"
+    }
+  },
+  "specialty_notes": {
+    "dermatology": "[PENDING_CLINICAL_REVIEW] How long has the rash been present? Any new products or exposures?",
+    "cardiology": "[PENDING_CLINICAL_REVIEW] Any family history of heart disease? Any prior ECG or cardiac tests?",
+    "psychiatry": "[PENDING_CLINICAL_REVIEW] Use PHQ-2 and GAD-2; do not ask radiation question."
+  }
 }

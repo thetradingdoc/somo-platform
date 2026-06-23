@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { mergeProductGrade } = require('../services/product-grade-merge');
+const { mergeProductGrade } = require('../services/catalog/product-grade-merge');
 
 function assert(name, cond) {
   if (!cond) throw new Error(`FAIL: ${name}`);

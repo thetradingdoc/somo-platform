@@ -199,7 +199,7 @@ async function preseedCloudDb() {
     }
   }
 
-  execSync(`DB_PATH="${seedPath}" CALLSOMO_OPERATOR_CUSTOMER_ID=${CUSTOMER_ID} SOMO_OWNER_EMAIL=${process.env.SOMO_OWNER_EMAIL || 'richard@callsomo.com'} node scripts/seed-operator-customer.cjs`, {
+  execSync(`DB_PATH="${seedPath}" CALLSOMO_OPERATOR_CUSTOMER_ID=${CUSTOMER_ID} SOMO_OWNER_EMAIL=${process.env.SOMO_OWNER_EMAIL || 'richard@callsomo.com'} node scripts/data/seed-operator-customer.cjs`, {
     cwd: MP,
     stdio: 'inherit',
     shell: '/bin/bash'
@@ -222,7 +222,7 @@ async function preseedCloudDb() {
   console.log('==> Tenant site-context verified (merchant bind + DID)');
 
   process.env.DB_PATH = seedPath;
-  const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
+  const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
   fixtures.seedE2eBookableProvider(CLINIC_ID, {
     specialty: 'Gastroenterology',
     providerEmail: 'maria.santos@doclittle.example'
@@ -400,7 +400,7 @@ function runVerify(sessionId) {
   const evidenceDir = path.join(MP, 'var', 'evidence', 'phase1');
   fs.mkdirSync(evidenceDir, { recursive: true });
   const outPath = path.join(evidenceDir, `live_${sessionId}.json`);
-  const out = execSync(`node scripts/verify-live-call.cjs --session_id=${sessionId} --json`, {
+  const out = execSync(`node scripts/verify/verify-live-call.cjs --session_id=${sessionId} --json`, {
     cwd: MP,
     encoding: 'utf8',
     env: { ...process.env, DB_PATH: './var/db/middleware-dev.db', SKIP_STARTUP_MIGRATIONS: '1' }
@@ -419,7 +419,7 @@ function pullGcsDb(dest) {
 function assertCapstoneTenantPreflight() {
   if (!CUSTOMER_ID) throw new Error('CALLSOMO_OPERATOR_CUSTOMER_ID required for tenant pre-flight');
   console.log('==> Capstone pre-flight: verify tenant site-context on live GCS');
-  execSync('node scripts/verify-tenant-site-context.cjs', {
+  execSync('node scripts/verify/verify-tenant-site-context.cjs', {
     cwd: MP,
     stdio: 'inherit',
     env: {

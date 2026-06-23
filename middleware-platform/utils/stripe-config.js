@@ -4,7 +4,7 @@
  * Centralized Stripe configuration with environment-aware key selection
  * and validation to prevent security issues (production keys in dev, test keys in prod)
  */
-const SecretManager = require('../services/secret-manager');
+const SecretManager = require('../services/platform/secret-manager');
 
 /**
  * Get Stripe secret key with validation

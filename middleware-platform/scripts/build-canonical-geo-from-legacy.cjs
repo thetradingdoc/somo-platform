@@ -2,7 +2,7 @@
 'use strict';
 
 const db = require('../database');
-const { ensureCanonicalGeoTables } = require('../services/geo-resolver-service');
+const { ensureCanonicalGeoTables } = require('../services/shared/geo-resolver-service');
 
 const SOURCE_VERSION = String(process.env.GEO_SOURCE_VERSION || `geo-${new Date().toISOString().slice(0, 10)}`);
 

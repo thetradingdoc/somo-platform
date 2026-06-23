@@ -3,7 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const Metrics = require('../services/metrics');
+const Metrics = require('../services/shared/metrics');
 
 function buildRouteDashboard(all = {}) {
   const out = {};

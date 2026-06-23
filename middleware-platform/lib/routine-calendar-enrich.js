@@ -54,7 +54,7 @@ function enrichRoutineCalendarDay(base, { careProgram, tplStartIso, concernId, e
   let milestoneLabel = null;
 
   if (careProgram && base.is_routine_day) {
-    const concernRoutineService = require('../services/concern-routine-service');
+    const concernRoutineService = require('../services/platform/concern-routine-service');
     const phaseSnap = concernRoutineService.resolveCurrentPhase(careProgram, tplStartIso, iso);
     photoPrompt = Boolean(phaseSnap?.photo_prompt);
     programWeek = phaseSnap?.program_week ?? null;

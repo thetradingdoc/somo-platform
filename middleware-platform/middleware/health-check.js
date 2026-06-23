@@ -247,7 +247,7 @@ async function healthCheckHandler(req, res) {
     ]);
     let langsmith = { enabled: false, project: 'unknown', hasKey: false };
     try {
-      const medicalCoding = require('../services/medical-coding-service');
+      const medicalCoding = require('../services/clinical/medical-coding-service');
       if (typeof medicalCoding.getLangSmithStatus === 'function') {
         langsmith = medicalCoding.getLangSmithStatus();
       }
@@ -266,7 +266,7 @@ async function healthCheckHandler(req, res) {
     }
     let colab_export = { loaded: false };
     try {
-      const ks = require('../services/knowledge-service');
+      const ks = require('../services/shared/knowledge-service');
       if (typeof ks.getExportStats === 'function') colab_export = ks.getExportStats();
     } catch (e) { colab_export.error = e.message; }
     return res.json({

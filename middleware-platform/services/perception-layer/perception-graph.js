@@ -10,7 +10,7 @@
 
 const visionEncoder = require('./vision-encoder');
 const clinicalBert = require('./clinical-bert-service');
-const medicalTextExtraction = require('../medical-text-extraction-service');
+const medicalTextExtraction = require('../clinical/medical-text-extraction-service');
 const textEncoder = require('./text-encoder');
 
 const CONFIDENCE_THRESHOLD = parseFloat(process.env.PERCEPTION_CONFIDENCE_THRESHOLD || '0.85');

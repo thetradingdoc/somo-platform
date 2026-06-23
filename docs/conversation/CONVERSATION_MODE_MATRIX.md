@@ -81,7 +81,7 @@ Before L2 dispatch, Retell calls must pass tenant identity validation (`clinic_i
 
 ## ASR normalization (2026-06-17)
 
-Intent detection and pivot use ASR-normalized utterances (filler strip, punctuation). **Conversation history is not mutated.** See `services/conversation-mode/asr-normalize.js`.
+Intent detection and pivot use ASR-normalized utterances (filler strip, punctuation). **Conversation history is not mutated.** See `services/conversation/asr-normalize.js`.
 
 ## demo_qual under enforce (2026-06-17)
 

@@ -155,7 +155,7 @@ const merged = {
     (isStaging ? '1' : '1'),
   CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN:
     parsed.CONVERSATION_MODE_ENFORCE_TENANT_INBOUND_ADMIN ??
-    (isStaging ? '1' : '0'),
+    (isStaging ? '1' : '1'),
   CONVERSATION_MODE_ENFORCE_DEMO_QUAL:
     parsed.CONVERSATION_MODE_ENFORCE_DEMO_QUAL || '0',
   STAGING: isStaging ? '1' : '0',
@@ -206,10 +206,14 @@ merged.REMOTE_RAG_TIMEOUT_MS = parsed.REMOTE_RAG_TIMEOUT_MS ?? '8000';
 merged.PINECONE_MIN_SCORE = parsed.PINECONE_MIN_SCORE ?? '0.45';
 merged.EVAL_USE_SEMANTIC = parsed.EVAL_USE_SEMANTIC ?? 'false';
 merged.OPQRST_FIELD_GATE_ENABLED = parsed.OPQRST_FIELD_GATE_ENABLED ?? '1';
+merged.CAPSTONE_DB_SYNC_TOKEN = parsed.CAPSTONE_DB_SYNC_TOKEN || parsed.RETELL_WEBHOOK_TOKEN || '';
 merged.USE_TRIAGE_RAG_V2 = parsed.USE_TRIAGE_RAG_V2 ?? '1';
 merged.CODING_SPINE_ONLY = parsed.CODING_SPINE_ONLY ?? '1';
 merged.CODING_PROD_CI = parsed.CODING_PROD_CI ?? '1';
 merged.RAG_API_URL = parsed.RAG_API_URL || 'disabled';
+merged.KELLY_RAILS_SSOT_POSTGRES = parsed.KELLY_RAILS_SSOT_POSTGRES ?? (isStaging ? '1' : '0');
+merged.POSTGRES_PRIMARY = parsed.POSTGRES_PRIMARY ?? (isStaging ? '1' : '0');
+merged.GCS_DB_UPLOAD_INTERVAL_MS = parsed.GCS_DB_UPLOAD_INTERVAL_MS ?? '300000';
 
 if (isStaging) {
   delete merged.NGROK_URL;

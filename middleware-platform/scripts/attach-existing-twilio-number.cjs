@@ -16,7 +16,7 @@ process.chdir(path.join(__dirname, '..'));
 
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
-const TwilioPhoneService = require('../services/twilio-phone-service');
+const TwilioPhoneService = require('../services/voice/twilio-phone-service');
 
 function parseArgs() {
   const out = {};

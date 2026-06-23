@@ -1,7 +1,7 @@
 'use strict';
 
 const db = require('../database');
-const { hashToken } = require('../services/secret-manager');
+const { hashToken } = require('../services/platform/secret-manager');
 
 function parseScopes(raw) {
   if (!raw) return [];

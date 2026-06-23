@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const settlement = require('../services/rcm-payment-settlement');
+const settlement = require('../services/rcm/rcm-payment-settlement');
 
 router.get('/pay/:token', async (req, res) => {
   try {

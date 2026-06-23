@@ -22,7 +22,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 
 const db = require('../database');
 
-const { getOperatorCustomerId } = require('../services/voice-account-resolution');
+const { getOperatorCustomerId } = require('../services/voice/voice-account-resolution');
 
 const {
 
@@ -34,9 +34,9 @@ const {
 
   resolvePracticeDisplayName
 
-} = require('../services/call-opener-resolver');
+} = require('../services/voice/call-opener-resolver');
 
-const { ensureOperatorTenantBootstrap } = require('../services/operator-tenant-bootstrap');
+const { ensureOperatorTenantBootstrap } = require('../services/shared/operator-tenant-bootstrap');
 
 
 

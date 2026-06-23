@@ -17,7 +17,7 @@ require('dotenv').config({
 
 const axios = require('axios');
 const twilio = require('twilio');
-const RetellService = require('../services/retell-service');
+const RetellService = require('../services/voice/retell-service');
 const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
 

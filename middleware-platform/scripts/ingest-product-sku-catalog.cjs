@@ -19,8 +19,8 @@ const path = require('path');
 const readline = require('readline');
 const Database = require('better-sqlite3');
 
-const { up: m034 } = require('../migrations/034_product_sku_catalog');
-const { createProductSkuCatalog } = require('../services/product-sku-catalog');
+const { up: m034 } = require('../database/migrations/034_product_sku_catalog');
+const { createProductSkuCatalog } = require('../services/catalog/product-sku-catalog');
 
 function parseArgs() {
   const out = { db: null, file: null, stdin: false, batch: 500 };

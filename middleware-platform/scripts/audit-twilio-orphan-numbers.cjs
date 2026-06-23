@@ -14,7 +14,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 process.chdir(require('path').join(__dirname, '..'));
 
 const db = require('../database');
-const TwilioPhoneService = require('../services/twilio-phone-service');
+const TwilioPhoneService = require('../services/voice/twilio-phone-service');
 
 const APPLY = process.argv.includes('--apply');
 

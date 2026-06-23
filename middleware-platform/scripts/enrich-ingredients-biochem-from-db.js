@@ -2,7 +2,7 @@
 'use strict';
 
 const db = require('../database').db;
-const { upsertBiochemFromCanonicalName } = require('../services/ingredient-biochem-repository');
+const { upsertBiochemFromCanonicalName } = require('../services/catalog/ingredient-biochem-repository');
 
 async function run() {
   const cols = db.prepare('PRAGMA table_info(product_ingredients)').all().map((c) => c.name);

@@ -37,11 +37,11 @@ process.env.RCM_E2E_DIRECT_TOOLS = process.env.RCM_E2E_DIRECT_TOOLS || '1';
 process.env.CODING_SPINE_ONLY = process.env.CODING_SPINE_ONLY || '1';
 process.env.TRIAGE_HYDE_ENABLED = process.env.TRIAGE_HYDE_ENABLED ?? '0';
 
-const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
-const { runKellyTurn } = require('../services/kelly-turn-resolver');
-const KellyToolExecutor = require('../services/kelly-tool-executor');
-const TriageRAGServiceV2 = require('../services/triage-rag-service-v2');
-const { computeVisitQuote } = require('../services/payer-quote-service');
+const fixtures = require('../lib/kelly-conversation-fixtures.cjs');
+const { runKellyTurn } = require('../services/kelly/kelly-turn-resolver');
+const KellyToolExecutor = require('../services/kelly/kelly-tool-executor');
+const TriageRAGServiceV2 = require('../services/clinical/triage-rag-service-v2');
+const { computeVisitQuote } = require('../services/payor/payer-quote-service');
 const dbMod = require('../database');
 const db = dbMod.db;
 
@@ -104,7 +104,7 @@ async function assistCodingJourney(sessionId, patientId, cfg) {
     'SELECT * FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1'
   ).get(sessionId);
 
-  const knowledgeService = require('../services/knowledge-service');
+  const knowledgeService = require('../services/shared/knowledge-service');
   const codesValid = rag?.primary_icd10 && rag?.primary_cpt
     ? knowledgeService.validateCodesExist({
       icd10: [rag.primary_icd10],

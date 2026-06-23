@@ -11,9 +11,9 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 process.chdir(require('path').resolve(__dirname, '..'));
 
 const { stediArchLog } = require('../lib/stedi-arch-debug');
-const InsuranceService = require('../services/insurance-service');
-const PayerGatewayService = require('../services/payer-gateway-service');
-const PriorAuthService = require('../services/prior-auth-service');
+const InsuranceService = require('../services/rcm/insurance-service');
+const PayerGatewayService = require('../services/payor/payer-gateway-service');
+const PriorAuthService = require('../services/platform/prior-auth-service');
 
 const PAYER_ID = process.env.STEDI_TEST_PAYER_ID || '60054';
 const MEMBER_ID = process.env.STEDI_TEST_MEMBER_ID || 'TEST123456';
@@ -188,7 +188,7 @@ async function main() {
   try {
     const express = require('express');
     const request = require('supertest');
-    const { stediWebhookRouter } = require('../routes/stedi-webhooks');
+    const { stediWebhookRouter } = require('../routes/rcm/stedi-webhooks');
     const app = express();
     app.use('/webhooks/stedi', stediWebhookRouter);
     const rem = await request(app)

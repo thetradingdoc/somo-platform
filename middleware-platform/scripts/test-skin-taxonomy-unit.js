@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-const { resolveSkinType } = require('../services/skin-type-resolver');
-const { resolveSkinConditions } = require('../services/skin-condition-resolver');
-const { resolveBaumannCode } = require('../services/baumann-skin-map-resolver');
-const { resolveIngredientFacts, evaluateIngredientSafety } = require('../services/ingredient-ontology-resolver');
+const { resolveSkinType } = require('../services/clinical/skin-type-resolver');
+const { resolveSkinConditions } = require('../services/shared/skin-condition-resolver');
+const { resolveBaumannCode } = require('../services/platform/baumann-skin-map-resolver');
+const { resolveIngredientFacts, evaluateIngredientSafety } = require('../services/catalog/ingredient-ontology-resolver');
 
 function assert(name, cond) {
   if (!cond) throw new Error(`Assertion failed: ${name}`);

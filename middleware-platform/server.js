@@ -6,7 +6,10 @@ try {
   const isProduction = nodeEnv === 'production' || nodeEnv === 'prod';
   // In local/dev test runs, prefer .env values over inherited shell exports.
   const dotenvPath = process.env.AUDIT_MIDDLEWARE === '1' ? '.env.audit' : undefined;
-  require('dotenv').config({ path: dotenvPath, override: !isProduction });
+  require('dotenv').config({
+    path: dotenvPath,
+    override: !isProduction && process.env.VERIFY_SERVER_BOOT !== '1'
+  });
 } catch (e) {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
 }
@@ -20,31 +23,14 @@ function bootLog(msg) {
 }
 bootLog(`server.js loaded pid=${process.pid} node=${process.version}`);
 
+const isProd = ['production', 'prod'].includes(String(process.env.NODE_ENV || '').toLowerCase());
+
 // SECURITY: Validate environment variables on startup
 const { validateAndExitIfInvalid } = require('./utils/env-validator');
 validateAndExitIfInvalid();
 
-// Enforce JWT for FHIR/DiagnosticReport in production to avoid accidental open PHI endpoints.
-const isProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
-if (isProd) {
-  const requireJwtForFhir = process.env.REQUIRE_JWT_FOR_FHIR === '1' || process.env.REQUIRE_JWT_FOR_FHIR === 'true';
-  const jwtSecret = process.env.JWT_SECRET || '';
-  if (!requireJwtForFhir) {
-    console.error('❌ REQUIRE_JWT_FOR_FHIR must be set to \"1\" in production. Refusing to start.');
-    process.exit(1);
-  }
-  if (!jwtSecret || jwtSecret.length < 32) {
-    console.error('❌ JWT_SECRET must be set (min 32 chars) in production. Refusing to start.');
-    process.exit(1);
-  }
-  const rtfv =
-    process.env.REQUIRE_TRIAGE_FOR_VOICE === '1' || process.env.REQUIRE_TRIAGE_FOR_VOICE === 'true';
-  if (!rtfv) {
-    console.warn(
-      '⚠️  PRODUCTION: REQUIRE_TRIAGE_FOR_VOICE is not enabled. Voice /voice/... routes may skip DB triage when session_id/call_id is omitted. Set REQUIRE_TRIAGE_FOR_VOICE=1 (see docs/middleware-platform/README.md#voice-triage-parity).'
-    );
-  }
-}
+const { validateProductionEnv } = require('./app/env-validation');
+validateProductionEnv();
 
 // LangSmith: route traces to Somo middleware project (LANGCHAIN_PROJECT)
 try {
@@ -126,43 +112,43 @@ const { fieldsFromSqlAggRow } = require('./lib/billing-calendar-agg');
 const { fetchBillingAggregatesByDay } = require('./lib/patient-calendar-billing-query');
 const { ensureRoutineTables } = require('./lib/patient-routine-db');
 const constants = require('./utils/constants');
-const PaymentOrchestrator = require('./services/payment-orchestrator');
-const PaymentFlowService = require('./services/payment-flow-service');
-const { sanitizeForLog, safeLogRequestBody } = require('./services/payment-security');
-const SMSService = require('./services/sms-service');
-const FHIRService = require('./services/fhir-service');
+const PaymentOrchestrator = require('./services/commerce/payment-orchestrator');
+const PaymentFlowService = require('./services/commerce/payment-flow-service');
+const { sanitizeForLog, safeLogRequestBody } = require('./services/commerce/payment-security');
+const SMSService = require('./services/platform/sms-service');
+const FHIRService = require('./services/shared/fhir-service');
 const FHIRAdapter = require('./adapters/fhir-adapter');
-const BookingService = require('./services/booking-service');
-const ReminderScheduler = require('./services/reminder-scheduler');
-const KellyToolExecutor = require('./services/kelly-tool-executor');
+const BookingService = require('./services/patient/booking-service');
+const ReminderScheduler = require('./services/platform/reminder-scheduler');
+const KellyToolExecutor = require('./services/kelly/kelly-tool-executor');
 const { normalizeToE164 } = require('./utils/phone-e164');
 const {
   resolveVoiceSessionIdForGuard,
   requireVoiceSessionIdForTriageParity,
   enforceVoiceTriageGuardrailsForSession
-} = require('./services/voice-triage-guards');
-const PostgresSyncWorker = require('./services/postgres-sync-worker');
-const ToolCallDlqWorker = require('./services/tool-call-dlq-worker');
-const EhrSyncJobWorker = require('./services/ehr-sync-job-worker');
-const InsuranceService = require('./services/insurance-service');
-const PayerCacheService = require('./services/payer-cache-service');
-const { resolvePayerSearchResult } = require('./services/payor-resolution-utils');
-const PayorRegistryResolverService = require('./services/payor-registry-resolver-service');
-const { resolveProviderPayorNetworkPrecheck } = require('./services/provider-network-precheck-service');
-const { listProviderSearchResults } = require('./services/provider-search-service');
-const Metrics = require('./services/metrics');
-const { adaptIncomingEvent } = require('./services/channel-adapter');
-const ProviderService = require('./services/provider-service');
-const PatientPortalService = require('./services/patient-portal-service');
-const PatientIntakeService = require('./services/patient-intake-service');
-const IngredientEnrichmentService = require('./services/ingredient-enrichment-service');
+} = require('./services/voice/voice-triage-guards');
+const PostgresSyncWorker = require('./services/platform/postgres-sync-worker');
+const ToolCallDlqWorker = require('./services/platform/tool-call-dlq-worker');
+const EhrSyncJobWorker = require('./services/platform/ehr-sync-job-worker');
+const InsuranceService = require('./services/rcm/insurance-service');
+const PayerCacheService = require('./services/payor/payer-cache-service');
+const { resolvePayerSearchResult } = require('./services/payor/payor-resolution-utils');
+const PayorRegistryResolverService = require('./services/payor/payor-registry-resolver-service');
+const { resolveProviderPayorNetworkPrecheck } = require('./services/platform/provider-network-precheck-service');
+const { listProviderSearchResults } = require('./services/platform/provider-search-service');
+const Metrics = require('./services/shared/metrics');
+const { adaptIncomingEvent } = require('./services/shared/channel-adapter');
+const ProviderService = require('./services/platform/provider-service');
+const PatientPortalService = require('./services/patient/patient-portal-service');
+const PatientIntakeService = require('./services/patient/patient-intake-service');
+const IngredientEnrichmentService = require('./services/catalog/ingredient-enrichment-service');
 const {
   upsertCustomerProductScan
-} = require('./services/landing-session-claim-service');
-const EHRAggregatorService = require('./services/ehr-aggregator-service');
-const EHRSyncService = require('./services/ehr-sync-service');
-const EpicAdapter = require('./services/epic-adapter');
-const RetellService = require('./services/retell-service');
+} = require('./services/platform/landing-session-claim-service');
+const EHRAggregatorService = require('./services/platform/ehr-aggregator-service');
+const EHRSyncService = require('./services/platform/ehr-sync-service');
+const EpicAdapter = require('./services/platform/epic-adapter');
+const RetellService = require('./services/voice/retell-service');
 const { twilioSignatureRequired, replayGuard } = require('./middleware/webhook-security');
 const {
   evaluateAndRecord,
@@ -172,7 +158,7 @@ const {
   resolveFraudReview,
   listOverdueFraudReviews,
   markFraudReviewAlerted
-} = require('./services/anti-sybil-service');
+} = require('./services/platform/anti-sybil-service');
 const livekitTokenRoutes = require('./routes/livekit');
 const authTokenRoutes = require('./routes/auth-tokens');
 const jwt = require('jsonwebtoken');
@@ -290,7 +276,7 @@ function antiSybilGuard(scope, identityBuilder, amountBuilder = null) {
 // Import Stripe Issuing Service (optional)
 let StripeIssuingService;
 try {
-  StripeIssuingService = require('./services/stripe-issuing-service');
+  StripeIssuingService = require('./services/commerce/stripe-issuing-service');
 } catch (e) {
   console.warn('⚠️  Stripe Issuing Service not available:', e.message);
   StripeIssuingService = null;
@@ -300,7 +286,7 @@ try {
 // CircleService exports a singleton instance, so we can use it directly
 let CircleService;
 try {
-  CircleService = require('./services/circle-service');
+  CircleService = require('./services/platform/circle-service');
   // Check if the service is available (has API key and is configured)
   if (!CircleService.isAvailable()) {
     console.warn('⚠️  Circle service is not fully configured. Wallet features will be limited.');
@@ -1366,7 +1352,7 @@ function decryptBillingField(value) {
 }
 
 function resolveBillingPricingPolicy() {
-  const { resolveCareProgramPricing } = require('./services/care-program-billing-service');
+  const { resolveCareProgramPricing } = require('./services/shared/care-program-billing-service');
   return {
     currency: 'USD',
     free: { monthly_scan_limit: Math.max(1, Number(process.env.BILLING_FREE_SCAN_LIMIT || 15)) },
@@ -1751,7 +1737,7 @@ try {
   livenessCheck = (req, res) => res.json({ alive: true });
 }
 
-const logger = require('./services/logger');
+const logger = require('./services/shared/logger');
 
 // mvp-72: Environment-controlled log level; suppress noisy logs in production
 if (isProd && !process.env.LOG_LEVEL) {
@@ -1886,9 +1872,9 @@ app.use(correlationIdMiddleware);
 app.use(cookieParser());
 
 // Stripe webhook — MUST be before express.json() (raw body required for signature verification)
-const { stripeWebhookRouter } = require('./routes/stripe-webhook-handler');
+const { stripeWebhookRouter } = require('./routes/rcm/stripe-webhook-handler');
 app.use('/webhooks/stripe', stripeWebhookRouter);
-const { stediWebhookRouter } = require('./routes/stedi-webhooks');
+const { stediWebhookRouter } = require('./routes/rcm/stedi-webhooks');
 app.use('/webhooks/stedi', stediWebhookRouter);
 
 // Body parsing
@@ -1913,7 +1899,7 @@ app.use('/api/public/geo/options', publicDiagnosticsLimiter);
 app.use('/api/public/geo/health', publicDiagnosticsLimiter);
 
 // Provider Availability (must be early so no other middleware intercepts)
-const ProviderServiceAvail = require('./services/provider-service');
+const ProviderServiceAvail = require('./services/platform/provider-service');
 app.get('/api/customers/me/availability-status', authLimiter, (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
@@ -2565,230 +2551,39 @@ app.use('/admin', (req, res, next) => {
 // Signup Routes (Customer Registration)
 // API routes for signup (POST /api/signup, etc.)
 // ============================================
-const signupRoutes = require('./routes/signup');
-// Only register API routes, not root (root is handled above)
-app.use('/api', signupRoutes);
+const { registerCoreApiRoutes, registerCommerceApiRoutes, registerAdminApiRoutes, registerVoiceRcmRoutes } = require('./app/register-routes');
+const { registerPublicContentRoutes } = require('./app/register-public-routes');
+registerCoreApiRoutes(app);
+registerCommerceApiRoutes(app);
+registerAdminApiRoutes(app);
 
 // ============================================
-// Credits Routes (Credits Purchase & Balance)
+// Invoice Routes (Admin & Customer) — moved to registerCommerceApiRoutes / registerAdminApiRoutes
 // ============================================
-const creditsRoutes = require('./routes/credits');
-app.use('/api/credits', creditsRoutes);
 
-// ============================================
-// Invoice Routes (Admin & Customer)
-// ============================================
-const invoiceRoutes = require('./routes/invoices');
-app.use('/api', invoiceRoutes);
-
-// Merchant settings/profile routes
-const merchantRoutes = require('./routes/merchant');
-app.use('/api/merchant', merchantRoutes);
-const providerRoutes = require('./routes/providers');
-app.use('/api/providers', providerRoutes);
-
-// Clinic Invoice Routes (Patient Billing)
-// ============================================
-const clinicInvoiceRoutes = require('./routes/invoices-clinic');
-app.use('/api/invoices', clinicInvoiceRoutes);
-
-// Products and Orders routes (merged from merchant-shop)
-const productRoutes = require('./routes/products');
-const orderRoutes = require('./routes/orders');
-app.use('/api/products', productRoutes);
-const prescriptionRoutes = require('./routes/prescriptions');
-app.use('/api/prescriptions', prescriptionRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/prescription-orders', orderRoutes);
-
-// Onboarding routes
-const onboardingRoutes = require('./routes/onboarding');
-app.use('/api/onboarding', onboardingRoutes);
-
-// Admin job search (scraped jobs for agent outreach)
-const adminLeadsRoutes = require('./routes/admin-leads');
-app.use('/api/admin/leads', adminLeadsRoutes);
-
-const adminScrapeRoutes = require('./routes/admin-scrape');
-app.use('/api/admin/scrape', adminScrapeRoutes);
-
-const adminEnrichRoutes = require('./routes/admin-enrich');
-app.use('/api/admin/enrich', adminEnrichRoutes);
-
-// Sequences (Phase 2)
-const sequencesRoutes = require('./routes/sequences');
-app.use('/api/sequences', sequencesRoutes);
-
-// Workflows (Enhanced workflow builder with AI actions)
-const workflowsRoutes = require('./routes/workflows');
-app.use('/api/admin/workflows', workflowsRoutes);
-
-// AI Template Generator (Phase 2)
-const aiTemplatesRoutes = require('./routes/ai-templates');
-app.use('/api/ai/templates', aiTemplatesRoutes);
-
-// Qualification Rules (Phase 2)
-const qualificationRulesRoutes = require('./routes/qualification-rules');
-app.use('/api/qualification-rules', qualificationRulesRoutes);
-
-// Admin AI Assistant
-const adminAIAssistantRoutes = require('./routes/admin-ai-assistant');
-app.use('/api/admin/ai', adminAIAssistantRoutes);
-
-// Admin tenant monitoring routes
-const adminTenantsRoutes = require('./routes/admin-tenants');
-app.use('/api/admin/tenants', adminTenantsRoutes);
-
-// Tenant config routes
-const tenantConfigRoutes = require('./routes/tenant-config');
-app.use('/api/tenant', tenantConfigRoutes);
+// Clinic Invoice Routes (Patient Billing) — see registerCommerceApiRoutes
+// Products and Orders — see registerCommerceApiRoutes
+// Onboarding — see registerCommerceApiRoutes
+// Admin routes — see registerAdminApiRoutes
 
 // LiveKit video conferencing (token endpoint)
 // (mounted above) app.use('/api/livekit', livekitTokenRoutes);
 
-// RAG proxy (Colab RAG via main tunnel)
-const ragProxyRoutes = require('./routes/rag-proxy');
-// RAG search (LittleLab landing search -> code candidates)
-const ragSearchRoutes = require('./routes/rag-search');
-app.use('/api/rag', ragProxyRoutes);
-app.use('/api/rag', ragSearchRoutes);
+// Public content + funnel routes (RS-2-04)
+registerPublicContentRoutes(app, { apiLimiter, publicCatalogReadLimiter, publicCommerceLimiter });
 
-const videoConsultRoutes = require('./routes/video-consult');
-app.use('/api/video-consult', videoConsultRoutes);
+// Patient portal routes — registered after sendUploadLinkHandler (see registerPatientPortalRoutes below)
 
-const { registerFaceReadPublicRoute } = require('./routes/public-face-read');
-registerFaceReadPublicRoute(app, { apiLimiter });
-
-const { registerPublicRoutineRoutes } = require('./routes/public-routines');
-registerPublicRoutineRoutes(app, { apiLimiter });
-
-const { registerPublicFunnelMatchRoutes } = require('./routes/public-funnel-match');
-registerPublicFunnelMatchRoutes(app, { apiLimiter });
-const { registerPublicFunnelIntakeRoutes } = require('./routes/public-funnel-intake');
-registerPublicFunnelIntakeRoutes(app, { apiLimiter });
-
-const { registerPublicFunnelSpecialistRoutes } = require('./routes/public-funnel-specialists');
-registerPublicFunnelSpecialistRoutes(app, { apiLimiter });
-
-const { registerPatientFunnelBridgeRoutes } = require('./routes/patient-funnel-bridge');
-registerPatientFunnelBridgeRoutes(app, { apiLimiter, requirePatientSession, recordPatientPortalEvent });
-
-// Legacy consumer static paths → littlelab funnel
-app.get(/^\/consumer(\/.*)?$/, (req, res) => {
-  const sub = String(req.path || '').replace(/^\/consumer\/?/, '');
-  if (sub.includes('get-app') || sub.includes('join')) {
-    return res.redirect(302, '/patients/patient-login.html?intent=signup');
-  }
-  return res.redirect(302, '/start');
-});
-
-const { registerPatientCareProgramBillingRoutes } = require('./routes/patient-care-program-billing');
-registerPatientCareProgramBillingRoutes(app, {
-  apiLimiter,
-  express,
-  requirePatientSession,
-  ensureBillingTables,
-  resolvePatientIdFromSession,
-  resolveBillingSubscription,
-  billingOk,
-  billingErr,
-  db,
-});
-
-const shelfApi = require('./lib/patient-shelf-api');
-const { registerPatientRoutineRoutes } = require('./routes/patient-routine');
-const { registerPatientShelfRoutes } = require('./routes/patient-shelf');
-const { registerPatientProductsRoutes } = require('./routes/patient-products');
-const { registerPatientBillingPortalRoutes } = require('./routes/patient-billing-portal');
-const { registerPatientBookingRoutes } = require('./routes/patient-booking');
-const { registerPublicLandingAssistantRoutes } = require('./routes/public-landing-assistant');
-const { registerPublicProductScanRoutes } = require('./routes/public-product-scan');
-const { registerPatientCheckoutChatRoutes } = require('./routes/patient-checkout-chat');
-const { registerPatientProfileRoutes } = require('./routes/patient-profile');
-const { registerPatientAuthRoutes } = require('./routes/patient-auth');
-const { registerPatientDocumentsRoutes } = require('./routes/patient-documents');
-const { registerPatientWalletRoutes } = require('./routes/patient-wallet');
-const { registerPatientRcmRoutes } = require('./routes/patient-rcm');
-const { registerPatientInsuranceRoutes } = require('./routes/patient-insurance');
-const { registerPriorAuthRoutes } = require('./routes/prior-auth');
-const { FALLBACK_CLINIC_ID, resolveClinicIdFromRequest } = require('./lib/resolve-clinic-id');
-
-const patientRouteDeps = {
-  apiLimiter,
-  express,
-  db,
-  requirePatientSession,
-  resolvePatientIdFromSession,
-  recordPatientPortalEvent,
-  ensureRoutineTables,
-  ensureBillingTables,
-  ensurePatientShelfInventoryColumns: shelfApi.ensurePatientShelfInventoryColumns,
-  loadPatientShelfProductRows: shelfApi.loadPatientShelfProductRows,
-  formatShelfProductApiRow: shelfApi.formatShelfProductApiRow,
-  parseBillingDocumentUpload,
-  safeParseJsonArray,
-  isIsoDateOnly,
-  localDateFromIso,
-  isoFromLocalDate,
-  weekdayKeyForIsoLocal,
-  enumerateIsoDates,
-  issuePatientDocumentDownloadUrl,
-  fetchBillingAggregatesByDay,
-  fieldsFromSqlAggRow,
-  PatientPortalService,
-  billingOk,
-  billingErr,
-  resolveBillingSubscription,
-  requirePlusForBillingFeature,
-  getPatientStep3Status,
-  ensureProductsPhase2Tables,
-  blockWalletWhenDisabled,
-  blockChatWhenDisabled,
-  isPatientWalletEnabled,
-  isPatientChatEnabled,
-  parseBooleanFlag,
-  withIdempotency,
-  assertPatientOwnsAppointmentOrThrow,
-  requireCsrfForCookieAuth,
-  rotatePatientSessionIfNeeded,
-  resolveClinicIdFromRequest,
-  FALLBACK_CLINIC_ID,
-  botGuard,
-  authLimiter,
-  listCatalogFromIndex,
-  parseProductRef,
-};
-registerPublicProductScanRoutes(app, { apiLimiter });
-registerPatientCheckoutChatRoutes(app, {
-  apiLimiter,
-  express,
-  requirePatientSession,
-  requireCsrfForCookieAuth,
-  validatePatientCheckoutChatBody,
-  rotatePatientSessionIfNeeded,
-  blockChatWhenDisabled,
-  db,
-});
-// Retell custom function endpoints
-const retellFunctionsRoutes = require('./routes/retell-functions');
-app.use('/api/retell', retellFunctionsRoutes);
-
-// Voice routes (product search, checkout, etc.)
-// Apply tenant context middleware to resolve merchant from subdomain
+// Voice + RCM routes — see registerVoiceRcmRoutes in app/register-routes.js
 const { tenantContext } = require('./middleware/tenant-context');
-const voiceRoutes = require('./routes/voice');
-app.use('/voice', tenantContext({ requireTenant: false }), voiceRoutes);
-
-// Voice agent settings (UI-configurable settings)
-const voiceAgentSettingsRoutes = require('./routes/voice-agent-settings');
-app.use('/api/voice-agent', tenantContext({ requireTenant: false }), voiceAgentSettingsRoutes);
+registerVoiceRcmRoutes(app, { tenantContext });
 
 // Kelly lifecycle/status APIs (provider-facing shell)
 const kellyRoutes = require('./routes/kelly');
 app.use('/api/kelly', kellyRoutes);
 
 // Payment routes (payment page and processing)
-const paymentRoutes = require('./routes/payment');
+const paymentRoutes = require('./routes/commerce/payment');
 app.use('/api/payment', botGuard, paymentRoutes);
 
 // Provider case summary API (appointments, SOAP notes, post-visit notes)
@@ -2803,37 +2598,7 @@ app.use('/api/pricing', pricingRoutes);
 const customerWalletRoutes = require('./routes/customer-wallet');
 app.use('/api/customer/wallet', customerWalletRoutes);
 
-// Public products (read-only) — dedicated rate bucket + legacy /public/* aliases (same handler, one catalog limiter)
-const publicProductsRoutes = require('./routes/public-products');
-app.use('/api/public/products', publicCatalogReadLimiter, publicProductsRoutes);
-app.use('/api/public/prescriptions', publicCatalogReadLimiter, publicProductsRoutes);
-app.use('/public/products', publicCatalogReadLimiter, publicProductsRoutes);
-app.use('/public/prescriptions', publicCatalogReadLimiter, publicProductsRoutes);
-
-// Public plans search (consumer MA lookup)
-const publicPlanSearchRoutes = require('./routes/public-plan-search');
-app.use('/api/public/plans', publicCatalogReadLimiter, publicPlanSearchRoutes);
-const publicGeoRoutes = require('./routes/public-geo');
-app.use('/api/public/geo', publicCatalogReadLimiter, publicGeoRoutes);
-const publicProviderSearchRoutes = require('./routes/public-provider-search');
-app.use('/api/public/providers', publicCatalogReadLimiter, publicProviderSearchRoutes);
-
-// Public checkout (unauthenticated ensure customer)
-const publicCheckoutRoutes = require('./routes/public-checkout');
-app.use('/api/public/checkout', publicCheckoutRoutes);
-
-// Commerce quote + cart — separate rate bucket from global /api limiter so bursts do not starve catalog reads
-const publicCommerceQuoteRoutes = require('./routes/public-commerce-quote');
-const publicCommerceCartRoutes = require('./routes/public-commerce-cart');
-app.use('/api/public/commerce', publicCommerceLimiter);
-app.use('/api/public/commerce', publicCommerceQuoteRoutes);
-app.use('/api/public/commerce', publicCommerceCartRoutes);
-app.use('/public/commerce', publicCommerceLimiter);
-app.use('/public/commerce', publicCommerceQuoteRoutes);
-app.use('/public/commerce', publicCommerceCartRoutes);
-
-const publicCheckoutChatRoutes = require('./routes/public-checkout-chat');
-app.use('/api/public/checkout-chat', publicCheckoutChatRoutes);
+// Public catalog/commerce/checkout — see registerPublicContentRoutes (called above)
 
 // ============================================
 // Customer Agent Routes (Prompt Management)
@@ -2846,8 +2611,6 @@ app.use('/api/customer/agent', customerAgentRoutes);
 // ============================================
 const customerBillingRoutes = require('./routes/customer-billing');
 app.use('/api/customer/billing', customerBillingRoutes);
-const voiceBillingRoutes = require('./routes/voice-billing');
-app.use('/api/voice-billing', voiceBillingRoutes);
 
 // Customer Dashboard (Tenant-scoped data)
 const customerDashboardRoutes = require('./routes/customer-dashboard');
@@ -2861,19 +2624,7 @@ app.use('/api/chat', chatCommandsRoutes);
 const automationRoutes = require('./routes/automation');
 app.use('/api/automation', automationRoutes);
 
-// Outbound Calls
-const outboundCallRoutes = require('./routes/outbound-call');
-app.use('/api/voice/outbound', outboundCallRoutes);
-
-// Voice Web Call (in-browser voice via Retell Web SDK)
-const voiceWebCallRoutes = require('./routes/voice-web-call');
-app.use('/api/voice', voiceWebCallRoutes);
-
-// RCM / Financial Intelligence APIs (EMPI-based)
-const rcmRoutes = require('./routes/rcm');
-app.use('/api/rcm', rcmRoutes);
-const rcmPublicRoutes = require('./routes/rcm-public');
-app.use('/api/public/rcm', rcmPublicRoutes);
+// Outbound / voice web / RCM — mounted via registerVoiceRcmRoutes
 const somoDemoPublicRoutes = require('./routes/somo-demo-public');
 app.use('/api/public/somo-demo', somoDemoPublicRoutes);
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
@@ -3189,7 +2940,7 @@ app.post(
     const from = req.body.From;
     const to = req.body.To;
     const body = req.body.Body || '';
-    const smsBooking = require('./services/sms-booking-service');
+    const smsBooking = require('./services/platform/sms-booking-service');
     const responseText = await smsBooking.processIncoming(from, to, body);
     const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(responseText)}</Message></Response>`;
     res.type('text/xml').send(twiml);
@@ -3312,7 +3063,7 @@ app.post(
               );
 
               // Calculate and update costs using UsageMonitor
-              const UsageMonitor = require('./services/usage-monitor');
+              const UsageMonitor = require('./services/platform/usage-monitor');
               await UsageMonitor.logVoiceCallUsage({
                 call_id: voiceCall.call_id,
                 customer_id: voiceCall.customer_id,
@@ -3324,7 +3075,7 @@ app.post(
 
               if (voiceCall.customer_id && callStatus === 'completed' && callDurationMinutes > 0) {
                 try {
-                  const { applyUsage } = require('./services/apply-usage');
+                  const { applyUsage } = require('./services/platform/apply-usage');
                   const _twilioDir = String(req.body?.Direction || '').toLowerCase();
                   const _callDirection =
                     voiceCall.direction ||
@@ -3471,7 +3222,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Payment page — Kelly flow: Stripe Elements + webhook-driven settlement
 // Browser requests get HTML; API requests (Accept: application/json) get client_secret
-const { paymentPageRouter } = require('./routes/payment-page-route');
+const { paymentPageRouter } = require('./routes/commerce/payment-page-route');
 app.get('/payment/:token', (req, res, next) => {
   if (req.headers.accept && req.headers.accept.includes('application/json')) return next();
   res.sendFile(path.join(__dirname, 'public', 'payment-page.html'));
@@ -3480,7 +3231,7 @@ app.use('/payment', paymentPageRouter);
 
 // Process payment (Task 11, 14: unified flow; amount from checkout)
 app.post('/process-payment', paymentLimiter, async (req, res) => {
-  const PaymentProcessorService = require('./services/payment-processor-service');
+  const PaymentProcessorService = require('./services/commerce/payment-processor-service');
   let idemKey;
   const claimOpType = 'process_payment';
   try {
@@ -3594,7 +3345,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
           fhirPatient = db.getFHIRPatientByEmail(checkout.customer_email);
         }
         if (!fhirPatient && checkout.customer_phone) {
-          const { findFHIRPatientForVoice } = require('./services/fhir-voice-lookup');
+          const { findFHIRPatientForVoice } = require('./services/shared/fhir-voice-lookup');
           fhirPatient = findFHIRPatientForVoice(db, {
             phone: checkout.customer_phone,
             clinicId: checkout.clinic_id,
@@ -3746,7 +3497,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         // Auto-confirm appointment if linked
         if (checkout.appointment_id) {
           try {
-            const BookingService = require('./services/booking-service');
+            const BookingService = require('./services/patient/booking-service');
             const confirmResult = await BookingService.confirmAppointment(
               checkout.appointment_id,
               checkout.clinic_id || null
@@ -3903,7 +3654,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     // Auto-confirm appointment if linked
     if (checkout.appointment_id) {
       try {
-        const BookingService = require('./services/booking-service');
+        const BookingService = require('./services/patient/booking-service');
         const confirmResult = await BookingService.confirmAppointment(
           checkout.appointment_id,
           checkout.clinic_id || null
@@ -4269,7 +4020,7 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
     // STEP 10: Send welcome email with subdomain and password (async, don't block response)
     setImmediate(async () => {
       try {
-        const EmailService = require('./services/email-service');
+        const EmailService = require('./services/platform/email-service');
         await EmailService.sendWelcomeEmail(
           email,
           name,
@@ -4861,7 +4612,7 @@ app.post('/api/calendar/disconnect', async (req, res) => {
 
 
 
-const { registerAdminPlatformRoutes } = require('./routes/admin-platform');
+const { registerAdminPlatformRoutes } = require('./routes/admin/admin-platform');
 registerAdminPlatformRoutes(app, {
   apiLimiter,
   express,
@@ -4873,13 +4624,13 @@ app.use('/api/admin', requireAdminAuth);
 const impactAdminRoutes = require('./routes/impact-admin');
 app.use('/api/admin/impact', impactAdminRoutes);
 
-const paymentOpsRoutes = require('./routes/payment-ops');
+const paymentOpsRoutes = require('./routes/commerce/payment-ops');
 app.use('/api/admin/payment-ops', paymentOpsRoutes);
 
-const adminKellyCallsRoutes = require('./routes/admin-kelly-calls');
+const adminKellyCallsRoutes = require('./routes/admin/admin-kelly-calls');
 app.use('/api/admin/kelly', adminKellyCallsRoutes);
 
-const adminVoiceOnboardingRoutes = require('./routes/admin-voice-onboarding');
+const adminVoiceOnboardingRoutes = require('./routes/admin/admin-voice-onboarding');
 app.use('/api/admin/voice-onboarding', adminVoiceOnboardingRoutes);
 
 // Visit pricing admin (Task 16)
@@ -4961,7 +4712,8 @@ app.use('/api/admin/voice-onboarding', adminVoiceOnboardingRoutes);
 // BOOKING/APPOINTMENT ENDPOINTS
 // ============================================
 
-// Clinic resolution: lib/resolve-clinic-id.js (FALLBACK_CLINIC_ID + resolveClinicIdFromRequest imported near patient routes)
+// Clinic resolution: lib/resolve-clinic-id.js
+const { FALLBACK_CLINIC_ID, resolveClinicIdFromRequest } = require('./lib/resolve-clinic-id');
 
 const { registerVoiceAppointmentRoutes } = require('./routes/voice-appointments');
 
@@ -5048,7 +4800,7 @@ function apiAppointmentArgs(req) {
 
 function invalidateSlotAvailabilityCache() {
   try {
-    const cache = require('./services/cache-service');
+    const cache = require('./services/platform/cache-service');
     cache.clear('slot_availability');
   } catch (_) {}
 }
@@ -5122,7 +4874,7 @@ app.get('/api/appointments/available-slots', async (req, res) => {
     }
 
     const practitionerId = args.practitioner_id || null;
-    const cache = require('./services/cache-service');
+    const cache = require('./services/platform/cache-service');
     const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', timezone, practitionerId || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) return res.json(cached);
@@ -5156,7 +4908,7 @@ app.post('/api/appointments/available-slots', async (req, res) => {
     }
 
     const practitionerId = args.practitioner_id || null;
-    const cache = require('./services/cache-service');
+    const cache = require('./services/platform/cache-service');
     const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', timezone, practitionerId || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) return res.json(cached);
@@ -5365,7 +5117,7 @@ app.post('/api/claims/create-from-diagnostic-report', async (req, res) => {
     if (icd10Codes.length === 0 && cptCodes.length === 0) return res.status(400).json({ success: false, error: 'No ICD/CPT codes; ensure case report or RAG has completed' });
 
     if (cptCodes.length === 0 && icd10Codes.length > 0) {
-      const DiagnosisCodeMapper = require('./services/diagnosis-code-mapper');
+      const DiagnosisCodeMapper = require('./services/clinical/diagnosis-code-mapper');
       cptCodes = DiagnosisCodeMapper.generateServiceLineItemsFromDiagnoses(icd10Codes, {
         maxServicesPerDiagnosis: 2,
         dateOfService: appt.date || new Date().toISOString().split('T')[0]
@@ -5442,7 +5194,7 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
 
     // If we have diagnosis codes but no CPT codes, generate service line items from diagnoses
     if (icd10Codes.length > 0 && cptCodes.length === 0) {
-      const DiagnosisCodeMapper = require('./services/diagnosis-code-mapper');
+      const DiagnosisCodeMapper = require('./services/clinical/diagnosis-code-mapper');
       console.log('📋 Generating service line items from diagnosis codes:', icd10Codes.map(d => typeof d === 'string' ? d : d.code));
 
       cptCodes = DiagnosisCodeMapper.generateServiceLineItemsFromDiagnoses(icd10Codes, {
@@ -5462,7 +5214,7 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
     const claimId = `claim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Prepare claim data (proof_of_care_hash for Tiba Spec 5.3, 5.4)
-    const SettlementService = require('./services/settlement-service');
+    const SettlementService = require('./services/platform/settlement-service');
     const proofOfCareHash = SettlementService.generateProofOfCare(
       pdfText?.substring(0, 2000) || '',
       { icd10: icd10Codes, cpt: cptCodes },
@@ -5502,7 +5254,7 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
 
     // Run pre-adjudication and persist real_time_plan_paid for Tiba reconciliation (Phase 5)
     try {
-      const AdjudicationService = require('./services/adjudication-service');
+      const AdjudicationService = require('./services/rcm/adjudication-service');
       AdjudicationService.preAdjudicateClaim(claimId);
     } catch (adjErr) {
       console.warn('⚠️  Pre-adjudication on PDF claim skipped:', adjErr.message);
@@ -5658,7 +5410,7 @@ app.get('/api/claims/:id', async (req, res) => {
 
     // Calculate EOB using real Stedi eligibility data
     // For approved claims, prioritize stored EOB from response_data (has final approved amounts)
-    const EOBCalculationService = require('./services/eob-calculation-service');
+    const EOBCalculationService = require('./services/clinical/eob-calculation-service');
     let eobCalculation;
 
     // For approved/paid claims, use stored EOB if available (contains final approved amounts)
@@ -5714,7 +5466,7 @@ app.get('/api/claims/:id', async (req, res) => {
 
     // Extract diagnosis codes with descriptions
     const diagnosisCodes = [];
-    const DiagnosisCodeMapper = require('./services/diagnosis-code-mapper');
+    const DiagnosisCodeMapper = require('./services/clinical/diagnosis-code-mapper');
 
     if (claimDetails.coding && claimDetails.coding.icd10) {
       diagnosisCodes.push(...claimDetails.coding.icd10.map(d => ({
@@ -5994,7 +5746,7 @@ app.get('/api/circle/accounts/:entityType/:entityId', async (req, res) => {
 // Upload = token-based document upload (lab results, photos before visit). Stored in patient_uploads/Azure.
 // Patient wallet (below) = payments (HSA/Circle, deposit, pay-claim). Separate feature, same /api/patient prefix.
 // Telemedicine Phase 3 — POST /api/patient/send-upload-link (upload link email)
-const { sendUploadLinkHandler } = require('./routes/patient-upload-link');
+const { sendUploadLinkHandler } = require('./routes/patient/patient-upload-link');
 
 // Telemedicine Phase 4 — Patient upload portal (Tasks 25–33). Router: GET /upload, POST /upload
 const uploadPortalRouter = require('./routes/upload-portal');
@@ -6057,7 +5809,7 @@ app.post('/api/triage/upload', apiLimiter, async (req, res) => {
             });
             // M-Doc.2: Async extraction for RAG query
             setImmediate(() => {
-              const extraction = require('./services/patient-document-extraction');
+              const extraction = require('./services/patient/patient-document-extraction');
               extraction.extractAndStore(
                 { id: docId, patient_id: patientId, storage_path: storagePath, file_name: f.originalname, file_type: f.mimetype },
                 null,
@@ -6218,9 +5970,9 @@ app.post('/api/claims/:claimId/submit-payment', async (req, res) => {
       });
     }
 
-    const InsuranceService = require('./services/insurance-service');
+    const InsuranceService = require('./services/rcm/insurance-service');
     try {
-      const codingCdi = require('./services/rcm-coding-cdi');
+      const codingCdi = require('./services/rcm/rcm-coding-cdi');
       let clinicIdForGate = process.env.DEFAULT_CLINIC_ID || 'clinic-default';
       if (claim.appointment_id) {
         const appt = db.db.prepare(`SELECT clinic_id FROM appointments WHERE id = ?`).get(claim.appointment_id);
@@ -6277,7 +6029,7 @@ app.post('/api/claims/:claimId/submit-payment', async (req, res) => {
  */
 app.get('/api/claims/:claimId/pre-adjudicate', async (req, res) => {
   try {
-    const AdjudicationService = require('./services/adjudication-service');
+    const AdjudicationService = require('./services/rcm/adjudication-service');
     const result = AdjudicationService.preAdjudicateClaim(req.params.claimId);
     if (!result.success) {
       return res.status(404).json(result);
@@ -6301,7 +6053,7 @@ app.get('/api/claims/:claimId/proof-of-care', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Claim not found' });
     }
 
-    const ProofOfCareService = require('./services/proof-of-care-service');
+    const ProofOfCareService = require('./services/platform/proof-of-care-service');
     const poc = await ProofOfCareService.verifyProofOfCare(claim);
 
     res.json({
@@ -6378,7 +6130,7 @@ app.get('/api/claims/:claimId/settlement-recommendation', async (req, res) => {
       eligibility = checks[0] || null;
     }
 
-    const EOBCalculationService = require('./services/eob-calculation-service');
+    const EOBCalculationService = require('./services/clinical/eob-calculation-service');
     let eobCalculation;
     try {
       eobCalculation = EOBCalculationService.calculateEOBFromClaim(
@@ -6390,7 +6142,7 @@ app.get('/api/claims/:claimId/settlement-recommendation', async (req, res) => {
       eobCalculation = {};
     }
 
-    const SettlementRulesService = require('./services/settlement-rules-service');
+    const SettlementRulesService = require('./services/platform/settlement-rules-service');
     const evaluation = SettlementRulesService.evaluateSettlementRules({
       claim,
       claimDetails,
@@ -6463,7 +6215,7 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
     }
 
     // Calculate EOB to get deductible and payment amounts
-    const EOBCalculationService = require('./services/eob-calculation-service');
+    const EOBCalculationService = require('./services/clinical/eob-calculation-service');
     let eobCalculation;
     let deductibleUsed = 0;
     let planPaidAmount = 0;
@@ -6537,7 +6289,7 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
     const paymentAmount = planPaidAmount || claim.insurance_amount || (claim.total_amount * 0.85);
 
     // Evaluate settlement rules (auto-approve vs manual review)
-    const SettlementRulesService = require('./services/settlement-rules-service');
+    const SettlementRulesService = require('./services/platform/settlement-rules-service');
     const settlementEvaluation = SettlementRulesService.evaluateSettlementRules({
       claim,
       claimDetails,
@@ -6559,7 +6311,7 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
     }
 
     // Proof of Care: when PROOF_OF_CARE_REQUIRED=1, block approval until care is verified
-    const ProofOfCareService = require('./services/proof-of-care-service');
+    const ProofOfCareService = require('./services/platform/proof-of-care-service');
     const poc = await ProofOfCareService.verifyProofOfCare(claim);
     if (process.env.PROOF_OF_CARE_REQUIRED === '1' || process.env.PROOF_OF_CARE_REQUIRED === 'true') {
       if (!poc.verified) {
@@ -6580,7 +6332,7 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
 
     if (providerAccount && insurerAccount && providerAccount.circle_wallet_id && insurerAccount.circle_wallet_id) {
       try {
-        const InstantSettlementService = require('./services/instant-settlement-service');
+        const InstantSettlementService = require('./services/platform/instant-settlement-service');
         
         // Ensure platform wallets exist (create if missing)
         await InstantSettlementService.ensurePlatformWallets();
@@ -6605,7 +6357,7 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
           // Fallback: Try direct transfer if instant settlement fails
           if (settlementResult.error?.includes('Platform escrow wallet not found')) {
             console.log('ℹ️  Falling back to direct transfer (platform wallets not set up)');
-            const CircleService = require('./services/circle-service');
+            const CircleService = require('./services/platform/circle-service');
             const fallbackResult = await CircleService.createTransfer({
               fromWalletId: insurerAccount.circle_wallet_id,
               toWalletId: providerAccount.circle_wallet_id,
@@ -6724,7 +6476,7 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
     // Escrow orchestration: include route when ESCROW_ENABLED
     let settlementRoute = { route: 'direct' };
     if (process.env.ESCROW_ENABLED === '1' || process.env.ESCROW_ENABLED === 'true') {
-      const EscrowOrchestratorService = require('./services/escrow-orchestrator-service');
+      const EscrowOrchestratorService = require('./services/platform/escrow-orchestrator-service');
       settlementRoute = await EscrowOrchestratorService.getSettlementRoute({
         claim,
         claimDetails,
@@ -7116,7 +6868,7 @@ app.post('/api/circle/webhook', express.raw({ type: 'application/json' }), async
           console.log(`✅ Payment completed for claim ${transfer.claim_id}`);
         }
         try {
-          const FinancialIntegrityService = require('./services/financial-integrity-service');
+          const FinancialIntegrityService = require('./services/platform/financial-integrity-service');
           FinancialIntegrityService.recordCircleTransferReconciliation(transfer, event.type);
         } catch (e) {
           console.warn('[CircleWebhook] financial integrity ingest (non-fatal):', e.message);
@@ -7138,7 +6890,7 @@ app.post('/api/circle/webhook', express.raw({ type: 'application/json' }), async
           });
         }
         try {
-          const FinancialIntegrityService = require('./services/financial-integrity-service');
+          const FinancialIntegrityService = require('./services/platform/financial-integrity-service');
           FinancialIntegrityService.recordCircleTransferReconciliation(transfer, event.type);
         } catch (e) {
           console.warn('[CircleWebhook] financial integrity ingest (non-fatal):', e.message);
@@ -7768,148 +7520,81 @@ app.use('/api/livekit', livekitTokenRoutes);
 // Protected by general API rate limiter
 
 // ============================================================
-// Patient booking (chat-led) + triage (Phase 1 web)
+// Patient portal routes (RS-2-04)
 // ============================================================
-function parseIsoDateFromText(text) {
-  const t = (text || '').toString();
-  const m = t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-  if (m) return m[0];
-  const lower = t.toLowerCase();
-  if (lower.includes('tomorrow')) {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
-  }
-  if (lower.includes('today')) return new Date().toISOString().slice(0, 10);
-  return null;
-}
+const shelfApi = require('./lib/patient-shelf-api');
+const { registerPatientPortalRoutes } = require('./app/register-patient-routes');
 
-function parseTimeFromText(text) {
-  const t = (text || '').toString().toLowerCase();
-  // "14:30"
-  const m24 = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
-  if (m24) return `${m24[1].padStart(2, '0')}:${m24[2]}`;
-  // "2pm", "2:30 pm"
-  const m12 = t.match(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(am|pm)\b/);
-  if (m12) {
-    let h = parseInt(m12[1], 10);
-    const min = m12[2] ? parseInt(m12[2], 10) : 0;
-    const ampm = m12[3];
-    if (ampm === 'pm' && h !== 12) h += 12;
-    if (ampm === 'am' && h === 12) h = 0;
-    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-  }
-  return null;
-}
-
-function isValidIanaTimezone(value) {
-  const tz = (value || '').toString().trim();
-  if (!tz) return false;
-  try {
-    Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date());
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-const { validateRequired, validateDate, combineValidators } = require('./middleware/input-validator');
-const validatePatientBookingScheduleBody = combineValidators(
-  validateRequired(['date', 'time']),
-  validateDate('date')
-);
-const validatePatientTriageBody = validateRequired(['message']);
-
-function validatePatientCheckoutChatBody(req, res, next) {
-  const b = req.body || {};
-  const msg = (b.message || '').toString().trim();
-  if (!msg) {
-    return res.status(400).json({ success: false, error: 'message is required', request_id: req.id });
-  }
-  if (msg.length > 4000) {
-    return res.status(400).json({ success: false, error: 'message too long (max 4000 characters)', request_id: req.id });
-  }
-  const pid = (b.product_id || '').toString().trim();
-  const provid = (b.provider_id || '').toString().trim();
-  if (!pid) {
-    return res.status(400).json({ success: false, error: 'product_id is required', request_id: req.id });
-  }
-  if (!provid) {
-    return res.status(400).json({ success: false, error: 'provider_id is required', request_id: req.id });
-  }
-  return next();
-}
-
-function validatePatientAvailableSlotsQuery(req, res, next) {
-  const date = (req.query?.date || '').toString().trim();
-  if (!date) {
-    return res.status(400).json({ success: false, error: 'date query parameter is required', request_id: req.id });
-  }
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
-    return res.status(400).json({ success: false, error: 'Invalid date format. Use YYYY-MM-DD.', request_id: req.id });
-  }
-  return next();
-}
-
-function auditBookingEvent(req, action, resourceType, resourceId, result = 'success') {
-  try {
-    if (db.auditLog) {
-      db.auditLog('patient', req?.patientSession?.patient_id || req?.patientSessionId || 'unknown', action, resourceType, resourceId, req.ip, req.get('User-Agent') || '', result);
-    }
-  } catch (_) {}
-}
-
-Object.assign(patientRouteDeps, {
-  validatePatientAvailableSlotsQuery,
-  validatePatientBookingScheduleBody,
-  validatePatientTriageBody,
-  auditBookingEvent,
-  otpSendLimiter,
-  otpConfirmLimiter,
-});
-registerPatientRoutineRoutes(app, patientRouteDeps);
-registerPatientShelfRoutes(app, patientRouteDeps);
-registerPatientProductsRoutes(app, patientRouteDeps);
-registerPatientBillingPortalRoutes(app, patientRouteDeps);
-registerPatientBookingRoutes(app, patientRouteDeps);
-registerPublicLandingAssistantRoutes(app, {
+const patientRouteDeps = {
   apiLimiter,
   express,
-  validatePatientTriageBody,
   db,
+  requirePatientSession,
+  resolvePatientIdFromSession,
+  recordPatientPortalEvent,
+  ensureRoutineTables,
+  ensureBillingTables,
+  ensurePatientShelfInventoryColumns: shelfApi.ensurePatientShelfInventoryColumns,
+  loadPatientShelfProductRows: shelfApi.loadPatientShelfProductRows,
+  formatShelfProductApiRow: shelfApi.formatShelfProductApiRow,
+  parseBillingDocumentUpload,
+  safeParseJsonArray,
+  isIsoDateOnly,
+  localDateFromIso,
+  isoFromLocalDate,
+  weekdayKeyForIsoLocal,
+  enumerateIsoDates,
+  issuePatientDocumentDownloadUrl,
+  fetchBillingAggregatesByDay,
+  fieldsFromSqlAggRow,
+  PatientPortalService,
+  billingOk,
+  billingErr,
+  resolveBillingSubscription,
+  requirePlusForBillingFeature,
+  getPatientStep3Status,
+  ensureProductsPhase2Tables,
+  blockWalletWhenDisabled,
+  blockChatWhenDisabled,
+  isPatientWalletEnabled,
+  isPatientChatEnabled,
+  parseBooleanFlag,
+  withIdempotency,
+  assertPatientOwnsAppointmentOrThrow,
+  requireCsrfForCookieAuth,
+  rotatePatientSessionIfNeeded,
+  resolveClinicIdFromRequest,
+  FALLBACK_CLINIC_ID,
+  botGuard,
+  authLimiter,
+  listCatalogFromIndex,
+  parseProductRef,
+};
+
+registerPatientPortalRoutes(app, {
+  apiLimiter,
+  express,
+  db,
+  requirePatientSession,
+  recordPatientPortalEvent,
+  ensureBillingTables,
+  resolvePatientIdFromSession,
+  resolveBillingSubscription,
+  billingOk,
+  billingErr,
+  patientRouteDeps,
+  requireCsrfForCookieAuth,
+  rotatePatientSessionIfNeeded,
+  blockChatWhenDisabled,
   upsertCustomerProductScan,
   antiSybilGuard,
-  requireAdminAuth,
-});
-
-const patientPortalDeps = {
-  ...patientRouteDeps,
   requireAdminAuth,
   sendUploadLinkHandler,
   botGuard,
   authLimiter,
   otpSendLimiter,
   otpConfirmLimiter,
-};
-registerPatientProfileRoutes(app, patientPortalDeps);
-registerPatientAuthRoutes(app, patientPortalDeps);
-registerPatientDocumentsRoutes(app, patientPortalDeps);
-registerPatientWalletRoutes(app, patientPortalDeps);
-registerPatientRcmRoutes(app, patientPortalDeps);
-registerPatientInsuranceRoutes(app, patientPortalDeps);
-registerPriorAuthRoutes(app, { apiLimiter, express, db });
-
-// GET /api/patient/triage/history — Fetch conversation history for resume (orch-5)
-
-// Patient: Get profile
-
-
-// Patient: Update profile (onboarding)
-
-
-// Dashboard: Billing summary by patient (derived from appointments)
-
+});
 
 // ============================================
 // WEBHOOK ENDPOINTS
@@ -7935,7 +7620,7 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
     console.log('\n📥 ========================================');
     console.log('📥 RETELL WEBHOOK RECEIVED');
     console.log('📥 ========================================');
-    const { safeLogHeaders } = require('./services/payment-security');
+    const { safeLogHeaders } = require('./services/commerce/payment-security');
     safeLogHeaders('Request Headers:', req);
     safeLogRequestBody('Request body:', req);
     console.log('📥 ========================================\n');
@@ -7990,13 +7675,13 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
             console.log(`✅ Updated voice call log for ${callId}: ${durationSeconds}s, ${functionCallCount} functions`);
 
             try {
-              const orchestrator = require('./services/rcm-journey-orchestrator');
+              const orchestrator = require('./services/rcm/rcm-journey-orchestrator');
               const clinicForRcm =
                 existingCall.clinic_id ||
                 process.env.DEFAULT_CLINIC_ID ||
                 process.env.PRIMARY_CLINIC_ID ||
                 'clinic-default';
-              const { parseIntakeFromCallPayload } = require('./services/rcm-intake-parser');
+              const { parseIntakeFromCallPayload } = require('./services/rcm/rcm-intake-parser');
               const rawIntake = {
                 duration_seconds: durationSeconds,
                 function_calls_count: functionCallCount,
@@ -8104,7 +7789,7 @@ app.get('/api/v1/patient/receipts', apiLimiter, requirePatientSession, async (re
       patient = db.getFHIRPatientByEmail(sessionValidation.email);
     }
     if (!patient && sessionValidation.phone) {
-      const { findFHIRPatientForVoice } = require('./services/fhir-voice-lookup');
+      const { findFHIRPatientForVoice } = require('./services/shared/fhir-voice-lookup');
       patient = findFHIRPatientForVoice(db, {
         phone: sessionValidation.phone,
         clinicId: sessionValidation.clinic_id || null,
@@ -8245,7 +7930,7 @@ app.post('/webhook/stripe', async (req, res) => {
 
             if (transfer && transfer.status === 'pending') {
               // Fund the wallet with USDC
-              const CircleService = require('./services/circle-service');
+              const CircleService = require('./services/platform/circle-service');
               const fundResult = await CircleService.fundWallet(walletId, amount);
 
               if (fundResult.success) {
@@ -8340,7 +8025,7 @@ app.post('/webhook/stripe', async (req, res) => {
 
             // Process payment token if provided
             if (paymentIntent.metadata.payment_token) {
-              const PaymentService = require('./services/payment-service');
+              const PaymentService = require('./services/commerce/payment-service');
               const tokenResult = await PaymentService.processPayment(
                 paymentIntent.metadata.payment_token,
                 paymentIntent.id
@@ -8427,7 +8112,7 @@ app.post('/webhook/stripe', async (req, res) => {
               setImmediate(() => {
                 (async () => {
                   try {
-                    const BookingService = require('./services/booking-service');
+                    const BookingService = require('./services/patient/booking-service');
                     await BookingService.confirmAppointment(apptId, clinicIdForConfirm);
                     const apt = await db.getAppointment(apptId);
                     if (apt && apt.visit_mode === 'sync_video' && piStatus === 'requires_capture' && db.updateAppointment) {
@@ -8488,7 +8173,7 @@ app.post('/webhook/stripe', async (req, res) => {
         ) {
           try {
             ensureBillingTables();
-            const { activateCareProgramSubscription } = require('./services/care-program-billing-service');
+            const { activateCareProgramSubscription } = require('./services/shared/care-program-billing-service');
             activateCareProgramSubscription(db, {
               sessionId: checkoutSession.metadata.patient_session_id,
               patientId: checkoutSession.metadata.patient_id || null,
@@ -8831,7 +8516,7 @@ app.get('/api/ehr/epic/callback', async (req, res) => {
   try {
     console.log('\n🔗 Epic OAuth Callback Received');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    const { sanitizeForLog, safeLogHeaders } = require('./services/payment-security');
+    const { sanitizeForLog, safeLogHeaders } = require('./services/commerce/payment-security');
     console.log('Query params:', JSON.stringify(sanitizeForLog(req.query || {})));
     console.log('Full URL:', req.url);
     safeLogHeaders('Headers:', req);
@@ -9236,13 +8921,30 @@ app.get('/api/ehr/epic/status', async (req, res) => {
   }
 });
 
+// Capstone / ops — flush live SQLite to GCS without rolling restart (avoids upload race).
+app.post('/api/internal/capstone/db-upload', async (req, res) => {
+  const expected = process.env.CAPSTONE_DB_SYNC_TOKEN || process.env.RETELL_WEBHOOK_TOKEN;
+  const token = String(req.headers['x-capstone-token'] || '').trim();
+  if (!expected || token !== expected) {
+    return res.status(403).json({ success: false, error: 'forbidden' });
+  }
+  try {
+    const dbPath = process.env.DB_PATH || '/var/data/middleware-staging.db';
+    const { upload } = require('./scripts/cloudrun-db-sync.cjs');
+    await upload();
+    return res.json({ success: true, db_path: dbPath });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message || 'upload_failed' });
+  }
+});
+
 // Health check endpoints (comprehensive)
 app.get('/health', healthCheckHandler);
 app.get('/health/ready', readinessCheck);
 app.get('/health/live', livenessCheck);
 app.get('/health/voice-operator', async (req, res) => {
   try {
-    const { assessVoiceOperatorReadiness } = require('./services/voice-operator-readiness');
+    const { assessVoiceOperatorReadiness } = require('./services/voice/voice-operator-readiness');
     const assessment = assessVoiceOperatorReadiness(db);
     const ok = assessment.ready;
     return res.status(ok ? 200 : 503).json({
@@ -9257,7 +8959,7 @@ app.get('/health/voice-operator', async (req, res) => {
 
 app.get('/health/email', (req, res) => {
   try {
-    const EmailService = require('./services/email-service');
+    const EmailService = require('./services/platform/email-service');
     const health = EmailService.getEmailHealth();
     const ok = health.provider_configured !== 'none';
     return res.status(ok ? 200 : 503).json({
@@ -9589,7 +9291,7 @@ app.post('/api/test/appointment-email', async (req, res) => {
 // Test UHC FHIR connection
 app.get('/api/test/uhc-fhir/connection', async (req, res) => {
   try {
-    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const UHCFHIRService = require('./services/platform/uhc-fhir-service');
     const useSandbox = req.query.sandbox !== 'false';
     const result = await UHCFHIRService.testConnection(useSandbox);
     res.json(result);
@@ -9604,7 +9306,7 @@ app.get('/api/test/uhc-fhir/connection', async (req, res) => {
 // Test UHC FHIR provider directory
 app.get('/api/test/uhc-fhir/providers', async (req, res) => {
   try {
-    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const UHCFHIRService = require('./services/platform/uhc-fhir-service');
     const result = await UHCFHIRService.pullProviderDirectory({
       useSandbox: req.query.sandbox !== 'false',
       zipCode: req.query.zip || null,
@@ -9623,7 +9325,7 @@ app.get('/api/test/uhc-fhir/providers', async (req, res) => {
 // Test UHC FHIR patient clinical data
 app.get('/api/test/uhc-fhir/patient/:patientId/clinical', async (req, res) => {
   try {
-    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const UHCFHIRService = require('./services/platform/uhc-fhir-service');
     const result = await UHCFHIRService.pullPatientClinicalData(req.params.patientId, {
       useSandbox: req.query.sandbox !== 'false'
     });
@@ -9639,7 +9341,7 @@ app.get('/api/test/uhc-fhir/patient/:patientId/clinical', async (req, res) => {
 // Test UHC FHIR coverage data
 app.get('/api/test/uhc-fhir/patient/:patientId/coverage', async (req, res) => {
   try {
-    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const UHCFHIRService = require('./services/platform/uhc-fhir-service');
     const result = await UHCFHIRService.pullCoverageData(req.params.patientId, {
       useSandbox: req.query.sandbox !== 'false'
     });
@@ -9655,7 +9357,7 @@ app.get('/api/test/uhc-fhir/patient/:patientId/coverage', async (req, res) => {
 // Test UHC FHIR claims data
 app.get('/api/test/uhc-fhir/patient/:patientId/claims', async (req, res) => {
   try {
-    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const UHCFHIRService = require('./services/platform/uhc-fhir-service');
     const result = await UHCFHIRService.pullClaimsData(req.params.patientId, {
       useSandbox: req.query.sandbox !== 'false'
     });
@@ -9671,7 +9373,7 @@ app.get('/api/test/uhc-fhir/patient/:patientId/claims', async (req, res) => {
 // Test UHC FHIR - pull ALL data
 app.get('/api/test/uhc-fhir/patient/:patientId/all', async (req, res) => {
   try {
-    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const UHCFHIRService = require('./services/platform/uhc-fhir-service');
     const result = await UHCFHIRService.pullAllPatientData(req.params.patientId, {
       useSandbox: req.query.sandbox !== 'false'
     });
@@ -9737,7 +9439,7 @@ function assertProdPayorReadinessOrExit() {
 
 assertProdPayorReadinessOrExit();
 
-const { assertVoiceOperatorReadinessOrExit } = require('./services/voice-operator-readiness');
+const { assertVoiceOperatorReadinessOrExit } = require('./services/voice/voice-operator-readiness');
 assertVoiceOperatorReadinessOrExit(db);
 
 bootLog(`calling app.listen host=${HOST} port=${PORT}`);
@@ -9768,7 +9470,7 @@ function onServerListening() {
   // Defer heavy sync work so HTTP handlers are not blocked during long listen-callback work.
   setImmediate(() => {
   try {
-    const checkoutSvc = require('./services/patient-checkout-chat-service');
+    const checkoutSvc = require('./services/patient/patient-checkout-chat-service');
     if (typeof checkoutSvc._runCheckoutPreparedBackfillOnce === 'function') {
       checkoutSvc._runCheckoutPreparedBackfillOnce().catch(() => {});
     }
@@ -9781,11 +9483,11 @@ function onServerListening() {
     }
   } catch (_) {}
   try {
-    const cacheService = require('./services/cache-service');
+    const cacheService = require('./services/platform/cache-service');
     if (typeof cacheService.warm === 'function') cacheService.warm();
   } catch (e) { console.warn('⚠️  Cache warm skipped:', e.message); }
   try {
-    const SpecialistResolverService = require('./services/specialist-resolver-service');
+    const SpecialistResolverService = require('./services/patient/specialist-resolver-service');
     if (SpecialistResolverService.cleanupCache) {
       SpecialistResolverService.cleanupCache();
       setInterval(() => SpecialistResolverService.cleanupCache(), 60 * 60 * 1000);
@@ -9878,7 +9580,7 @@ function onServerListening() {
   try {
     ReminderScheduler.start();
     ReminderScheduler.startScheduledActivities(); // Start email follow-up scheduler
-    const caseReportTimeoutWorker = require('./services/case-report-timeout-worker');
+    const caseReportTimeoutWorker = require('./services/platform/case-report-timeout-worker');
     caseReportTimeoutWorker.start();
   } catch (error) {
     console.error('⚠️  Failed to start reminder scheduler:', error.message);
@@ -9887,7 +9589,7 @@ function onServerListening() {
 
   // mvp-74: Start durable notification queue worker (retries + dead-letter)
   try {
-    const NotificationQueue = require('./services/notification-queue');
+    const NotificationQueue = require('./services/platform/notification-queue');
     const enabled = (process.env.NOTIFICATION_QUEUE_ENABLED === '1' || process.env.NOTIFICATION_QUEUE_ENABLED === 'true') || isProd;
     if (enabled) {
       NotificationQueue.start();
@@ -10044,7 +9746,7 @@ function onServerListening() {
 
   // Phase 1: Auto-cancel unpaid appointment checkouts (webhook-safe)
   try {
-    const BookingService = require('./services/booking-service');
+    const BookingService = require('./services/patient/booking-service');
     const ttlMinutes = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_MINUTES || '30', 10);
     const pollMs = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_POLL_MS || '60000', 10);
 
@@ -10133,7 +9835,7 @@ function onServerListening() {
 
   // Phase 0: Financial integrity deterministic reconciliation + daily close
   try {
-    const FinancialIntegrityService = require('./services/financial-integrity-service');
+    const FinancialIntegrityService = require('./services/platform/financial-integrity-service');
     const enabled = process.env.FINANCIAL_INTEGRITY_JOBS_ENABLED !== '0';
     if (enabled) {
       const reconMs = Math.max(
@@ -10198,7 +9900,7 @@ function onServerListening() {
   try {
     const settlementRetryEnabled = process.env.SETTLEMENT_RETRY_JOB_ENABLED !== '0';
     if (settlementRetryEnabled) {
-      const SettlementRetryService = require('./services/settlement-retry-service');
+      const SettlementRetryService = require('./services/platform/settlement-retry-service');
       const retryMs = Math.max(
         60 * 1000,
         parseInt(process.env.SETTLEMENT_RETRY_JOB_INTERVAL_MS || `${5 * 60 * 1000}`, 10) || 5 * 60 * 1000
@@ -10231,7 +9933,7 @@ function onServerListening() {
   try {
     const reliabilityEnabled = process.env.PAYMENT_RELIABILITY_MONITOR_ENABLED !== '0';
     if (reliabilityEnabled) {
-      const PaymentReliabilityMonitor = require('./services/payment-reliability-monitor');
+      const PaymentReliabilityMonitor = require('./services/commerce/payment-reliability-monitor');
       const intervalMs = Math.max(
         60 * 1000,
         parseInt(process.env.PAYMENT_RELIABILITY_MONITOR_INTERVAL_MS || `${5 * 60 * 1000}`, 10) || 5 * 60 * 1000

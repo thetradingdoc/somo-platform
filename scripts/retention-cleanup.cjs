@@ -7,7 +7,7 @@
  */
 
 const path = require('path');
-process.env.DB_PATH = process.env.DB_PATH || path.join('middleware-platform', 'middleware-dev.db');
+process.env.DB_PATH = process.env.DB_PATH || path.join('middleware-platform', 'var', 'db', 'middleware-dev.db');
 
 // This file runs at repo root; middleware DB module lives under middleware-platform/.
 const db = require('../middleware-platform/database');

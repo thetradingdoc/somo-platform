@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const ImpactLedgerService = require('../services/impact-ledger-service');
+const ImpactLedgerService = require('../services/platform/impact-ledger-service');
 const db = require('../database');
 
 router.get('/dashboard', (req, res) => {

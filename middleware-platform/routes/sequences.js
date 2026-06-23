@@ -7,7 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const SequenceEngineService = require('../services/sequence-engine-service');
+const SequenceEngineService = require('../services/platform/sequence-engine-service');
 const { requireAdminAuth } = require('../middleware/admin-auth');
 const rateLimit = require('express-rate-limit');
 

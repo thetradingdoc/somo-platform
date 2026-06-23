@@ -11,14 +11,14 @@ const db = require('../database');
 const {
   deriveStateFromLegacy,
   transitionState
-} = require('../services/voice-onboarding-state');
+} = require('../services/voice/voice-onboarding-state');
 const {
   buildDefaultInboundGreeting,
   buildDefaultOutboundOpener,
   isLegacyGenericGreeting,
   resolvePracticeDisplayName
-} = require('../services/call-opener-resolver');
-const { normalizeSettingsRow } = require('../services/voice-settings-sync');
+} = require('../services/voice/call-opener-resolver');
+const { normalizeSettingsRow } = require('../services/voice/voice-settings-sync');
 
 const dryRun = process.argv.includes('--dry-run');
 

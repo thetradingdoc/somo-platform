@@ -8,8 +8,8 @@
 
 require('dotenv').config();
 const db = require('../database').db;
-const FHIRService = require('../services/fhir-service');
-const InsuranceService = require('../services/insurance-service');
+const FHIRService = require('../services/shared/fhir-service');
+const InsuranceService = require('../services/rcm/insurance-service');
 const { v4: uuidv4 } = require('uuid');
 
 console.log('\n🔄 SYNCING TEST PATIENTS TO PRODUCTION');

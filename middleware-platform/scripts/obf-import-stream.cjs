@@ -5,7 +5,7 @@
 const readline = require('readline');
 const crypto = require('crypto');
 const db = require('../database');
-const Metrics = require('../services/metrics');
+const Metrics = require('../services/shared/metrics');
 const { normalizeObfDocument } = require('./obf-normalize-record.cjs');
 
 function parseArgs(argv) {

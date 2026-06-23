@@ -325,7 +325,7 @@ Run from `middleware-platform/`. Requires `middleware-dev.db` (or `DB_PATH`) and
 | npm script | What it exercises |
 |------------|-------------------|
 | `npm run test:kelly:rails:golden` | Router, tool allowlists, execute-turn, lanes-payment, voice-payment, kelly-turn-resolver (50 tests) |
-| `npx jest --testPathPattern='conversation-mode'` | Resolver, pivot engine, acceptance matrix, V1–V14 scenarios (19 tests) |
+| `npm run verify:kelly-rails-env` | Resolver, pivot engine, acceptance matrix, V1–V14 scenarios |
 | `npm run test:rails:conversation-sandbox` | Seven scripted multi-turn dialogs (booking, copay, appt lookup, outbound reminder, urgent, Spanish booking, Mandarin copay) via `runKellyTurn` with `CONVERSATION_MODE_ROUTING=enforce` |
 
 Sandbox reports (generated on run):

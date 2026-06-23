@@ -579,9 +579,9 @@ Status: engineering checklist.
 
 | Area | Representative tests / paths |
 |------|-------------------------------|
-| Gate stack (schema, semantic, confidence, safety) | `middleware-platform/__tests__/reasoning-gates-fsm.test.js`, `middleware-platform/__tests__/reasoning-pipeline.test.js` |
-| FSM helpers | `reasoning-gates-fsm.test.js` (`canTransition`, `computePostPatchSnapshotState`) |
-| Contract guards | `middleware-platform/__tests__/result-summary-contract-guards.test.js` |
+| Gate stack (schema, semantic, confidence, safety) | `verify-reasoning-re-enable-readiness`, `verify-orchestration-trace-completeness` |
+| FSM helpers | `verify-reasoning-re-enable-readiness` |
+| Contract guards | `verify-kelly-tools` |
 
 **CI:** `.github/workflows/ci.yml` runs middleware Jest, `test:reasoning-regression`, and `eval:reasoning:harness` (see [Rollout gate](#rollout-gate-shadow-canary-ci-rollback)).
 

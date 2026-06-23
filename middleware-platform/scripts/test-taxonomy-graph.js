@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { resolveTaxonomyGraphAction } = require('../services/taxonomy-graph-resolver');
+const { resolveTaxonomyGraphAction } = require('../services/catalog/taxonomy-graph-resolver');
 
 function assert(name, cond) {
   if (!cond) throw new Error(`Assertion failed: ${name}`);

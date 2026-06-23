@@ -17,7 +17,7 @@ const {
   getConcernProgram,
   resolveCurrentPhase,
   buildTemplatePayload,
-} = require('../services/concern-routine-service');
+} = require('../services/platform/concern-routine-service');
 const { syncItemLogsForPhotoDay, buildPhotoAssistantSummary } = require('../lib/routine-photo-day');
 const { buildCompareDay } = require('../lib/routine-compare-helper');
 

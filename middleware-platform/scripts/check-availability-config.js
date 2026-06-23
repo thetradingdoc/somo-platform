@@ -13,8 +13,8 @@ const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 const db = require('../database');
 const { getClinicBusinessHours } = require('../config/clinic-business-hours');
-const BookingService = require('../services/booking-service');
-const ProviderService = require('../services/provider-service');
+const BookingService = require('../services/patient/booking-service');
+const ProviderService = require('../services/platform/provider-service');
 
 const CLINIC_ID = process.env.CLINIC_ID || process.env.DEFAULT_CLINIC_ID || 'clinic-default';
 const DATE = process.argv[2] || (() => {

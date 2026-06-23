@@ -8,7 +8,7 @@
 
 const path = require('path');
 const Database = require('better-sqlite3');
-const { SiteContextStatus } = require('../../services/call-site-context');
+const { SiteContextStatus } = require('../../services/voice/call-site-context');
 
 const VERDICT_SQL = `
 SELECT
@@ -169,9 +169,9 @@ function evaluateTenantSiteContext(dbPathOrHandle, opts = {}) {
   const { db: sqlite } = handle;
   try {
     const row = runVerdictQuery(sqlite, { customerId, did });
-    const { resolveCallSiteContext } = require('../../services/call-site-context');
-    const { evaluateIdentityAdmission } = require('../../services/voice-identity-admission');
-    const { isTenantResolvedForMode } = require('../../services/voice-routing-world');
+    const { resolveCallSiteContext } = require('../../services/voice/call-site-context');
+    const { evaluateIdentityAdmission } = require('../../services/voice/voice-identity-admission');
+    const { isTenantResolvedForMode } = require('../../services/voice/voice-routing-world');
 
     const dbAdapter = createDbAdapter(sqlite);
     const siteContext = resolveCallSiteContext({

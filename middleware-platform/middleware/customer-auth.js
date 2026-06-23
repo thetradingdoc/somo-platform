@@ -111,7 +111,7 @@ function requireCustomerAuth(req, res, next) {
 
     if (!customer._capabilities) {
       try {
-        const { getCapabilities } = require('../services/customer-capabilities');
+        const { getCapabilities } = require('../services/platform/customer-capabilities');
         customer._capabilities = getCapabilities(customer);
       } catch (_) {
         customer._capabilities = [];

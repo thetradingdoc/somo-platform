@@ -20,8 +20,8 @@ const GAP_JSON =
 const SAMPLE_N = parseInt(process.env.GAP_SAMPLE_N || '120', 10);
 const KELLY_SAMPLE_N = parseInt(process.env.KELLY_SAMPLE_N || '20', 10);
 
-const { match } = require('../services/funnel-match-service');
-const { classifyDermPatientQA } = require('../services/derm-patient-qa-triage');
+const { match } = require('../services/catalog/funnel-match-service');
+const { classifyDermPatientQA } = require('../services/shared/derm-patient-qa-triage');
 
 function loadGapRows() {
   if (!fs.existsSync(GAP_JSON)) {
@@ -57,7 +57,7 @@ function hasLlmEnv() {
 }
 
 async function maybeKellyTurn(message, sessionId, clinicId) {
-  const KellyAgentService = require('../services/kelly-agent-service');
+  const KellyAgentService = require('../services/kelly/kelly-agent-service');
   const started = Date.now();
   const result = await KellyAgentService.processTurn({
     message,

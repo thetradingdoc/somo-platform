@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { requestDemoCall, isDemoEnabled } = require('../services/somo-demo-service');
+const { requestDemoCall, isDemoEnabled } = require('../services/platform/somo-demo-service');
 const { getTurnstileSecret } = require('../lib/somo-demo-env');
 
 async function verifyTurnstileIfConfigured(token) {

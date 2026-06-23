@@ -1084,7 +1084,7 @@ node middleware-platform/scripts/migrate-voice-onboarding-v1.cjs
 7. Run regression tests:
    ```bash
    cd middleware-platform
-   npx jest __tests__/opqrst-field-gate.test.js __tests__/opqrst-voice-history-wiring.test.js __tests__/voice-reply-formatter.test.js --runInBand
+   npm run verify:opqrst-freeze --prefix middleware-platform
    ```
 8. Measure billing-pivot frequency before prod enable:
    ```bash

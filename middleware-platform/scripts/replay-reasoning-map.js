@@ -1,7 +1,7 @@
 'use strict';
 
 const dbModule = require('../database');
-const { buildReasoningMap } = require('../services/reasoning-map-service');
+const { buildReasoningMap } = require('../services/shared/reasoning-map-service');
 
 function main() {
   const limit = Math.max(1, Number(process.env.REASONING_REPLAY_LIMIT || 50));

@@ -6,7 +6,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
-const { provisionSaasTenant } = require('../services/saas-tenant-provision');
+const { provisionSaasTenant } = require('../services/shared/saas-tenant-provision');
 
 function parseArgs() {
   const out = {};

@@ -12,7 +12,7 @@
  */
 
 require('dotenv').config();
-const RetellService = require('../../middleware-platform/services/retell-service');
+const RetellService = require('../../middleware-platform/services/voice/retell-service');
 const fs = require('fs');
 const path = require('path');
 

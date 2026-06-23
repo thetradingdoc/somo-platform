@@ -1,5 +1,7 @@
 'use strict';
 
+const { dbWarn } = require('../log');
+
 /**
  * Run ordered startup migrations. Bodies stay in database.js until Phase 2 domain split.
  *
@@ -9,7 +11,7 @@
 function runStartupMigrations(migrationFns, options = {}) {
   const skip = !!options.skip;
   if (skip) {
-    console.warn('⚠️  SKIP_STARTUP_MIGRATIONS enabled: skipping startup migration batch');
+    dbWarn('⚠️  SKIP_STARTUP_MIGRATIONS enabled: skipping startup migration batch');
     return;
   }
   for (const fn of migrationFns) {

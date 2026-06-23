@@ -8,7 +8,7 @@
  *   node scripts/ingredient-alias-report.cjs [--limit 50] [--tsv]
  */
 const db = require('../database');
-const { getTopUnresolvedInciTokens, getIngredientResolutionMetrics } = require('../services/ingredient-resolution-metrics');
+const { getTopUnresolvedInciTokens, getIngredientResolutionMetrics } = require('../services/catalog/ingredient-resolution-metrics');
 
 function parseArgs(argv) {
   let limit = 50;

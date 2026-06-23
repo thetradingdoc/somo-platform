@@ -1,0 +1,82 @@
+'use strict';
+
+/**
+ * Ordered startup migration registry (RS-2-02).
+ * Function bodies remain in database.js until extracted per-domain.
+ *
+ * @param {Record<string, Function>} fns — migrate* functions from database.js
+ * @returns {Function[]}
+ */
+function buildStartupMigrationBatch(fns) {
+  return [
+    fns.migrateInsuranceClaimsTable,
+    fns.migrateFHIRPatientsWalletAddress,
+    fns.migratePatientPortalSessionsEmail,
+    fns.migratePatientPortalSessionsSecurityMeta,
+    fns.migrateMonthlyInvoicesJobCalls,
+    fns.migrateOrderTracking,
+    fns.migrateMerchantOrderCommerceIdempotency,
+    fns.migrateLeadsPipeline,
+    fns.migrateLeadsPhase1,
+    fns.migrateSequences,
+    fns.migrateQualificationRules,
+    fns.migrateCustomersTable,
+    fns.migrateProviderCanonicalLinks,
+    fns.migrateTriageSessionBookingFor,
+    fns.migrateVoiceCallLogCosts,
+    fns.migrateVoiceCallStateTables,
+    fns.migrateIcd10CodesTable,
+    fns.migrateHcpcsCodesTable,
+    fns.migrateBillingReferenceTables,
+    fns.migrateCodeEmbeddingsTable,
+    fns.migrateCodingDecisionsTable,
+    fns.migrateLlmUsageLogTable,
+    fns.migratePostgresSyncRetryTable,
+    fns.migrateDlqToolCallsTable,
+    fns.migrateFeatureFlagsTable,
+    fns.migrateVoiceCallLogClinicId,
+    fns.migrateVoiceAgentUx,
+    fns.migrateClinicMonthlyLlmCostTable,
+    fns.migrateClinicsMonthlyCostCap,
+    fns.migrateLongTermMemoryTables,
+    fns.migrateClinicSettingsTable,
+    fns.migrateHipaaAccessLogTable,
+    fns.migratePatientDocumentsStatus,
+    fns.migratePatientDocumentDownloadTokens,
+    fns.migrateIdempotencyKeysTable,
+    fns.migrateAppointmentsCustomerId,
+    fns.migrateCustomerMerchantId,
+    fns.migrateMerchantsSubdomain,
+    fns.migrateCustomersPasswordHash,
+    fns.migrateCustomerCreditsExpiration,
+    fns.migrateVoiceSubscriptionBilling,
+    fns.migrateProviderTrialSim,
+    fns.migrateSomoDemoRequests,
+    fns.migrateFHIRPatientsMerchantId,
+    fns.migrateFHIRPatientsMergedInto,
+    fns.migrateCircleAccountsMerchantId,
+    fns.migrateLeadLabels,
+    fns.migrateResearchBounties,
+    fns.migrateEmpiTables,
+    fns.migrateRcmPremiumTables,
+    fns.migrateRcmAiDecisions,
+    fns.migrateVideoConsultSessions,
+    fns.migrateEncounterVitals,
+    fns.migrateIntakeEventStream,
+    fns.migrateSessionStateProjection,
+    fns.migrateBackfillSessionStateFromTriage,
+    fns.migrateCosmeticKnowledgeTables,
+    fns.migrateCasePatternsStore,
+    fns.migrateFinalAssessmentArtifacts,
+    fns.migratePayorRawIngestTables,
+    fns.migratePayorNormalizationTables,
+    fns.migratePayorBlockingTables,
+    fns.migratePayorSimilarityTables,
+    fns.migratePayorResolutionTables,
+    fns.migratePayorCanonicalTables,
+    fns.migratePayorReviewTables,
+    fns.migrateProviderRegistryCoreTables,
+  ].filter(Boolean);
+}
+
+module.exports = { buildStartupMigrationBatch };

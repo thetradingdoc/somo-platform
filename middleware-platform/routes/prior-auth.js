@@ -8,7 +8,7 @@
 
 function registerPriorAuthRoutes(app, deps) {
   const { apiLimiter, express, db } = deps;
-  const PriorAuthService = require('../services/prior-auth-service');
+  const PriorAuthService = require('../services/platform/prior-auth-service');
 
   app.post('/api/prior-auth/evaluate', apiLimiter, express.json(), (req, res) => {
     try {

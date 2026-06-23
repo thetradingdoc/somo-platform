@@ -12,5 +12,12 @@ e2e
 __tests__
 test-results
 data
+var
+e2e-artifacts
+screenshots
+playwright-report
+scripts/verify
+scripts/harness
+scripts/data
 *.md
 !README.md

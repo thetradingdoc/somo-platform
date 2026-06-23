@@ -6,9 +6,9 @@
 
 const express = require('express');
 const db = require('../database');
-const InvoiceService = require('../services/invoice-service');
-const PDFInvoiceService = require('../services/pdf-invoice-service');
-const EmailService = require('../services/email-service');
+const InvoiceService = require('../services/platform/invoice-service');
+const PDFInvoiceService = require('../services/platform/pdf-invoice-service');
+const EmailService = require('../services/platform/email-service');
 const { authLimiter, apiLimiter } = require('../middleware/rate-limiter');
 
 const router = express.Router();
