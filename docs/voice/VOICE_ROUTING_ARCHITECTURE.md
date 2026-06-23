@@ -360,10 +360,10 @@ Fail-closed and handoff paths:
 | Escalation | `services/escalation-service.js` |
 | Demo | `webhooks/somo-demo-handler.js`, `services/somo-demo-orchestrator.js` |
 | Kelly turn | `services/kelly-turn-resolver.js` |
-| L2 | `services/conversation-mode/*` |
-| L4 | `services/kelly-rails/execute-turn.js`, `enter-clinical-lane.js`, `state-schema.js` |
+| L2 | `services/conversation/*` |
+| L4 | `services/kelly/rails/execute-turn.js`, `enter-clinical-lane.js`, `state-schema.js` |
 | OPQRST gate | `services/opqrst-field-gate.js` |
-| Operator | `services/conversation-mode/rails/operator-outbound-rail.js` |
+| Operator | `services/conversation/rails/operator-outbound-rail.js` |
 | Verify | `scripts/pd-4-platform-live-verify.cjs`, `scripts/voice-routing-matrix-smoke.cjs` |
 
 ---

@@ -38,9 +38,9 @@
 
 ### P0-B Hard transactional gates
 
-- [ ] **CR-006** `done` — No "appointment confirmed" unless `schedule_appointment_success` or DB row | Files: [`gates/schedule.js`](middleware-platform/services/kelly-rails/gates/schedule.js), [`appointment-read.js`](middleware-platform/services/kelly-rails/appointment-read.js)
-- [ ] **CR-007** `partial` — Remove transactional tools from LLM allowlist on `confirm_visit`, `cancel_execute`, `pay_invoice` | Files: [`tool-allowlists.js`](middleware-platform/services/kelly-rails/tool-allowlists.js), [`gate-registry.js`](middleware-platform/services/kelly-rails/gate-registry.js)
-- [ ] **CR-008** `partial` — Gate-owned reply only; LLM must not invent confirmation when gate returns `reply` | Files: [`node-runner.js`](middleware-platform/services/kelly-rails/node-runner.js)
+- [ ] **CR-006** `done` — No "appointment confirmed" unless `schedule_appointment_success` or DB row | Files: [`gates/schedule.js`](middleware-platform/services/kelly/rails/gates/schedule.js), [`appointment-read.js`](middleware-platform/services/kelly/rails/appointment-read.js)
+- [ ] **CR-007** `partial` — Remove transactional tools from LLM allowlist on `confirm_visit`, `cancel_execute`, `pay_invoice` | Files: [`tool-allowlists.js`](middleware-platform/services/kelly/rails/tool-allowlists.js), [`gate-registry.js`](middleware-platform/services/kelly/rails/gate-registry.js)
+- [ ] **CR-008** `partial` — Gate-owned reply only; LLM must not invent confirmation when gate returns `reply` | Files: [`node-runner.js`](middleware-platform/services/kelly/rails/node-runner.js)
 - [ ] **CR-009** `open` — Unit test: confirm utterance without `tool_completed` → no `booking_confirmed` key | Files: `__tests__/booking-confirm-without-tool.test.js` (new)
 
 ### P0-C Live verify scripts
@@ -97,7 +97,7 @@
 - [ ] **CR-030** `runbook` — Prod live cancel → `verify:live-cancel-call` PASS (runbook)
 - [ ] **CR-031** `runbook` — Prod live reschedule → `verify:live-reschedule-call` PASS (runbook)
 - [ ] **CR-032** `open` — Same-day cancel + rebook prod smoke
-- [ ] **CR-033** `partial` — Cancellation subrail intents only; no phantom `toolsUsed` | [`cancellation-subrail.js`](middleware-platform/services/conversation-mode/subrails/cancellation-subrail.js)
+- [ ] **CR-033** `partial` — Cancellation subrail intents only; no phantom `toolsUsed` | [`cancellation-subrail.js`](middleware-platform/services/conversation/subrails/cancellation-subrail.js)
 
 ### P1-C Payments
 
@@ -109,9 +109,9 @@
 
 ### P1-D Conversation + SSOT
 
-- [ ] **CR-039** `open` — `hydrateSessionForTurn(sessionId)` merge projection + meta_kv + triage | [`hydrate.js`](middleware-platform/services/kelly-rails/hydrate.js), [`execute-turn.js`](middleware-platform/services/kelly-rails/execute-turn.js)
+- [ ] **CR-039** `open` — `hydrateSessionForTurn(sessionId)` merge projection + meta_kv + triage | [`hydrate.js`](middleware-platform/services/kelly/rails/hydrate.js), [`execute-turn.js`](middleware-platform/services/kelly/rails/execute-turn.js)
 - [ ] **CR-040** `open` — OPQRST → booking pivot syncs `triage_sessions` into projection
-- [ ] **CR-041** `partial` — Turn-planner audit: cancel/records/copay intents from subrails only | [`turn-planner.js`](middleware-platform/services/kelly-rails/turn-planner.js)
+- [ ] **CR-041** `partial` — Turn-planner audit: cancel/records/copay intents from subrails only | [`turn-planner.js`](middleware-platform/services/kelly/rails/turn-planner.js)
 - [ ] **CR-042** `open` — Telemetry SLO: `orchestration_trace_gap` < 1% documented in OPERATIONS.md
 
 ### P1-E Dashboard proof
@@ -120,7 +120,7 @@
 - [ ] **CR-044** `partial` — Activity feed: cancel + reschedule + payment events consistently | [`kelly-activity-feed-service.js`](middleware-platform/services/kelly-activity-feed-service.js)
 - [ ] **CR-045** `open` — Calendar reflects voice-booked appts within 30s (poll in [`provider-shell.js`](unified-dashboard/assets/js/provider-shell.js))
 - [ ] **CR-046** `open` — Revenue tab: `voice_checkouts` + RCM payments scoped to clinic | [`tab-payments.js`](unified-dashboard/assets/js/revenue/tab-payments.js)
-- [ ] **CR-047** `partial` — `test:prod:provider-portal` npm script + post-login smoke | [`playwright.prod.config.cjs`](middleware-platform/playwright.prod.config.cjs)
+- [ ] **CR-047** `partial` — Provider portal post-login smoke via verify scripts | `npm run verify:tenant-site-context`
 
 ### P1 — Frontend
 
@@ -150,13 +150,13 @@
 ### P2-B Language / quality
 
 - [ ] **CR-053** `open` — `prompt-bounding-locale` — merged subrail objectives + locale lock
-- [ ] **CR-054** `partial` — All deterministic gate strings EN/ES/ZH | [`deterministic.js`](middleware-platform/services/kelly-rails/prompts/deterministic.js)
+- [ ] **CR-054** `partial` — All deterministic gate strings EN/ES/ZH | [`deterministic.js`](middleware-platform/services/kelly/rails/prompts/deterministic.js)
 - [ ] **CR-055** `open` — ASR low-confidence → clarify prod monitor script
 
 ### P2-C Clinical chain
 
 - [ ] **CR-056** `partial` — OPQRST → book sandbox chain + prod runbook
-- [ ] **CR-057** `partial` — Emergency rail prod spot-check (911, no booking pivot) | [`gates/safety.js`](middleware-platform/services/kelly-rails/gates/safety.js)
+- [ ] **CR-057** `partial` — Emergency rail prod spot-check (911, no booking pivot) | [`gates/safety.js`](middleware-platform/services/kelly/rails/gates/safety.js)
 - [ ] **CR-058** `open` — `verify-live-records-call.cjs`
 
 ### P2-D Outbound

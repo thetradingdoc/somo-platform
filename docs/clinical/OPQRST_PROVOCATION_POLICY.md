@@ -32,7 +32,7 @@ Policy is **not** keyed on specialty name containing "derm".
 
 ### Tenant override: `triage_policy: required`
 
-When tenant policy is `required` (see [tenant-policy.js](middleware-platform/services/conversation-mode/tenant-policy.js)), provocation **is** required for `opqrstComplete`.
+When tenant policy is `required` (see [tenant-policy.js](middleware-platform/services/conversation/tenant-policy.js)), provocation **is** required for `opqrstComplete`.
 
 ### Single source of truth
 

@@ -1,7 +1,8 @@
 # OPERATIONS
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-22
 
+> **Testing (2026-06-22):** Jest unit tests and Playwright E2E specs were removed from `middleware-platform`. Pre-deploy gates use `scripts/verify/*` only — see [middleware-platform/docs/VERIFY_GATES.md](../../middleware-platform/docs/VERIFY_GATES.md). Historical references to `__tests__/` and `npx playwright test` below are archival.
 
 ---
 
@@ -89,11 +90,15 @@ SESSION_ID=<retell_call_id> DB_PATH=/path/to/prod.db npm run verify:live-booking
 
 `callsomo-terminal-cutover.sh deploy-api` runs `verify:kelly-rails-cloudrun` and fails the deploy on shadow routing. Optional post-call check when `SESSION_ID` + `DB_PATH` are set (`SKIP_LIVE_CALL_VERIFY=1` to skip).
 
-### Kelly Cloud Run env snapshot (CR-001–004)
+### Kelly Cloud Run env snapshot (CR-001–005)
 
-Record revision + env after every production deploy:
+Record revision + env after every production deploy. **Operator checklist:** [`docs/runbooks/CR-001-005-OPERATOR-CHECKLIST.md`](../runbooks/CR-001-005-OPERATOR-CHECKLIST.md).
 
 ```bash
+# One command: verify + evidence JSON (recommended)
+npm run operator:cr-001-005
+
+# Or verify only
 cd middleware-platform
 GCP_PROJECT=somo-callsomo GCP_SERVICE=somo-middleware npm run verify:kelly-rails-cloudrun
 ```
@@ -358,7 +363,7 @@ Heavy background workers and catalog sync block the Node event loop on large loc
 
 ```bash
 cd middleware-platform
-export DB_PATH=./middleware-dev.db
+export DB_PATH=./var/db/middleware-dev.db
 export DEV_LIGHT_START=1
 export CATALOG_MASTER_SYNC_ENABLED=0
 export EHR_SYNC_ENABLED=0
@@ -388,7 +393,7 @@ cd middleware-platform && npm start
 
 ### Optional: bloated local DB
 
-If `:4000` is still slow with the light profile, `middleware-dev.db` may be very large. Back it up and start fresh, or run `VACUUM` after auditing growth.
+If `:4000` is still slow with the light profile, `var/db/middleware-dev.db` may be very large. Back it up and start fresh, or run `VACUUM` after auditing growth.
 
 ## Env (middleware)
 
@@ -1232,7 +1237,7 @@ See [`middleware-platform/.env.example`](../../middleware-platform/.env.example)
 
 ```bash
 cd middleware-platform
-export DB_PATH=./middleware-dev.db
+export DB_PATH=./var/db/middleware-dev.db
 export TWILIO_WEBHOOK_SIGNATURE_REQUIRED=0
 
 npm run billing:test-scenarios    # full automated suite
@@ -1483,7 +1488,7 @@ Use `--dry-run` before production provisioning.
 
 # Production database parity (embeddings, MPFS, NPPES taxonomy)
 
-Dev SQLite (`middleware-dev.db`) is the reference. Replicate these counts on production before relying on semantic search, voice coding, or fee/taxonomy features.
+Dev SQLite (`var/db/middleware-dev.db`) is the reference. Replicate these counts on production before relying on semantic search, voice coding, or fee/taxonomy features.
 
 | Table / asset | Dev target count | How to build |
 |---------------|------------------|--------------|
@@ -1501,7 +1506,7 @@ Dev SQLite (`middleware-dev.db`) is the reference. Replicate these counts on pro
 ```bash
 # On dev machine (stop writers first)
 cd middleware-platform
-sqlite3 middleware-dev.db ".backup 'middleware-prod-seed.db'"
+sqlite3 var/db/middleware-dev.db ".backup 'middleware-prod-seed.db'"
 
 # Upload to Render persistent disk / prod server, set SQLITE_PATH or DATABASE_URL
 ```

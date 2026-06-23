@@ -553,13 +553,13 @@ These are intentionally implementation-aligned and can be expanded into C4 Level
 # Kelly Agentic Rails V2 — As Built
 
 **Date:** 2026-06-02  
-**Code:** [`middleware-platform/services/kelly-rails/`](../../middleware-platform/services/kelly-rails/)
+**Code:** [`middleware-platform/services/kelly/rails/`](../../middleware-platform/services/kelly/rails/)
 
 ## Entry
 
 All patient conversation channels should use [`kelly-turn-resolver.js`](../../middleware-platform/services/kelly-turn-resolver.js):
 
-- `KELLY_RAILS_V2=1` → [`orchestrator.handleTurn`](../../middleware-platform/services/kelly-rails/orchestrator.js) (LangGraph + lane steps)
+- `KELLY_RAILS_V2=1` → [`orchestrator.handleTurn`](../../middleware-platform/services/kelly/rails/orchestrator.js) (LangGraph + lane steps)
 - `KELLY_RAILS_V2=0` → legacy `KellyAgentService.processTurn`
 - Hybrid bridge fallback is **off by default**; enable only with `KELLY_ALLOW_HYBRID_GRAPH=1` during controlled migration tests.
 
@@ -606,7 +606,7 @@ flowchart TB
 | education | education → clinical_advice → done |
 | support | faq → handoff → done |
 
-Tool allow-lists: [`tool-allowlists.js`](../../middleware-platform/services/kelly-rails/tool-allowlists.js).
+Tool allow-lists: [`tool-allowlists.js`](../../middleware-platform/services/kelly/rails/tool-allowlists.js).
 
 ## Deprecated (v2 path)
 
@@ -680,7 +680,7 @@ RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:conversation
 
 **North star:** Cold-start patient ride — symptom → triage → book → copay link — without `seedBookingReady` or skip-triage fixtures.
 
-**V2 rebuild (authoritative when `KELLY_RAILS_V2=1`):** [`middleware-platform/services/kelly-rails/`](../middleware-platform/services/kelly-rails/) — LangGraph host + lane steps + tool allow-lists. Phases 2–7 bridge/`processTurn` patches are **deprecated** on the v2 path (see [`kelly_rails_v2_as_built.md`](./kelly_rails_v2_as_built.md)).
+**V2 rebuild (authoritative when `KELLY_RAILS_V2=1`):** [`middleware-platform/services/kelly/rails/`](../middleware-platform/services/kelly/rails/) — LangGraph host + lane steps + tool allow-lists. Phases 2–7 bridge/`processTurn` patches are **deprecated** on the v2 path (see [`kelly_rails_v2_as_built.md`](./kelly_rails_v2_as_built.md)).
 
 **Related todos (execution checklists):**
 
@@ -916,7 +916,7 @@ Check off in PRs; completed phase history is in git history (todo archive purged
 - [x] **G1-1** `kelly-conversation-graph.js` START → `router` node
 - [x] **G1-2** `routeIntakeSwitch` conditional edges
 - [x] **G1-3** Router inputs: message + flags (+ legacy meta read during migration)
-- [x] **G1-4** Unit tests: router edges (rash, OBGYN, pay, skincare-only) — [`kelly-conversation-graph-router.test.js`](../../middleware-platform/__tests__/kelly-conversation-graph-router.test.js)
+- [x] **G1-4** Router edges (rash, OBGYN, pay, skincare-only) — `npm run verify:kelly-rails-env`
 - [x] **G1-5** `LANGGRAPH_KELLY_ROLLOUT_PCT` + production 0|1 guard
 
 ### Phase 2 — Intake branch subgraph
@@ -1383,7 +1383,7 @@ SPA static mounts (`/unified-dashboard`, `/patients`, `/business`, `/insurer`, s
 
 | PR | Change | Verify |
 |----|--------|--------|
-| P0-1 | `services/voice-inbound-tenant.js` — SaaS fail-closed when no `retell_agent_id` | `jest voice-inbound-tenant`, `billing:test-gate` |
+| P0-1 | `services/voice-inbound-tenant.js` — SaaS fail-closed when no `retell_agent_id` | `verify-voice-tenant-contract`, `verify:tenant-site-context` |
 | P0-2 | `voice-agent-settings.js` — no `akin-dunbar` fallback for authenticated SaaS | `test:e2e:staging-voice` |
 | P0-2 | Staging DB truth in runbooks (`POSTGRES_URL`, GCS snapshot lag) | `staging:preflight`, `audit:trial-provision-drift` |
 
@@ -1436,7 +1436,7 @@ npm run billing:test-gate
 npm run audit:trial-provision-drift
 npm run staging:preflight
 npm run test:e2e:staging-voice
-SKIP_STARTUP_MIGRATIONS=1 npx jest __tests__/voice-inbound-tenant.test.js
+npm run verify:voice-tenant-contract --prefix middleware-platform
 ```
 
 Manual P0: inbound PSTN call → `npm run staging:call-verify -- --customer-id=…`

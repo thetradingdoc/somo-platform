@@ -410,7 +410,7 @@ somo/
 │   │   ├── setup-circle-wallets.js
 │   │   ├── backup-database.js
 │   │   └── ...
-│   ├── __tests__/                 # Jest tests (see jest.config.js; may be sparse)
+│   ├── scripts/verify/            # Deploy gates (verify scripts; Jest removed 2026-06-22)
 │   ├── utils/                     # Utility functions
 │   │   ├── api-keys.js
 │   │   ├── postgres.js
@@ -474,15 +474,15 @@ somo/
 ## New code guidelines
 
 - Prefer adding **Express routes** under `middleware-platform/routes/` and **mounting** them from `server.js` instead of growing inline handlers in `server.js` (~11k lines compose entry; see [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md)).
-- **Jest** uses `middleware-platform/__tests__/` (see `jest.config.js`). The npm script runs `jest --passWithNoTests` until more tests land.
-- **Integration / manual scripts** may still live as `middleware-platform/test-*.js` or under `scripts/`; migrating those into `__tests__/` is incremental cleanup.
+- **Verify scripts** replace Jest (2026-06-22). Pre-push: `npm run ci:fast` from repo root. See [VERIFY_GATES.md](../../middleware-platform/docs/VERIFY_GATES.md).
+- **Integration / manual scripts** live under `middleware-platform/scripts/` (`verify/`, `harness/`, `data/`).
 - **Module boundaries (soft rule):** `routes/` → `services/` → `adapters/` / `database`; avoid `services/` importing Express `req`/`res`. Keeps units testable without booting HTTP.
 
 ## 🔧 Areas for Improvement
 
 ### 1. Test file organization
-**Current:** Jest roots at `__tests__/`; many legacy `test-*.js` files may still exist at the middleware root for manual runs.  
-**Recommendation:** Add real unit/integration tests under `__tests__/` and retire ad-hoc files over time.
+**Current:** Verify scripts under `scripts/verify/`; `npm test` runs prod-spine-imports only.  
+**Recommendation:** Add new gates as `scripts/verify/verify-<domain>.cjs` per [VERIFY_GATES.md](../../middleware-platform/docs/VERIFY_GATES.md).
 
 ### 2. Script Organization
 **Current**: All scripts in `scripts/` directory  

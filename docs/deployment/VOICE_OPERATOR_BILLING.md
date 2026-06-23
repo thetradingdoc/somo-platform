@@ -159,7 +159,7 @@ API_BASE_URL=https://api.callsomo.com node scripts/operator-outbound-smoke.cjs -
 
 ## Operator outbound stages (O-1)
 
-Rail: `services/conversation-mode/rails/operator-outbound-rail.js`
+Rail: `services/conversation/rails/operator-outbound-rail.js`
 
 | Stage | Purpose |
 |-------|---------|

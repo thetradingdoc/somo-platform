@@ -65,13 +65,13 @@ OpqrstFieldGate.resolve({
 
 ## History SSOT (voice wiring)
 
-G-1 requires `lastAssistantText` so G-3b can classify answers. Chat writes via [node-runner.js](../../middleware-platform/services/kelly-rails/node-runner.js) (`appendHistory`). Voice must do the same:
+G-1 requires `lastAssistantText` so G-3b can classify answers. Chat writes via [node-runner.js](../../middleware-platform/services/kelly/rails/node-runner.js) (`appendHistory`). Voice must do the same:
 
 | Component | Role |
 |-----------|------|
-| [history.js](../../middleware-platform/services/kelly-rails/history.js) | `getLastAssistantText`, `appendHistory`, `seedKellyHistoryFromOrchestrate` |
+| [history.js](../../middleware-platform/services/kelly/rails/history.js) | `getLastAssistantText`, `appendHistory`, `seedKellyHistoryFromOrchestrate` |
 | [retell-websocket.js](../../middleware-platform/webhooks/retell-websocket.js) | Writes user + assistant turns to `kelly_conversation_history`; passes `last_assistant_text` to formatter |
-| [execute-turn.js](../../middleware-platform/services/kelly-rails/execute-turn.js) | Reads `getLastAssistantText(sessionId, { db })` before `OpqrstFieldGate.resolve` |
+| [execute-turn.js](../../middleware-platform/services/kelly/rails/execute-turn.js) | Reads `getLastAssistantText(sessionId, { db })` before `OpqrstFieldGate.resolve` |
 
 Read order: Kelly history table → `orchestrate_sessions.conversation_history` fallback → empty string.
 

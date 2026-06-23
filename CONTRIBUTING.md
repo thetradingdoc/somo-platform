@@ -25,20 +25,16 @@
 Mirror what CI exercises (see `.github/workflows/ci.yml`):
 
 ```bash
-# 1) Middleware — install, syntax, tests, security gate
-cd middleware-platform && npm ci && npm test && npm run release:security-gate && cd ..
-
-# 2) Repo root — guardrails + agentic checkout static verify
-node scripts/check-performance-budgets.cjs
-node scripts/check-auth-ui-guardrails.cjs
-RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs
-node scripts/verify-agentic-checkout.cjs
-
-# 3) Patient app (Expo) — typecheck
-cd patient-app && npm ci && npx tsc --noEmit && cd ..
+# Pre-push gate (verify scripts + guardrails; mirrors CI)
+npm run ci:fast
 ```
 
-Optional: `cd patient-app && npm run lint` (not all CI jobs run Expo lint yet).
+Optional legacy surfaces:
+
+```bash
+# Patient app (Expo) — typecheck if you touched patient-app/
+cd patient-app && npm ci && npx tsc --noEmit && cd ..
+```
 
 ## Documentation
 
@@ -59,13 +55,13 @@ Optional: `cd patient-app && npm run lint` (not all CI jobs run Expo lint yet).
 
 - Static verification: `npm run verify:agentic-checkout` from repo root (or `patient-app` script of the same name).
 
-## Tests
+## Verification (not Jest)
 
-- Middleware Jest is configured with **`jest --passWithNoTests`**; add real tests under `middleware-platform/__tests__/`.
-- **Playwright** (middleware): specs live under `middleware-platform/e2e/`. CI runs **Jest + `release:security-gate`** on every PR (see `.github/workflows/ci.yml`); **full Playwright** is not in the default job—run locally or add a scheduled/manual workflow when you need browser coverage against a live API.
-- **Playwright browsers:** before first run, install Chromium: `cd middleware-platform && npx playwright install chromium` (CI sandboxes that skip this will fail with “browser not found”).
-- **Checkout E2E base URL:** set `CHECKOUT_E2E_BASE_URL` to the middleware origin serving static files (often `http://127.0.0.1:4000`). The checkout page uses `window.API_BASE` (default `http://localhost:4000`); if you open the HTML via `127.0.0.1` but leave the default API base, requests can go to the wrong origin—override `API_BASE` in an init script or match host (`localhost` vs `127.0.0.1`) consistently.
-- There is **no Cypress** tree in `middleware-platform` right now — the workflow step skips when `cypress/` is absent.
+- **Jest and Playwright were removed** (2026-06-22). Do not add `__tests__/` without an ADR reversing [VERIFY_GATES.md](middleware-platform/docs/VERIFY_GATES.md).
+- **Pre-push:** `npm run ci:fast` from repo root.
+- **Middleware spine:** `cd middleware-platform && npm test` runs `prod-spine-imports` only.
+- **Domain gates:** see [middleware-platform/docs/VERIFY_GATES.md](middleware-platform/docs/VERIFY_GATES.md).
+- **Nightly / pre-release:** `npm run ci:slow`.
 
 ## Security
 
@@ -80,4 +76,4 @@ From the repository root (no extra install; uses Node only):
 npm run ci:local
 ```
 
-Runs performance budgets, auth UI guardrails, retention cleanup **dry-run**, agentic checkout verify, then **`middleware-platform` Jest** and **`release:security-gate`**. Install middleware deps first: `cd middleware-platform && npm ci` (or `npm install`).
+Runs verify scripts and repo guardrails (see `scripts/ci-local.sh`). Install middleware deps first: `cd middleware-platform && npm ci` (or `npm install`).

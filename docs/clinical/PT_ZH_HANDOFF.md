@@ -10,7 +10,7 @@
 2. If confidence is below `KELLY_LANG_MIN_CONFIDENCE`, or language is PT/ZH without expanded rails:
    - Lane: `support` / `handoff`
    - Tools: **no** `schedule_appointment`, `get_available_slots`, `request_patient_payment`
-3. Caller hears a **canned message in their language** (from [`orchestrator.js`](../../middleware-platform/services/kelly-rails/orchestrator.js)):
+3. Caller hears a **canned message in their language** (from [`orchestrator.js`](../../middleware-platform/services/kelly/rails/orchestrator.js)):
    - **PT:** specialist connection message
    - **ZH:** specialist connection message
    - **EN fallback:** English specialist message
