@@ -1,0 +1,109 @@
+{
+  "version": "2.0.0",
+  "merchant_id": "merchant_c3d547a10f43eeec",
+  "clinic_id": "clinic-default",
+  "currency": "USD",
+  "description": "Fixture supplement catalog for PSTN Replay 100 v3. Seed into local DB before running scenarios.",
+  "products": [
+    {
+      "product_id": "sku_vitd3_2000",
+      "sku": "SUPP-VITD3-2000",
+      "name": "Vitamin D3 2000 IU",
+      "category": "supplement",
+      "price": 24.99,
+      "inventory": 120,
+      "description": "Daily vitamin D3 softgel for bone and immune support.",
+      "search_terms": ["vitamin d", "vitamin d3", "d3", "bone health", "immune"]
+    },
+    {
+      "product_id": "sku_omega3_1200",
+      "sku": "SUPP-OMEGA3-1200",
+      "name": "Omega-3 1200mg",
+      "category": "supplement",
+      "price": 29.99,
+      "inventory": 85,
+      "description": "EPA/DHA omega-3 for heart and brain health.",
+      "search_terms": ["omega 3", "omega three", "omega-3", "fish oil", "heart health"]
+    },
+    {
+      "product_id": "sku_mag_glyc",
+      "sku": "SUPP-MAG-GLY",
+      "name": "Magnesium Glycinate 400mg",
+      "category": "supplement",
+      "price": 22.99,
+      "inventory": 200,
+      "description": "Gentle magnesium for sleep and muscle relaxation.",
+      "search_terms": ["magnesium", "sleep", "muscle", "glycinate", "mag glyc"]
+    },
+    {
+      "product_id": "sku_b_complex",
+      "sku": "SUPP-B-COMPLEX",
+      "name": "B-Complex 100",
+      "category": "supplement",
+      "price": 19.99,
+      "inventory": 90,
+      "description": "B-vitamin blend for energy metabolism.",
+      "search_terms": ["b complex", "b-complex", "energy", "b vitamins"]
+    },
+    {
+      "product_id": "sku_multi_daily",
+      "sku": "SUPP-MULTI-DAILY",
+      "name": "Daily Multivitamin",
+      "category": "supplement",
+      "price": 27.99,
+      "inventory": 150,
+      "description": "Once-daily multivitamin with essential vitamins and minerals.",
+      "search_terms": ["multivitamin", "multi vitamin", "daily vitamin", "energy"]
+    },
+    {
+      "product_id": "sku_probiotic",
+      "sku": "SUPP-PROB-50B",
+      "name": "Probiotic 50B CFU",
+      "category": "supplement",
+      "price": 34.99,
+      "inventory": 60,
+      "description": "Multi-strain probiotic for digestive balance.",
+      "search_terms": ["probiotic", "gut health", "digestive", "probiotics"]
+    },
+    {
+      "product_id": "sku_lion_mane",
+      "sku": "SUPP-LION-MANE",
+      "name": "Lion's Mane 1000mg",
+      "category": "supplement",
+      "price": 39.99,
+      "inventory": 45,
+      "description": "Cognitive support mushroom extract.",
+      "search_terms": ["lion's mane", "lions mane", "nootropic", "focus"]
+    },
+    {
+      "product_id": "sku_turmeric",
+      "sku": "SUPP-TURMERIC",
+      "name": "Turmeric Curcumin 500mg",
+      "category": "supplement",
+      "price": 26.99,
+      "inventory": 70,
+      "description": "Anti-inflammatory turmeric with curcumin.",
+      "search_terms": ["turmeric", "curcumin", "inflammation"]
+    },
+    {
+      "product_id": "sku_creatine",
+      "sku": "SUPP-CREATINE",
+      "name": "Creatine Monohydrate 5g",
+      "category": "supplement",
+      "price": 32.99,
+      "inventory": 55,
+      "description": "Performance creatine monohydrate powder.",
+      "search_terms": ["creatine", "performance", "muscle", "workout"]
+    },
+    {
+      "product_id": "sku_collagen",
+      "sku": "SUPP-COLLAGEN",
+      "name": "Marine Collagen Peptides",
+      "category": "supplement",
+      "price": 44.99,
+      "inventory": 40,
+      "description": "Marine collagen for skin and joint support.",
+      "search_terms": ["collagen", "marine collagen", "skin", "joints"]
+    }
+  ]
+}

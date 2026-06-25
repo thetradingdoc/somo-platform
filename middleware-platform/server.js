@@ -70,8 +70,6 @@ const {
   getHostname,
   isSomoMarketingHostname,
   isLocalDevRootHost,
-  SOMO_LANDING_BUILD_INSTRUCTIONS_HTML,
-  isSomoLandingBuildReady: landingBuildReady,
 } = require('./lib/static-hosting-paths');
 const { registerEarlySomoLandingStatic } = require('./bootstrap/static-hosting');
 // Node 18+ has global fetch; fallback to axios where needed
@@ -2106,24 +2104,8 @@ function getUnifiedDashboardPath(...subPaths) {
   return path.join(__dirname, '..', 'unified-dashboard', ...subPaths);
 }
 
-function getSomoLandingBuildPath(...subPaths) {
-  const fs = require('fs');
-  let azurePath = path.join(__dirname, 'unified-dashboard', 'somo-landing', 'build', ...subPaths);
-  if (fs.existsSync(azurePath)) {
-    return azurePath;
-  }
-  return path.join(__dirname, '..', 'unified-dashboard', 'somo-landing', 'build', ...subPaths);
-}
-
-function trySendSomoLanding(res) {
-  if (!landingBuildReady(getSomoLandingBuildPath)) return false;
-  res.sendFile(path.resolve(getSomoLandingBuildPath('index.html')));
-  return true;
-}
-
-function sendSomoLandingOrInstructions(res) {
-  if (trySendSomoLanding(res)) return;
-  res.status(503).type('html').send(SOMO_LANDING_BUILD_INSTRUCTIONS_HTML);
+function redirectMarketingRoot(res) {
+  return res.redirect(302, '/business/trial-activation.html');
 }
 
 function redirectLegacyLandingPath(req, res) {
@@ -2185,11 +2167,11 @@ app.get('/', (req, res) => {
         '</body></html>'
       );
     }
-    return sendSomoLandingOrInstructions(res);
+    return redirectMarketingRoot(res);
   }
 
   if (isSomoMarketingHostname(hostname)) {
-    return sendSomoLandingOrInstructions(res);
+    return redirectMarketingRoot(res);
   }
 
   // API subdomain - check if user is already logged in
@@ -2231,7 +2213,7 @@ app.get('/', (req, res) => {
   }
 
   // Never leave GET / unanswered (avoids hung sockets and accidental catch-all 404 for edge Host values)
-  sendSomoLandingOrInstructions(res);
+  redirectMarketingRoot(res);
 });
 
 // Legacy littlelab marketing paths → unified Somo landing at /
@@ -2874,8 +2856,6 @@ const rcmRoutes = require('./routes/rcm');
 app.use('/api/rcm', rcmRoutes);
 const rcmPublicRoutes = require('./routes/rcm-public');
 app.use('/api/public/rcm', rcmPublicRoutes);
-const somoDemoPublicRoutes = require('./routes/somo-demo-public');
-app.use('/api/public/somo-demo', somoDemoPublicRoutes);
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
 app.use('/api/internal/service-ops', internalServiceOpsRoutes);
 const impactPublicRoutes = require('./routes/impact-public');
@@ -2994,11 +2974,11 @@ app.get('/wallet', (req, res) => {
 // Favicon: browsers still request /favicon.ico — serve Somo landing favicon when built.
 app.get('/favicon.ico', (req, res) => {
   const fs = require('fs');
-  const fromBuild = getSomoLandingBuildPath('assets', 'brand', 'somo-icon.png');
-  if (fs.existsSync(fromBuild)) {
+  const fromAssets = getUnifiedDashboardPath('assets', 'images', 'somo-icon.png');
+  if (fs.existsSync(fromAssets)) {
     res.type('image/png');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.sendFile(fromBuild);
+    return res.sendFile(fromAssets);
   }
   const svgFavicon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">S</text></svg>';
   res.setHeader('Content-Type', 'image/svg+xml');
@@ -3209,34 +3189,6 @@ function escapeXml(s) {
     .replace(/'/g, '&apos;');
 }
 
-// Twilio async AMD for Somo demo outbound
-const somoDemoAmdHandler = [
-  express.urlencoded({ extended: true }),
-  twilioSignatureRequired,
-  async (req, res) => {
-    try {
-      const callSid = req.body.CallSid;
-      const answeredBy = req.body.AnsweredBy || req.body.MachineDetectionResult || '';
-      if (callSid && /machine|fax/i.test(String(answeredBy))) {
-        const row = db.db
-          .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
-          .get(callSid);
-        if (row?.id) {
-          db.updateSomoDemoRequest(row.id, {
-            voicemail_detected: 1,
-            outcome: 'voicemail',
-            status: 'completed'
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('Somo demo AMD callback error:', e.message);
-    }
-    res.sendStatus(200);
-  }
-];
-app.post('/voice/somo-demo-amd-callback', ...somoDemoAmdHandler);
-
 // Twilio Status Callback - receives call status updates
 app.post(
   '/voice/status-callback',
@@ -3271,26 +3223,6 @@ app.post(
     if (callSid) {
       setImmediate(async () => {
         try {
-          const somoDemo = db.db
-            .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
-            .get(callSid);
-          if (somoDemo?.id) {
-            const patch = {};
-            if (callStatus) patch.status = callStatus;
-            if (callDuration) {
-              patch.duration_sec = parseInt(callDuration, 10);
-            }
-            if (callStatus === 'completed' && !patch.outcome) {
-              patch.outcome = 'completed_twilio';
-            }
-            if (callStatus === 'no-answer' || callStatus === 'busy') {
-              patch.outcome = callStatus;
-            }
-            if (Object.keys(patch).length) {
-              db.updateSomoDemoRequest(somoDemo.id, patch);
-            }
-          }
-
           // Update voice_call_log with duration and calculate costs if call completed
           const voiceCall = db.db.prepare('SELECT * FROM voice_call_log WHERE twilio_call_sid = ? ORDER BY created_at DESC LIMIT 1').get(callSid);
 

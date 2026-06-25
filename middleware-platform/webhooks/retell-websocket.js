@@ -19,7 +19,7 @@ const PatientOrchestratorService = require('../services/patient-orchestrator-ser
 const KellyAgentService = require('../services/kelly-agent-service');
 const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
-const somoDemoHandler = require('./somo-demo-handler');
+const navigationHandler = require('./consumer-navigation-handler');
 const VoiceAgentRuntime = require('../services/voice-agent-runtime');
 const {
     resolveCallOpeners,
@@ -28,6 +28,10 @@ const {
 } = require('../services/call-opener-resolver');
 const { normalizeSettingsRow } = require('../services/voice-settings-sync');
 const { resolveCustomerIdForBilling } = require('../services/voice-account-resolution');
+
+function pstnReplayQuiet(connection) {
+    return !!(connection?.replayMode && String(process.env.PSTN_REPLAY_QUIET_LOGS || '').trim() === '1');
+}
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -87,6 +91,7 @@ class RetellWebSocketHandler {
             hasReceivedRetellMessage: false, // Track whether Retell sent at least one LLM frame
             session
         };
+        connection._db = this.db;
         this.activeConnections.set(callId, connection);
         this.sendInitialHandshake(callId, connection);
 
@@ -415,9 +420,24 @@ class RetellWebSocketHandler {
                     call_type: callTypeMetaEarly,
                     direction: directionMetaEarly,
                     routing_world: connection.routing_world || null,
-                    isSomoDemoDemo: somoDemoHandler.isSomoDemoDemoConnection(connection),
                     allow_heuristic: isDevClinicFallbackAllowed()
                 });
+                const metaSiteVerified =
+                    String(
+                        dvEarly?.site_context_status ||
+                            callMeta.metadata?.site_context_status ||
+                            ''
+                    ).toLowerCase() === 'verified' &&
+                    connection.customer_id &&
+                    (connection.clinic_id || dvEarly?.clinic_id) &&
+                    (!dvEarly?.customer_id ||
+                        String(dvEarly.customer_id) === String(connection.customer_id));
+                if (metaSiteVerified && siteCtx.site_context_status !== 'verified') {
+                    siteCtx.site_context_status = 'verified';
+                    siteCtx.clinic_id = connection.clinic_id || dvEarly?.clinic_id || siteCtx.clinic_id;
+                    siteCtx.customer_id = connection.customer_id;
+                    siteCtx.clinic_id_source = siteCtx.clinic_id_source || 'metadata';
+                }
                 connection.site_context = siteCtx;
                 connection.site_context_status = siteCtx.site_context_status;
                 connection.clinic_id_source = siteCtx.clinic_id_source;
@@ -539,11 +559,6 @@ class RetellWebSocketHandler {
                 console.log(`✅ Voice caller name pre-filled from call metadata: ${pn}`);
             }
 
-            if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
-                connection.awaitingName = false;
-                connection._demoCallType = 'somo_demo';
-            }
-
             const callTypeMeta =
                 callMeta.metadata?.call_type ||
                 dv?.call_type ||
@@ -592,6 +607,11 @@ class RetellWebSocketHandler {
                 if (routingWorld === 'demo') {
                     connection._demoCallType = 'somo_demo';
                     connection._isSomoDemoDemo = true;
+                }
+                if (routingWorld === 'navigation') {
+                    connection._isNavigationConnection = true;
+                    connection._navigationCallType = 'consumer_navigation';
+                    connection.awaitingName = false;
                 }
             } catch (e) {
                 console.warn('⚠️  routing_world resolve failed:', e.message);
@@ -686,22 +706,21 @@ class RetellWebSocketHandler {
             }
 
             // Provider voice runtime (greeting, hours, enabled) — after tenant context exists
-            if (!connection._runtimeApplied && !somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+            if (!connection._runtimeApplied && !navigationHandler.isNavigationConnection(connection)) {
                 this.applyProviderRuntime(callId, connection, callMeta, message.response_id);
             }
 
             // If the call starts and the caller is silent, proactively greet once.
-            if (!connection.sentInitialGreeting && !somoDemoHandler.isSomoDemoDemoConnection(connection) && !connection.agentBlocked) {
-                this.sendInitialGreeting(callId, connection, callMeta, message.response_id);
-            }
-            if (!connection.sentInitialGreeting && somoDemoHandler.isSomoDemoDemoConnection(connection)) {
-                somoDemoHandler.sendDemoInitialGreeting(
+            if (!connection.sentInitialGreeting && navigationHandler.isNavigationConnection(connection)) {
+                navigationHandler.sendNavigationInitialGreeting(
                     callId,
                     connection,
                     callMeta,
                     message.response_id,
                     (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
                 );
+            } else if (!connection.sentInitialGreeting && !connection.agentBlocked) {
+                this.sendInitialGreeting(callId, connection, callMeta, message.response_id);
             }
         }
 
@@ -723,7 +742,7 @@ class RetellWebSocketHandler {
 
         console.log(`\n📨 Message from ${callId}:`, interactionType);
 
-        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+        if (navigationHandler.isNavigationConnection(connection)) {
             if (interactionType === 'ping_pong') {
                 this.sendToRetell(connection.ws, { response_type: 'ping_pong', timestamp: message.timestamp });
                 return;
@@ -732,11 +751,27 @@ class RetellWebSocketHandler {
                 this.sendToRetell(connection.ws, { type: 'pong' });
                 return;
             }
-            await somoDemoHandler.handleDemoMessage(callId, connection, message, {
+            if (interactionType === 'update' && message.update?.transcript) {
+                const userSaid = message.update.transcript;
+                connection.conversationHistory.push({
+                    role: 'user',
+                    content: userSaid,
+                    timestamp: Date.now()
+                });
+                await navigationHandler.handleNavigationTranscript(
+                    callId,
+                    connection,
+                    userSaid,
+                    message,
+                    (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
+                );
+                return;
+            }
+            const handled = await navigationHandler.handleNavigationMessage(callId, connection, message, {
                 sendRetellResponse: (ws, content, rid) => this.sendRetellResponse(ws, content, rid),
                 interactionType
             });
-            return;
+            if (handled) return;
         }
 
         switch (interactionType) {
@@ -797,7 +832,7 @@ class RetellWebSocketHandler {
     async handleTranscript(callId, message) {
         const connection = this.activeConnections.get(callId);
 
-        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+        if (navigationHandler.isNavigationConnection(connection)) {
             const userSaid = message.transcript;
             if (userSaid) {
                 connection.conversationHistory.push({
@@ -805,7 +840,7 @@ class RetellWebSocketHandler {
                     content: userSaid,
                     timestamp: Date.now()
                 });
-                await somoDemoHandler.handleDemoTranscript(
+                await navigationHandler.handleNavigationTranscript(
                     callId,
                     connection,
                     userSaid,
@@ -833,7 +868,8 @@ class RetellWebSocketHandler {
                 });
                 this.sendEscalationResponse(connection.ws, esc.reply || blockMsg, message.response_id, {
                     transferNumber: esc.transfer_number || null,
-                    endCall: esc.end_call || !esc.transfer_number
+                    endCall: esc.end_call || !esc.transfer_number,
+                    callId
                 });
             } catch (_) {
                 this.sendRetellResponse(connection.ws, blockMsg, message.response_id);
@@ -1434,8 +1470,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         const connection = this.activeConnections.get(callId);
         if (!connection) return;
 
-        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
-            await somoDemoHandler.handleDemoFunctionCall(callId, connection, message);
+        if (navigationHandler.isNavigationConnection(connection)) {
+            await navigationHandler.handleNavigationFunctionCall(callId, connection, message);
             return;
         }
 
@@ -1816,7 +1852,9 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         }
 
         try {
-            console.log(`🔍 Searching products: ${query}`);
+            if (!pstnReplayQuiet(connection)) {
+                console.log(`🔍 Searching products: ${query}`);
+            }
 
             // Resolve merchant_id from dynamic variables first (from Retell call setup), then function args, then clinic
             let merchantId = null;
@@ -1829,14 +1867,15 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                                    connection.callMetadata.retell_llm_dynamic_variables ||
                                    (connection.callMetadata.metadata && connection.callMetadata.metadata.dynamic_variables);
                 
-                // Debug logging
-                console.log(`🔍 Checking dynamic variables for merchant_id...`);
-                console.log(`   callMetadata exists: ${!!connection.callMetadata}`);
-                console.log(`   dynamic_variables: ${!!connection.callMetadata.dynamic_variables}`);
-                console.log(`   retell_llm_dynamic_variables: ${!!connection.callMetadata.retell_llm_dynamic_variables}`);
-                console.log(`   metadata.dynamic_variables: ${!!(connection.callMetadata.metadata && connection.callMetadata.metadata.dynamic_variables)}`);
-                if (dynamicVars) {
-                    console.log(`   Found dynamicVars: ${JSON.stringify(dynamicVars)}`);
+                if (!pstnReplayQuiet(connection)) {
+                    console.log(`🔍 Checking dynamic variables for merchant_id...`);
+                    console.log(`   callMetadata exists: ${!!connection.callMetadata}`);
+                    console.log(`   dynamic_variables: ${!!connection.callMetadata.dynamic_variables}`);
+                    console.log(`   retell_llm_dynamic_variables: ${!!connection.callMetadata.retell_llm_dynamic_variables}`);
+                    console.log(`   metadata.dynamic_variables: ${!!(connection.callMetadata.metadata && connection.callMetadata.metadata.dynamic_variables)}`);
+                    if (dynamicVars) {
+                        console.log(`   Found dynamicVars: ${JSON.stringify(dynamicVars)}`);
+                    }
                 }
                 
                 if (dynamicVars && dynamicVars.merchant_id) {
@@ -1901,6 +1940,19 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 console.error(`   This should never happen. Product search will fail.`);
             } else {
                 console.log(`✅ Final merchant_id resolved: ${merchantId}`);
+            }
+
+            if (connection.replayMode) {
+                const VoiceAdapter = require('../adapters/voice-adapter');
+                const products = this.db.searchProducts(query, merchantId) || [];
+                const voiceProducts = VoiceAdapter.toVoiceFormat(products);
+                connection.lastSearchResults = voiceProducts;
+                return {
+                    success: true,
+                    products: voiceProducts,
+                    total: voiceProducts.length,
+                    query
+                };
             }
 
             // Call your middleware API
@@ -2404,13 +2456,17 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
 
     // Handle create_checkout function call
     async handleCreateCheckout(callId, functionArgs) {
-        console.log('\n🔍 DEBUG: handleCreateCheckout START');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`📞 Call ID: ${callId}`);
-        console.log(`📋 Function Args (RAW):`, JSON.stringify(functionArgs, null, 2));
-        console.log(`📋 Function Args Keys:`, Object.keys(functionArgs || {}));
-        
         const connection = this.activeConnections.get(callId);
+        const quiet = pstnReplayQuiet(connection);
+
+        if (!quiet) {
+            console.log('\n🔍 DEBUG: handleCreateCheckout START');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log(`📞 Call ID: ${callId}`);
+            console.log(`📋 Function Args (RAW):`, JSON.stringify(functionArgs, null, 2));
+            console.log(`📋 Function Args Keys:`, Object.keys(functionArgs || {}));
+        }
+
         if (!connection) {
             console.error('❌ Connection not found for callId:', callId);
             return {
@@ -2418,28 +2474,34 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 error: 'Connection not found'
             };
         }
-        console.log(`✅ Connection found for callId: ${callId}`);
+        if (!quiet) console.log(`✅ Connection found for callId: ${callId}`);
 
         // CRITICAL: Extract and store email from function arguments OR connection state
-        console.log('\n🔍 STEP 1: Extract email from function args');
+        if (!quiet) console.log('\n🔍 STEP 1: Extract email from function args');
         let customerEmail = functionArgs.customer_email || functionArgs.email;
-        console.log(`   functionArgs.customer_email: ${functionArgs.customer_email || 'NOT FOUND'}`);
-        console.log(`   functionArgs.email: ${functionArgs.email || 'NOT FOUND'}`);
-        console.log(`   Extracted email: ${customerEmail || 'NOT FOUND'}`);
+        if (!quiet) {
+            console.log(`   functionArgs.customer_email: ${functionArgs.customer_email || 'NOT FOUND'}`);
+            console.log(`   functionArgs.email: ${functionArgs.email || 'NOT FOUND'}`);
+            console.log(`   Extracted email: ${customerEmail || 'NOT FOUND'}`);
+        }
         
         // FALLBACK: If not in function args, try to get from connection state (where it might have been stored earlier)
         if (!customerEmail) {
-            console.log('\n🔍 STEP 2: Email not in function args, checking connection state');
+            if (!quiet) {
+                console.log('\n🔍 STEP 2: Email not in function args, checking connection state');
+            }
             const connectionEmail = this.getCustomerEmail(callId);
-            console.log(`   connection.customerEmail: ${connectionEmail || 'NOT FOUND'}`);
+            if (!quiet) {
+                console.log(`   connection.customerEmail: ${connectionEmail || 'NOT FOUND'}`);
+            }
             customerEmail = connectionEmail;
-            console.log(`   Final email from connection: ${customerEmail || 'NOT FOUND'}`);
+            if (!quiet) console.log(`   Final email from connection: ${customerEmail || 'NOT FOUND'}`);
         }
         
         // Store email in connection for future use
         if (customerEmail) {
             connection.customerEmail = customerEmail;
-            console.log(`✅ Stored customer email in connection: ${customerEmail}`);
+            if (!quiet) console.log(`✅ Stored customer email in connection: ${customerEmail}`);
         } else {
             console.error('❌ NO EMAIL FOUND IN FUNCTION ARGS OR CONNECTION STATE');
         }
@@ -2470,10 +2532,12 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         }
 
         try {
-            console.log('\n🔍 STEP 3: Email found, proceeding with checkout');
-            console.log(`💳 Creating checkout via function call: ${productId}`);
-            console.log(`📧 Email being sent: ${customerEmail}`);
-            console.log(`📋 Full function args:`, JSON.stringify(functionArgs, null, 2));
+            if (!quiet) {
+                console.log('\n🔍 STEP 3: Email found, proceeding with checkout');
+                console.log(`💳 Creating checkout via function call: ${productId}`);
+                console.log(`📧 Email being sent: ${customerEmail}`);
+                console.log(`📋 Full function args:`, JSON.stringify(functionArgs, null, 2));
+            }
 
             // Resolve merchant ID from clinic_id, function args, or dynamic variables
             let merchantId = functionArgs.merchant_id;
@@ -2523,10 +2587,80 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 mandate_id: functionArgs.mandate_id || null
             };
             
-            console.log(`📤 Sending checkout request:`, JSON.stringify({
-                ...checkoutPayload,
-                customer_email: customerEmail ? `${customerEmail.substring(0, 3)}***` : 'MISSING'
-            }, null, 2));
+            if (!quiet) {
+                console.log(`📤 Sending checkout request:`, JSON.stringify({
+                    ...checkoutPayload,
+                    customer_email: customerEmail ? `${customerEmail.substring(0, 3)}***` : 'MISSING'
+                }, null, 2));
+            }
+
+            if (connection.replayMode) {
+                const PaymentOrchestrator = require('../services/payment-orchestrator');
+                const EmailVerificationService = require('../services/email-verification-service');
+                try {
+                    await EmailVerificationService.sendVerificationCode(customerEmail);
+                    const codeRow = this.db.db
+                        ?.prepare?.(
+                            'SELECT code FROM email_verification_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1'
+                        )
+                        ?.get(customerEmail.toLowerCase().trim());
+                    if (codeRow?.code) {
+                        await EmailVerificationService.verifyCode(customerEmail, codeRow.code);
+                    }
+                } catch (_) {}
+
+                const resp = await PaymentOrchestrator.createCheckout({
+                    merchant_id: merchantId,
+                    customer: {
+                        name: customerName,
+                        phone: customerPhone,
+                        email: customerEmail
+                    },
+                    items: [{ product_id: productId, quantity }],
+                    payment: { method: functionArgs.payment_method || 'link', currency: 'USD' },
+                    source: { protocol: 'voice', platform: 'retell_replay', input_type: 'voice' },
+                    metadata: { session_id: callId }
+                });
+
+                const plain = {
+                    success: resp?.success === true,
+                    checkout_id: resp?.checkout_id || null,
+                    payment_token: resp?.payment_token || null,
+                    amount: resp?.payment?.amount || null,
+                    error: resp?.error || null,
+                    requires_verification: resp?.requires_verification === true
+                };
+
+                if (plain.payment_token) {
+                    connection.lastPaymentToken = plain.payment_token;
+                    connection.lastCheckoutId = plain.checkout_id;
+                }
+
+                if (plain.requires_verification) {
+                    return {
+                        success: true,
+                        requires_verification: true,
+                        payment_token: plain.payment_token,
+                        checkout_id: plain.checkout_id,
+                        message: `A verification code has been sent to ${customerEmail}. Please verify your email to complete checkout.`
+                    };
+                }
+
+                if (plain.success) {
+                    return {
+                        success: true,
+                        checkout_id: plain.checkout_id,
+                        payment_token: plain.payment_token,
+                        amount: plain.amount,
+                        message: `Checkout created successfully. Payment link will be sent to ${customerEmail}.`
+                    };
+                }
+
+                return {
+                    success: false,
+                    error: plain.error || 'Checkout creation failed'
+                };
+            }
 
             // Create checkout
             const response = await axios.post(`${apiBaseUrl}/voice/checkout/create`, checkoutPayload);
@@ -3102,6 +3236,35 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             endCall: options.endCall,
             noInterruptionAllowed: options.noInterruptionAllowed
         });
+        if (options.transferNumber) {
+            let connection = null;
+            if (options.callId) {
+                connection = this.activeConnections.get(options.callId) || null;
+            }
+            if (!connection) {
+                for (const conn of this.activeConnections.values()) {
+                    if (conn.ws === ws) {
+                        connection = conn;
+                        break;
+                    }
+                }
+            }
+            const callSid =
+                connection?.twilio_call_sid ||
+                connection?.callMetadata?.metadata?.twilio_call_sid ||
+                connection?.callMetadata?.retell_llm_dynamic_variables?.['twilio-callsid'] ||
+                null;
+            if (callSid) {
+                const { attemptTwilioTransfer } = require('../services/twilio-transfer-fallback');
+                attemptTwilioTransfer(callSid, options.transferNumber)
+                    .then((r) => {
+                        if (r.attempted) {
+                            console.log(`[R-06-4] Twilio transfer fallback ${callSid} → ${r.transfer_number}`);
+                        }
+                    })
+                    .catch((e) => console.warn('[R-06-4] Twilio transfer fallback failed:', e.message));
+            }
+        }
     }
 
     /** Partial reply while turn is still processing (perceived latency). */
@@ -3141,8 +3304,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
     // Helper: build and send one-time initial greeting
     sendInitialGreeting(callId, connection, callMeta, responseId = null) {
         if (!connection || connection.sentInitialGreeting) return;
-        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
-            somoDemoHandler.sendDemoInitialGreeting(
+        if (navigationHandler.isNavigationConnection(connection)) {
+            navigationHandler.sendNavigationInitialGreeting(
                 callId,
                 connection,
                 callMeta,
@@ -3860,6 +4023,28 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     voice_agent_instruction: 'If payment_token is missing, re-run create_appointment_checkout to resend verification, then retry verify_checkout_code.'
                 };
             }
+
+            if (connection?.replayMode) {
+                const tokenRecord = this.db.getPaymentToken?.(paymentToken);
+                if (!tokenRecord) {
+                    return { success: false, error: 'Invalid token', error_code: 'INVALID_PAYMENT_TOKEN' };
+                }
+                const code = String(args.verification_code || args.code || '').trim();
+                if ((tokenRecord.verification_code || '').trim() !== code) {
+                    return {
+                        success: false,
+                        error: 'Invalid verification code',
+                        error_code: 'INVALID_VERIFICATION_CODE'
+                    };
+                }
+                return {
+                    success: true,
+                    verified: true,
+                    payment_token: paymentToken,
+                    message: 'Email verified. Payment link will be sent.'
+                };
+            }
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/checkout/verify`, {
                 payment_token: paymentToken,
                 verification_code: args.verification_code,
@@ -3883,7 +4068,60 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
     async handleGetOrderTracking(callId, args) {
         try {
             console.log(`📦 Getting order tracking for call ${callId}`);
-            
+
+            const connection = this.activeConnections.get(callId);
+
+            if (connection?.replayMode) {
+                const db = this.db;
+                const TrackingService = require('../services/tracking-service');
+                const SMSService = require('../services/sms-service');
+                let order = null;
+                const orderId = args.order_id;
+                let customerEmail = args.customer_email;
+                let customerPhone = args.customer_phone;
+                if (customerPhone) {
+                    try {
+                        customerPhone = SMSService.formatPhoneNumber(customerPhone);
+                    } catch (_) {}
+                }
+                if (orderId) order = db.getOrder?.(orderId);
+                if (!order && (customerEmail || customerPhone)) {
+                    const allOrders = db.getAllOrders?.() || [];
+                    const matching = allOrders.filter((o) => {
+                        const emailMatch =
+                            customerEmail &&
+                            o.customer_email &&
+                            o.customer_email.toLowerCase() === customerEmail.toLowerCase();
+                        const phoneMatch =
+                            customerPhone &&
+                            o.customer_phone &&
+                            o.customer_phone.replace(/\D/g, '') === String(customerPhone).replace(/\D/g, '');
+                        return emailMatch || phoneMatch;
+                    });
+                    if (matching.length) {
+                        order = matching.sort(
+                            (a, b) => new Date(b.created_at) - new Date(a.created_at)
+                        )[0];
+                    }
+                }
+                if (!order) {
+                    return {
+                        success: true,
+                        found: false,
+                        message:
+                            "I couldn't find an order matching that information. Could you please provide your order number or email address?"
+                    };
+                }
+                const tracking = TrackingService.getTrackingSummary(order);
+                return {
+                    success: true,
+                    found: true,
+                    order_id: order.id,
+                    message: tracking?.message || `Order ${order.id} is ${order.delivery_status || order.status}`,
+                    delivery_status: order.delivery_status || order.status
+                };
+            }
+
             const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
             
             // Call the voice tracking endpoint
@@ -4220,6 +4458,58 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 success: false,
                 error: error.message
             };
+        }
+    }
+    /**
+     * PSTN replay: execute production function handlers without a live Retell WebSocket.
+     */
+    async replayFunctionCall(callId, functionName, functionArgs = {}) {
+        const connection = this.activeConnections.get(callId);
+        if (!connection) {
+            return { success: false, error: `Replay connection not found: ${callId}` };
+        }
+
+        const name = String(functionName || '').trim();
+        const args = functionArgs && typeof functionArgs === 'object' ? functionArgs : {};
+
+        switch (name) {
+            case 'search_products':
+                return this.handleSearchProducts(callId, args);
+            case 'create_checkout':
+                return this.handleCreateCheckout(callId, args);
+            case 'get_available_payment_methods':
+                return this.handleGetAvailablePaymentMethods(callId, args);
+            case 'verify_checkout_code':
+                return this.handleVerifyCheckoutCode(callId, args);
+            case 'get_order_tracking':
+                return this.handleGetOrderTracking(callId, args);
+            case 'end_call':
+                return this.handleEndCall(callId, args);
+            case 'collect_insurance':
+            case 'schedule_appointment':
+            case 'patient_intake':
+            case 'get_patient_intake_status':
+            case 'get_available_slots':
+            case 'search_appointments':
+            case 'confirm_appointment':
+            case 'cancel_appointment':
+            case 'reschedule_appointment':
+            case 'create_appointment_checkout':
+            case 'get_product_quote':
+            case 'prepare_commerce_checkout':
+            case 'transfer_call': {
+                const KellyToolExecutor = require('../services/kelly-tool-executor');
+                const clinicId = this.resolveClinicId(connection, args, {});
+                return KellyToolExecutor.execute(name, args, {
+                    sessionId: callId,
+                    clinicId,
+                    patientId: connection.patientId || null,
+                    callerPhone: connection.customerPhone || null,
+                    channel: connection.replayChannel || 'voice'
+                });
+            }
+            default:
+                return { success: false, error: `Unknown replay function: ${name}` };
         }
     }
 }

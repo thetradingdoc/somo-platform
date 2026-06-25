@@ -117,7 +117,10 @@ async function promoteBookingWhenReady(state, ctx) {
 
   const db = require('../../database');
   const row = db.getTriageSession ? db.getTriageSession(ctx.sessionId) : null;
-  if (!opqrstCompleteForSession(row, ctx)) return;
+  const replayBypass =
+    process.env.PSTN_REPLAY_COMMERCE === '1' &&
+    KellyToolExecutor._getSessionMeta(ctx.sessionId, 'kelly_e2e_skip_triage') === '1';
+  if (!replayBypass && !opqrstCompleteForSession(row, ctx)) return;
 
   try {
     KellyToolExecutor._setSessionMeta(ctx.sessionId, 'booking_intent_seen', '1');
@@ -137,7 +140,7 @@ async function promoteBookingWhenReady(state, ctx) {
     state.flags.triage_complete = true;
   }
 
-  if (row.quality || row.region || row.onset) {
+  if (row && (row.quality || row.region || row.onset)) {
     state.flags.opqrst_from_triage = {
       quality: row.quality || null,
       region: row.region || row.body_site || null,
@@ -360,7 +363,12 @@ async function executeTurn(input = {}) {
 
   state.flags._lane_export = state.active_lane;
 
+  const replaySkipAvailProbe =
+    process.env.PSTN_REPLAY_COMMERCE === '1' &&
+    KellyToolExecutor._getSessionMeta(ctx.sessionId, 'kelly_e2e_skip_triage') === '1';
+
   if (
+    !replaySkipAvailProbe &&
     state.active_lane === KELLY_LANE.BOOKING &&
     !state.flags.no_provider_availability &&
     !state.flags._availability_probed &&

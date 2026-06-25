@@ -2,7 +2,6 @@
 
 const db = require('../database');
 const twilio = require('twilio');
-const { resolveTemplate } = require('./somo-demo-template-registry');
 const { resolveTelephonyWebhookBase } = require('../utils/telephony-webhook-base');
 const {
   resolveVoiceMerchantId,
@@ -113,58 +112,4 @@ async function initiateOutboundCall({
   };
 }
 
-/**
- * Public Somo demo landing demo — no merchant context.
- */
-async function initiateSomoDemoDemoCall({
-  phone_number,
-  demo_request_id,
-  use_case,
-  prospect_name,
-  practice_specialty,
-  questions_asked,
-  template: templateIn
-}) {
-  if (!phone_number) throw new Error('Phone number is required');
-
-  const template = templateIn || resolveTemplate({ use_case: use_case || 'receptionist' });
-  const retellAgentId = template.agentId;
-  const fromNumber = template.fromNumber;
-
-  const apiBase = await resolveTelephonyWebhookBase();
-
-  const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-  const webhookUrl = new URL(`${apiBase}/voice/incoming`);
-  webhookUrl.searchParams.set('call_type', 'somo_demo');
-  webhookUrl.searchParams.set('agent_id', retellAgentId);
-  if (demo_request_id) webhookUrl.searchParams.set('demo_request_id', String(demo_request_id));
-  if (use_case) webhookUrl.searchParams.set('use_case', String(use_case));
-  if (prospect_name) webhookUrl.searchParams.set('prospect_name', encodeURIComponent(String(prospect_name)));
-  if (practice_specialty) webhookUrl.searchParams.set('practice_specialty', encodeURIComponent(String(practice_specialty)));
-  if (questions_asked) webhookUrl.searchParams.set('questions_asked', encodeURIComponent(String(questions_asked)));
-
-  const statusCallback = `${apiBase}/voice/status-callback`;
-  const amdCallback = `${apiBase}/voice/somo-demo-amd-callback`;
-
-  const twilioCall = await twilioClient.calls.create({
-    from: fromNumber,
-    to: phone_number,
-    url: webhookUrl.toString(),
-    statusCallback,
-    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed', 'busy', 'no-answer', 'failed', 'canceled'],
-    machineDetection: 'Enable',
-    asyncAmd: true,
-    asyncAmdStatusCallback: amdCallback,
-    asyncAmdStatusCallbackMethod: 'POST'
-  });
-
-  return {
-    success: true,
-    call_id: twilioCall.sid,
-    provider: 'twilio_direct',
-    phone_number,
-    template_id: template.template_id
-  };
-}
-
-module.exports = { initiateOutboundCall, initiateSomoDemoDemoCall, resolveTemplate };
+module.exports = { initiateOutboundCall };

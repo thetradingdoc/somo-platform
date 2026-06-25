@@ -126,6 +126,70 @@ async function postDirect(path, body = {}) {
       quote: body.quote || null
     };
   }
+
+  if (String(process.env.PSTN_REPLAY_COMMERCE || '').trim() === '1') {
+    if (p.includes('/commerce/email/send-code')) {
+      const EmailVerificationService = require('../email-verification-service');
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!email) return { success: false, error: 'email_required' };
+      return EmailVerificationService.sendVerificationCode(email);
+    }
+    if (p.includes('/commerce/email/verify-code')) {
+      const EmailVerificationService = require('../email-verification-service');
+      return EmailVerificationService.verifyCode(body.email, body.code);
+    }
+    if (p.includes('/commerce/quote')) {
+      const dbMod = require('../../database');
+      const merchantId = body.provider_id || body.merchant_id;
+      const productId = body.product_id || body.prescription_id;
+      const qty = Math.max(1, Number(body.quantity) || 1);
+      if (!merchantId) return { success: false, error: 'merchant_not_found' };
+      if (!productId) return { success: false, error: 'product_id_required' };
+      const product = dbMod.getProduct(productId);
+      if (!product) return { success: false, error: 'product_not_found' };
+      if (product.merchant_id && product.merchant_id !== merchantId) {
+        return { success: false, error: 'product_merchant_mismatch' };
+      }
+      const unit = Number(product.price || 0);
+      const amount = Number((unit * qty).toFixed(2));
+      const quoteId = `pstn_quote_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      return {
+        success: true,
+        quote_id: quoteId,
+        checkout_session_id: quoteId,
+        prescription_id: productId,
+        product_id: productId,
+        amount,
+        subtotal: amount,
+        tax_amount: 0,
+        tax_rate: 0,
+        tax_included: false,
+        quantity: qty,
+        currency: 'USD'
+      };
+    }
+    if (p.includes('/checkout/start')) {
+      const pi = `pi_pstn_replay_${Date.now()}`;
+      const checkoutId = `chk_pstn_${Date.now()}`;
+      return {
+        success: true,
+        checkout: {
+          checkout_id: checkoutId,
+          payment_intent_id: pi,
+          client_secret: `${pi}_secret`
+        },
+        commerce_checkout: {
+          checkout_id: checkoutId,
+          payment_action: {
+            type: 'stripe_payment_intent',
+            payment_intent_id: pi,
+            client_secret: `${pi}_secret`
+          }
+        }
+      };
+    }
+  }
+
   throw new Error(`RCM_E2E_DIRECT_TOOLS: unsupported path ${path}`);
 }
 

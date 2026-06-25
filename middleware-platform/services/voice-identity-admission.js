@@ -31,9 +31,9 @@ function evaluateIdentityAdmission(opts = {}) {
     callType === 'sales_outbound' ||
     callType === 'operator_outbound' ||
     direction === 'outbound';
-  const isDemo = callType === 'somo_demo';
+  const isNavigation = callType === 'consumer_navigation';
 
-  if (isDemo) {
+  if (isNavigation) {
     return { admitted: true, locale };
   }
 

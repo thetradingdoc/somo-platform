@@ -8,7 +8,6 @@ const {
   resolveOutboundRetellAgent,
   resolveMerchantForVoice,
   buildAccountResolutionFailureTwiml,
-  requiresCustomerId,
   getOperatorCustomerId
 } = require('./voice-account-resolution');
 
@@ -21,50 +20,45 @@ function createVoiceIncomingHandler(deps) {
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
-    const { isDemoTwilioNumber, resolveTemplate: resolveSomoDemoTemplate } = require('./somo-demo-template-registry');
+    const { isPlatformNavigationDid } = require('./navigation/navigation-config');
 
-    // Check if this is an outbound sales call (from query params) or inbound to demo line
-    let isSomoDemoDemo = req.query.call_type === 'somo_demo';
-    const normalizedToForDemo = normalizePhoneNumber(req.body.To);
-    if (!isSomoDemoDemo && isDemoTwilioNumber(normalizedToForDemo)) {
-      isSomoDemoDemo = true;
-      console.log('📞 Inbound call to Somo demo demo Twilio number');
+    const normalizedToNumber = normalizePhoneNumber(req.body.To);
+
+    const isOutboundSalesEarly = isOutboundRequest(req);
+    const platformNavigationDid = !isOutboundSalesEarly && isPlatformNavigationDid(normalizedToNumber);
+    if (platformNavigationDid) {
+      console.log('📞 Inbound call to platform navigation DID');
     }
-    const demoRequestId = req.query.demo_request_id;
-    const somoDemoUseCase = req.query.use_case ? String(req.query.use_case) : null;
-    const somoDemoProspectName = req.query.prospect_name
-      ? decodeURIComponent(String(req.query.prospect_name))
-      : null;
-    const somoDemoPracticeSpecialty = req.query.practice_specialty
-      ? decodeURIComponent(String(req.query.practice_specialty))
-      : null;
-    const somoDemoQuestionsAsked = req.query.questions_asked
-      ? decodeURIComponent(String(req.query.questions_asked))
-      : null;
 
-    const isOutboundSales = isOutboundRequest(req, isSomoDemoDemo);
+    const isOutboundSales = isOutboundSalesEarly;
     const leadId = req.query.lead_id;
     const clinicName = req.query.clinic_name ? decodeURIComponent(req.query.clinic_name) : null;
-    const resolvedCallType = normalizeCallType(req, {
+    const resolvedCallTypeInitial = normalizeCallType(req, {
       isOutbound: isOutboundSales,
-      isSomoDemoDemo,
       leadId
     });
+    let resolvedCallType = resolvedCallTypeInitial;
 
     // Look up SaaS customer by dedicated Twilio phone number first
     const toNumberRaw = req.body.To;
-    const normalizedToNumber = normalizePhoneNumber(toNumberRaw);
     const defaultAgentId = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a';
 
     const account = resolveVoiceAccount(db, req, {
       normalizedToNumber,
-      isSomoDemoDemo,
       isOutbound: isOutboundSales,
       leadId
     });
     let clinicId = account.clinicId || null;
     let customerId = account.customerId;
     let matchedCustomer = account.matchedCustomer;
+
+    const { isNavigationCustomer } = require('./voice-account-resolution');
+    const { CALL_TYPE_CONSUMER_NAVIGATION } = require('./voice-call-context');
+    const isNavigationInbound =
+      !isOutboundSales && isNavigationCustomer(matchedCustomer);
+    if (isNavigationInbound) {
+      resolvedCallType = CALL_TYPE_CONSUMER_NAVIGATION;
+    }
 
     let siteContextForMetadata = null;
     let voiceContextForCall = null;
@@ -77,8 +71,7 @@ function createVoiceIncomingHandler(deps) {
         customer_id: customerId,
         clinic_id: clinicId,
         call_type: resolvedCallType,
-        direction: isOutboundSales ? 'outbound' : 'inbound',
-        isSomoDemoDemo
+        direction: isOutboundSales ? 'outbound' : 'inbound'
       });
       siteContextForMetadata = siteCtx;
       voiceContextForCall = buildVoiceCallContext({ siteContext: siteCtx });
@@ -90,38 +83,11 @@ function createVoiceIncomingHandler(deps) {
       ? resolveOutboundRetellAgent(req, matchedCustomer, defaultAgentId)
       : defaultAgentId;
 
-    if (customerId && !isOutboundSales && !isSomoDemoDemo && matchedCustomer?.retell_agent_id) {
+    if (customerId && !isOutboundSales && matchedCustomer?.retell_agent_id) {
       retellAgentId = matchedCustomer.retell_agent_id;
     }
 
-    if (isSomoDemoDemo) {
-      try {
-        const tpl = resolveSomoDemoTemplate({ use_case: somoDemoUseCase || 'receptionist' });
-        retellAgentId = req.query.agent_id || tpl.agentId;
-      } catch (e) {
-        console.error('❌ Somo demo demo agent not configured:', e.message);
-        const errTwiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Polly.Joanna">Demo calls are temporarily unavailable. Please try again later.</Say>
-  <Hangup/>
-</Response>`;
-        return res.type('text/xml').send(errTwiml);
-      }
-    }
-
-    if (isSomoDemoDemo) {
-      console.log('📞 SOMO DEMO CALL');
-      console.log(`   Demo request: ${demoRequestId}`);
-      console.log(`   Use case: ${somoDemoUseCase}`);
-      console.log(`   Prospect: ${somoDemoProspectName}`);
-      console.log(`   Agent: ${retellAgentId}`);
-      if (demoRequestId) {
-        const demoRow = db.getSomoDemoRequest(demoRequestId);
-        if (demoRow) {
-          db.updateSomoDemoRequest(demoRequestId, { status: 'ringing' });
-        }
-      }
-    } else if (isOutboundSales) {
+    if (isOutboundSales) {
       console.log('📞 OUTBOUND SALES CALL DETECTED');
       console.log(`   Lead ID: ${leadId}`);
       console.log(`   Clinic: ${clinicName}`);
@@ -140,7 +106,7 @@ function createVoiceIncomingHandler(deps) {
       console.log(`✅ Outbound honoring agent_id query: ${retellAgentId}`);
     }
 
-    if (requiresCustomerId(isSomoDemoDemo) && !customerId) {
+    if (!customerId) {
       console.error('❌ Account resolution failed: customer_id required before register-phone-call');
       return res.type('text/xml').send(buildAccountResolutionFailureTwiml());
     }
@@ -152,7 +118,6 @@ function createVoiceIncomingHandler(deps) {
     const retellResolution = resolveInboundRetellAgent({
       matchedCustomer,
       customerId,
-      isSomoDemoDemo,
       isOutboundSales,
       callType: resolvedCallType,
       currentRetellAgentId: retellAgentId,
@@ -166,7 +131,7 @@ function createVoiceIncomingHandler(deps) {
     }
     retellAgentId = retellResolution.retellAgentId;
 
-    if (customerId && isOutboundSales && !isSomoDemoDemo) {
+    if (customerId && isOutboundSales) {
       const { canInitiateOutboundCall, buildBlockedTwiml } = require('./billing-access');
       const access = canInitiateOutboundCall(db, customerId);
       if (!access.allowed) {
@@ -175,7 +140,7 @@ function createVoiceIncomingHandler(deps) {
       }
     }
 
-    if (customerId && !isOutboundSales && !isSomoDemoDemo) {
+    if (customerId && !isOutboundSales) {
       const { canAcceptInboundCall, buildBlockedTwiml } = require('./billing-access');
       const access = canAcceptInboundCall(db, customerId);
       if (!access.allowed) {
@@ -189,7 +154,7 @@ function createVoiceIncomingHandler(deps) {
       }
     }
 
-    if (matchedCustomer && !isOutboundSales && !isSomoDemoDemo) {
+    if (matchedCustomer && !isOutboundSales) {
       try {
         const VoiceAgentRuntime = require('./voice-agent-runtime');
         const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
@@ -214,9 +179,7 @@ function createVoiceIncomingHandler(deps) {
     }
 
     // Per-clinic rate limit (Section 17) — tier-aware when customer known
-    const tenantKey = isSomoDemoDemo
-      ? `somo_demo:${demoRequestId || retellAgentId}`
-      : clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
+    const tenantKey = clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
     let tierRateLimit;
     if (matchedCustomer) {
       const { getRateLimitForCustomer } = require('./billing-access');
@@ -239,23 +202,6 @@ function createVoiceIncomingHandler(deps) {
     if (req.body.CallSid) {
       metadata.twilio_call_sid = req.body.CallSid;
     }
-    // Add lead metadata for outbound sales calls
-    if (isSomoDemoDemo) {
-      metadata.call_type = 'somo_demo';
-      metadata.direction = 'inbound';
-      const { getOperatorCustomerId } = require('./voice-account-resolution');
-      const operatorId = getOperatorCustomerId();
-      if (operatorId && db.getCustomer(operatorId)) {
-        metadata.customer_id = operatorId;
-        if (!customerId) {
-          customerId = operatorId;
-          matchedCustomer = db.getCustomer(operatorId);
-        }
-      }
-      if (demoRequestId) metadata.demo_request_id = demoRequestId;
-      if (somoDemoUseCase) metadata.use_case = somoDemoUseCase;
-      if (somoDemoProspectName) metadata.prospect_name = somoDemoProspectName;
-    }
     if (isOutboundSales) {
       metadata.call_type = resolvedCallType;
       metadata.direction = 'outbound';
@@ -263,9 +209,12 @@ function createVoiceIncomingHandler(deps) {
         metadata.lead_id = leadId;
         metadata.clinic_name = clinicName;
       }
-    } else if (!isSomoDemoDemo) {
+    } else if (isNavigationInbound) {
+      metadata.call_type = CALL_TYPE_CONSUMER_NAVIGATION;
+      metadata.direction = 'inbound';
+    } else {
       metadata.call_type = resolvedCallType === 'operator_outbound' ? 'operator_outbound' : 'inbound_tenant';
-      metadata.direction = isOutboundSales ? 'outbound' : 'inbound';
+      metadata.direction = 'inbound';
     }
     if (clinicId) {
       metadata.clinic_id = clinicId;
@@ -340,32 +289,6 @@ function createVoiceIncomingHandler(deps) {
       dynamicVariables.merchant_id = String(merchantId);
     }
 
-    // Somo demo public demo — per-use-case opener for Retell
-    if (isSomoDemoDemo) {
-      const { getUseCaseContext } = require('./somo-demo-service');
-      const useCaseKey = somoDemoUseCase || 'receptionist';
-      const ctx = getUseCaseContext(useCaseKey);
-      dynamicVariables.company_name = 'Somo demo';
-      dynamicVariables.prospect_name = String(somoDemoProspectName || 'there');
-      dynamicVariables.use_case = String(useCaseKey);
-      dynamicVariables.use_case_label = String(ctx.use_case_label);
-      dynamicVariables.use_case_opener = String(ctx.use_case_opener);
-      if (somoDemoPracticeSpecialty) {
-        dynamicVariables.practice_specialty = String(somoDemoPracticeSpecialty);
-      }
-      if (somoDemoQuestionsAsked) {
-        dynamicVariables.questions_asked = String(somoDemoQuestionsAsked);
-      }
-      dynamicVariables.call_type = 'somo_demo';
-      dynamicVariables.persona_name = 'Kelly';
-      if (demoRequestId) dynamicVariables.demo_request_id = String(demoRequestId);
-      try {
-        const tpl = resolveSomoDemoTemplate({ use_case: useCaseKey });
-        dynamicVariables.template_id = tpl.template_id;
-      } catch (_) {}
-      console.log('📋 Added Somo demo demo context to dynamic variables');
-    }
-
     // Outbound: mirror call_type/direction in dynamic variables (Retell sometimes omits metadata on WS)
     if (isOutboundSales) {
       dynamicVariables.call_type = String(resolvedCallType || 'operator_outbound');
@@ -413,6 +336,11 @@ function createVoiceIncomingHandler(deps) {
     }
     if (matchedCustomer?.customer_type) {
       dynamicVariables.customer_type = String(matchedCustomer.customer_type);
+    }
+    if (isNavigationInbound) {
+      dynamicVariables.call_type = CALL_TYPE_CONSUMER_NAVIGATION;
+      dynamicVariables.direction = 'inbound';
+      dynamicVariables.routing_world = 'navigation';
     }
     if (appointmentIdFromQuery) {
       dynamicVariables.appointment_id = appointmentIdFromQuery;
@@ -551,11 +479,21 @@ function createVoiceIncomingHandler(deps) {
                 ? decodeURIComponent(String(req.query.opening_intent))
                 : '';
             const callDirection = isOutboundSales ? 'outbound' : 'inbound';
-            const callTypeForMode = isSomoDemoDemo
-              ? 'somo_demo'
+            const { resolveRoutingWorld, ROUTING_WORLD_NAVIGATION } = require('./voice-routing-world');
+            const callTypeForMode = isNavigationInbound
+              ? CALL_TYPE_CONSUMER_NAVIGATION
               : isOutboundSales
                 ? resolvedCallType
                 : 'tenant';
+            const routingWorld = isNavigationInbound
+              ? ROUTING_WORLD_NAVIGATION
+              : resolveRoutingWorld({
+                  call_type: callTypeForMode,
+                  direction: callDirection,
+                  to_number: normalizedToNumber,
+                  customer_id: customerId,
+                  customer: matchedCustomer
+                });
             seedModeAtCallStart({
               sessionId: callId,
               db,
@@ -564,11 +502,7 @@ function createVoiceIncomingHandler(deps) {
               call_type: callTypeForMode,
               direction: callDirection,
               tenantResolved: require('./voice-routing-world').isTenantResolvedForMode(customerId),
-              routing_world: isSomoDemoDemo
-                ? 'demo'
-                : customerId
-                  ? 'tenant'
-                  : 'unidentified',
+              routing_world: routingWorld,
               site_context_status: voiceContextForCall?.site_context_status || null,
               appointmentId: appointmentIdFromQuery,
               outbound_purpose: outboundPurposeFromQuery,
@@ -674,11 +608,7 @@ function createVoiceIncomingHandler(deps) {
               }
             }
 
-            const callDirection = isOutboundSales
-              ? 'outbound'
-              : isSomoDemoDemo
-                ? 'inbound'
-                : 'inbound';
+            const callDirection = isOutboundSales ? 'outbound' : 'inbound';
 
             await db.logVoiceCall({
               id: `call-${callId}`,

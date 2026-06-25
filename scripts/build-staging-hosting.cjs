@@ -3,7 +3,7 @@
 
 /**
  * Assemble Firebase Hosting bundle for callsomo.com (Firebase somo-4ddf6):
- *   - Somo landing SPA (/)
+ *   - Root redirect to business trial activation
  *   - Provider signup/login + business portal static HTML
  *   - Unified-dashboard assets at /assets and /unified-dashboard/assets
  *
@@ -13,12 +13,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const UD = path.join(ROOT, 'unified-dashboard');
-const LANDING = path.join(UD, 'somo-landing');
 const OUT = path.join(UD, 'hosting-dist');
+const REDIRECT_TARGET = '/business/trial-activation.html';
 
 function rmrf(dir) {
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
@@ -57,41 +56,33 @@ function copyDir(src, dest, { merge = false } = {}) {
   }
 }
 
-function main() {
-  console.log('Building somo-landing…');
-  const env = {
-    ...process.env,
-    VITE_API_BASE: process.env.VITE_API_BASE || 'https://api.callsomo.com',
-    VITE_SIGNUP_URL: process.env.VITE_SIGNUP_URL || '/signup?utm_source=somo',
-    VITE_LOGIN_URL: process.env.VITE_LOGIN_URL || '/login?utm_source=somo'
-  };
-  const build = spawnSync('npm', ['run', 'build'], {
-    cwd: LANDING,
-    stdio: 'inherit',
-    env,
-    shell: process.platform === 'win32'
-  });
-  if (build.status !== 0) process.exit(build.status || 1);
+function writeRootRedirectIndex() {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="0;url=${REDIRECT_TARGET}">
+  <title>Somo</title>
+  <script>location.replace('${REDIRECT_TARGET}');</script>
+</head>
+<body>
+  <p><a href="${REDIRECT_TARGET}">Continue to Somo</a></p>
+</body>
+</html>
+`;
+  fs.writeFileSync(path.join(OUT, 'index.html'), html, 'utf8');
+}
 
+function main() {
   console.log('Assembling hosting-dist…');
   rmrf(OUT);
   mkdirp(OUT);
 
-  copyDir(path.join(LANDING, 'build'), OUT);
+  writeRootRedirectIndex();
 
   console.log('  portal assets → /assets + /unified-dashboard/assets');
   copyDir(path.join(UD, 'assets'), path.join(OUT, 'assets'));
   copyDir(path.join(UD, 'assets'), path.join(OUT, 'unified-dashboard', 'assets'));
-
-  console.log('  landing vite assets (merge)');
-  copyDir(path.join(LANDING, 'build', 'assets'), path.join(OUT, 'assets'), { merge: true });
-
-  const landingBrand = path.join(LANDING, 'build', 'assets', 'brand');
-  const outBrand = path.join(OUT, 'assets', 'brand');
-  if (fs.existsSync(landingBrand)) {
-    console.log('  landing brand assets (overwrite portal copies)');
-    copyDir(landingBrand, outBrand);
-  }
 
   console.log('  business portal HTML');
   copyDir(path.join(UD, 'business'), path.join(OUT, 'business'));

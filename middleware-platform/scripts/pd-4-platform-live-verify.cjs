@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * PD-4 live verify: platform inbound → routing_world=demo, no OPQRST.
+ * PD-4 live verify: platform inbound → routing_world=navigation, no OPQRST/kelly rails.
  *
  * Usage:
  *   # After deploy + placing a call to +13639990205:
@@ -25,7 +25,8 @@ const {
   parsePayload,
   fetchKellyEvents,
   findToolCompleted,
-  printReportAndExit
+  printReportAndExit,
+  pullProdDbFromGcs
 } = require('./verify-live-shared.cjs');
 
 const PLATFORM_DID = process.env.CALLSOMO_OPERATOR_TWILIO_NUMBER || '+13639990205';
@@ -35,16 +36,6 @@ const PROBE_FROM = process.env.PD4_PROBE_FROM_NUMBER || process.env.TWILIO_PROBE
 
 function argvHas(flag) {
   return process.argv.includes(flag);
-}
-
-function pullProdDb() {
-  const dest = process.env.DB_PATH || path.join(__dirname, '..', 'backups', 'middleware-staging.db');
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  const gsPath = `gs://${GCS_BUCKET}/${GCS_OBJECT}`;
-  console.log(`Pulling ${gsPath} → ${dest}`);
-  execSync(`gsutil cp "${gsPath}" "${dest}"`, { stdio: 'inherit' });
-  process.env.DB_PATH = dest;
-  return dest;
 }
 
 async function placeProbeCall() {
@@ -83,15 +74,15 @@ function findLatestPlatformSession(db) {
     .all();
   for (const row of rows) {
     const p = parsePayload(row);
-    if (p.routing_world !== 'demo') continue;
+    if (p.routing_world !== 'navigation') continue;
     const toNum = String(p.to_number || p.extra?.to_number || '');
     if (toNum && toNum.replace(/\D/g, '') !== PLATFORM_DID.replace(/\D/g, '')) continue;
     return row.session_id || row.call_id;
   }
-  // Fallback: recent demo routing_world regardless of to_number in payload
+  // Fallback: recent navigation routing_world regardless of to_number in payload
   for (const row of rows) {
     const p = parsePayload(row);
-    if (p.routing_world === 'demo') return row.session_id || row.call_id;
+    if (p.routing_world === 'navigation') return row.session_id || row.call_id;
   }
   return null;
 }
@@ -142,7 +133,7 @@ function verifySession(db, sessionId) {
   const modeViolations = events.filter((e) => e.event_type === 'mode_violation_blocked');
 
   const pass =
-    routingWorld.includes('demo') &&
+    routingWorld.includes('navigation') &&
     opqrstTools.length === 0 &&
     kellyRails.length === 0;
 
@@ -164,13 +155,17 @@ function verifySession(db, sessionId) {
 }
 
 async function main() {
-  if (argvHas('--pull-db')) pullProdDb();
+  if (argvHas('--pull-db')) pullProdDbFromGcs();
 
   if (argvHas('--probe-call')) {
     await placeProbeCall();
     console.log('Waiting 55s for call to connect and events to flush…');
     await new Promise((r) => setTimeout(r, 55000));
-    if (!argvHas('--skip-db-pull')) pullProdDb();
+    if (!argvHas('--skip-db-pull')) pullProdDbFromGcs();
+    // Fall through to Retell latest when DB has no kelly_call_events yet
+    if (!process.env.SESSION_ID && !process.env.CALL_ID) {
+      process.argv.push('--latest');
+    }
   }
 
   let sessionId = process.env.SESSION_ID || process.env.CALL_ID || '';
@@ -221,7 +216,7 @@ async function main() {
     report.retell = retell;
     if (!retell.opqrst_in_transcript && retell.demo_or_booking_language) {
       report.pass = true;
-      report.pass_reason = 'retell_transcript_no_opqrst_demo_flow';
+      report.pass_reason = 'retell_transcript_no_opqrst_navigation_flow';
     }
   }
   if (!report.pass && retell && !retell.opqrst_in_transcript) {

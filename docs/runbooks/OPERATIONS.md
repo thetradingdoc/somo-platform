@@ -268,19 +268,32 @@ See [deployment README § CI and deployment](../deployment/README.md#ci-and-depl
 
 ```bash
 curl -sS -i https://api.callsomo.com/health
-curl -sS -i https://api.callsomo.com/api/public/somo-demo/health
-curl -sS -i -X POST https://api.callsomo.com/api/public/landing-assistant/turn \
-  -H 'content-type: application/json' -d '{"session_id":"rollback-smoke","message":"hello"}'
+cd middleware-platform && npm run navigation:preflight
+npm run navigation:routing-live -- --latest
 npm run verify:prod:routing-smoke --prefix middleware-platform
 ```
 
-### Landing (Firebase Hosting)
+### Consumer navigation (platform DID `+13639990205`)
+
+After API deploy, seed navigation on GCS and enable the handler:
 
 ```bash
-cd unified-dashboard/somo-landing
-VITE_API_BASE=https://api.callsomo.com npm run build
-# deploy via firebase deploy (project configured in unified-dashboard/firebase.json)
+npm run phase1:pull-db
+cd middleware-platform
+npm run navigation:gcs-seed   # sets NAVIGATION_ENABLED=1 on Cloud Run
+npm run navigation:routing-live -- --pull-db --latest
 ```
+
+Kill switch: set `NAVIGATION_ENABLED=0` on Cloud Run. See [`NAVIGATION_OPERATOR_RUNBOOK.md`](NAVIGATION_OPERATOR_RUNBOOK.md).
+
+### Hosting (Firebase)
+
+```bash
+node scripts/build-staging-hosting.cjs
+npm run deploy:staging-hosting   # if marketing bundle changed
+```
+
+Root `/` redirects to `/business/trial-activation.html` (somo-landing SPA retired).
 
 ## Post-deploy smoke
 
@@ -414,7 +427,7 @@ Incident playbooks (Stripe, Stedi, reasoning, DLQ): [`docs/runbooks/README.md`](
 
 | Number / env | Role | `routing_world` | Handler |
 |--------------|------|-----------------|---------|
-| `+13639990205` / `TWILIO_PHONE_NUMBER` | Platform + demo fallback | `demo` inbound | `somo-demo-handler` |
+| `+13639990205` / `TWILIO_PHONE_NUMBER` | Consumer navigation inbound | `navigation` inbound | `consumer-navigation-handler` |
 | `CALLSOMO_OPERATOR_TWILIO_NUMBER` | Operator CID outbound | `operator_outbound` | `operator-outbound-rail` |
 | Tenant `customers.twilio_phone_number` | Clinic DID | `tenant` | Kelly Rails V2 |
 | Unknown DID, no `customer_id` | Unidentified | `unidentified` | Fail-closed handoff |
@@ -436,6 +449,46 @@ Incident playbooks (Stripe, Stedi, reasoning, DLQ): [`docs/runbooks/README.md`](
 3. In Retell call log, confirm transfer dispatched (single WS frame with `transfer_number` + `no_interruption_allowed`) — not only `handoff_escalations.outcome = transfer_requested`.
 4. **Pass criterion:** callee PSTN rings. Log `call_id`, date, and operator name below.
 5. If step 4 fails, implement REST `POST /v2/call/{id}/transfer` fallback (R-06-4) and re-run.
+
+**T-001 pass log** (append when step 4 passes):
+
+```markdown
+### T-001 pass log
+- Date: YYYY-MM-DD
+- Operator: <name>
+- Environment: staging (STAGING=1 on somo-middleware)
+- call_id: call_xxx
+- Transfer target: +1...
+- Retell transfer frame: yes/no
+- PSTN rang: yes/no
+- Result: PASS | FAIL
+```
+
+Phase 1 tooling: `npm run phase1:checklist` · [`PHASE1_DID_INVENTORY.md`](../deployment/PHASE1_DID_INVENTORY.md) · [`PHASE1_PD4_LOG.md`](../deployment/PHASE1_PD4_LOG.md)
+
+### T-001 pass log (2026-06-23)
+- Date: 2026-06-23
+- Operator: automated probe
+- Environment: staging (revision somo-middleware-00119-mvh+)
+- call_id: call_430cc1bc2e9b8d6e9b759cd05df (WS) / CA26eb1850a0609dc3c27595ccf3190f74 (PSTN probe)
+- Transfer target: +12028131474
+- Retell transfer frame: **yes** (WS `transfer_number` confirmed)
+- PSTN rang: **no** — re-test from **external cell** to +18623622415 (R-06-4 Twilio `<Dial>` fallback deployed)
+- Result: **PARTIAL** (frame pass; ring pending external PSTN)
+
+**Booking (2026-06-23):** Tenant seeded on GCS (`cust_96848972…`, +18623622415). Kelly OPQRST live on call_109f4a45 / call_9f020da8. `schedule_appointment` not yet completed — finish on live call.
+
+**Preflight ready (2026-06-23, revision `somo-middleware-00123-grd`):**
+- `verify-tenant-site-context` PASS on `+18623622415` → `clinic-doclittle`
+- Transfer target: **`+18622307479`** (`clinics.transfer_number` on GCS + `CALLSOMO_OPERATOR_FALLBACK_PSTN`)
+- Operator calls required (external cell, not Twilio probe):
+  1. **T-001 ring:** Dial `+18623622415` → say *"Transfer me to a human; I can't verify my identity."* → answer `+18622307479`
+  2. **Booking:** Dial `+18623622415` again → complete OPQRST → accept slot → confirm
+- After calls: `npm run phase1:report-calls --prefix middleware-platform -- --t001 call_xxx --booking call_yyy --t001-rang yes`
+
+**T-001 ring:** SKIPPED per operator (2026-06-23) — WS transfer frame pass on `call_430cc1bc2e9b8d6e9b759cd05df` accepted; transfer target set to `+18622307479`.
+
+**Booking attempts (automated capstone, 2026-06-23):** `call_3071e80…`, `call_525818…`, `call_ec2d056…`, `call_27f930…` — Kelly OPQRST loops; no `schedule_appointment`. **Manual PSTN booking call still required** (dial `+18623622415`, complete OPQRST + accept slot).
 
 **PD-4 live routing matrix:** Offline smoke does not close PD-4. One live call per routing world — see [VOICE_REMEDIATION_OPERATOR_GATES.md](./VOICE_REMEDIATION_OPERATOR_GATES.md#pd-4--live-routing-matrix-5-worlds).
 

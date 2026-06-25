@@ -47,17 +47,27 @@ Production deploy preserves existing service env vars (image-only) and targets w
 ## Post-deploy verification
 
 ```bash
-curl -i https://api.callsomo.com/api/public/somo-demo/health
-curl -i -X POST https://api.callsomo.com/api/public/landing-assistant/turn \
-  -H 'content-type: application/json' \
-  -d '{"session_id":"smoke","message":"hello"}'
+curl -i https://api.callsomo.com/health
+cd middleware-platform && npm run navigation:preflight
+npm run navigation:routing-live -- --latest
 npm run verify:prod:routing-smoke --prefix middleware-platform
 npm run test:prod:smoke --prefix middleware-platform
 ```
 
-## Somo demo secrets
+## Consumer navigation (platform DID)
 
-Prefer `SOMO_DEMO_*` in Secret Manager / `.env`.
+`+13639990205` (`TWILIO_PHONE_NUMBER`) routes to **consumer navigation** when `NAVIGATION_ENABLED=1`. Deploy + seed:
+
+```bash
+npm run phase1:pull-db
+cd middleware-platform && npm run navigation:gcs-seed
+```
+
+Operator runbook: [`docs/runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md).
+
+## Retired: Somo demo / somo-landing
+
+`/api/public/somo-demo/*` and `unified-dashboard/somo-landing/` were removed (2026-06). Root `/` redirects to trial activation; platform inbound is navigation-only.
 
 ## Kelly rails (production profile)
 

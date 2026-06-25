@@ -22,8 +22,14 @@ function resolveConversationMode(input = {}) {
   const tenantResolved = input.tenantResolved !== false;
   const routingWorld = String(input.routing_world || '').toLowerCase();
 
-  if (routingWorld === 'demo' || callType === 'somo_demo') {
-    return { mode: ConversationMode.DEMO_QUAL, subrail: null, reason: 'call_type_demo', call_type: callType, direction };
+  if (routingWorld === 'navigation' || callType === 'consumer_navigation') {
+    return {
+      mode: ConversationMode.NAVIGATION_MEMBER,
+      subrail: null,
+      reason: 'call_type_navigation',
+      call_type: callType,
+      direction
+    };
   }
 
   if (isEmergency(utterance)) {
@@ -67,7 +73,6 @@ function resolveConversationMode(input = {}) {
 
   const siteStatus = String(input.site_context_status || '').toLowerCase();
   const tenantInbound =
-    callType !== 'somo_demo' &&
     callType !== 'sales_outbound' &&
     callType !== 'operator_outbound' &&
     direction === 'inbound' &&

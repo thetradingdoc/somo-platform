@@ -3,7 +3,7 @@
 
 **Last Updated:** 2026-05-30
 
-> **Marketing landing:** Active SPA is [`unified-dashboard/somo-landing/`](../../unified-dashboard/somo-landing/) at `/`. Legacy CRA + Kelly/LiveKit assistant lives in [`unified-dashboard/_archive/littlelab-landing/`](../../unified-dashboard/_archive/littlelab-landing/) (retired 2026-05-29). See [`SURFACE_OWNERSHIP_MAP.md`](../meta/SURFACE_OWNERSHIP_MAP.md).
+> **Marketing landing:** Active SPA is [`business/trial-activation portal/`](../../business/trial-activation portal/) at `/`. Legacy CRA + Kelly/LiveKit assistant lives in [`unified-dashboard/_archive/littlelab-landing/`](../../unified-dashboard/_archive/littlelab-landing/) (retired 2026-05-29). See [`SURFACE_OWNERSHIP_MAP.md`](../meta/SURFACE_OWNERSHIP_MAP.md).
 
 > **Medical coding:** Canonical architecture and operations live in **[docs/Medical Coding/ARCHITECTURE.md](../Medical%20Coding/ARCHITECTURE.md)** and **[OPERATIONS.md](../Medical%20Coding/OPERATIONS.md)**. Do **not** expand this 12k-line file for codebook/RAG updates — patch the Medical Coding docs and link from here. The [#voice-agent-runbook](#voice-agent-runbook) section below is partially refreshed; older tables elsewhere may still reference `getCodeCandidates` or `localhost:4000` RAG defaults.
 
@@ -12206,7 +12206,7 @@ Primary runtime surfaces:
 
 - `middleware-platform/` - Core backend API + orchestration + workers + integrations
 - `unified-dashboard/` - Static/web portals (patient, business, admin, insurer) and shared JS/CSS
-- `unified-dashboard/somo-landing/` - Somo marketing SPA at `/`
+- `business/trial-activation portal/` - Somo marketing SPA at `/`
 - `unified-dashboard/_archive/littlelab-landing/` - Archived React/CRA landing and assistant experience
 - `patient-app/` - Expo/React Native app (auth + appointments + checkout chat integration)
 - `docs/` - Consolidated canonical documentation

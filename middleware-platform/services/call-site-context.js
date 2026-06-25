@@ -5,7 +5,7 @@
  * Separate from routing_world (demo / tenant / unidentified).
  */
 
-const { normalizePhone, isDemoLineToNumber } = require('./voice-routing-world');
+const { normalizePhone } = require('./voice-routing-world');
 
 const SiteContextStatus = Object.freeze({
   VERIFIED: 'verified',
@@ -34,8 +34,11 @@ function isOutboundCallType(callType) {
 }
 
 function siteContextNotRequired(opts = {}) {
-  if (opts.isSomoDemoDemo || opts.call_type === 'somo_demo') return true;
-  if (isDemoLineToNumber(normalizePhone(opts.to_number))) return true;
+  if (String(opts.call_type || '').toLowerCase() === 'consumer_navigation') return true;
+  try {
+    const { isPlatformNavigationDid } = require('./navigation/navigation-config');
+    if (isPlatformNavigationDid(normalizePhone(opts.to_number))) return true;
+  } catch (_) {}
   const callType = String(opts.call_type || '').toLowerCase();
   const direction = String(opts.direction || '').toLowerCase();
   if (direction === 'outbound' || isOutboundCallType(callType)) {

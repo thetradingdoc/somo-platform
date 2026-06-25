@@ -32,13 +32,18 @@ class EmailVerificationService {
             // Generate code
             const code = this.generateCode();
             const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+            const quietReplay =
+                String(process.env.PSTN_REPLAY_QUIET_LOGS || '').trim() === '1' &&
+                String(process.env.PSTN_REPLAY_COMMERCE || '').trim() === '1';
 
-            console.log('\n📧 EMAIL VERIFICATION: Sending Code');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log(`Email: ${email}`);
-            console.log(`Code: ${code}`);
-            console.log(`Expires: ${expiresAt.toISOString()}`);
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            if (!quietReplay) {
+                console.log('\n📧 EMAIL VERIFICATION: Sending Code');
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.log(`Email: ${email}`);
+                console.log(`Code: ${code}`);
+                console.log(`Expires: ${expiresAt.toISOString()}`);
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            }
 
             // Store code in database
             db.createEmailVerificationCode(

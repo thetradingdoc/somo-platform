@@ -734,6 +734,64 @@
     },
     {
       "type": "function",
+      "name": "resolve_patient_plan",
+      "description": "Resolve spoken health plan name to canonical payor for SomoPay navigation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plan_name": { "type": "string", "description": "Health plan or insurer name spoken by member" },
+          "payer_id": { "type": "string", "description": "Optional payer id if known" },
+          "state_hint": { "type": "string", "description": "US state hint, e.g. NY" }
+        },
+        "required": ["plan_name"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "check_plan_benefits",
+      "description": "Return commercial benefit summaries for resolved plan near member ZIP.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "payor_entity_id": { "type": "string" },
+          "zip": { "type": "string" },
+          "specialty_key": { "type": "string", "description": "dental|vision|mental_health|primary_care" }
+        },
+        "required": ["payor_entity_id"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "find_care_near_me",
+      "description": "Find bookable in-network providers for specialty near member ZIP.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "specialty": { "type": "string" },
+          "zip": { "type": "string" },
+          "payor_entity_id": { "type": "string" },
+          "payer_id": { "type": "string" },
+          "clinic_id": { "type": "string" },
+          "in_network_only": { "type": "boolean" }
+        },
+        "required": ["specialty"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "resolve_employer_member",
+      "description": "Resolve employer code + member id to plan without carrier name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "employer_code": { "type": "string" },
+          "member_id": { "type": "string" }
+        },
+        "required": ["employer_code", "member_id"]
+      }
+    },
+    {
+      "type": "function",
       "name": "end_call",
       "description": "End the call when the customer is done or when the conversation is complete."
     }

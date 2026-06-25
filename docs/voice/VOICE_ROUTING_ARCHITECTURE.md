@@ -1,16 +1,18 @@
 # Somo voice routing architecture
 
-**Last updated:** 2026-06-19  
+**Last updated:** 2026-06-24  
 **Epic:** PLATFORM-VOICE  
 **Production revision (PD-4 verified):** `somo-middleware-00079-kdz`
 
-This document describes how inbound and outbound voice calls are classified, routed, and handled across **five routing worlds**, and how **L2 conversation mode** and **L4 Kelly Rails / OPQRST guards** prevent clinical bleed on the platform line.
+This document describes how inbound and outbound voice calls are classified, routed, and handled across **routing worlds**, and how **L2 conversation mode** and **L4 Kelly Rails / OPQRST guards** prevent clinical bleed on tenant lines.
+
+**Platform DID (`+13639990205`):** Consumer **navigation** (need-first Kelly) via `consumer-navigation-handler` + `navigation-orchestrator` — not demo qualification or tenant Kelly. See [`PLATFORM_NUMBER_INBOUND_SPEC.md`](PLATFORM_NUMBER_INBOUND_SPEC.md).
 
 ---
 
 ## 1. System overview
 
-Somo voice uses a **shared Retell agent** (Kelly) with **runtime branching** — the same agent ID can behave as demo qualification, tenant front desk, or operator outbound depending on `to_number`, `call_type`, and `customer_id`.
+Somo voice uses a **shared Retell agent** (Kelly) with **runtime branching** — the same agent ID can behave as consumer navigator, tenant front desk, or operator outbound depending on `to_number`, `call_type`, and `customer_id`.
 
 ```mermaid
 flowchart TB
@@ -29,10 +31,10 @@ flowchart TB
   end
 
   subgraph branch [Runtime branch]
-    Demo[somo-demo-handler<br/>Groq qualification]
+    Nav[consumer-navigation-handler<br/>need-first navigator]
     KellyBlock[Kelly blocked<br/>handoff script]
     Kelly["runKellyTurn()<br/>kelly-turn-resolver.js"]
-    RW -->|demo| Demo
+    RW -->|navigation| Nav
     RW -->|unidentified| KellyBlock
     RW -->|tenant / platform_support / outbound| Kelly
   end
@@ -59,7 +61,7 @@ flowchart TB
 
 | Number / env | Typical role | `routing_world` | Handler |
 |--------------|--------------|-----------------|---------|
-| `+13639990205` / `CALLSOMO_OPERATOR_TWILIO_NUMBER` / `TWILIO_PHONE_NUMBER` | Platform + demo inbound | `demo` | `somo-demo-handler` |
+| `+13639990205` / `CALLSOMO_OPERATOR_TWILIO_NUMBER` / `TWILIO_PHONE_NUMBER` | Consumer navigation inbound | `navigation` | `consumer-navigation-handler` |
 | Tenant `customers.twilio_phone_number` | Clinic DID | `tenant` | Kelly Rails V2 |
 | Operator CID (outbound) | Somo operator calls | `operator_outbound` | `operator-outbound-rail` |
 | Sales outbound | Lead dialer | `sales_outbound` | Outbound sales rail |
@@ -90,7 +92,7 @@ On `call_details`:
 2. **Clinic fallback (R-8)** — `DEFAULT_CLINIC_ID` only when `customer_id` is already resolved.
 3. **Routing world (R-2, R-8)** — `resolveRoutingWorld()` → `connection.routing_world` + `routing_world_resolved` event.
 4. **Demo gate (R-4)** — `isSomoDemoDemoConnection()`: `call_type=somo_demo` **OR** inbound `isDemoLineToNumber(to)`.
-5. **Kelly block** — `shouldBlockKellyTurn(demo|unidentified)` before `runKellyTurn()`.
+5. **Kelly block** — `shouldBlockKellyTurn(navigation|unidentified)` before `runKellyTurn()` on non-tenant paths.
 
 ```mermaid
 sequenceDiagram
@@ -100,20 +102,20 @@ sequenceDiagram
   participant R as Retell
   participant WS as retell-websocket
   participant RW as voice-routing-world
-  participant D as somo-demo-handler
+  participant N as consumer-navigation-handler
   participant K as kelly-turn-resolver
 
   C->>T: Inbound to DID
   T->>VI: POST /voice/incoming
-  VI->>VI: isDemoTwilioNumber(to)?
+  VI->>VI: resolveNavigationInboundByDid(to)?
   VI->>R: Register + dynamic_variables
   R->>WS: WebSocket call_details
   WS->>WS: Backfill customer_id, call_type
   WS->>RW: resolveRoutingWorld()
-  RW-->>WS: demo | tenant | unidentified | ...
-  alt routing_world = demo
-    WS->>D: handleDemoTranscript()
-    Note over D: Groq + OPEN→QUALIFY→VALUE→CTA
+  RW-->>WS: navigation | tenant | unidentified | ...
+  alt routing_world = navigation
+    WS->>N: navigation orchestrator turn
+    Note over N: need → plan → ZIP → one rec + copay
   else routing_world = unidentified
     WS->>WS: Handoff script, no Kelly
   else tenant / platform_support / outbound
@@ -211,35 +213,30 @@ flowchart LR
 
 ---
 
-## 7. Demo path (platform inbound)
+## 7. Navigation path (platform inbound)
 
-**Entry:** `routing_world=demo` OR `isSomoDemoDemoConnection()`.
+**Entry:** `routing_world=navigation` when `NAVIGATION_ENABLED=1` and inbound `To` matches platform DID (`resolveNavigationInboundByDid`).
 
-**Handler:** `webhooks/somo-demo-handler.js` + `services/somo-demo-orchestrator.js`
+**Handler:** `webhooks/consumer-navigation-handler.js` + `services/navigation/navigation-orchestrator.js`
 
 ```mermaid
 stateDiagram-v2
-  [*] --> OPEN: Demo greeting
-  OPEN --> QUALIFY: Caller engages
-  QUALIFY --> VALUE: Practice type captured
-  VALUE --> CTA: Interest shown
-  VALUE --> OBJECTION: Pushback
-  OBJECTION --> CTA: Handled
-  CTA --> CLOSE: Signup / team call
-  CLOSE --> [*]: end_call
+  [*] --> OPEN: "Hi, I'm Kelly. How can I help you today?"
+  OPEN --> NEED: Caller states need
+  NEED --> PLAN: Insurance / plan
+  PLAN --> ZIP: Location
+  ZIP --> REC: Single ranked provider + copay
+  REC --> CONTACT: Offer phone / address only
+  CONTACT --> [*]: end_call
 
   note right of OPEN
     No Kelly Rails
-    No triage_sessions
+    No booking
     No OPQRST
   end note
 ```
 
-**Tools (demo only):** `record_interest`, `send_signup_link`, `send_signup_email`, `end_call`.
-
-**Off-script (LX-1):** "What do you do?" / "Speak to someone" → `record_interest` + team callback + `end_call`.
-
-**Playbook:** `middleware-platform/assets/somo-demo-qualification-playbook.md` (bundled in Docker).
+**Operator runbook:** [`docs/runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md).
 
 ---
 
@@ -358,7 +355,7 @@ Fail-closed and handoff paths:
 | Routing world | `services/voice-routing-world.js` |
 | Site context | `services/call-site-context.js` |
 | Escalation | `services/escalation-service.js` |
-| Demo | `webhooks/somo-demo-handler.js`, `services/somo-demo-orchestrator.js` |
+| Navigation | `webhooks/consumer-navigation-handler.js`, `services/navigation/navigation-orchestrator.js` |
 | Kelly turn | `services/kelly-turn-resolver.js` |
 | L2 | `services/conversation-mode/*` |
 | L4 | `services/kelly-rails/execute-turn.js`, `enter-clinical-lane.js`, `state-schema.js` |

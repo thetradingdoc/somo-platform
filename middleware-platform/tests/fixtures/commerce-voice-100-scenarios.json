@@ -1,0 +1,5641 @@
+{
+  "_deprecated": true,
+  "_deprecated_notice": "SUPERSEDED by commerce-pstn-replay-100.json (v2 PSTN Replay pack). Use v2 for replayable full-dialogue transcripts. This v1 behavioral matrix is retained for reference only.",
+  "_successor": "commerce-pstn-replay-100.json",
+  "version": "1.0.0",
+  "generated_at": "2026-06-24",
+  "description": "Commerce 100-scenario test pack for 24/7 supplement sales (voice + chat + UI). Preparation only — see COMMERCE_100_SCENARIO_RUNNER_SPEC.md",
+  "merchant_id": "merchant_c3d547a10f43eeec",
+  "clinic_id": "clinic-default",
+  "catalog_fixture": "commerce-supplement-catalog.json",
+  "assertion_schema": "commerce-assertion-schema.json",
+  "speech_corpus": "eval/commerce-speech-golden-set.json",
+  "baseline_predicted_aqs": 0.41,
+  "target_aqs": 0.85,
+  "scenario_count": 100,
+  "categories": {
+    "commerce_purchase": 18,
+    "commerce_complaint": 12,
+    "vent_handoff": 10,
+    "non_transactional": 8,
+    "booking": 10,
+    "cancel_reschedule": 8,
+    "appointment_payment": 8,
+    "outbound": 8,
+    "speech_asr": 10,
+    "frontend": 10
+  },
+  "scenarios": [
+    {
+      "id": "C-001",
+      "title": "Single SKU Vitamin D3: education → quote → email verify → ship → pay",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Hi, I'm interested in vitamin D for bone health",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "max_words": 40
+          }
+        },
+        {
+          "role": "user",
+          "text": "How much is it?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "must_not_state_price_from_memory": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Okay I'd like to buy one",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "asks_one_question": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "My email is buyer001@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "collects_shipping": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "123 Main St, Boston MA 02101",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_address": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes that's correct",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_product_quote",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_vitd3_2000"
+          }
+        },
+        {
+          "name": "send_commerce_verification_code",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "verify_commerce_code",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "save_shipping_address",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "prepare_commerce_checkout",
+          "required": true,
+          "before": "get_product_quote",
+          "args": {}
+        }
+      ],
+      "state_assertions": [
+        {
+          "store": "meta_kv",
+          "key": "checkout_stage",
+          "final": "checkout_prepared"
+        },
+        {
+          "store": "meta_kv",
+          "key": "commerce_email_verified",
+          "final": "1"
+        },
+        {
+          "store": "kelly_call_events",
+          "key": "event_type",
+          "final": "tool_completed",
+          "tool": "prepare_commerce_checkout"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "CHAT_COMMERCE_TOOL_CHAIN",
+        "CHECKOUT_STAGE_FSM",
+        "TOOL_COMPLETED_BEFORE_CLAIM"
+      ],
+      "failure_codes": [
+        "COMMERCE_NO_ACK",
+        "CHECKOUT_STAGE_REGRESSION",
+        "PRICE_FROM_MEMORY"
+      ],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-002",
+      "title": "Browse 3 supplements, add 2 to cart, checkout",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000",
+          "sku_omega3_1000",
+          "sku_magnesium_gly"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "What do you have for sleep and heart health?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_browse_not_push": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Add magnesium and omega 3 to my cart",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_cart": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "I'm ready to checkout",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "asks_email": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "cart002@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "add_to_cart",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_magnesium_gly"
+          }
+        },
+        {
+          "name": "add_to_cart",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_omega3_1000"
+          }
+        },
+        {
+          "name": "get_cart",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "prepare_commerce_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [
+        {
+          "store": "commerce_carts",
+          "key": "line_count",
+          "final": 2
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHAT_COMMERCE_TOOL_CHAIN",
+        "CART_LINE_ITEMS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-003",
+      "title": "Quantity 2 Omega-3; total matches DB",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_omega3_1000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want two bottles of omega 3 fish oil",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "cart003@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "states_server_locked_total": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_product_quote",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_omega3_1000",
+            "quantity": 2
+          }
+        },
+        {
+          "name": "prepare_commerce_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [
+        {
+          "store": "checkout_sessions",
+          "key": "amount_cents",
+          "final": 6500,
+          "note": "32.50 * 2 * 100"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHAT_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-004",
+      "title": "Voice: I want vitamin D → search → create_checkout → SMS link",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want to buy vitamin D",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "max_words": 25
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes the 2000 IU one",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "asks_email": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "voice004@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_checkout_link_sent": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {
+            "query": "vitamin d"
+          }
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": "search_products",
+          "args": {}
+        }
+      ],
+      "state_assertions": [
+        {
+          "store": "kelly_call_events",
+          "key": "event_type",
+          "final": "tool_completed",
+          "tool": "create_checkout"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN",
+        "ACK_BEFORE_TRANSACTION",
+        "TOOL_COMPLETED_BEFORE_CLAIM"
+      ],
+      "failure_codes": [
+        "VOICE_TOOL_MANIFEST_GAP",
+        "COMMERCE_NO_ACK"
+      ],
+      "predicted_failure_refs": [
+        "F-02"
+      ],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-005",
+      "title": "Voice: caller spells email; verify code path",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_magnesium_gly"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I'd like magnesium glycinate",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "asks_email": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "j-a-n-e dot d-o-e at example dot com",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "reads_back_email": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes that's right",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "mentions_verification_code": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "The code is 482910",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-006",
+      "title": "Voice vs chat price parity for same SKU",
+      "channel": "both",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "How much is vitamin D3 2000 IU?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "must_use_tool_for_price": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_product_quote",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_vitd3_2000"
+          }
+        },
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {
+            "query": "vitamin d3"
+          }
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [
+        {
+          "store": "parity",
+          "key": "amount_cents_voice",
+          "final": 2499
+        },
+        {
+          "store": "parity",
+          "key": "amount_cents_chat",
+          "final": 2499
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "PRICE_PARITY_VOICE_CHAT"
+      ],
+      "failure_codes": [
+        "PRICE_PARITY_MISMATCH"
+      ],
+      "predicted_failure_refs": [
+        "F-01"
+      ],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-007",
+      "title": "Switch product mid-conversation: cart clear + new quote",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000",
+          "sku_probiotic_50b"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Add vitamin D to cart",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_add": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Actually I want probiotics instead",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "handles_switch": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes clear the vitamin D",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "add_to_cart",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "clear_cart",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "get_product_quote",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_probiotic_50b"
+          }
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHAT_COMMERCE_TOOL_CHAIN",
+        "CART_LINE_ITEMS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-008",
+      "title": "Voice: What's good for energy → search → recommend → buy",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_multivit_daily",
+          "sku_iron_chelate"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "What's good for energy?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "offers_options": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "The multivitamin sounds good",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "asks_email": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "energy008@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {
+            "query": "energy"
+          }
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-009",
+      "title": "Chat: Multivitamin + Probiotic bundle (2 line items)",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_multivit_daily",
+          "sku_probiotic_50b"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want the daily multivitamin and probiotic",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_two_items": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "checkout009@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "add_to_cart",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_multivit_daily"
+          }
+        },
+        {
+          "name": "add_to_cart",
+          "required": true,
+          "before": null,
+          "args": {
+            "product_id": "sku_probiotic_50b"
+          }
+        },
+        {
+          "name": "prepare_commerce_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [
+        {
+          "store": "commerce_carts",
+          "key": "line_count",
+          "final": 2
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CART_LINE_ITEMS",
+        "CHAT_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-010",
+      "title": "After-hours voice commerce: no we are closed",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {},
+        "after_hours": true
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Are you open? I want to order vitamin D",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "must_not_say_closed_for_commerce": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Great, let's order it",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-011",
+      "title": "Returning patient: cart restored on session resume",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_omega3_1000"
+        ],
+        "session_seed": {
+          "cart_session_id": "cart_resume_011",
+          "items": [
+            {
+              "product_id": "sku_omega3_1000",
+              "quantity": 1
+            }
+          ]
+        }
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I'm back — still want to finish my order",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "acknowledges_resume": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "checkout011@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_cart",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "prepare_commerce_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHAT_COMMERCE_TOOL_CHAIN",
+        "CART_LINE_ITEMS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-012",
+      "title": "Voice Mastercard commerce with mandate_id",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Buy vitamin D with my Mastercard on file",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "asks_email": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "mc012@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {
+            "payment_method": "mastercard",
+            "mandate_id": "mandate_test_012"
+          }
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-02"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-013",
+      "title": "Chat: payment poll until payment_confirmed",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_magnesium_gly"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Ready to pay for magnesium",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_pay_in_thread": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "[user completes Stripe PI in UI]",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "meta_kv",
+          "key": "checkout_stage",
+          "final": "payment_confirmed"
+        },
+        {
+          "store": "meta_kv",
+          "key": "checkout_stage_meta_reason",
+          "final": null,
+          "when_failed": "must_surface_in_ui"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHECKOUT_STAGE_FSM",
+        "FRONTEND_STRIPE_PAY"
+      ],
+      "failure_codes": [
+        "CHECKOUT_FAILED_UI_SILENT"
+      ],
+      "predicted_failure_refs": [
+        "F-10"
+      ],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-014",
+      "title": "Voice: wrong email code once then success",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_probiotic_50b"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Order probiotic please",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "prob014@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "Wrong code 111111",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "reprompts_code": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Correct code 482910",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-015",
+      "title": "Chat: shipping address confirm before prepare_commerce_checkout",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Buy vitamin D",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "ship015@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "456 Oak Ave, Austin TX 78701",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "reads_back_address": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes confirm",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "save_shipping_address",
+          "required": true,
+          "before": "prepare_commerce_checkout",
+          "args": {}
+        },
+        {
+          "name": "prepare_commerce_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHAT_COMMERCE_TOOL_CHAIN",
+        "CHECKOUT_STAGE_FSM"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-016",
+      "title": "Voice: low inventory SKU graceful message",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_low_stock_demo"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want 5 B-complex bottles",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "explains_inventory_limit": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Okay I'll take 2",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {
+            "quantity": 2
+          }
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-017",
+      "title": "Chat: stale client price rejected with 409",
+      "channel": "chat",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "[client sends checkout with stale quote amount]",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "http",
+          "key": "status",
+          "final": 409,
+          "error": "quote_stale"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHAT_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [
+        "QUOTE_STALE_NOT_HANDLED"
+      ],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-018",
+      "title": "Voice: order tracking after purchase",
+      "channel": "voice",
+      "category": "commerce_purchase",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_omega3_1000"
+        ],
+        "session_seed": {
+          "prior_order_id": "ord_test_018"
+        }
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Where is my omega 3 order?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "provides_status_or_honest_unknown": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_order_tracking",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-019",
+      "title": "Voice: cancel supplement order before ship",
+      "channel": "voice",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Cancel my supplement order from yesterday",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "empathy_then_policy": true,
+            "offers_handoff": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [
+        "NO_CANCEL_ORDER_TOOL"
+      ],
+      "predicted_failure_refs": [
+        "F-07"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-020",
+      "title": "Chat: abandon cart mid-checkout; stage resets",
+      "channel": "chat",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Start checkout",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "[user closes tab mid code_sent]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "[user returns 30 min later]",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "meta_kv",
+          "key": "checkout_stage",
+          "final": "collecting_details",
+          "after_abandon": true
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHECKOUT_STAGE_FSM"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-021",
+      "title": "Voice: charged twice → handoff, no refund promise",
+      "channel": "voice",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I was charged twice for the same order!",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "offers_handoff": true,
+            "must_not_promise_refund": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "VENT_HANDOFF",
+        "NO_BOT_THERAPY"
+      ],
+      "failure_codes": [
+        "REFUND_PROMISED",
+        "HANDOFF_NOT_TRIGGERED"
+      ],
+      "predicted_failure_refs": [
+        "F-07"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-022",
+      "title": "Chat: wrong product delivered → empathy + handoff",
+      "channel": "chat",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "You sent me the wrong supplement",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "offers_handoff": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-07"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-023",
+      "title": "Voice: return probiotics → policy + handoff",
+      "channel": "voice",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I need to return the probiotics",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "explains_return_policy": true,
+            "offers_handoff": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-024",
+      "title": "Chat: dispute charge after payment_confirmed",
+      "channel": "chat",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {
+          "checkout_stage": "payment_confirmed"
+        }
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want to dispute this charge",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_handoff": true,
+            "must_not_void_payment": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-025",
+      "title": "Voice: angry — product caused rash → ack + handoff",
+      "channel": "voice",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Your vitamin gave me a rash! This is unacceptable!",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "offers_handoff": true,
+            "must_not_diagnose": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "VENT_HANDOFF",
+        "NO_BOT_THERAPY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-026",
+      "title": "Chat: refund request while still in code_sent",
+      "channel": "chat",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {
+          "checkout_stage": "code_sent"
+        }
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want a refund",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "clarifies_not_paid_yet": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHECKOUT_STAGE_FSM"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-027",
+      "title": "Voice: stop calling me on outbound commerce follow-up",
+      "channel": "voice",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "direction": "outbound",
+        "call_type": "operator_outbound"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Stop calling me please",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "records_opt_out": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION"
+      ],
+      "failure_codes": [
+        "OPT_OUT_NOT_RECORDED"
+      ],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-028",
+      "title": "Chat: clear cart after complaint resolved",
+      "channel": "chat",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_magnesium_gly"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Never mind, clear my cart",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_clear": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "clear_cart",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CART_LINE_ITEMS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-029",
+      "title": "Voice: track order — status unknown → honest reply",
+      "channel": "voice",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Track order number XYZUNKNOWN",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "honest_unknown": true,
+            "offers_handoff": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_order_tracking",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-030",
+      "title": "Chat: invalid merchant_id blocked",
+      "channel": "chat",
+      "category": "commerce_complaint",
+      "preconditions": {
+        "merchant_id": "merchant_invalid_000",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Checkout please",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "http",
+          "key": "status",
+          "final": 400,
+          "error": "merchant_not_found"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CHAT_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [
+        "PAYMENT_SURFACE_EXPOSED"
+      ],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-031",
+      "title": "Voice: rough week ×3 vent turns → handoff before products",
+      "channel": "voice",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "It's been a really rough week at work",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "must_not_pitch_product": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "I can't sleep and everything feels overwhelming",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "must_not_pitch_product": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "I just needed to talk to someone",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_handoff": true,
+            "must_not_pitch_product": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_NOT_SCHEDULING_JUMP",
+        "VENT_HANDOFF",
+        "NO_BOT_THERAPY"
+      ],
+      "failure_codes": [
+        "HANDOFF_NOT_TRIGGERED",
+        "PRODUCT_PITCH_ON_VENT"
+      ],
+      "predicted_failure_refs": [
+        "F-03"
+      ],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-032",
+      "title": "Chat: stressed parent vent → ack → gentle supplement offer",
+      "channel": "chat",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I'm so stressed I can't even think straight as a parent",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Maybe something for stress?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "gentle_offer_no_push": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "NO_BOT_THERAPY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-03"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-033",
+      "title": "Voice: grief vent → handoff within 2 turns",
+      "channel": "voice",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I lost someone close to me recently",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "offers_handoff": true,
+            "must_not_schedule": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VENT_HANDOFF",
+        "ACK_NOT_SCHEDULING_JUMP"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-03"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-034",
+      "title": "Voice: mixed vent + buy — ack stress THEN offer Vitamin D",
+      "channel": "voice",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Stressful week — also I heard vitamin D might help",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "then_commerce_ok": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes let's order vitamin D",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-03",
+        "F-04"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-035",
+      "title": "Chat: I just need someone to listen → handoff",
+      "channel": "chat",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I just need someone to listen",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_handoff": true,
+            "must_not_checkout": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VENT_HANDOFF",
+        "ACK_NOT_SCHEDULING_JUMP"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-03"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-036",
+      "title": "Voice: profanity → de-escalate + handoff offer",
+      "channel": "voice",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "This service is damn terrible",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "de_escalates": true,
+            "offers_handoff": true,
+            "must_not_match_tone": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-037",
+      "title": "Voice: long monologue → brevity + handoff",
+      "channel": "voice",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "[90 second monologue about life problems without pausing]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "max_words": 25,
+            "offers_handoff": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VENT_HANDOFF",
+        "VOICE_SLO"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-038",
+      "title": "Chat: ack before quote — sounds stressful lets get you sorted",
+      "channel": "chat",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_magnesium_gly"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Rough day — I need magnesium for sleep",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "contains_acknowledgement": true,
+            "acknowledgement_before_price": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes please quote it",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_product_quote",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION",
+        "CHAT_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [
+        "COMMERCE_NO_ACK"
+      ],
+      "predicted_failure_refs": [
+        "F-04"
+      ],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-039",
+      "title": "Voice: praise then unrelated life advice → scope guard",
+      "channel": "voice",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "You're so helpful! Should I quit my job?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "scope_guard": true,
+            "offers_handoff_or_redirect": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "NO_BOT_THERAPY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-040",
+      "title": "Voice: handoff_exhausted after 2 failed transfers",
+      "channel": "voice",
+      "category": "vent_handoff",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Get me a human",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "initiates_transfer": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "[transfer fails]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "Try again",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "retries_once": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "[transfer fails again]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "handoff_exhausted_copy": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "kelly_call_events",
+          "key": "event_type",
+          "final": "handoff_exhausted"
+        },
+        {
+          "store": "kelly_rails_session_projection",
+          "key": "flags_json.handoff_exhausted",
+          "final": true
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-041",
+      "title": "Voice: office hours question only",
+      "channel": "voice",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "What are your office hours?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "answers_hours": true,
+            "must_not_checkout": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_NOT_SCHEDULING_JUMP"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-042",
+      "title": "Voice: what supplements do you sell — browse no buy",
+      "channel": "voice",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "What supplements do you sell?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "lists_categories": true,
+            "must_not_force_checkout": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Thanks just looking",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": false,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-043",
+      "title": "Chat: ingredient interaction education, no checkout",
+      "channel": "chat",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitc_serum",
+          "sku_probiotic_50b"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Can I take vitamin C serum with probiotics orally?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "educates_no_checkout": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "NO_BOT_THERAPY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-044",
+      "title": "Voice: wrong number",
+      "channel": "voice",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Is this the pizza place?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "clarifies_business": true,
+            "brief": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-045",
+      "title": "Chat: user idle 3 turns then leaves",
+      "channel": "chat",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Hi",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "greeting": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "[silence]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "gentle_prompt": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "[silence]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_help": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-046",
+      "title": "Voice: callback request not order",
+      "channel": "voice",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Can someone call me back tomorrow?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "captures_callback": true,
+            "must_not_checkout": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-047",
+      "title": "Chat: compare two products, no purchase",
+      "channel": "chat",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_omega3_1000",
+          "sku_multivit_daily"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "What's the difference between omega 3 and your multivitamin?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "compares_educational": true,
+            "must_not_checkout": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ACK_BEFORE_TRANSACTION"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-048",
+      "title": "Voice: Spanish browse-only",
+      "channel": "voice",
+      "category": "non_transactional",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "¿Qué suplementos tienen?",
+          "asr_noise": "clean",
+          "locale": "es"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "locale": "es",
+            "lists_products": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_SLO"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-049",
+      "title": "Voice: routine supplement consult booking",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I need to schedule a supplement consult, no symptoms",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "routine_booking": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Next Tuesday afternoon",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "Alex Rivera, alex049@example.com, 555-010-0049",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_available_slots",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "schedule_appointment",
+          "required": true,
+          "before": "get_available_slots",
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS",
+        "TOOL_COMPLETED_BEFORE_CLAIM"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-050",
+      "title": "Voice: symptom + supplement → triage before book",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I have a rash and also want supplement advice",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "triage_first": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "[OPQRST answers]",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "store_triage_opqrst",
+          "required": true,
+          "before": "get_available_slots",
+          "args": {}
+        },
+        {
+          "name": "run_triage_rag",
+          "required": true,
+          "before": "get_available_slots",
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS",
+        "EMERGENCY_NO_SCHEDULE"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-051",
+      "title": "Voice: stated-time booking without API slots",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Book me Tuesday at 3pm for supplement consult",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "Sam Lee, sam051@example.com, 555-010-0051",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "schedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-052",
+      "title": "Voice: provider mismatch conflict gate",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want Dr. Wrongname on Friday",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "handles_mismatch": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "kelly_rails_session_projection",
+          "key": "flags_json.provider_mismatch",
+          "final": true
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-053",
+      "title": "Voice: no slots → slots_empty copy",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Any openings this Saturday?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "slots_empty_copy": true,
+            "asks_alternate": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "kelly_call_events",
+          "key": "event_type",
+          "final": "booking_outcome",
+          "outcome": "no_availability"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-054",
+      "title": "Voice: confirm without schedule tool → no false confirm",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Yes book it",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "must_not_confirm_without_tool": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "TOOL_COMPLETED_BEFORE_CLAIM",
+        "BOOKING_GATE_SUCCESS"
+      ],
+      "failure_codes": [
+        "FALSE_BOOKING_CONFIRM"
+      ],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-055",
+      "title": "Voice: Spanish booking happy path",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Quiero hacer una cita para consulta de suplementos",
+          "asr_noise": "clean",
+          "locale": "es"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "locale": "es"
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_available_slots",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "schedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS",
+        "VOICE_SLO"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-056",
+      "title": "Voice: book then ask to order vitamins on phone",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_multivit_daily"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Book supplement consult for Friday",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "[booking completes]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "Can I also order vitamins on this call?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "handles_post_book_commerce": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "schedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS",
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-057",
+      "title": "Chat commerce during active voice booking session",
+      "channel": "both",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {},
+        "parallel_sessions": true
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "[voice] Book appointment",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "[chat] Add vitamin D to cart while voice booking active",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "RAILS_PROJECTION_CONSISTENT",
+        "CHAT_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [
+        "STATE_COLLISION"
+      ],
+      "predicted_failure_refs": [
+        "F-08"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-058",
+      "title": "Voice: emergency chest pain → 911 no schedule",
+      "channel": "voice",
+      "category": "booking",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I'm having crushing chest pain",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "emergency_protocol": true,
+            "must_not_schedule": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "get_available_slots",
+          "required": false,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "schedule_appointment",
+          "required": false,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "EMERGENCY_NO_SCHEDULE"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-059",
+      "title": "Voice: cancel by name and date",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Cancel my appointment — Alex Rivera, Tuesday",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_cancel": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "cancel_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CANCEL_GATE_SUCCESS",
+        "TOOL_COMPLETED_BEFORE_CLAIM"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-060",
+      "title": "Voice: reschedule to new slot",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Reschedule my visit to next Friday afternoon",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_slots": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes 2pm works",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "reschedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "RESCHEDULE_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-061",
+      "title": "Voice: same-day cancel + rebook intent drain",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Cancel today and book next week instead",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "handles_cancel_rebook": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "cancel_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "schedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CANCEL_GATE_SUCCESS",
+        "BOOKING_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-062",
+      "title": "Voice: cancel fails → cancel_failed copy",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "force_cancel_fail": true
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Cancel appointment id INVALID",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CANCEL_GATE_SUCCESS"
+      ],
+      "failure_codes": [
+        "CANCEL_FAILED_COPY"
+      ],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-063",
+      "title": "Voice: reschedule fails → reschedule_failed copy",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "force_reschedule_fail": true
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Reschedule to invalid slot",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "RESCHEDULE_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-064",
+      "title": "Voice: outbound reminder → patient cancels",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "call_type": "operator_outbound",
+        "direction": "outbound",
+        "outbound_purpose": "appointment_reminder",
+        "appointment_id": "appt_reminder_064"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "[outbound opener]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "Actually cancel that appointment",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "pivots_to_cancel": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "cancel_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION",
+        "CANCEL_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-065",
+      "title": "Voice: outbound reminder → patient reschedules",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "call_type": "operator_outbound",
+        "direction": "outbound",
+        "outbound_purpose": "appointment_reminder"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Can we move it to Thursday?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "pivots_to_reschedule": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "reschedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION",
+        "RESCHEDULE_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-066",
+      "title": "Voice: cancel appointment unrelated to supplement order",
+      "channel": "voice",
+      "category": "cancel_reschedule",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Cancel my doctor visit — not my vitamin order",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "disambiguates": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "cancel_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "CANCEL_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-067",
+      "title": "Voice: copay link after book",
+      "channel": "voice",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "[after successful schedule]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_copay_checkout": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "create_appointment_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [
+        {
+          "store": "kelly_call_events",
+          "key": "event_type",
+          "final": "payment_link_sent"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "APPOINTMENT_CHECKOUT",
+        "TOOL_COMPLETED_BEFORE_CLAIM"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P0",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-068",
+      "title": "Voice: verify_checkout_code success",
+      "channel": "voice",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "My code is 482910",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "confirms_payment_step": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "verify_checkout_code",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "APPOINTMENT_CHECKOUT"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-069",
+      "title": "Voice: verify_checkout_code wrong twice",
+      "channel": "voice",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "111111",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "reprompts": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "222222",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_resend_or_handoff": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "APPOINTMENT_CHECKOUT"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-070",
+      "title": "Voice: payment link SMS failure → notification_failed",
+      "channel": "voice",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "force_sms_fail": true
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Send payment link",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "kelly_call_events",
+          "key": "event_type",
+          "final": "notification_failed",
+          "channel": "sms"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "APPOINTMENT_CHECKOUT"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-071",
+      "title": "Voice: how much is my copay",
+      "channel": "voice",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "How much is my copay for the visit?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "quotes_copay_or_explains": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "APPOINTMENT_CHECKOUT"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-072",
+      "title": "Voice: insurance before appointment checkout",
+      "channel": "voice",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Book visit and check my insurance first",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "collects_insurance_first": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "collect_insurance",
+          "required": true,
+          "before": "create_appointment_checkout",
+          "args": {}
+        },
+        {
+          "name": "schedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_appointment_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "APPOINTMENT_CHECKOUT",
+        "BOOKING_GATE_SUCCESS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-073",
+      "title": "Chat: N/A — appointment pay is voice-primary",
+      "channel": "chat",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": "Appointment copay checkout is voice-primary; chat commerce lane does not handle visit copay",
+      "assertions": [],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-074",
+      "title": "Voice: book + copay + supplement upsell same call",
+      "channel": "voice",
+      "category": "appointment_payment",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_multivit_daily"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Book consult and pay copay",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "[booking + copay flow]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "user",
+          "text": "Also send me multivitamin link",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "schedule_appointment",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_appointment_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "BOOKING_GATE_SUCCESS",
+        "APPOINTMENT_CHECKOUT",
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-075",
+      "title": "Voice: appointment reminder outbound",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "call_type": "operator_outbound",
+        "direction": "outbound",
+        "outbound_purpose": "appointment_reminder",
+        "appointment_id": "appt_out_075"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Hello?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "reminder_script": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes I'll be there",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-076",
+      "title": "Voice: supplement reorder follow-up refill Vitamin D",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {},
+        "call_type": "operator_outbound",
+        "direction": "outbound",
+        "outbound_purpose": "supplement_reorder",
+        "prior_order_id": "ord_vitd_076"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Hello",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "refill_offer": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "Yes refill vitamin D",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION",
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [
+        "OUTBOUND_COMMERCE_RAIL_MISSING"
+      ],
+      "predicted_failure_refs": [
+        "F-05"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-077",
+      "title": "Voice: outbound voicemail disposition",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "call_type": "operator_outbound",
+        "amd": "voicemail"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "[voicemail beep]",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "disposition",
+          "key": "value",
+          "final": "voicemail"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-078",
+      "title": "Voice: outbound quiet hours block",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "quiet_hours": true
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "outbound_call_attempts",
+          "key": "blocked",
+          "final": true
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION"
+      ],
+      "failure_codes": [
+        "QUIET_HOURS_NOT_ENFORCED"
+      ],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-079",
+      "title": "Voice: outbound opt-out",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "call_type": "operator_outbound",
+        "direction": "outbound"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Take me off your list",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "disposition",
+          "key": "value",
+          "final": "opt_out"
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-080",
+      "title": "Voice: outbound live answer → handoff human",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "call_type": "operator_outbound"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I need to speak to someone",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "offers_handoff": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION",
+        "VENT_HANDOFF"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-081",
+      "title": "Voice: outbound patient wants to buy supplement",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_omega3_1000"
+        ],
+        "session_seed": {},
+        "call_type": "operator_outbound",
+        "outbound_purpose": "appointment_reminder"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Thanks for the reminder — can I order omega 3 too?",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "pivots_to_commerce": true
+          }
+        }
+      ],
+      "tool_expectations": [
+        {
+          "name": "search_products",
+          "required": true,
+          "before": null,
+          "args": {}
+        },
+        {
+          "name": "create_checkout",
+          "required": true,
+          "before": null,
+          "args": {}
+        }
+      ],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "VOICE_COMMERCE_TOOL_CHAIN",
+        "OUTBOUND_DISPOSITION"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-082",
+      "title": "Voice: RCM follow-up default call_type",
+      "channel": "voice",
+      "category": "outbound",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "call_type": "rcm_follow_up",
+        "direction": "outbound"
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Hello",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "rcm_script": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "OUTBOUND_DISPOSITION"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-083",
+      "title": "Voice: low ASR confidence → clarify",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "asr_confidence": 0.55
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "mumble vitamin d mumble",
+          "asr_noise": "noisy",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [
+        {
+          "store": "kelly_call_events",
+          "key": "event_type",
+          "final": "asr_low_confidence",
+          "optional": true
+        }
+      ],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ASR_CONFIDENCE",
+        "EOT_LATENCY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 1200,
+        "min_confidence": 0.65,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-084",
+      "title": "Voice: homophone iron vs ion",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_iron_chelate"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want ion supplements for energy",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "clarifies_iron": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "WER_THRESHOLD",
+        "ASR_CONFIDENCE"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-085",
+      "title": "Voice: noisy omega three / omega 3",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_omega3_1000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "omega three fish oil please",
+          "asr_noise": "noisy",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "WER_THRESHOLD",
+        "EOT_LATENCY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 1200,
+        "min_confidence": 0.65,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-086",
+      "title": "Voice: Spanish supplement names",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Quiero comprar vitamina D",
+          "asr_noise": "clean",
+          "locale": "es"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "locale": "es"
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "WER_THRESHOLD",
+        "VOICE_SLO"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-087",
+      "title": "Voice: fast multi-intent utterance",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "I want vitamin D and book appointment and pay my bill",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "disambiguates_intent": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ASSISTANT_LATENCY",
+        "VOICE_SLO"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-088",
+      "title": "Voice: barge-in during email collection",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "My email is jane@— wait actually use jane2@example.com",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "handles_barge_in": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "EOT_LATENCY",
+        "VOICE_SLO"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-089",
+      "title": "Voice: WER regression commerce speech golden set",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "meta",
+          "note": "Batch eval all 30 commerce-speech-golden-set.json pairs"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "WER_THRESHOLD"
+      ],
+      "failure_codes": [
+        "WER_REGRESSION"
+      ],
+      "predicted_failure_refs": [
+        "F-09"
+      ],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-090",
+      "title": "Voice: RTF spike detection",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "Order probiotic",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "RTF_THRESHOLD",
+        "ASSISTANT_LATENCY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-091",
+      "title": "Voice: long silence reminder_required",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "[15s silence]",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "reminder_prompt": true
+          }
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "EOT_LATENCY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-092",
+      "title": "Voice: misheard email domain confirm back",
+      "channel": "voice",
+      "category": "speech_asr",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [
+        {
+          "role": "user",
+          "text": "john at yahoo dot co dot uk",
+          "asr_noise": "clean",
+          "locale": "en"
+        },
+        {
+          "role": "agent",
+          "expect": {
+            "reads_back_email": true
+          }
+        },
+        {
+          "role": "user",
+          "text": "No co.uk not com",
+          "asr_noise": "clean",
+          "locale": "en"
+        }
+      ],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [],
+      "skip_reason": null,
+      "assertions": [
+        "ASR_CONFIDENCE",
+        "VOICE_COMMERCE_TOOL_CHAIN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": [],
+      "speech_metrics": {
+        "max_wer": 0.15,
+        "max_eot_latency_ms": 800,
+        "min_confidence": 0.75,
+        "max_assistant_latency_ms": 2500,
+        "max_rtf": 1
+      }
+    },
+    {
+      "id": "C-093",
+      "title": "UI: load product strip + server quote",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "selector": "#productTitle",
+          "not_empty": true
+        },
+        {
+          "api": "POST /api/public/commerce/quote",
+          "returns": "quote_id"
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_QUOTE_LOAD"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-06"
+      ],
+      "priority": "P1",
+      "tags": []
+    },
+    {
+      "id": "C-094",
+      "title": "UI: SSE turn stream",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "api": "POST /api/patient/checkout-chat/turn/stream",
+          "streams": true
+        },
+        {
+          "selector": "#chatThread",
+          "receives_message": true
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_SSE_TURN"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-06"
+      ],
+      "priority": "P1",
+      "tags": []
+    },
+    {
+      "id": "C-095",
+      "title": "UI: btnPayInThread Stripe PI modal",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_magnesium_gly"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "selector": "#btnPayInThread",
+          "clickable_after": "checkout_prepared"
+        },
+        {
+          "stripe": "confirmCardPayment"
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_STRIPE_PAY"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-06"
+      ],
+      "priority": "P1",
+      "tags": []
+    },
+    {
+      "id": "C-096",
+      "title": "UI: cart header count updates",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_omega3_1000",
+          "sku_probiotic_50b"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "selector": "#headerCartCount",
+          "text": "2"
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_QUOTE_LOAD"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": []
+    },
+    {
+      "id": "C-097",
+      "title": "UI: degraded catalog hero",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {},
+        "catalog_degraded": true
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "file": "checkout-chat.html",
+          "contains": "degraded"
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_QUOTE_LOAD"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": []
+    },
+    {
+      "id": "C-098",
+      "title": "UI: cc_journey_state sessionStorage persistence",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "storage_key": "cc_journey_state:sku_vitd3_2000",
+          "fields": [
+            "hasChatted",
+            "quoteReady"
+          ]
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_ANALYTICS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [],
+      "priority": "P1",
+      "tags": []
+    },
+    {
+      "id": "C-099",
+      "title": "UI: analytics events agentic_primary in_chat_pay_tap",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "event": "agentic_primary"
+        },
+        {
+          "event": "in_chat_pay_tap"
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_ANALYTICS"
+      ],
+      "failure_codes": [],
+      "predicted_failure_refs": [
+        "F-06"
+      ],
+      "priority": "P1",
+      "tags": []
+    },
+    {
+      "id": "C-100",
+      "title": "UI: quote stale error message + retry",
+      "channel": "chat_ui",
+      "category": "frontend",
+      "preconditions": {
+        "merchant_id": "merchant_c3d547a10f43eeec",
+        "clinic_id": "clinic-default",
+        "products": [
+          "sku_vitd3_2000"
+        ],
+        "session_seed": {}
+      },
+      "transcript": [],
+      "tool_expectations": [],
+      "state_assertions": [],
+      "ui_assertions": [
+        {
+          "api_error": "quote_stale",
+          "ui_shows_retry": true
+        }
+      ],
+      "skip_reason": null,
+      "assertions": [
+        "FRONTEND_QUOTE_LOAD"
+      ],
+      "failure_codes": [
+        "QUOTE_STALE_UI_MISSING"
+      ],
+      "predicted_failure_refs": [
+        "F-06",
+        "F-10"
+      ],
+      "priority": "P1",
+      "tags": []
+    }
+  ]
+}

@@ -1,10 +1,13 @@
 'use strict';
 
 /**
- * Resolve which voice "world" a call belongs to — demo, tenant, operator outbound, etc.
+ * Resolve which voice "world" a call belongs to — tenant, operator outbound, navigation, etc.
  */
 
 const { getOperatorCustomerId } = require('./voice-account-resolution');
+
+/** Sixth routing world — P1-S1 wires resolveRoutingWorld logic. */
+const ROUTING_WORLD_NAVIGATION = 'navigation';
 
 function normalizePhone(n) {
   if (!n) return '';
@@ -13,16 +16,6 @@ function normalizePhone(n) {
     return SMSService.formatPhoneNumber(String(n).trim());
   } catch {
     return String(n).trim();
-  }
-}
-
-function isDemoLineToNumber(toNumber) {
-  if (!toNumber) return false;
-  try {
-    const { isDemoTwilioNumber } = require('./somo-demo-template-registry');
-    return isDemoTwilioNumber(normalizePhone(toNumber));
-  } catch {
-    return false;
   }
 }
 
@@ -37,14 +30,8 @@ function isDemoLineToNumber(toNumber) {
 function resolveRoutingWorld(opts = {}) {
   const callType = String(opts.call_type || '').toLowerCase();
   const direction = String(opts.direction || '').toLowerCase();
-  const toNumber = normalizePhone(opts.to_number);
   const customerId = opts.customer_id ? String(opts.customer_id) : null;
   const customer = opts.customer || null;
-  const operatorId = getOperatorCustomerId();
-
-  if (callType === 'somo_demo' || (direction !== 'outbound' && isDemoLineToNumber(toNumber))) {
-    return 'demo';
-  }
 
   if (
     callType === 'operator_outbound' ||
@@ -54,8 +41,11 @@ function resolveRoutingWorld(opts = {}) {
     return callType === 'sales_outbound' ? 'sales_outbound' : 'operator_outbound';
   }
 
-  if (customerId && operatorId && customerId === operatorId && isDemoLineToNumber(toNumber)) {
-    return 'platform_support';
+  if (
+    callType === 'consumer_navigation' ||
+    customer?.customer_type === 'navigation'
+  ) {
+    return ROUTING_WORLD_NAVIGATION;
   }
 
   if (customerId && customer?.customer_type === 'operator') {
@@ -74,10 +64,10 @@ function isTenantResolvedForMode(customerId) {
   return !!(customerId && String(customerId).trim());
 }
 
-/** Kelly Rails must not run for demo or unidentified inbound. */
+/** Kelly Rails must not run for navigation or unidentified inbound. */
 function shouldBlockKellyTurn(routingWorld) {
   const world = routingWorld || 'unidentified';
-  return world === 'demo' || world === 'unidentified';
+  return world === ROUTING_WORLD_NAVIGATION || world === 'unidentified';
 }
 
 function emitRoutingWorldEvent(db, { session_id, call_id, routing_world, extra = {} }) {
@@ -96,8 +86,8 @@ function emitRoutingWorldEvent(db, { session_id, call_id, routing_world, extra =
 }
 
 module.exports = {
+  ROUTING_WORLD_NAVIGATION,
   normalizePhone,
-  isDemoLineToNumber,
   resolveRoutingWorld,
   isTenantResolvedForMode,
   shouldBlockKellyTurn,

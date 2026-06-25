@@ -10,6 +10,9 @@ const {
   resolveClinicFromDid
 } = require('./call-site-context');
 
+/** Retell / voice metadata call_type for SomoPay consumer navigation (P1-S1). */
+const CALL_TYPE_CONSUMER_NAVIGATION = 'consumer_navigation';
+
 function buildVoiceCallContext(opts = {}) {
   const site = opts.siteContext || opts.site_context || {};
   const status = String(
@@ -111,6 +114,7 @@ function resolveTenantClinicFromCallMeta(db, callMeta = {}) {
 }
 
 module.exports = {
+  CALL_TYPE_CONSUMER_NAVIGATION,
   buildVoiceCallContext,
   canRunKelly,
   canPrepopulatePatient,

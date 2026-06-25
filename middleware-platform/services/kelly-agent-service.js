@@ -2314,6 +2314,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       /** When set (e.g. public landing), overrides persisted session language for this turn. */
       preferredLanguage: preferredLanguageParam = null,
       commerceCheckout = null,
+      pstnVoiceCommerce = null,
       checkoutPolicy = null,
       turnAuthority = null,
       customerId = null,
@@ -2413,6 +2414,18 @@ Antworten Sie durchgehend auf Deutsch.`,
       try {
         KellyToolExecutor._setSessionMeta(sessionId, 'scan_chat_mode', '1');
       } catch (_) {}
+    }
+
+    if (pstnVoiceCommerce && pstnVoiceCommerce.merchantId) {
+      return await this._processPstnVoiceCommerceTurn({
+        message,
+        sessionId,
+        channel: channel || 'voice',
+        clinicId,
+        callerPhone,
+        preferredLanguage: preferredLanguageParam,
+        pstnVoiceCommerce
+      });
     }
 
     if (commerceCheckout && commerceCheckout.productId && commerceCheckout.providerId) {
@@ -5054,6 +5067,61 @@ Antworten Sie durchgehend auf Deutsch.`,
   }
 
   /**
+   * PSTN replay / voice supplement commerce: Retell-style product search + checkout tools.
+   */
+  static async _processPstnVoiceCommerceTurn({
+    message,
+    sessionId,
+    channel,
+    clinicId,
+    callerPhone,
+    preferredLanguage,
+    pstnVoiceCommerce
+  }) {
+    const msgText = String(message || '').trim();
+    const lang =
+      (preferredLanguage && String(preferredLanguage).slice(0, 2)) ||
+      (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) ||
+      'en';
+
+    try {
+      KellyToolExecutor._setSessionMeta(sessionId, 'pstn_voice_commerce', '1');
+      KellyToolExecutor._setSessionMeta(sessionId, 'pstn_merchant_id', pstnVoiceCommerce.merchantId);
+    } catch (_) {}
+
+    KellyToolExecutor.beginTurnToolLog?.(sessionId);
+
+    const loopResult = await this._runLLMLoop({
+      history: [...(this._loadHistory(sessionId) || []), { role: 'user', content: msgText }],
+      context: {
+        pstnVoiceCommerce,
+        preferredLanguage: lang,
+        channel: channel || 'voice'
+      },
+      clinicId,
+      sessionId,
+      channel: channel || 'voice',
+      callerPhone: callerPhone || pstnVoiceCommerce.callerPhone || null
+    });
+
+    const reply = String(loopResult.reply || '').trim() || 'How can I help you with supplements today?';
+    this._appendToHistory(sessionId, 'user', message);
+    this._appendToHistory(sessionId, 'assistant', reply);
+
+    const executorTools = KellyToolExecutor.getTurnToolsUsed?.(sessionId) || [];
+    const toolsUsed = [
+      ...new Set([...(loopResult.toolsUsed || []), ...executorTools])
+    ];
+
+    return {
+      reply,
+      endCall: !!loopResult.endCall,
+      toolsUsed,
+      language: lang
+    };
+  }
+
+  /**
    * Retail checkout chat: only commerce quote + payment tools (no triage/scheduling).
    */
   static async _processCommerceCheckoutTurn({
@@ -5066,7 +5134,9 @@ Antworten Sie durchgehend auf Deutsch.`,
     commerceCheckout,
     checkoutPolicy,
     onStreamDelta,
-    onToolStatus
+    onToolStatus,
+    customerId = null,
+    providerInstructions = null
   }) {
     const msgText = String(message || '').trim();
     const lang = (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en';
@@ -5366,6 +5436,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         new Promise((_, reject) => setTimeout(() => reject(new Error('LLM_TURN_TIMEOUT')), turnTimeoutMs))
       ]);
     } catch (err) {
+      console.error('[KellyAgent] commerce checkout LLM loop failed:', err?.message || err);
       const reply = "I'm having trouble connecting. Use the Continue button below to proceed, or try again in a moment.";
       this._appendToHistory(sessionId, 'assistant', reply);
       return _checkoutReply(reply, [], lang, KellyToolExecutor._getCheckoutStage(sessionId), _stageToPolicyFlags(KellyToolExecutor._getCheckoutStage(sessionId)), _stageToActions(KellyToolExecutor._getCheckoutStage(sessionId)));
@@ -5427,8 +5498,15 @@ Antworten Sie durchgehend auf Deutsch.`,
       .map(m => ({ role: m.role, content: _truncateForLLM(m.content, maxChars) }));
 
     const commerceCtx = context.commerceContext;
+    const usePstnVoiceCommerce = !!(context.pstnVoiceCommerce && context.pstnVoiceCommerce.merchantId);
     const useCommerceTools = !!(commerceCtx && commerceCtx.productId && commerceCtx.providerId);
     let toolsForRequest = useCommerceTools ? COMMERCE_CHECKOUT_TOOLS : KELLY_TOOLS;
+    let buildPstnVoiceCommerceSystemPrompt = null;
+    if (usePstnVoiceCommerce) {
+      const pstnCfg = require('./pstn-voice-commerce-config');
+      toolsForRequest = pstnCfg.loadPstnVoiceCommerceTools();
+      buildPstnVoiceCommerceSystemPrompt = pstnCfg.buildPstnVoiceCommerceSystemPrompt;
+    }
     const allowedTools = Array.isArray(checkoutPolicy?.allowedTools) ? checkoutPolicy.allowedTools : null;
     if (useCommerceTools && allowedTools && allowedTools.length) {
       toolsForRequest = toolsForRequest.filter((t) => allowedTools.includes(t?.function?.name));
@@ -5447,15 +5525,20 @@ Antworten Sie durchgehend auf Deutsch.`,
     }
     const streamCommerce = typeof onStreamDelta === 'function' && useCommerceTools;
 
-    let systemContent = useCommerceTools
-      ? buildCommerceCheckoutSystemPrompt({
-          ...commerceCtx,
+    let systemContent = usePstnVoiceCommerce
+      ? buildPstnVoiceCommerceSystemPrompt({
+          merchantId: context.pstnVoiceCommerce.merchantId,
           preferredLanguage: context.preferredLanguage
         })
-      : KellyPromptBuilder.buildKellySystemPrompt(context, {
-          buildLegacy: _buildSystemPromptLegacy,
-          languageDirective: (pl) => KellyAgentService._languageDirective(pl)
-        });
+      : useCommerceTools
+        ? buildCommerceCheckoutSystemPrompt({
+            ...commerceCtx,
+            preferredLanguage: context.preferredLanguage
+          })
+        : KellyPromptBuilder.buildKellySystemPrompt(context, {
+            buildLegacy: _buildSystemPromptLegacy,
+            languageDirective: (pl) => KellyAgentService._languageDirective(pl)
+          });
 
     if (channel === 'voice') {
       let providerBlock = providerInstructions;

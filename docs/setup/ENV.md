@@ -37,7 +37,7 @@ Quick reference. Full narrative: [`docs/setup/README.md`](./README.md). Copy fro
 
 See also: [Medical Coding OPERATIONS](../Medical%20Coding/OPERATIONS.md), [RENDER_PRODUCTION_CHECKLIST](../deployment/RENDER_PRODUCTION_CHECKLIST.md).
 
-## Somo landing (`unified-dashboard/somo-landing/.env.development`)
+## Somo landing (`business/trial-activation portal/.env.development`)
 
 | Key | Purpose |
 |-----|---------|

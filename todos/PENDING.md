@@ -21,6 +21,24 @@ Code landed in post-review train; operator gates still open:
 
 ---
 
+## Phase 1 live PSTN gates (2026-06-23)
+
+**Closed in tooling/docs:** `phase1-*` scripts, `PHASE1_PD4_LOG.md`, `PHASE1_DID_INVENTORY.md`, Retell verify fallback for empty GCS `kelly_call_events`.
+
+**PD-4 (5/5):** Verified on revision `00115-v7d` — see [PHASE1_PD4_LOG.md](../docs/deployment/PHASE1_PD4_LOG.md).
+
+**Still blocked (operator):**
+
+| Item | Blocker | Ticket |
+|------|---------|--------|
+| T-001 PSTN ring | Twilio API probes disconnect ~5s; no inbound to `+12028131474` | **R-06-4** REST `POST /v2/call/{id}/transfer` fallback in `retell-websocket.js` |
+| Live tenant booking + portal | `verify-tenant-site-context` FAIL on GCS for `cust_96848972…`; portal appointments empty | Stamp site context on prod DB or capstone preseed; external PSTN booking |
+| GCS verify scripts | `POSTGRES_PRIMARY=1` — GCS SQLite has 0 Kelly events | Add Postgres read path to live verify scripts or fix upload flush |
+
+**Tenant DID SSOT:** `+18623622415` (not `+18622307479` — not on Twilio account).
+
+---
+
 ## Blocked — operator (cannot complete in code)
 
 These require live prod/staging access, human QA, or clinical sign-off:

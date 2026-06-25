@@ -187,7 +187,7 @@ This repository ships **two distinct user journeys** that share branding/UI toke
 
 ## Marketing landing dev (`somo-landing`)
 
-- Hot reload: `cd unified-dashboard/somo-landing && npm run dev` → `http://localhost:5180`
+- Hot reload: `cd business/trial-activation portal && npm run dev` → `http://localhost:5180`
 - Vite proxies `/login`, `/signup`, `/api`, `/unified-dashboard`, and `/business` to middleware (`VITE_API_PROXY`, default `:4000`).
 - `VITE_LOGIN_URL` / `VITE_SIGNUP_URL` in `.env.development` — Hero **Sign in** uses `loginUrl()` (default `/login?utm_source=somo` on the dev server).
 - Production build on `:4000` uses same paths without a separate port.

@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 32" role="img" aria-label="Acme Consulting">
-  <path d="M8 26L16 6l8 20h-3.5l-1.5-4h-6.5l-1.5 4H8zm5.5-7.5h5L16 11.5 13.5 18.5z" fill="#6b7280"/>
-  <text x="34" y="14" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#374151">Acme</text>
-  <text x="34" y="26" font-family="system-ui,sans-serif" font-size="8" font-weight="600" fill="#9ca3af" letter-spacing="0.08em">CONSULTING</text>
-</svg>

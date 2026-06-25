@@ -7,9 +7,14 @@ const { handleCancellationSubrail } = require('../services/conversation-mode/sub
 const { handleOpqrstSubrail } = require('../services/conversation-mode/subrails/opqrst-subrail');
 
 describe('conversation mode acceptance V1–V14', () => {
-  test('V1 somo_demo mode resolves to demo_qual', () => {
-    const out = resolveConversationMode({ call_type: 'somo_demo', direction: 'inbound', tenantPolicy: {} });
-    expect(out.mode).toBe('demo_qual');
+  test('V1 navigation mode resolves to navigation_member', () => {
+    const out = resolveConversationMode({
+      call_type: 'consumer_navigation',
+      direction: 'inbound',
+      routing_world: 'navigation',
+      tenantPolicy: {}
+    });
+    expect(out.mode).toBe('navigation_member');
     expect(isToolAllowedForMode('store_triage_opqrst', { mode: out.mode })).toBe(false);
   });
 

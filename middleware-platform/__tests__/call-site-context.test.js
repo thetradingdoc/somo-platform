@@ -16,7 +16,7 @@ describe('call-site-context', () => {
     getCustomer: (id) => (id === 'cust-1' ? { id, merchant_id: 'm1' } : null)
   };
 
-  test('demo line → not_required', () => {
+  test('platform navigation DID → not_required', () => {
     const ctx = resolveCallSiteContext({
       db: mockDb,
       to_number: '+13639990205',

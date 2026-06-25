@@ -32,7 +32,7 @@ flowchart LR
 
 ```
 callsomo.com DemoSection
-  → POST /api/public/somo-demo/request-call
+  → POST /health (legacy demo API retired) request-call
   → Twilio outbound → POST /voice/incoming
   → Retell SIP → wss://api.callsomo.com/webhook/retell/llm
   → Kelly rails (KELLY_RAILS_V2=1)
@@ -153,7 +153,7 @@ Do **not** point `api.callsomo.com` at `ghs.googlehosted.com` until Cloud Run ha
 |-------------|----------------|
 | Retell LLM WebSocket | `wss://api.callsomo.com/webhook/retell/llm` |
 | Twilio voice webhook | `https://api.callsomo.com/voice/incoming` |
-| Demo health | `https://api.callsomo.com/api/public/somo-demo/health` |
+| Demo health | `https://api.callsomo.com/health (legacy demo API retired) health` |
 
 Configure Retell after deploy:
 
@@ -232,7 +232,7 @@ npm run smoke:callsomo
 | `https://callsomo.com/` | 200, Somo landing SPA |
 | `https://callsomo.com/signup` | Signup wizard |
 | `https://api.callsomo.com/health/live` | 200 |
-| `https://api.callsomo.com/api/public/somo-demo/health` | JSON `ok: true` |
+| `https://api.callsomo.com/health (legacy demo API retired) health` | JSON `ok: true` |
 | `npm run verify:agent-config` | PASS, WSS = production URL |
 
 Optional outbound call:

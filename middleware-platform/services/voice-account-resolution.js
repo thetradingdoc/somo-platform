@@ -23,8 +23,7 @@ function isOutboundCallType(callType) {
   return OUTBOUND_CALL_TYPES.has(String(callType || '').toLowerCase());
 }
 
-function isOutboundRequest(req, isSomoDemoDemo) {
-  if (isSomoDemoDemo) return false;
+function isOutboundRequest(req) {
   const callType = req.query.call_type ? String(req.query.call_type) : null;
   return (
     isOutboundCallType(callType) ||
@@ -33,8 +32,7 @@ function isOutboundRequest(req, isSomoDemoDemo) {
   );
 }
 
-function normalizeCallType(req, { isOutbound, isSomoDemoDemo, leadId }) {
-  if (isSomoDemoDemo) return 'somo_demo';
+function normalizeCallType(req, { isOutbound, leadId }) {
   const explicit = req.query.call_type ? String(req.query.call_type) : null;
   if (explicit) return explicit;
   if (leadId) return 'sales_outbound';
@@ -43,13 +41,43 @@ function normalizeCallType(req, { isOutbound, isSomoDemoDemo, leadId }) {
 }
 
 /**
+ * Inbound navigation customer bound to To DID (overrides Twilio URL customer_id).
+ */
+function resolveNavigationInboundByDid(db, normalizedToNumber) {
+  if (!normalizedToNumber) return null;
+  try {
+    const { isNavigationEnabled } = require('./navigation/navigation-config');
+    if (!isNavigationEnabled()) return null;
+  } catch (_) {
+    return null;
+  }
+  const row = db.getCustomerByTwilioNumber(normalizedToNumber);
+  return isNavigationCustomer(row) ? row : null;
+}
+
+/**
  * Resolve customer_id and matched customer for a voice webhook.
  */
 function resolveVoiceAccount(db, req, opts) {
-  const { normalizedToNumber, isSomoDemoDemo, isOutbound, leadId } = opts;
+  const { normalizedToNumber, isOutbound, leadId } = opts;
   let customerId = req.query.customer_id ? String(req.query.customer_id).trim() : null;
   let matchedCustomer = null;
   let clinicId = req.query.clinic_id ? String(req.query.clinic_id).trim() : null;
+
+  if (!isOutbound) {
+    const navCustomer = resolveNavigationInboundByDid(db, normalizedToNumber);
+    if (navCustomer) {
+      customerId = navCustomer.id;
+      matchedCustomer = navCustomer;
+      console.log(`✅ Navigation inbound via DID: ${customerId}`);
+      return {
+        customerId,
+        matchedCustomer,
+        clinicId,
+        agentIdFromRequest: req.query.agent_id || req.headers?.['x-retell-agent-id']
+      };
+    }
+  }
 
   if (customerId) {
     matchedCustomer = db.getCustomer(customerId);
@@ -70,7 +98,7 @@ function resolveVoiceAccount(db, req, opts) {
     }
   }
 
-  if (!customerId && !isOutbound && !isSomoDemoDemo) {
+  if (!customerId && !isOutbound) {
     const customerByNumber = db.getCustomerByTwilioNumber(normalizedToNumber);
     if (customerByNumber) {
       matchedCustomer = customerByNumber;
@@ -230,8 +258,8 @@ function buildAccountResolutionFailureTwiml(message) {
 </Response>`;
 }
 
-function requiresCustomerId(isSomoDemoDemo) {
-  return !isSomoDemoDemo;
+function isNavigationCustomer(customer) {
+  return String(customer?.customer_type || '').toLowerCase() === 'navigation';
 }
 
 module.exports = {
@@ -244,7 +272,8 @@ module.exports = {
   resolveMerchantForVoice,
   resolveCustomerIdForBilling,
   buildAccountResolutionFailureTwiml,
-  requiresCustomerId,
+  isNavigationCustomer,
+  resolveNavigationInboundByDid,
   resolveVoiceMerchantId: (db, customer) => {
     if (!customer) return null;
     if (customer.merchant_id) return customer.merchant_id;

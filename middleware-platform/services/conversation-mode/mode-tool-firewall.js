@@ -44,6 +44,11 @@ const MODE_FORBIDDEN_TOOLS = {
     'request_patient_payment',
     'store_triage_opqrst'
   ]),
+  [ConversationMode.NAVIGATION_MEMBER]: new Set([
+    'store_triage_opqrst',
+    'run_triage_rag',
+    'store_triage_rich_intake'
+  ]),
   [ConversationMode.TENANT_RECORDS]: new Set(['schedule_appointment', 'request_patient_payment'])
 };
 
@@ -120,6 +125,22 @@ function isToolAllowedForMode(toolName, ctx = {}) {
 
   const mode = ctx.conversation_mode || ctx.mode;
   const subrail = ctx.active_subrail || ctx.subrail;
+
+  if (mode === ConversationMode.NAVIGATION_MEMBER) {
+    const allowed = new Set([
+      'resolve_patient_plan',
+      'check_plan_benefits',
+      'find_care_near_me',
+      'resolve_employer_member',
+      'get_available_slots',
+      'schedule_appointment',
+      'collect_insurance',
+      'create_appointment_checkout',
+      'end_call',
+      'get_triage_session'
+    ]);
+    return allowed.has(name);
+  }
 
   const modeForbidden = MODE_FORBIDDEN_TOOLS[mode];
   if (modeForbidden?.has(name)) return false;

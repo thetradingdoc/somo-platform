@@ -31,9 +31,9 @@ const CAPSTONE_DB_TOKEN = process.env.CAPSTONE_DB_SYNC_TOKEN || process.env.RETE
 const AGENT_ID = process.env.RETELL_AGENT_ID;
 const RETELL_KEY = process.env.RETELL_API_KEY;
 const CUSTOMER_ID = process.env.CAPSTONE_CUSTOMER_ID || process.env.CALLSOMO_OPERATOR_CUSTOMER_ID;
-const CLINIC_ID = process.env.CAPSTONE_CLINIC_ID || process.env.DEFAULT_CLINIC_ID || 'clinic-default';
+const CLINIC_ID = process.env.CAPSTONE_CLINIC_ID || process.env.DEFAULT_CLINIC_ID || 'clinic-doclittle';
 const FROM_NUMBER = process.env.CAPSTONE_FROM_NUMBER || '+12028131474';
-const TO_NUMBER = process.env.CAPSTONE_TENANT_DID || '+18622307479';
+const TO_NUMBER = process.env.CAPSTONE_TENANT_DID || '+18623622415';
 
 const UTTERANCES = [
   'Hi, I have stomach pain since this morning.',
@@ -50,25 +50,28 @@ const UTTERANCES = [
   'Yes please book an appointment.',
   'Paul Capstone.',
   'paul.capstone@test.com',
-  'plus one two zero two eight one three one four seven four.',
+  'plus one eight six two two three zero seven four seven nine.',
   'Thank you, goodbye.'
 ];
 
 const RESPONSE_BY_AGENT = [
+  { re: /scale of|scale from|1 to 10|one to ten|how bad|how severe|severity|worst pain|rate the pain/i, text: 'About a six out of ten.' },
+  { re: /radiate|spread anywhere|move anywhere|stay in one spot|stay right there/i, text: 'It stays in one spot and does not spread.' },
+  { re: /better or worse|makes it|worse|provoc|rest help|antacid|lying down|eating|movement/i, text: 'Rest helps a little, movement makes it worse.' },
+  { re: /where.*pain|point to|located in|location of|which part|stomach area/i, text: 'Upper middle part of my stomach.' },
   { re: /when did|when .* start|start/i, text: 'It started this morning.' },
-  { re: /feel like|describe|quality|what .* feel/i, text: 'It feels like an aching pain.' },
+  { re: /feel like|describe|quality|what .* feel|sharp|dull|burning|cramping/i, text: 'It feels like an aching pain.' },
   { re: /constant|comes and go|timing|come and go/i, text: 'It is constant.' },
-  { re: /scale|1 to 10|how bad|severity|how severe/i, text: 'About a six out of ten.' },
   { re: /medications|meds|taking any/i, text: 'No medications.' },
   { re: /allerg/i, text: 'No allergies.' },
   { re: /prior tests|workups|tests before/i, text: 'No prior tests.' },
   { re: /alcohol|drink/i, text: 'No alcohol use.' },
   { re: /insurance|payer|plan|coverage/i, text: 'I have Blue Cross Blue Shield plan x.' },
   { re: /member id|subscriber|policy number/i, text: 'My member id is MBR123.' },
-  { re: /book|appointment|schedule|slot|available/i, text: 'Yes please book an appointment.' },
+  { re: /book|appointment|schedule|slot|available|time works/i, text: 'Yes please book an appointment.' },
   { re: /name|full name|who am i speaking/i, text: 'Paul Capstone.' },
   { re: /email|e-mail/i, text: 'paul.capstone@test.com' },
-  { re: /phone|number|call you back/i, text: 'plus one two zero two eight one three one four seven four.' }
+  { re: /phone|number|call you back/i, text: 'plus one eight six two two three zero seven four seven nine.' }
 ];
 
 function pickUserReply(agentText, utterIdx) {
@@ -400,13 +403,31 @@ function runVerify(sessionId) {
   const evidenceDir = path.join(MP, 'var', 'evidence', 'phase1');
   fs.mkdirSync(evidenceDir, { recursive: true });
   const outPath = path.join(evidenceDir, `live_${sessionId}.json`);
-  const out = execSync(`node scripts/verify-live-call.cjs --session_id=${sessionId} --json`, {
-    cwd: MP,
-    encoding: 'utf8',
-    env: { ...process.env, DB_PATH: './var/db/middleware-dev.db', SKIP_STARTUP_MIGRATIONS: '1' }
-  });
+  const bookingVerify = process.env.PHASE1_BOOKING_VERIFY === '1';
+  const out = bookingVerify
+    ? execSync(`node scripts/verify-live-booking-call.cjs`, {
+        cwd: MP,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          SESSION_ID: sessionId,
+          DB_PATH: pulled,
+          SKIP_STARTUP_MIGRATIONS: '1',
+          PHASE1_STRICT: process.env.PHASE1_STRICT || '1'
+        }
+      })
+    : execSync(`node scripts/verify-live-call.cjs --session_id=${sessionId} --json`, {
+        cwd: MP,
+        encoding: 'utf8',
+        env: { ...process.env, DB_PATH: './var/db/middleware-dev.db', SKIP_STARTUP_MIGRATIONS: '1' }
+      });
   fs.writeFileSync(outPath, out);
   console.log(out);
+  if (bookingVerify) {
+    const parsed = JSON.parse(out);
+    if (!parsed.pass) process.exit(2);
+    return;
+  }
   const parsed = JSON.parse(out);
   if (!parsed.success) process.exit(2);
 }

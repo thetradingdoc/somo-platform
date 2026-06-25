@@ -30,7 +30,7 @@ async function main() {
     'Can Somo handle Spanish-speaking patients too?'
   ];
 
-  const health = await timedFetch(`${API_BASE}/api/public/somo-demo/health`);
+  const health = await timedFetch(`${API_BASE}/health`);
   const turns = [];
   for (const message of messages) {
     const r = await timedFetch(`${API_BASE}/api/public/landing-assistant/turn`, {

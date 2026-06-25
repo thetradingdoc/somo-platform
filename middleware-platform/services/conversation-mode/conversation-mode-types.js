@@ -3,6 +3,7 @@
 /** Top-level conversation modes (8). */
 const ConversationMode = Object.freeze({
   DEMO_QUAL: 'demo_qual',
+  NAVIGATION_MEMBER: 'navigation_member',
   OUTBOUND_SALES: 'outbound_sales',
   OPERATOR_OUTBOUND: 'operator_outbound',
   TENANT_INBOUND_ADMIN: 'tenant_inbound_admin',
@@ -63,6 +64,7 @@ function normalizeCallType(callType) {
   if (t === 'sales_outbound') return 'sales_outbound';
   if (t === 'operator_outbound') return 'operator_outbound';
   if (t === 'inbound_tenant' || t === 'inbound') return 'inbound_tenant';
+  if (t === 'consumer_navigation') return 'consumer_navigation';
   if (t === 'sequence_automation') return 'operator_outbound';
   return t || 'unknown';
 }

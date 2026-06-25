@@ -1585,6 +1585,56 @@ class KellyToolExecutor {
         case 'run_derm_patient_qa':
           return await KellyToolExecutor._runDermPatientQA(args, patientId);
 
+        case 'search_products': {
+          const pstnTools = require('./pstn-voice-commerce-tools');
+          return await pstnTools.searchProducts(args, {
+            sessionId,
+            clinicId,
+            merchantId: context.merchantId,
+            callerPhone
+          });
+        }
+
+        case 'create_checkout': {
+          const pstnTools = require('./pstn-voice-commerce-tools');
+          return await pstnTools.createCheckout(args, {
+            sessionId,
+            clinicId,
+            merchantId: context.merchantId,
+            callerPhone
+          });
+        }
+
+        case 'get_available_payment_methods': {
+          const pstnTools = require('./pstn-voice-commerce-tools');
+          return await pstnTools.getAvailablePaymentMethods(args, {
+            sessionId,
+            clinicId,
+            merchantId: context.merchantId,
+            callerPhone
+          });
+        }
+
+        case 'verify_checkout_code': {
+          const pstnTools = require('./pstn-voice-commerce-tools');
+          return await pstnTools.verifyCheckoutCode(args, {
+            sessionId,
+            clinicId,
+            merchantId: context.merchantId,
+            callerPhone
+          });
+        }
+
+        case 'get_order_tracking': {
+          const pstnTools = require('./pstn-voice-commerce-tools');
+          return await pstnTools.getOrderTracking(args, {
+            sessionId,
+            clinicId,
+            merchantId: context.merchantId,
+            callerPhone
+          });
+        }
+
         case 'end_call':
           return { success: true, end_call: true };
 
@@ -1812,7 +1862,30 @@ class KellyToolExecutor {
             'massachusetts': 'MA',
             'maryland': 'MD',
             'virginia': 'VA',
-            'washington': 'WA'
+            'washington': 'WA',
+            'oregon': 'OR',
+            'illinois': 'IL',
+            'colorado': 'CO',
+            'arizona': 'AZ',
+            'georgia': 'GA',
+            'ohio': 'OH',
+            'michigan': 'MI',
+            'north carolina': 'NC',
+            'tennessee': 'TN',
+            'indiana': 'IN',
+            'missouri': 'MO',
+            'wisconsin': 'WI',
+            'minnesota': 'MN',
+            'connecticut': 'CT',
+            'nevada': 'NV',
+            'utah': 'UT',
+            'iowa': 'IA',
+            'kansas': 'KS',
+            'louisiana': 'LA',
+            'alabama': 'AL',
+            'kentucky': 'KY',
+            'oklahoma': 'OK',
+            'south carolina': 'SC'
           };
           const validStateCodes = new Set([
             'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',

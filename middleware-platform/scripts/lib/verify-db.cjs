@@ -59,8 +59,57 @@ function findEventType(events, eventType) {
   return events.some((e) => e.event_type === eventType);
 }
 
+/** GCS pull target — never var/db/middleware-dev.db (bootstrap default). */
+function resolvePulledProdDbPath() {
+  const mpRoot = path.join(__dirname, '..', '..');
+  const repoRoot = path.join(mpRoot, '..');
+  return path.resolve(
+    process.env.PHASE1_DB_PATH ||
+      process.env.NAVIGATION_GCS_DB_PATH ||
+      path.join(repoRoot, 'backups', 'middleware-staging.db')
+  );
+}
+
+function assertDbIntegrity(dbPath) {
+  const p = path.resolve(dbPath);
+  if (!fs.existsSync(p)) {
+    throw new Error(`DB not found: ${p}`);
+  }
+  const sqlite = new Database(p, { readonly: true });
+  try {
+    const row = sqlite.pragma('integrity_check', { simple: true });
+    if (row !== 'ok') {
+      throw new Error(`SQLite integrity_check failed on ${p}: ${row}`);
+    }
+  } finally {
+    sqlite.close();
+  }
+}
+
+function pullProdDbFromGcs() {
+  const { execSync } = require('child_process');
+  const bucket = process.env.GCS_DB_BUCKET || 'somo-staging-db-somo-callsomo';
+  const object = process.env.GCS_DB_OBJECT || 'middleware-staging.db';
+  const dest = resolvePulledProdDbPath();
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  for (const suffix of ['-wal', '-shm', '-journal']) {
+    try {
+      fs.unlinkSync(dest + suffix);
+    } catch (_) {}
+  }
+  const gsPath = `gs://${bucket}/${object}`;
+  console.log(`Pulling ${gsPath} → ${dest}`);
+  execSync(`gsutil cp "${gsPath}" "${dest}"`, { stdio: 'inherit' });
+  assertDbIntegrity(dest);
+  process.env.DB_PATH = dest;
+  return dest;
+}
+
 module.exports = {
   resolveDbPath,
+  resolvePulledProdDbPath,
+  assertDbIntegrity,
+  pullProdDbFromGcs,
   openReadonlyDb,
   openAppDb,
   fetchKellyEventsRaw,

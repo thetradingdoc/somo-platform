@@ -109,7 +109,7 @@ Legacy domains are retired in application code; DNS redirects are operator-owned
 
 | Canonical | Notes |
 |-----------|--------|
-| `/api/public/somo-demo/*` | Only supported public demo routes |
+| `/health (legacy demo API retired) *` | Only supported public demo routes |
 | `/api/public/dodgecall/*` | **Removed** — deploy revision must include `somo-demo` mounts |
 
 ## FHIR namespace

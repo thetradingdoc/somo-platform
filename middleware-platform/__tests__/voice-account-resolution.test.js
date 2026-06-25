@@ -4,6 +4,7 @@ const {
   getOperatorCustomerId,
   resolveCustomerIdForBilling,
   resolveVoiceAccount,
+  resolveNavigationInboundByDid,
   isOutboundRequest,
   normalizeCallType
 } = require('../services/voice-account-resolution');
@@ -33,7 +34,7 @@ describe('voice-account-resolution', () => {
   it('normalizeCallType sets operator_outbound default', () => {
     const req = { query: {} };
     expect(
-      normalizeCallType(req, { isOutbound: true, isSomoDemoDemo: false, leadId: null })
+      normalizeCallType(req, { isOutbound: true, leadId: null })
     ).toBe('operator_outbound');
   });
 
@@ -43,13 +44,29 @@ describe('voice-account-resolution', () => {
   });
 
   const mockDb = (overrides = {}) => ({
-    getCustomer: (id) => (id === 'cust_op' ? { id, merchant_id: 'm1' } : null),
-    getCustomerByTwilioNumber: (n) =>
-      n === '+13639990205' ? { id: 'cust_by_phone', twilio_phone_number: n } : null,
+    getCustomer: (id) => {
+      if (id === 'cust_op') return { id, merchant_id: 'm1' };
+      if (id === 'cust-nav') return { id: 'cust-nav', customer_type: 'navigation', merchant_id: 'm-nav' };
+      return null;
+    },
+    getCustomerByTwilioNumber: (n) => {
+      if (n === '+13639990205') {
+        return { id: 'cust-nav', customer_type: 'navigation', twilio_phone_number: n };
+      }
+      return null;
+    },
     getClinicPhoneNumber: () => null,
     getCustomerIdForClinic: () => null,
     db: { prepare: () => ({ get: () => null }) },
     ...overrides
+  });
+
+  beforeEach(() => {
+    process.env.NAVIGATION_ENABLED = '1';
+  });
+
+  afterEach(() => {
+    delete process.env.NAVIGATION_ENABLED;
   });
 
   it('path A resolves customer_id from URL query param', () => {
@@ -58,7 +75,6 @@ describe('voice-account-resolution', () => {
     const req = { query: { customer_id: 'cust_op' }, headers: {} };
     const result = resolveVoiceAccount(db, req, {
       normalizedToNumber: '+13639990205',
-      isSomoDemoDemo: false,
       isOutbound: true,
       leadId: null
     });
@@ -66,16 +82,34 @@ describe('voice-account-resolution', () => {
     delete process.env.CALLSOMO_OPERATOR_CUSTOMER_ID;
   });
 
-  it('path B resolves customer via To number on inbound', () => {
+  it('path B resolves navigation customer via To on inbound (platform DID)', () => {
     const db = mockDb();
     const req = { query: {}, headers: {} };
     const result = resolveVoiceAccount(db, req, {
       normalizedToNumber: '+13639990205',
-      isSomoDemoDemo: false,
       isOutbound: false,
       leadId: null
     });
-    expect(result.customerId).toBe('cust_by_phone');
+    expect(result.customerId).toBe('cust-nav');
+  });
+
+  it('navigation DID overrides operator customer_id in Twilio URL', () => {
+    process.env.CALLSOMO_OPERATOR_CUSTOMER_ID = 'cust_op';
+    const db = mockDb();
+    const req = { query: { customer_id: 'cust_op' }, headers: {} };
+    const result = resolveVoiceAccount(db, req, {
+      normalizedToNumber: '+13639990205',
+      isOutbound: false,
+      leadId: null
+    });
+    expect(result.customerId).toBe('cust-nav');
+    delete process.env.CALLSOMO_OPERATOR_CUSTOMER_ID;
+  });
+
+  it('resolveNavigationInboundByDid returns navigation row when enabled', () => {
+    const db = mockDb();
+    const row = resolveNavigationInboundByDid(db, '+13639990205');
+    expect(row?.id).toBe('cust-nav');
   });
 
   it('path C resolves operator env fallback on outbound without customer_id', () => {
@@ -84,7 +118,6 @@ describe('voice-account-resolution', () => {
     const req = { query: { call_type: 'operator_outbound' }, body: {}, headers: {} };
     const result = resolveVoiceAccount(db, req, {
       normalizedToNumber: '+13639990205',
-      isSomoDemoDemo: false,
       isOutbound: true,
       leadId: null
     });

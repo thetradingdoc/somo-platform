@@ -16,7 +16,7 @@ class VoiceAdapter {
 
         return products.map((product, index) => {
             // Debug: Log first product structure
-            if (index === 0) {
+            if (index === 0 && String(process.env.PSTN_REPLAY_QUIET_LOGS || '').trim() !== '1') {
                 console.log('🔍 VoiceAdapter: First product keys:', Object.keys(product));
                 console.log('🔍 VoiceAdapter: First product.name:', product.name, 'type:', typeof product.name);
             }

@@ -6,7 +6,7 @@ Product-specific voice agents (separate from production Kelly / clinic stack).
 
 | Agent | Docs |
 |-------|------|
-| **Somo demo** (landing prospects) | [`somo-demo/README.md`](somo-demo/README.md) (architecture, ADRs, registry) · [`somo-demo/RUNBOOK.md`](somo-demo/RUNBOOK.md) (local + prod ops) |
+| **Consumer navigation** (platform DID `+13639990205`) | [`runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md) · [`voice/PLATFORM_NUMBER_INBOUND_SPEC.md`](../voice/PLATFORM_NUMBER_INBOUND_SPEC.md) |
 | **Kelly** (paying clinics) | [`../voice-agent/README.md`](../voice-agent/README.md) |
 
 Do not mix Somo demo Retell config with Kelly `configure-retell.js`.

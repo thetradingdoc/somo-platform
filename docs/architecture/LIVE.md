@@ -1,6 +1,11 @@
 # LIVE
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-24
+
+## 2026-06-24 changelog
+
+- **Platform DID navigation:** `+13639990205` routes to consumer navigation (`consumer-navigation-handler` + `navigation-orchestrator`). Somo demo stack and `somo-landing` SPA retired; root `/` redirects to `/business/trial-activation.html`.
+- Operator runbook: [`runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md).
 
 ## 2026-06-17 changelog
 
@@ -90,7 +95,7 @@ Primary runtime surfaces:
 
 - `middleware-platform/` - Core backend API + orchestration + workers + integrations
 - `unified-dashboard/` - Static/web portals (patient, business, admin, insurer) and shared JS/CSS
-- `unified-dashboard/somo-landing/` - Somo marketing SPA at `/` (`:5180` dev, proxies `/api` → `:4000`)
+- `unified-dashboard/` — static portals; marketing root redirects to `/business/trial-activation.html` (somo-landing retired 2026-06)
 - `unified-dashboard/_archive/littlelab-landing/` - Archived CRA landing + Kelly/LiveKit assistant (retired 2026-05-29)
 - `patient-app/` - Expo/React Native app (auth + appointments + checkout chat integration)
 - `docs/` - Consolidated canonical documentation
@@ -228,7 +233,7 @@ Characteristics:
 
 - Vite + React marketing SPA at `/` (hero, capabilities, demo, ROI, pricing, languages, FAQ)
 - Image 1 palette via `somo-tokens.css` + `somo-landing/src/styles/somo.css`
-- Public demo: `POST /api/public/somo-demo/request-call`
+- Public demo: `POST /health (legacy demo API retired) request-call`
 - Legacy CRA + Kelly/LiveKit assistant funnel: `_archive/littlelab-landing/` (archived 2026-05-29)
 
 ## 6.3 Patient Mobile App (`patient-app`)
@@ -667,7 +672,7 @@ RCM_E2E_USE_EXISTING_SERVER=1 npm run test:e2e:rcm:conversation
 ## 0. Phase status snapshot (closure checkpoint)
 
 - Phase A foundation (Somo demo / API infra — **GO** 2026-06-02):
-  - Canonical `/api/public/somo-demo/*` live on `api.callsomo.com` → Cloud Run `somo-middleware`.
+  - Canonical `/health (legacy demo API retired) *` live on `api.callsomo.com` → Cloud Run `somo-middleware`.
   - Legacy demo alias routes and pre-cutover Cloud Run service **decommissioned** ([`GCP_SOMO_SERVICE_CUTOVER.md`](../deployment/GCP_SOMO_SERVICE_CUTOVER.md)).
   - Rolling 24h duplicate lock semantics are implemented in repo.
   - Deterministic API error codes (`DUPLICATE_PHONE_WINDOW`, `IP_RATE_LIMIT`, etc.) are implemented.
@@ -1221,7 +1226,7 @@ Single map for “what listens where” on the main Node process. **Compose entr
 
 ## Somo marketing landing (`somo-landing`)
 
-The Somo marketing Vite bundle (`unified-dashboard/somo-landing/build`) is served at:
+The Somo marketing Vite bundle (`business/trial-activation portal/build`) is served at:
 
 | Pattern | Notes |
 |---------|--------|
@@ -1287,7 +1292,7 @@ SPA static mounts (`/unified-dashboard`, `/patients`, `/business`, `/insurer`, s
 ## Primary Entrypoints
 
 - **API runtime:** `middleware-platform/server.js`
-- **Marketing landing:** `unified-dashboard/somo-landing/src/main.jsx`
+- **Marketing landing:** `business/trial-activation portal/src/main.jsx`
 - **Archived landing assistant:** `unified-dashboard/_archive/littlelab-landing/src/index.js`
 - **Patient app (Expo Router):** `patient-app/app/_layout.tsx`
 - **Ops/verification scripts:** `scripts/` (repo root), `middleware-platform/scripts/`

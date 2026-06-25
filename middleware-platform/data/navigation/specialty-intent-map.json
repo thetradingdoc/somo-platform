@@ -1,0 +1,27 @@
+{
+  "dental": {
+    "specialty": "Dental",
+    "label": "dental care",
+    "phrases": ["dentist", "dental", "teeth", "tooth", "oral", "toothache", "cavity"]
+  },
+  "orthodontics": {
+    "specialty": "Orthodontics",
+    "label": "braces or orthodontics",
+    "phrases": ["braces", "orthodontist", "orthodontics", "invisalign", "straighten teeth"]
+  },
+  "optometry": {
+    "specialty": "Optometry",
+    "label": "vision care",
+    "phrases": ["optometrist", "eye doctor", "vision", "glasses", "optical", "ophthalmology"]
+  },
+  "psychiatry": {
+    "specialty": "Psychiatry",
+    "label": "mental health support",
+    "phrases": ["psychiatrist", "therapy", "therapist", "mental health", "counseling", "psychology", "anxiety", "anxious", "depressed", "depression"]
+  },
+  "primary_care": {
+    "specialty": "PrimaryCare",
+    "label": "primary care",
+    "phrases": ["primary care", "pcp", "family doctor", "general doctor", "gp", "internist", "checkup"]
+  }
+}

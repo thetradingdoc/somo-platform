@@ -98,7 +98,7 @@ function createDbAdapter(sqlite) {
  * @param {{ customerId: string, clinicId: string, did: string, clinicName?: string }} opts
  */
 function stampTenantSiteContext(dbPathOrHandle, opts = {}) {
-  const { customerId, clinicId, did, clinicName = 'Default Clinic' } = opts;
+  const { customerId, clinicId, did, clinicName = 'Default Clinic', clinicSlug } = opts;
   if (!customerId || !clinicId || !did) {
     throw new Error('stampTenantSiteContext requires customerId, clinicId, and did');
   }
@@ -124,15 +124,16 @@ function stampTenantSiteContext(dbPathOrHandle, opts = {}) {
       .run(merchantKey, customerId);
     sqlite.prepare(`UPDATE customers SET merchant_id = ? WHERE id = ?`).run(merchantKey, customerId);
 
+    const slug = clinicSlug || String(clinicId).replace(/^clinic-/, '') || 'default';
     sqlite
       .prepare(
         `INSERT INTO clinics (clinic_id, name, slug, merchant_id, is_active)
-         VALUES (?, ?, 'default', ?, 1)
+         VALUES (?, ?, ?, ?, 1)
          ON CONFLICT(clinic_id) DO UPDATE SET
            merchant_id = excluded.merchant_id,
            is_active = 1`
       )
-      .run(clinicId, clinicName, merchantKey);
+      .run(clinicId, clinicName, slug, merchantKey);
 
     sqlite
       .prepare(

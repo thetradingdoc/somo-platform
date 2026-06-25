@@ -16,7 +16,7 @@ test.describe('Provider portal prod smoke (read-only)', () => {
   });
 
   test('api health responds', async ({ request }) => {
-    const res = await request.get(`${API_BASE}/api/public/somo-demo/health`);
+    const res = await request.get(`${API_BASE}/health`);
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
     expect(body.ok).toBe(true);

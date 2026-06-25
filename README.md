@@ -53,7 +53,8 @@
 - Epic/1upHealth (EHR integration)
 
 **Frontend**:
-- Static dashboards + Somo marketing landing (`unified-dashboard/somo-landing`)
+- Static dashboards (provider, admin, business portals)
+- Marketing root redirects to `/business/trial-activation.html` (somo-landing SPA retired 2026-06)
 - Deploy/hosting: see **[docs/deployment/README.md](docs/deployment/README.md)** (GCP is the documented source of truth)
 
 **Standards**:
@@ -67,7 +68,6 @@
 somo/
 ├── middleware-platform/     # Backend API (Express, Stripe, Retell, voice LLM, FHIR, …)
 ├── unified-dashboard/       # Provider/patient HTML dashboards + static assets
-│   ├── somo-landing/        # Somo marketing SPA (Vite → build served at /)
 │   └── _archive/littlelab-landing/  # Retired CRA landing + assistant (2026-05-29)
 ├── patient-app/             # Expo (React Native) patient app
 ├── livekit-agents/          # Python transcription / agent workers
@@ -127,7 +127,8 @@ With `middleware-platform` running (`npm start`), visit:
 
 | Surface                      | Local URL                       | Served From                              |
 |------------------------------|---------------------------------|------------------------------------------|
-| Somo marketing landing       | http://localhost:4000/          | `somo-landing/build`                     |
+| Marketing / trial entry      | http://localhost:4000/          | Redirect → `/business/trial-activation.html` |
+| Consumer navigation (PSTN)   | +13639990205                    | `consumer-navigation-handler` when `NAVIGATION_ENABLED=1` |
 | Admin landing                | http://localhost:4000/admin     | `unified-dashboard/admin/index.html`     |
 | Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
 | API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |

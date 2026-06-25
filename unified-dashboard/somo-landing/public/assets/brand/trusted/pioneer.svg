@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 32" role="img" aria-label="Pioneer Realty">
-  <path d="M8 16h6l2-4 2 4h6l-5 4 2 6-5-3.5L6 26l2-6-5-4z" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linejoin="round"/>
-  <path d="M14 12l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1 2-4z" fill="#6b7280"/>
-  <text x="34" y="14" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#374151">Pioneer</text>
-  <text x="34" y="26" font-family="system-ui,sans-serif" font-size="8" font-weight="600" fill="#9ca3af" letter-spacing="0.08em">REALTY</text>
-</svg>

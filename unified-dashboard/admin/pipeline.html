@@ -28,13 +28,6 @@
 
     <div class="admin-crm-card">
       <div class="admin-crm-card-title admin-crm-card-title--split">
-        <span>Inbound demos <span id="inboundDemoCount" class="admin-crm-badge admin-crm-badge-muted">—</span></span>
-      </div>
-      <div id="inboundDemoList"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
-    </div>
-
-    <div class="admin-crm-card">
-      <div class="admin-crm-card-title admin-crm-card-title--split">
         <span>Call-ready queue <span id="queueCount" class="admin-crm-badge admin-crm-badge-muted">—</span></span>
         <button class="btn btn-primary btn-sm" id="btnCall10">Call next 10</button>
       </div>
@@ -86,36 +79,9 @@
       };
       document.getElementById('btnCall10').onclick = callNext10;
       document.getElementById('btnEnrich').onclick = () => { location.href = '/admin/'; };
-      loadInboundDemos();
       loadQueue();
       loadKanban();
     });
-
-    async function loadInboundDemos() {
-      const el = document.getElementById('inboundDemoList');
-      const countEl = document.getElementById('inboundDemoCount');
-      if (!el) return;
-      try {
-        const r = await apiFetch('/api/admin/leads?source=landing_demo&limit=20');
-        const leads = r.leads || [];
-        if (countEl) countEl.textContent = leads.length;
-        if (!leads.length) {
-          el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No landing-page demo requests yet.</p>';
-          return;
-        }
-        el.innerHTML = leads.map((l) => `
-          <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${esc(l.id)}'">
-            <div style="flex:1;min-width:0;">
-              <div class="admin-crm-row-name" style="font-weight:600;">${esc(l.clinic_name)}</div>
-              <div style="font-size:12px;color:var(--muted);">${esc(l.clinic_email || l.clinic_phone || '')}</div>
-            </div>
-            <span class="admin-crm-badge admin-crm-badge-info">Inbound</span>
-          </div>
-        `).join('');
-      } catch (e) {
-        el.innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
-      }
-    }
 
     async function loadQueue(page = 0) {
       currentPage = page;

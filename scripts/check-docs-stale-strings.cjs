@@ -16,7 +16,8 @@ const DOCS = path.join(ROOT, 'docs');
 const PATTERNS = [
   { re: /myskin-middleware/i, label: 'myskin-middleware (decommissioned Cloud Run service)' },
   { re: /\/api\/public\/dodgecall\//i, label: '/api/public/dodgecall/ (removed HTTP routes)' },
-  { re: /dodgecall\/health/i, label: 'dodgecall/health probe (use somo-demo/health)' },
+  { re: /\/api\/public\/somo-demo\//i, label: '/api/public/somo-demo/ (retired — use /health)' },
+  { re: /unified-dashboard\/somo-landing/i, label: 'somo-landing SPA (retired — root redirects to trial activation)' },
 ];
 
 const ALLOW_PATH = [

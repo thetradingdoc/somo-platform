@@ -54,17 +54,6 @@
         </div>
       </div>
 
-      <div class="admin-crm-card" id="demoQualCard" hidden>
-        <div class="admin-crm-card-title">Inbound demo qualification</div>
-        <table style="width:100%;font-size:13px;border-collapse:collapse;">
-          <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);width:38%;">Use case</td><td id="demoUseCase">—</td></tr>
-          <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Interest</td><td id="demoInterest">—</td></tr>
-          <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Primary problem</td><td id="demoProblem">—</td></tr>
-          <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Form context</td><td id="demoQuestions">—</td></tr>
-          <tr><td style="padding:6px 0;color:var(--muted);">Demo request</td><td id="demoRequestId">—</td></tr>
-        </table>
-      </div>
-
       <div class="admin-crm-card">
         <div class="admin-crm-card-title">Add a note</div>
         <textarea id="noteText" style="width:100%;min-height:80px;padding:10px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;" placeholder="Notes, next steps..."></textarea>
@@ -154,31 +143,8 @@
       callBtn.disabled = !callable;
       callBtn.style.opacity = callable ? '1' : '0.5';
 
-      renderDemoQual(lead);
       renderCalls(calls || []);
       renderActivities(activities || []);
-    }
-
-    function renderDemoQual(lead) {
-      const card = document.getElementById('demoQualCard');
-      if (!card) return;
-      const isDemo =
-        lead.source === 'landing_demo' || String(lead.external_id || '').startsWith('somo_demo:');
-      if (!isDemo) {
-        card.hidden = true;
-        return;
-      }
-      card.hidden = false;
-      let meta = {};
-      try {
-        meta = lead.notes ? JSON.parse(lead.notes) : {};
-      } catch (_) {}
-      const q = meta.qualification || {};
-      document.getElementById('demoUseCase').textContent = meta.use_case || '—';
-      document.getElementById('demoInterest').textContent = q.interest_level || '—';
-      document.getElementById('demoProblem').textContent = q.primary_problem || '—';
-      document.getElementById('demoQuestions').textContent = meta.questions_asked || '—';
-      document.getElementById('demoRequestId').textContent = meta.demo_request_id || '—';
     }
 
     function renderCalls(calls) {

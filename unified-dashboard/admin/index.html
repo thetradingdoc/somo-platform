@@ -53,22 +53,13 @@
                   </div>
                 </div>
 
-    <div class="admin-crm-two-col">
-      <div class="admin-crm-card">
-        <div class="admin-crm-card-title admin-crm-card-title--split">
-          <span>Top call-ready</span>
-          <a href="/admin/pipeline.html" style="font-size:12px;color:var(--accent-green);font-weight:400;">View queue →</a>
-                    </div>
-        <div id="callReadyList"><div class="admin-crm-skeleton" style="height:160px;"></div></div>
-                      </div>
-      <div class="admin-crm-card">
-        <div class="admin-crm-card-title admin-crm-card-title--split">
-          <span>Demos &amp; follow-ups</span>
-          <a href="/admin/pipeline.html" style="font-size:12px;color:var(--accent-green);font-weight:400;">Full pipeline →</a>
-                    </div>
-        <div id="demoList"><div class="admin-crm-skeleton" style="height:160px;"></div></div>
-          </div>
-        </div>
+    <div class="admin-crm-card">
+      <div class="admin-crm-card-title admin-crm-card-title--split">
+        <span>Top call-ready</span>
+        <a href="/admin/pipeline.html" style="font-size:12px;color:var(--accent-green);font-weight:400;">View queue →</a>
+      </div>
+      <div id="callReadyList"><div class="admin-crm-skeleton" style="height:160px;"></div></div>
+    </div>
     </main>
 
   <div class="admin-crm-modal-overlay" id="scrapeModal">
@@ -98,7 +89,7 @@
     });
 
     async function loadAll() {
-      await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline(), loadInboundDemos()]);
+      await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline()]);
     }
 
     async function loadStatus() {
@@ -201,26 +192,6 @@
             } catch (e) {
         document.getElementById('funnelView').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load pipeline</p>';
       }
-    }
-
-    async function loadInboundDemoLeads(limit = 4) {
-      try {
-        const r = await apiFetch(`/api/admin/leads?source=landing_demo&limit=${limit}`);
-        return r.leads || [];
-      } catch (_) {
-        return [];
-      }
-    }
-
-    async function loadInboundDemos() {
-      const demoEl = document.getElementById('demoList');
-      if (!demoEl) return;
-      const demoLeads = await loadInboundDemoLeads(4);
-      if (!demoLeads.length) {
-        demoEl.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">No inbound demos yet</p>';
-        return;
-      }
-      demoEl.innerHTML = demoLeads.map(l => rowLead(l, false)).join('');
     }
 
     function rowLead(l, withCall) {

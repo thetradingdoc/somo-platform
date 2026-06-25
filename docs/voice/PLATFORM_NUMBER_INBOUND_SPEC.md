@@ -1,53 +1,61 @@
-# Platform number inbound spec (PD-1)
+# Platform number inbound spec
 
-**Status:** Draft for engineering + product sign-off  
-**Epic:** PLATFORM-VOICE  
+**Status:** Active (patient navigator P1)  
 **Primary platform DID:** `+13639990205` (Twilio `TWILIO_PHONE_NUMBER` / `CALLSOMO_OPERATOR_TWILIO_NUMBER`)
 
 ## Purpose
 
-The platform inbound line is **not** a tenant clinic DID. Callers reaching this number are prospects, operators testing, or general Somo inquiries — **not** patients of a specific clinic.
+The platform inbound line is the **consumer-facing Somo Health patient navigator** PSTN entry. Callers get need-first navigation: care need → plan → ZIP → one ranked in-network recommendation with copay in context → contact info only.
 
-Kelly Rails clinical intake (OPQRST, `triage_sessions`, `store_triage_opqrst`) must **never** run on this line.
+Kelly Rails clinical intake (`store_triage_opqrst`, `triage_sessions`) must **never** run on this line. Legacy Somo demo qualification and somo-landing outbound demos are retired.
 
 ## Routing worlds
 
 | World | When | Agent path | Clinical |
 |-------|------|------------|----------|
-| `demo` | Inbound to demo/platform DID, or `call_type=somo_demo` | `somo-demo-handler` + Groq qualification | **No** |
-| `platform_support` | Operator `customer_type` on platform DID with resolved `customer_id` | Admin + handoff/callback | **No** (`triage_policy=disabled`) |
+| `navigation` | Inbound to platform DID with `cust-navigation-demo` on DID | `consumer-navigation-handler` | **No** |
+| `platform_support` | Operator `customer_type` with resolved `customer_id` | Admin + handoff/callback | **No** |
 | `tenant` | Inbound to tenant DID with `customer_id` | Full Kelly Rails V2 | Per tenant policy |
 | `operator_outbound` | Outbound from operator account | `operator-outbound-rail` | **No** |
-| `unidentified` | No `customer_id`, not demo line | Fail-closed admin + handoff | **No** |
+| `unidentified` | No `customer_id`, not navigation line | Fail-closed admin + handoff | **No** |
 
-## Caller intents on platform inbound
+## Ingress (no Twilio reconfig)
+
+Twilio may keep the existing voice URL. Server-side:
+
+1. `resolveNavigationInboundByDid` binds inbound `To` → `cust-navigation-demo` when `NAVIGATION_ENABLED=1`.
+2. `routing_world=navigation` on Retell WebSocket.
+3. `cust-navigation-demo.retell_agent_id` set via `NAVIGATION_RETELL_AGENT_ID` or `RETELL_AGENT_ID`.
+
+## Caller intents on platform inbound (P1)
 
 | Caller says | Expected behavior |
 |-------------|-------------------|
-| "Can I book?" / "Make an appointment" | Demo qualification or platform handoff — **not** OPQRST |
-| Email / phone capture | Contact capture — **not** SYMPTOM |
-| "What do you do?" / "Speak to someone" | Handoff + `record_interest` (demo) or callback offer |
-| Real symptom on platform line | Demo VALUE illustration only — no `triage_sessions` writes |
+| Care need (dentist, braces, anxiety) | Map to specialty; then ask plan |
+| Health plan / insurer name | `resolve_patient_plan` |
+| ZIP | Rank one in-network provider; copay in context |
+| Yes to contact offer | Phone + hours; **no booking** |
 
 ## Identity requirements
 
-- `tenantResolved` = **`customer_id` present** (clinic_id alone is insufficient).
-- Env `DEFAULT_CLINIC_ID` fallback applies **only** when `customer_id` is resolved.
-- Retell register must set `dynamicVariables.call_type`, `customer_id`, `direction`, `to_number`.
+- Navigation resolves via **`customers.twilio_phone_number`** on `To` (overrides URL `customer_id`).
+- Retell register sets `call_type=consumer_navigation`, `customer_type=navigation`.
 
 ## Telemetry
 
-Every call emits `routing_world_resolved` in `kelly_call_events`. Ops triage: if OPQRST fires, check `routing_world !== tenant`.
+Every call emits `routing_world_resolved` in `kelly_call_events`. Ops triage: platform PSTN should show `routing_world=navigation`.
 
-## Acceptance (PD-4)
+## Acceptance
 
-- [ ] Platform inbound → `routing_world: demo` in events
-- [ ] No `kelly_rails_v2` / OPQRST on demo path
-- [ ] Replay `call_de149e6` / `call_affe468` utterances pass unit smoke
-- [ ] Tenant DID with `customer_id` → full Kelly booking/clinical per policy
+- [ ] Inbound to `+13639990205` → `routing_world: navigation`
+- [ ] Greeting: "How can I help you today?" (need-first)
+- [ ] No `kelly_rails_v2` / OPQRST on navigation path
+- [ ] No booking/slot tools on navigation line in P1
+- [ ] `npm run navigation:routing-live -- --pull-db --latest` passes after PSTN call
 
 ## Related
 
-- `todos/PLATFORM-VOICE-ROUTING.md` — implementation tracker
-- `docs/runbooks/OPERATIONS.md` — number map (PD-3)
-- `services/voice-routing-world.js` — code SSOT
+- `docs/runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`
+- `docs/deployment/NAVIGATION_PITCH_SCRIPT.md`
+- `services/voice-routing-world.js`
+- `services/voice-account-resolution.js` — `resolveNavigationInboundByDid`

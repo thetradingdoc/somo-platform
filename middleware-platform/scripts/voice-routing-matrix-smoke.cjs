@@ -51,8 +51,14 @@ const REPLAY_TURNS = [
 console.log('=== voice-routing-matrix-smoke ===\n');
 
 assert(
-  resolveRoutingWorld({ to_number: '+13639990205', direction: 'inbound' }) === 'demo',
-  'platform line → demo world'
+  resolveRoutingWorld({
+    to_number: '+13639990205',
+    direction: 'inbound',
+    call_type: 'consumer_navigation',
+    customer_id: 'cust-navigation-demo',
+    customer: { customer_type: 'navigation' }
+  }) === 'navigation',
+  'platform line → navigation world'
 );
 assert(isTenantResolvedForMode(null) === false, 'no customer_id → tenant unresolved');
 assert(shouldBlockKellyTurn('unidentified') === true, 'unidentified blocks Kelly');
@@ -105,12 +111,12 @@ assert(isVoicemailOrIvrUtterance('please leave a message after the tone'), 'O-2 
 assert(isOptOutUtterance("don't call me again"), 'LX-6 opt-out detect');
 
 const { resolveCallSiteContext, SiteContextStatus } = require('../services/call-site-context');
-const demoCtx = resolveCallSiteContext({
+const navCtx = resolveCallSiteContext({
   to_number: '+13639990205',
-  call_type: 'inbound_tenant',
+  call_type: 'consumer_navigation',
   direction: 'inbound'
 });
-assert(demoCtx.site_context_status === SiteContextStatus.NOT_REQUIRED, 'SITE-02 demo → not_required');
+assert(navCtx.site_context_status === SiteContextStatus.NOT_REQUIRED, 'SITE-02 navigation → not_required');
 
 assert(
   !isToolAllowedForMode('schedule_appointment', {

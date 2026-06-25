@@ -76,7 +76,7 @@
 
 | ID | Status | Notes |
 |----|--------|-------|
-| T-001 | ⬜ | Manual Retell transfer gate — OPERATIONS runbook |
+| T-001 | ⚠️ | Manual Retell transfer gate — ring **skipped** by operator; WS frame pass logged |
 | T-002–T-004 | ✅ | Single-frame Retell transfer + emergency-safety + identity path |
 | T-005 | ✅ | migration 070 + scoped `getFHIRPatientByPhone` |
 | T-006 | ✅ | migration 071 + case_records / session_state_projection tenant cols |

@@ -1,0 +1,244 @@
+[
+  {
+    "id": "commerce_asr_001",
+    "reference": "I want to buy vitamin D three",
+    "hypothesis": "I want to buy vitamin D three",
+    "locale": "en",
+    "category": "commerce_purchase",
+    "scenario_ref": "C-004"
+  },
+  {
+    "id": "commerce_asr_002",
+    "reference": "Do you have omega three fish oil",
+    "hypothesis": "Do you have omega 3 fish oil",
+    "locale": "en",
+    "category": "commerce_purchase",
+    "scenario_ref": "C-008"
+  },
+  {
+    "id": "commerce_asr_003",
+    "reference": "I'd like two bottles of the probiotic please",
+    "hypothesis": "I'd like two bottles of the probiotic please",
+    "locale": "en",
+    "category": "commerce_purchase",
+    "scenario_ref": "C-009"
+  },
+  {
+    "id": "commerce_asr_004",
+    "reference": "What's good for energy",
+    "hypothesis": "What's good for energy",
+    "locale": "en",
+    "category": "commerce_purchase",
+    "scenario_ref": "C-008"
+  },
+  {
+    "id": "commerce_asr_005",
+    "reference": "My email is sarah dot jones at gmail dot com",
+    "hypothesis": "My email is sarah.jones at gmail.com",
+    "locale": "en",
+    "category": "commerce_checkout",
+    "scenario_ref": "C-005"
+  },
+  {
+    "id": "commerce_asr_006",
+    "reference": "Cancel my supplement order",
+    "hypothesis": "Cancel my supplement order",
+    "locale": "en",
+    "category": "commerce_complaint",
+    "scenario_ref": "C-019"
+  },
+  {
+    "id": "commerce_asr_007",
+    "reference": "I was charged twice for the same order",
+    "hypothesis": "I was charged twice for the same order",
+    "locale": "en",
+    "category": "commerce_complaint",
+    "scenario_ref": "C-021"
+  },
+  {
+    "id": "commerce_asr_008",
+    "reference": "I need to return the probiotics",
+    "hypothesis": "I need to return the probiotics",
+    "locale": "en",
+    "category": "commerce_complaint",
+    "scenario_ref": "C-023"
+  },
+  {
+    "id": "commerce_asr_009",
+    "reference": "This vitamin gave me a rash",
+    "hypothesis": "This vitamin gave me a rash",
+    "locale": "en",
+    "category": "commerce_complaint",
+    "scenario_ref": "C-025"
+  },
+  {
+    "id": "commerce_asr_010",
+    "reference": "It's been a really rough week at work",
+    "hypothesis": "It's been a really rough week at work",
+    "locale": "en",
+    "category": "vent_handoff",
+    "scenario_ref": "C-031"
+  },
+  {
+    "id": "commerce_asr_011",
+    "reference": "I just need someone to listen",
+    "hypothesis": "I just need someone to listen",
+    "locale": "en",
+    "category": "vent_handoff",
+    "scenario_ref": "C-035"
+  },
+  {
+    "id": "commerce_asr_012",
+    "reference": "I'm so stressed I can't even think straight",
+    "hypothesis": "I'm so stressed I can't even think straight",
+    "locale": "en",
+    "category": "vent_handoff",
+    "scenario_ref": "C-032"
+  },
+  {
+    "id": "commerce_asr_013",
+    "reference": "What supplements do you sell",
+    "hypothesis": "What supplements do you sell",
+    "locale": "en",
+    "category": "browse_only",
+    "scenario_ref": "C-042"
+  },
+  {
+    "id": "commerce_asr_014",
+    "reference": "What are your office hours",
+    "hypothesis": "What are your office ours",
+    "locale": "en",
+    "category": "non_transactional",
+    "scenario_ref": "C-041"
+  },
+  {
+    "id": "commerce_asr_015",
+    "reference": "I want iron supplements for energy",
+    "hypothesis": "I want ion supplements for energy",
+    "locale": "en",
+    "category": "asr_homophone",
+    "scenario_ref": "C-084",
+    "notes": "Homophone trap: iron vs ion"
+  },
+  {
+    "id": "commerce_asr_016",
+    "reference": "Can I get magnesium glycinate",
+    "hypothesis": "Can I get magnesium glycinate",
+    "locale": "en",
+    "category": "commerce_purchase",
+    "scenario_ref": "C-001"
+  },
+  {
+    "id": "commerce_asr_017",
+    "reference": "Quiero comprar vitamina D",
+    "hypothesis": "Quiero comprar vitamina D",
+    "locale": "es",
+    "category": "commerce_purchase",
+    "scenario_ref": "C-086"
+  },
+  {
+    "id": "commerce_asr_018",
+    "reference": "¿Qué suplementos tienen?",
+    "hypothesis": "Que suplementos tienen",
+    "locale": "es",
+    "category": "browse_only",
+    "scenario_ref": "C-048"
+  },
+  {
+    "id": "commerce_asr_019",
+    "reference": "I need to schedule a supplement consult",
+    "hypothesis": "I need to schedule a supplement consult",
+    "locale": "en",
+    "category": "booking",
+    "scenario_ref": "C-049"
+  },
+  {
+    "id": "commerce_asr_020",
+    "reference": "I need to cancel my appointment on Tuesday",
+    "hypothesis": "I need to cancel my appointment on Tuesday",
+    "locale": "en",
+    "category": "cancel",
+    "scenario_ref": "C-059"
+  },
+  {
+    "id": "commerce_asr_021",
+    "reference": "Can I reschedule to next Friday afternoon",
+    "hypothesis": "Can I reschedule to next Friday afternoon",
+    "locale": "en",
+    "category": "reschedule",
+    "scenario_ref": "C-060"
+  },
+  {
+    "id": "commerce_asr_022",
+    "reference": "How much is my copay for the visit",
+    "hypothesis": "How much is my co pay for the visit",
+    "locale": "en",
+    "category": "appointment_payment",
+    "scenario_ref": "C-071"
+  },
+  {
+    "id": "commerce_asr_023",
+    "reference": "Stop calling me please",
+    "hypothesis": "Stop calling me please",
+    "locale": "en",
+    "category": "outbound_opt_out",
+    "scenario_ref": "C-027"
+  },
+  {
+    "id": "commerce_asr_024",
+    "reference": "Yes this is a good time for my reminder",
+    "hypothesis": "Yes this is a good time for my reminder",
+    "locale": "en",
+    "category": "outbound",
+    "scenario_ref": "C-075"
+  },
+  {
+    "id": "commerce_asr_025",
+    "reference": "Time to refill my vitamin D",
+    "hypothesis": "Time to refill my vitamin D",
+    "locale": "en",
+    "category": "outbound_commerce",
+    "scenario_ref": "C-076"
+  },
+  {
+    "id": "commerce_asr_026",
+    "reference": "omega three omega 3 fish oil please",
+    "hypothesis": "omega 3 omega three fish oil please",
+    "locale": "en",
+    "category": "asr_noisy",
+    "scenario_ref": "C-085",
+    "snr": "low"
+  },
+  {
+    "id": "commerce_asr_027",
+    "reference": "I want vitamin D and also book an appointment and pay my bill",
+    "hypothesis": "I want vitamin D and also book appointment and pay my bill",
+    "locale": "en",
+    "category": "multi_intent",
+    "scenario_ref": "C-087"
+  },
+  {
+    "id": "commerce_asr_028",
+    "reference": "Where is my order",
+    "hypothesis": "Where is my order",
+    "locale": "en",
+    "category": "order_tracking",
+    "scenario_ref": "C-018"
+  },
+  {
+    "id": "commerce_asr_029",
+    "reference": "I'm having crushing chest pain",
+    "hypothesis": "I'm having crushing chest pain",
+    "locale": "en",
+    "category": "emergency",
+    "scenario_ref": "C-058"
+  },
+  {
+    "id": "commerce_asr_030",
+    "reference": "My email is john at yahoo dot co dot uk",
+    "hypothesis": "My email is john at yahoo.co.uk",
+    "locale": "en",
+    "category": "email_confirm",
+    "scenario_ref": "C-092"
+  }
+]

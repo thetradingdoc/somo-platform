@@ -17,7 +17,6 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c1', customer_type: 'saas', retell_agent_id: null },
       customerId: 'c1',
-      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent,
       defaultAgentId: defaultAgent
@@ -30,7 +29,6 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c1', customer_type: 'saas', retell_agent_id: 'agent_tenant' },
       customerId: 'c1',
-      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });
@@ -43,30 +41,16 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c2', trial_status: 'active' },
       customerId: 'c2',
-      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });
     expect(r.failClosed).toBe(true);
   });
 
-  test('Somo demo demo keeps current agent', () => {
-    const r = resolveInboundRetellAgent({
-      matchedCustomer: null,
-      customerId: null,
-      isSomoDemoDemo: true,
-      isOutboundSales: false,
-      currentRetellAgentId: 'agent_demo'
-    });
-    expect(r.failClosed).toBe(false);
-    expect(r.retellAgentId).toBe('agent_demo');
-  });
-
   test('outbound sales keeps current agent', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: null,
       customerId: null,
-      isSomoDemoDemo: false,
       isOutboundSales: true,
       currentRetellAgentId: 'agent_sales'
     });
@@ -78,7 +62,6 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c3', customer_type: 'api' },
       customerId: 'c3',
-      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });
@@ -91,7 +74,6 @@ describe('voice-inbound-tenant', () => {
     const r = resolveInboundRetellAgent({
       matchedCustomer: { id: 'c1', customer_type: 'saas' },
       customerId: 'c1',
-      isSomoDemoDemo: false,
       isOutboundSales: false,
       currentRetellAgentId: defaultAgent
     });
@@ -99,9 +81,8 @@ describe('voice-inbound-tenant', () => {
     expect(r.retellAgentId).toBe(defaultAgent);
   });
 
-  test('buildMissingRetellTwiml escapes XML and includes Hangup', () => {
-    const twiml = buildMissingRetellTwiml('Test & "msg"');
-    expect(twiml).toContain('<Hangup');
-    expect(twiml).not.toContain('& "');
+  test('buildMissingRetellTwiml returns hangup TwiML', () => {
+    const twiml = buildMissingRetellTwiml();
+    expect(twiml).toMatch(/Hangup/);
   });
 });

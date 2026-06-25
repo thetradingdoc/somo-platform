@@ -30,7 +30,7 @@ function start(name, args) {
   child.on('exit', (code, signal) => {
     if (!shuttingDown) {
       const why = signal ? `signal ${signal}` : `exit ${code}`;
-      console.error(`[dev:one-place] ${name} stopped (${why}). Shutting down both processes.`);
+      console.error(`[dev:one-place] ${name} stopped (${why}). Shutting down.`);
       shutdown(typeof code === 'number' ? code : 1);
     }
   });
@@ -49,8 +49,8 @@ function shutdown(exitCode) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
-console.log('[dev:one-place] Starting middleware API on :4000 and Somo landing dev UI on :5180');
-console.log('[dev:one-place] Landing: http://localhost:5180  API: http://localhost:4000');
+console.log('[dev:one-place] Starting middleware API on :4000');
+console.log('[dev:one-place] API: http://localhost:4000');
+console.log('[dev:one-place] Root redirects to /business/trial-activation.html');
 
 start('api', ['start', '--prefix', 'middleware-platform']);
-start('ui', ['run', 'dev', '--prefix', 'unified-dashboard/somo-landing']);

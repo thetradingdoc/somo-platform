@@ -12,8 +12,13 @@ const constants = require('../utils/constants');
 
 class PaymentOrchestrator {
     static async createCheckout(requestData, tenantContext = null) {
-        console.log('\n💳 PAYMENT ORCHESTRATOR: Creating Checkout');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        const quietReplay =
+            String(process.env.PSTN_REPLAY_QUIET_LOGS || '').trim() === '1' &&
+            String(process.env.PSTN_REPLAY_COMMERCE || '').trim() === '1';
+        if (!quietReplay) {
+            console.log('\n💳 PAYMENT ORCHESTRATOR: Creating Checkout');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        }
 
         try {
             // Convert to standard format
@@ -25,7 +30,9 @@ class PaymentOrchestrator {
             }
 
             const PaymentSecurity = require('./payment-security');
-            console.log('📋 Request Summary:', JSON.stringify(PaymentSecurity.sanitizeForLog(paymentRequest.getSummary())));
+            if (!quietReplay) {
+                console.log('📋 Request Summary:', JSON.stringify(PaymentSecurity.sanitizeForLog(paymentRequest.getSummary())));
+            }
 
             // Validate request (merchant_id is optional - fallback will handle it)
             const validation = paymentRequest.validate();
@@ -78,7 +85,9 @@ class PaymentOrchestrator {
                 });
             }
 
-            console.log('✅ Merchant found:', merchant.name, '(ID:', merchant.id + ')');
+            if (!quietReplay) {
+                console.log('✅ Merchant found:', merchant.name, '(ID:', merchant.id + ')');
+            }
 
             // Enrich items with full details
             const enrichedItems = await this._enrichItems(paymentRequest.items, merchant);
@@ -96,7 +105,7 @@ class PaymentOrchestrator {
             // Calculate totals
             const totals = this._calculateTotals(enrichedItems, paymentRequest.totals);
 
-            console.log('💰 Totals:', totals);
+            if (!quietReplay) console.log('💰 Totals:', totals);
 
             // Normalize phone number (ensure it's never null)
             const normalizedPhone = paymentRequest.customer?.phone 
@@ -131,7 +140,7 @@ class PaymentOrchestrator {
             };
 
             await db.createVoiceCheckout(checkout);
-            console.log('✅ Checkout created:', checkoutId);
+            if (!quietReplay) console.log('✅ Checkout created:', checkoutId);
 
             // Route to payment method
             const paymentResult = await this._routePayment(
@@ -141,7 +150,7 @@ class PaymentOrchestrator {
                 paymentRequest
             );
 
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            if (!quietReplay) console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
             return paymentResult;
 
@@ -504,7 +513,10 @@ class PaymentOrchestrator {
     }
 
     static async _handleLinkPayment(checkout, merchant, paymentRequest) {
-        console.log('🔗 Processing link-based payment');
+        const quietReplay =
+            String(process.env.PSTN_REPLAY_QUIET_LOGS || '').trim() === '1' &&
+            String(process.env.PSTN_REPLAY_COMMERCE || '').trim() === '1';
+        if (!quietReplay) console.log('🔗 Processing link-based payment');
 
         // Generate payment token
         const paymentToken = PaymentService.createPaymentToken(checkout.id);
@@ -548,10 +560,34 @@ class PaymentOrchestrator {
                 amount: checkout.amount
             }
         );
-        console.log('📧 Payment link email sent:', emailResult.success ? '✅ Sent' : '❌ Failed');
+        if (!quietReplay) {
+            console.log('📧 Payment link email sent:', emailResult.success ? '✅ Sent' : '❌ Failed');
+        }
         
         if (!emailResult.success) {
-            console.error('❌ Failed to send payment link email:', emailResult.error);
+            if (!quietReplay) console.error('❌ Failed to send payment link email:', emailResult.error);
+            if (process.env.PSTN_REPLAY_COMMERCE === '1') {
+                return new PaymentResponse({
+                    success: true,
+                    transaction_id: paymentRequest.transaction_id,
+                    checkout_id: checkout.id,
+                    payment: {
+                        method: 'link',
+                        status: 'pending',
+                        amount: checkout.amount,
+                        currency: 'USD'
+                    },
+                    payment_link: paymentLink,
+                    payment_token: paymentToken,
+                    requires_action: true,
+                    action_type: 'email_link',
+                    message: `Payment link ready for ${checkout.customer_email} (replay: email skipped)`,
+                    metadata: {
+                        email_sent: false,
+                        replay_email_skipped: true
+                    }
+                });
+            }
             return new PaymentResponse({
                 success: false,
                 error: 'Failed to send payment link email. Please try again.',

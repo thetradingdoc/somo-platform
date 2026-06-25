@@ -9,7 +9,7 @@
 - Clarified that Kelly turn routing now runs through conversation-mode session dispatch before lane execution.
 - Consolidated rollout truth to conversation matrix + rollout runbook for production readiness tracking.
 
-**Somo marketing landing** at `/` is [`somo-landing`](../../unified-dashboard/somo-landing/). Kelly/LiveKit CRA client paths below refer to [`_archive/littlelab-landing`](../../unified-dashboard/_archive/littlelab-landing/) unless noted.
+**Somo marketing landing** at `/` is [`somo-landing`](../../business/trial-activation portal/). Kelly/LiveKit CRA client paths below refer to [`_archive/littlelab-landing`](../../unified-dashboard/_archive/littlelab-landing/) unless noted.
 
 **Voice runtime (2026):** [`services/voice-agent-runtime.js`](../../middleware-platform/services/voice-agent-runtime.js), migrations `053`/`054`, [VOICE_PROMPT_SSOT.md](../architecture/VOICE_PROMPT_SSOT.md), [voice-inbound troubleshooting](../runbooks/voice-inbound-troubleshooting.md).
 

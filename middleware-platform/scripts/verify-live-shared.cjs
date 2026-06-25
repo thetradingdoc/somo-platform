@@ -10,6 +10,9 @@ const { parseVerifyArgs, requireSessionId } = require('./lib/verify-args.cjs');
 const { parseJson } = require('./lib/verify-assert.cjs');
 const {
   resolveDbPath,
+  resolvePulledProdDbPath,
+  assertDbIntegrity,
+  pullProdDbFromGcs,
   openReadonlyDb,
   fetchKellyEventsRaw,
   findToolCompleted,
@@ -27,6 +30,9 @@ module.exports = {
   parseArgs: parseVerifyArgs,
   parseVerifyArgs,
   resolveDbPath,
+  resolvePulledProdDbPath,
+  assertDbIntegrity,
+  pullProdDbFromGcs,
   canonicalDbPath,
   openReadonlyDb,
   parsePayload: parseJson,

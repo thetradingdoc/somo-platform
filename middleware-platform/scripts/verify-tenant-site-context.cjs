@@ -24,11 +24,11 @@ const jsonOut = process.argv.includes('--json');
 const did =
   (process.argv.find((a) => a.startsWith('--did=')) || '').split('=')[1] ||
   process.env.CAPSTONE_TENANT_DID ||
-  '+18622307479';
+  '+18623622415';
 const customerId =
   (process.argv.find((a) => a.startsWith('--customer_id=')) || '').split('=')[1] ||
-  process.env.CALLSOMO_OPERATOR_CUSTOMER_ID ||
-  process.env.CAPSTONE_CUSTOMER_ID;
+  process.env.CAPSTONE_CUSTOMER_ID ||
+  process.env.CALLSOMO_OPERATOR_CUSTOMER_ID;
 const clinicId =
   (process.argv.find((a) => a.startsWith('--clinic_id=')) || '').split('=')[1] ||
   process.env.CAPSTONE_CLINIC_ID ||

@@ -31,8 +31,8 @@ See `PAYOR_SEARCH_TEST_GUIDE.md`.
 
 ## Other runners
 
-- **Playwright (Somo landing):** `npm run test:e2e-somo-landing` or `test:e2e-landing` — `e2e/somo-landing.spec.cjs`.
 - **Staging:** `test:e2e:staging`, `test:e2e:staging-signup`, `test:e2e:staging-voice` (see `playwright.staging.config.cjs`).
+- **Navigation contracts:** `npm run test:navigation:contracts` — routing, orchestrator, seed idempotency.
 - **Acne journey eval (plain Node):** `npm run test:eval-engine` → `tests/e2e/eval-engine.unit.test.js`.
 - **Reasoning eval (CI):** `npm run eval:reasoning:harness`.
 
