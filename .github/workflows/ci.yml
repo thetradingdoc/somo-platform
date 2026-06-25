@@ -26,6 +26,13 @@ jobs:
         working-directory: ./middleware-platform
         run: npm ci
 
+      - name: Install health video UI dependencies
+        working-directory: ./unified-dashboard/health-video-landing
+        run: npm ci
+
+      - name: Build health video UI
+        run: npm run health:ui:build
+
       - name: Repo ci:gate
         run: npm run ci:gate
 

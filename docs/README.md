@@ -35,14 +35,15 @@
 4. What CI actually runs vs deploy: **[Deployment (GCP Source of Truth)](./deployment/README.md)**.
 5. Code layout: **[CODE_STRUCTURE.md](./development/README.md#guides-code-structure)**.
 6. Staging-only product checks (quote parity, chat → pay): **[STAGING_PRODUCT_VERIFICATION.md](./testing/README.md#staging-product-verification)**.
-7. Architecture decisions (ADRs): **[architecture/decisions/README.md](./architecture/README.md#decisions-readme)**.
-8. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/README.md#commerce-agentic-checkout-file-map)**.
-9. `server.js` decomposition & route ownership: **[SERVER_DECOMPOSITION.md](./architecture/SERVER_DECOMPOSITION.md)**, **[RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md](./architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)**.
-10. `server.js` refactor policy (new routes only in `routes/`): **[SERVER_JS_REFACTOR_POLICY.md](./development/README.md#server-js-refactor-policy)**.
-11. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/README.md#periodic-maintenance)**.
-12. Secret scanning expectations: **[Security docs](./security/README.md)**.
-13. Browser E2E status: **[E2E_STATUS.md](./testing/README.md#e2e-status)**; funnel API smoke: `cd middleware-platform && npm run test:e2e-funnel` (server on :4000).
-14. Batch line-level docs gap tracker: **[meta gap tracker section](./meta/README.md#codebase-batch-review-and-documentation-gaps)**.
+7. **Consumer video health:** **[VIDEO_HEALTH.md](./product/VIDEO_HEALTH.md)** — LiveKit, Kelly PA, local `./run` at `/health-video/`.
+8. Architecture decisions (ADRs): **[architecture/decisions/README.md](./architecture/README.md#decisions-readme)**.
+9. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/README.md#commerce-agentic-checkout-file-map)**.
+10. `server.js` decomposition & route ownership: **[SERVER_DECOMPOSITION.md](./architecture/SERVER_DECOMPOSITION.md)**, **[RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md](./architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)**.
+11. `server.js` refactor policy (new routes only in `routes/`): **[SERVER_JS_REFACTOR_POLICY.md](./development/README.md#server-js-refactor-policy)**.
+12. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/README.md#periodic-maintenance)**.
+13. Secret scanning expectations: **[Security docs](./security/README.md)**.
+14. Browser E2E status: **[E2E_STATUS.md](./testing/README.md#e2e-status)**; funnel API smoke: `cd middleware-platform && npm run test:e2e-funnel` (server on :4000).
+15. Batch line-level docs gap tracker: **[meta gap tracker section](./meta/README.md#codebase-batch-review-and-documentation-gaps)**.
 
 ---
 
