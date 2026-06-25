@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#16a637">
+  <meta name="theme-color" content="#1C35EA">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
   <style>
-  :root { --primary: #16a637; --primary-dark: #1e3a8a; --primary-light: #16a637; }
+  :root { --primary: #1C35EA; --primary-dark: #1e3a8a; --primary-light: #1C35EA; }
   .layout { display: flex; min-height: 100vh; }
   .sidebar { width: 260px; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.05); position: fixed; height: 100vh; overflow-y: auto; }
     .sidebar-header { padding: 24px; border-bottom: 1px solid var(--gray-200, #e2e8f0); }
@@ -56,7 +56,7 @@
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .room-input { padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 16px; width: 200px; }
     .room-input[readonly] { background: #f1f5f9; color: #475569; cursor: default; }
-    .status { margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 8px; color: #166534; font-size: 14px; }
+    .status { margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 8px; color: #121F9E; font-size: 14px; }
     .status.error { background: #fef2f2; color: #991b1b; }
   .status.connecting { background: #fefce8; color: #854d0e; }
   .video-page-title {
@@ -90,7 +90,7 @@
     cursor: pointer;
   }
   .workspace-chip.active {
-    border-color: #128a2e;
+    border-color: #1529C4;
     background: #dbeafe;
     color: #1d4ed8;
   }
@@ -212,13 +212,13 @@
     font-weight: 600;
     text-transform: uppercase;
   }
-  .status-pill[data-status="listening"] { background: #166534; color: #dcfce7; }
+  .status-pill[data-status="listening"] { background: #121F9E; color: #dcfce7; }
   .status-pill[data-status="processing"] { background: #854d0e; color: #fef3c7; animation: pulse 1s infinite; }
-  .status-pill[data-status="codes_updated"] { background: #16a637; color: #dbeafe; }
+  .status-pill[data-status="codes_updated"] { background: #1C35EA; color: #dbeafe; }
   .status-pill[data-status="idle"] { background: #374151; color: #9ca3af; }
   @keyframes pulse { 50% { opacity: 0.7; } }
   .risk-pill { padding: 2px 8px; border-radius: 999px; font-size: 9px; font-weight: 600; }
-  .risk-low { background: #166534; color: #dcfce7; }
+  .risk-low { background: #121F9E; color: #dcfce7; }
   .risk-moderate { background: #854d0e; color: #fef3c7; }
   .risk-high { background: #7f1d1d; color: #fecaca; }
 
@@ -414,7 +414,7 @@
     padding: 8px 14px;
     border-radius: 6px;
     border: none;
-    background: var(--somo-green, #16a637);
+    background: var(--somo-green, #1C35EA);
     color: white;
     font-size: 12px;
     cursor: pointer;
@@ -570,7 +570,7 @@
             <div class="workspace-toolbar-actions">
               <button type="button" id="toggleTranscriptDockBtn" class="workspace-chip">Transcript</button>
               <button type="button" id="toggleClinicalPanelBtn" class="workspace-chip">Clinical panel</button>
-              <div id="sseStatusBadge" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 10px;border-radius:999px;background:#166534;color:#dcfce7;" title="Real-time updates">● Live</div>
+              <div id="sseStatusBadge" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 10px;border-radius:999px;background:#121F9E;color:#dcfce7;" title="Real-time updates">● Live</div>
             </div>
           </div>
         <div class="transcript-panel-wrap" style="display:flex;gap:16px;">
@@ -1232,7 +1232,7 @@
       const badge = document.getElementById('sseStatusBadge');
       if (!badge) return;
       if (connected) {
-        badge.style.background = '#166534';
+        badge.style.background = '#121F9E';
         badge.style.color = '#dcfce7';
         badge.textContent = '● Live';
         badge.title = 'Real-time updates connected';

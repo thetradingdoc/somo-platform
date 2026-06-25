@@ -39,14 +39,16 @@
 
 ## 1) Executive Summary
 
-Somo (callsomo.com) and legacy Somo surfaces share a Node/Express middleware (`middleware-platform`) that orchestrates:
+Somo (callsomo.com) runs on a Node/Express middleware (`middleware-platform`) that orchestrates:
 
 - Voice workflows (Retell + Twilio + booking/payment/insurance tools)
-- Patient web portal and native mobile app experiences
-- Agentic checkout and commerce (catalog -> quote -> chat -> Stripe checkout)
+- Consumer video health chat (LiveKit + Kelly PA via `health-*` sessions)
+- Patient web portal (`unified-dashboard/patients`)
 - Insurance/RCM and FHIR-adjacent healthcare data flows
 - Video consult and tokenized realtime/session flows
 - Admin/business/ops dashboards and automation pipelines
+
+Legacy agentic commerce checkout and `patient-app/` were removed 2026-06. See [`product/VIDEO_HEALTH.md`](../product/VIDEO_HEALTH.md).
 
 The system is intentionally **integration-heavy**, with many optional providers behind environment flags (Stripe, Circle, Stedi, Epic, 1upHealth, LiveKit, Azure services, LangSmith/LangChain tooling).  
 
@@ -94,10 +96,8 @@ Week 1 operational gate: [SOMO_FOUNDATION_RUNBOOK.md](../Database/SOMO_FOUNDATIO
 Primary runtime surfaces:
 
 - `middleware-platform/` - Core backend API + orchestration + workers + integrations
-- `unified-dashboard/` - Static/web portals (patient, business, admin, insurer) and shared JS/CSS
-- `unified-dashboard/` — static portals; marketing root redirects to `/business/trial-activation.html` (somo-landing retired 2026-06)
-- `unified-dashboard/_archive/littlelab-landing/` - Archived CRA landing + Kelly/LiveKit assistant (retired 2026-05-29)
-- `patient-app/` - Expo/React Native app (auth + appointments + checkout chat integration)
+- `unified-dashboard/` - Static/web portals (patient, business, admin); marketing root → `/business/trial-activation.html`
+- `livekit-agents/` - Python transcription workers for video sessions
 - `docs/` - Consolidated canonical documentation
 - `scripts/`, `infra/`, `Knowledge/`, `todos/` - operations, infra, data assets, roadmap state
 
@@ -108,14 +108,14 @@ Primary runtime surfaces:
 ```mermaid
 flowchart LR
     P[Patients] --> WEB[Patient Web Portal<br/>unified-dashboard/patients]
-    P --> APP[Patient Mobile App<br/>patient-app Expo]
+    P --> HEALTH[Video Health Chat<br/>health-video.html]
     P --> VOICE[Phone Call / Voice Entry]
 
     CLINIC[Clinic Staff / Providers] --> BIZ[Business Portal<br/>unified-dashboard/business]
     OPS[Ops/Admin Team] --> ADMIN[Admin Portal<br/>unified-dashboard/admin]
 
     WEB --> API[Middleware API<br/>middleware-platform/server.js]
-    APP --> API
+    HEALTH --> API
     VOICE --> RETELL[Retell AI]
     RETELL --> API
 
@@ -141,8 +141,7 @@ flowchart TB
       U1[unified-dashboard/patients]
       U2[unified-dashboard/business]
       U3[unified-dashboard/admin]
-      U4[somo-landing Vite SPA]
-      M1[patient-app Expo RN]
+      U5[health-video.html]
     end
 
     subgraph Middleware["middleware-platform"]

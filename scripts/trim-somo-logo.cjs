@@ -2,7 +2,8 @@
 'use strict';
 
 /**
- * Trim transparent padding from somo-logo PNGs (1024² exports → tight lockup).
+ * Trim transparent padding from somo-logo PNGs.
+ * For black-background PSD exports, use: node scripts/prepare-somo-logo.cjs <source.png>
  * Run: node scripts/trim-somo-logo.cjs && npm run brand:sync
  */
 

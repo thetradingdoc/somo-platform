@@ -29,7 +29,7 @@ API: `GET /api/voice-agent/onboarding` returns `onboarding_state`, `destination.
 
 | Surface | Path | Font / brand |
 |---------|------|----------------|
-| Setup wizard | `voice-setup.html` (5 steps) | League Spartan, `somo-logo.png`, lizard CTA |
+| Setup wizard | `voice-setup.html` (5 steps) | League Spartan, `somo-logo.png`, blue CTA |
 | Trial activation | `trial-activation.html` | Signup marketing styles |
 | Agent dashboard | `agent.html` | Plus Jakarta Sans, inbound/outbound cards |
 

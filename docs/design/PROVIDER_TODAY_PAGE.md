@@ -27,7 +27,7 @@
 
 | Role | Token |
 |------|--------|
-| Primary CTA | `--somo-green` `#16a637` |
+| Primary CTA | `--somo-green` `#1C35EA` |
 | Pending chip | neutral grey (`#f1f5f9` / `#64748b`) |
 | Risk alerts | `--red-soft` |
 | Provisioning | `--violet-soft` |

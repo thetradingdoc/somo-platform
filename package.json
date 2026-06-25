@@ -2,8 +2,14 @@
   "name": "somo",
   "type": "module",
   "scripts": {
+    "health:ui:dev": "npm run dev --prefix unified-dashboard/health-video-landing",
+    "health:ui:build": "npm run build --prefix unified-dashboard/health-video-landing",
     "check:brand": "node scripts/check-brand-strings.cjs",
+    "brand:copy": "node scripts/brand-copy-assets.cjs",
+    "brand:prepare-logo": "echo 'WARNING: prepare-somo-logo alters pixels. Prefer: npm run brand:copy -- <logo.png> [icon.png]' && node scripts/prepare-somo-logo.cjs",
+    "brand:prepare-icon": "node scripts/prepare-somo-icon.cjs",
     "brand:favicons": "node scripts/generate-brand-favicons.cjs",
+    "brand:crop-icon": "node scripts/crop-somo-icon.cjs",
     "brand:trim-logo": "node scripts/trim-somo-logo.cjs",
     "brand:sync": "node scripts/generate-brand-favicons.cjs && node scripts/sync-brand-assets.cjs",
     "check:legacy-hosts": "node scripts/check-legacy-hosts.cjs",
@@ -15,7 +21,6 @@
     "report:legacy-landing-refs": "node scripts/report-legacy-landing-references.cjs",
     "report:landing-deletion-candidates": "node scripts/report-landing-deletion-candidates.cjs",
     "retention:cleanup": "node scripts/retention-cleanup.cjs",
-    "verify:agentic-checkout": "node scripts/verify-agentic-checkout.cjs",
     "ci:gate": "bash scripts/ci-local.sh gate",
     "ci:full": "bash scripts/ci-local.sh full",
     "ci:phase0": "npm run ci:phase0 --prefix middleware-platform",
@@ -76,13 +81,7 @@
     "report:prod:payor-alert-signals": "npm run report:prod:payor-alert-signals --prefix middleware-platform",
     "test:prod:smoke": "npm run test:prod:smoke --prefix middleware-platform",
     "test:prod:mobile": "npm run test:prod:mobile --prefix middleware-platform",
-    "test:prod:full": "npm run test:prod:full --prefix middleware-platform",
-    "generate:commerce-pstn-replay": "npm run generate:commerce-pstn-replay --prefix middleware-platform",
-    "validate:commerce-pstn-replay": "npm run validate:commerce-pstn-replay --prefix middleware-platform",
-    "commerce-pstn-replay": "npm run commerce-pstn-replay --prefix middleware-platform",
-    "test:commerce-pstn-replay": "npm run test:commerce-pstn-replay --prefix middleware-platform",
-    "test:commerce-pstn-replay:full": "npm run test:commerce-pstn-replay:full --prefix middleware-platform",
-    "test:commerce-pstn-replay:dry": "npm run test:commerce-pstn-replay:dry --prefix middleware-platform"
+    "test:prod:full": "npm run test:prod:full --prefix middleware-platform"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",

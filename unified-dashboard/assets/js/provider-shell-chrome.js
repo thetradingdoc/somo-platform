@@ -1,5 +1,5 @@
 /**
- * Shared sidebar chrome: Somo gecko icon + Kelly live widget.
+ * Shared sidebar chrome: Somo icon + Kelly live widget.
  * Loaded after provider-shell.js; used by provider-layout and built-in shell pages.
  */
 (function () {

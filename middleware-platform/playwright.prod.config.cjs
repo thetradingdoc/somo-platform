@@ -19,28 +19,6 @@ module.exports = defineConfig({
   },
   projects: [
     {
-      name: 'prod-api-smoke',
-      testDir: './e2e',
-      testMatch: '**/somo-prod-smoke.spec.cjs'
-    },
-    {
-      name: 'prod-smoke-browser',
-      testDir: './e2e',
-      testMatch: '**/somo-landing.spec.cjs',
-      use: { browserName: 'chromium' }
-    },
-    {
-      name: 'prod-mobile',
-      testDir: './e2e',
-      testMatch: '**/somo-landing.spec.cjs',
-      grep: /mobile header|scroll cue hidden|pricing cards mobile|capability cards mobile/,
-      use: {
-        browserName: 'chromium',
-        viewport: { width: 390, height: 844 },
-        serviceWorkers: 'block'
-      }
-    },
-    {
       name: 'provider-journey-prod',
       testDir: './e2e/provider',
       testMatch: '**/provider-portal-journey-prod.spec.cjs',
@@ -52,6 +30,5 @@ module.exports = defineConfig({
       }
     }
   ],
-  grepInvert: process.env.PW_INCLUDE_BROWSER === '1' ? undefined : /Somo demo landing/
 });
 

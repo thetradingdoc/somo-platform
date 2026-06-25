@@ -10,11 +10,11 @@
 }
 
 :root {
-    /* Brand Colors - Somo green */
-    --primary: #16a637;
-    --primary-dark: #128a2e;
-    --primary-light: #16a637;
-    --secondary: #128a2e;
+    /* Brand Colors - Somo blue */
+    --primary: #1C35EA;
+    --primary-dark: #1529C4;
+    --primary-light: #1C35EA;
+    --secondary: #1529C4;
     --accent: #60a5fa;
 
     /* Status Colors */
@@ -163,7 +163,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    background: #16a637;
+    background: #1C35EA;
     color: #fff;
     font-weight: 700;
     box-shadow: 0 10px 20px rgba(49, 77, 182, 0.35);

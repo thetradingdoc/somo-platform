@@ -79,7 +79,7 @@ Secondary filters/actions below the topbar (e.g. Calendar): `div.pp-toolbar`, no
 ## Buttons and color
 
 - Use `pp-btn`, `pp-btn-primary`, `pp-btn-outline`, `pp-btn-ghost`, `pp-btn-link`, `pp-btn-sm`
-- Primary CTA: `var(--somo-green)` (`#16a637`) — no per-page `#10b981` overrides
+- Primary CTA: `var(--somo-green)` (`#1C35EA`) — no per-page `#10b981` overrides
 
 ## Anti-patterns
 

@@ -1,25 +1,25 @@
 /**
- * Somo Admin Portal — marketing-light brand (League Spartan, lizard/MSU/grass)
+ * Somo Admin Portal — marketing-light brand (League Spartan, blue primary)
  * Requires somo-tokens.css loaded first.
  */
 
 :root {
-  --bg: var(--somo-bg-marketing, #fbf9f4);
+  --bg: var(--somo-bg-marketing, #ffffff);
   --panel: #ffffff;
-  --panel-2: var(--somo-lizard-10, #f4fbe8);
+  --panel-2: var(--somo-primary-soft, #EEF0FE);
   --text: var(--somo-text-marketing, #1a1a1a);
   --muted: var(--somo-muted-marketing, #6b6b6b);
   --border: var(--somo-border-marketing, #e8e4dc);
-  --accent: var(--somo-msu, #164437);
-  --accent-green: var(--somo-grass, #238108);
-  --accent-blue: var(--somo-grass, #238108);
+  --accent: var(--somo-ink, #000000);
+  --accent-green: var(--somo-primary-hover, #1529C4);
+  --accent-blue: var(--somo-primary, #1C35EA);
   --accent-orange: #ea580c;
-  --admin-cta: var(--somo-lizard, #b5e930);
-  --admin-cta-hover: var(--somo-lizard-hover, #9fd628);
-  --admin-gradient: linear-gradient(135deg, var(--somo-lizard) 0%, var(--somo-grass) 100%);
-  --admin-gradient-text: linear-gradient(135deg, var(--somo-grass), var(--somo-msu));
-  --admin-focus-ring: rgba(181, 233, 48, 0.28);
-  --admin-shadow-cta: rgba(35, 129, 8, 0.22);
+  --admin-cta: var(--somo-primary, #1C35EA);
+  --admin-cta-hover: var(--somo-primary-hover, #1529C4);
+  --admin-gradient: linear-gradient(135deg, var(--somo-primary) 0%, var(--somo-primary-hover) 100%);
+  --admin-gradient-text: linear-gradient(135deg, var(--somo-primary), var(--somo-ink));
+  --admin-focus-ring: rgba(28, 53, 234, 0.28);
+  --admin-shadow-cta: rgba(28, 53, 234, 0.22);
 }
 
 * {

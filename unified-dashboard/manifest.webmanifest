@@ -4,7 +4,7 @@
   "start_url": "/unified-dashboard/patients/patient-dashboard.html",
   "display": "standalone",
   "background_color": "#f7fafc",
-  "theme_color": "#16a637",
+  "theme_color": "#1C35EA",
   "icons": [
     {
       "src": "assets/brand/favicon-32x32.png",

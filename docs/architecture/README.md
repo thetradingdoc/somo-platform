@@ -965,7 +965,7 @@ The **archived Skin & Care assistant** (`_archive/littlelab-landing`) could open
 
 ## Agentic checkout — file map
 
-
+> **Retired 2026-06.** Agentic commerce checkout (`checkout-chat`, `patient-app`, `/api/public/commerce`) was removed from the repo. Consumer surface is video health — see [`product/VIDEO_HEALTH.md`](../product/VIDEO_HEALTH.md). Historical file map below for archaeology only.
 
 Cross-surface feature: **landing / deep link → chat (Kelly) → server quote → Stripe pay**.
 

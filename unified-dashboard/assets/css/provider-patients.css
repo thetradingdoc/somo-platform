@@ -103,12 +103,12 @@
 }
 
 .pp-patient-card:hover {
-  border-color: var(--somo-green, #16a637);
+  border-color: var(--somo-green, #1C35EA);
   box-shadow: var(--shadow-md);
 }
 
 .pp-patient-card.pp-patient-card--focus {
-  outline: 2px solid var(--somo-green, #16a637);
+  outline: 2px solid var(--somo-green, #1C35EA);
   outline-offset: 2px;
 }
 
@@ -130,7 +130,7 @@
   height: 40px;
   border-radius: 10px;
   background: var(--green-soft, #dcfce7);
-  color: var(--green, #16a637);
+  color: var(--green, #1C35EA);
   font-weight: 700;
   font-size: 13px;
   display: flex;
@@ -244,7 +244,7 @@ a.pp-patient-chip--action,
 .pp-patient-card__cta {
   font-size: 12px;
   font-weight: 700;
-  color: var(--somo-green, #16a637);
+  color: var(--somo-green, #1C35EA);
 }
 
 .pp-patient-card__contact {
@@ -282,7 +282,7 @@ a.pp-patient-chip--action,
   padding: 8px 10px;
   background: #f8fafc;
   border-radius: 8px;
-  border-left: 3px solid var(--somo-green, #16a637);
+  border-left: 3px solid var(--somo-green, #1C35EA);
   margin-bottom: 12px;
 }
 

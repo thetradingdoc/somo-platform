@@ -13,7 +13,6 @@ const ROOT = path.join(__dirname, '..');
 const SCAN_ROOTS = [
   path.join(ROOT, 'unified-dashboard'),
   path.join(ROOT, 'middleware-platform/public'),
-  path.join(ROOT, 'patient-app'),
 ];
 
 const SKIP_DIRS = new Set([
@@ -43,7 +42,6 @@ const ALLOW_PATH = [
   /\/api\/public\/dodgecall\//i,
   /dodgecall-demo/i,
   /business\/trial-activation\.html/i,
-  /somo-landing\//i, // folder name until infra rename complete
   /brand-allowlist/i,
   /docs\/archive\//i,
   /INFRA_BRAND_DEFERRAL/i,
