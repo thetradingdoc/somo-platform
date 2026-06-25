@@ -546,6 +546,30 @@ class RetellWebSocketHandler {
             connection.to_number = connection.to_number || callMeta.to_number || dv?.to_number || null;
             connection.from_number = connection.from_number || callMeta.from_number || dv?.from_number || null;
 
+            try {
+                const {
+                    isNavigationEnabled,
+                    isPlatformNavigationDid,
+                    navigationCustomerId
+                } = require('../services/navigation/navigation-config');
+                const { normalizePhone } = require('../services/voice-routing-world');
+                const { CALL_TYPE_CONSUMER_NAVIGATION } = require('../services/voice-call-context');
+                const navTo = normalizePhone(connection.to_number || callMeta.to_number);
+                if (isNavigationEnabled() && isPlatformNavigationDid(navTo)) {
+                    const navRow = this.db.getCustomer?.(navigationCustomerId());
+                    if (navRow?.id) {
+                        connection.customer_id = String(navRow.id);
+                    }
+                    connection.call_type = CALL_TYPE_CONSUMER_NAVIGATION;
+                    connection._navigationCallType = CALL_TYPE_CONSUMER_NAVIGATION;
+                    connection._isNavigationConnection = true;
+                    connection.routing_world = 'navigation';
+                    console.log(`✅ Platform navigation DID bind for ${callId} → ${connection.customer_id || navigationCustomerId()}`);
+                }
+            } catch (navBindErr) {
+                console.warn('⚠️  Platform navigation DID bind failed:', navBindErr.message);
+            }
+
             const knownFromCall = dv && (dv.patient_name || dv.patientName || dv.prospect_name);
             if (knownFromCall && String(knownFromCall).trim()) {
                 const pn = String(knownFromCall).trim();
@@ -562,6 +586,8 @@ class RetellWebSocketHandler {
             const callTypeMeta =
                 callMeta.metadata?.call_type ||
                 dv?.call_type ||
+                connection.call_type ||
+                connection._navigationCallType ||
                 connection._demoCallType ||
                 null;
             const directionMeta =

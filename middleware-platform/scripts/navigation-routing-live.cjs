@@ -142,7 +142,9 @@ async function verifyViaRetell(sessionId) {
       transcript
     );
     const clinicFail = /trouble identifying your clinic account/i.test(transcript);
-    const navigationGreeting = /health plan or insurer are you with/i.test(transcript);
+    const navigationGreeting =
+      (/how can i help you today/i.test(transcript) && !/front desk receptionist/i.test(transcript)) ||
+      /health plan or insurer are you with/i.test(transcript);
     return {
       call_id: c.call_id,
       to_number: c.to_number,
