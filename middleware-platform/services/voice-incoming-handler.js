@@ -54,8 +54,20 @@ function createVoiceIncomingHandler(deps) {
 
     const { isNavigationCustomer } = require('./voice-account-resolution');
     const { CALL_TYPE_CONSUMER_NAVIGATION } = require('./voice-call-context');
+    const { navigationCustomerId } = require('./navigation/navigation-config');
+
+    if (platformNavigationDid && !isNavigationCustomer(matchedCustomer)) {
+      const navRow = db.getCustomer(navigationCustomerId());
+      if (navRow) {
+        customerId = navRow.id;
+        matchedCustomer = navRow;
+        console.log(`✅ Platform navigation DID override: ${customerId}`);
+      }
+    }
+
     const isNavigationInbound =
-      !isOutboundSales && isNavigationCustomer(matchedCustomer);
+      !isOutboundSales &&
+      (platformNavigationDid || isNavigationCustomer(matchedCustomer));
     if (isNavigationInbound) {
       resolvedCallType = CALL_TYPE_CONSUMER_NAVIGATION;
     }
@@ -83,7 +95,10 @@ function createVoiceIncomingHandler(deps) {
       ? resolveOutboundRetellAgent(req, matchedCustomer, defaultAgentId)
       : defaultAgentId;
 
-    if (customerId && !isOutboundSales && matchedCustomer?.retell_agent_id) {
+    if (isNavigationInbound) {
+      const { resolveNavigationRetellAgentId } = require('./navigation/navigation-config');
+      retellAgentId = resolveNavigationRetellAgentId();
+    } else if (customerId && !isOutboundSales && matchedCustomer?.retell_agent_id) {
       retellAgentId = matchedCustomer.retell_agent_id;
     }
 
