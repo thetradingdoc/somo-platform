@@ -19,8 +19,19 @@ async function resolveVideoConsultIds(opts = {}) {
   let roomId = room_id || null;
   let encounterId = encounter_id || null;
 
-  // From room_id (e.g. appt-xxx or case-CR-xxx)
+  // From room_id (e.g. appt-xxx, health-uuid, or case-CR-xxx)
   if (roomId) {
+    if (roomId.startsWith('health-')) {
+      const sessionId = roomId.replace(/^health-/, '');
+      return {
+        room_id: roomId,
+        appointment_id: null,
+        encounter_id: sessionId,
+        patient_id: null,
+        clinic_id: null,
+        health_session_id: sessionId
+      };
+    }
     if (roomId.startsWith('appt-')) {
       appointmentId = appointmentId || roomId.replace(/^appt-/, '');
       encounterId = encounterId || appointmentId; // Video consult: encounter_id = appointment_id

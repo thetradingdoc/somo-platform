@@ -16,7 +16,11 @@ const BookingService = require('../services/booking-service');
 const symptomTriage = require('../services/symptom-triage-service');
 const SafetyPreScreen = require('../services/safety-prescreen');
 const QueryPlanner = require('../services/query-planner');
-const { buildTranscriptDeltaItem, buildAssistantUpdatePayload } = require('../services/video-consult-sse-schema');
+const {
+  buildTranscriptDeltaItem,
+  buildAssistantUpdatePayload,
+  buildToolEventPayload
+} = require('../services/video-consult-sse-schema');
 const knowledgeService = require('../services/knowledge-service');
 const tokenBudget = require('../utils/token-budget');
 const { adaptIncomingEvent } = require('../services/channel-adapter');
@@ -48,6 +52,10 @@ const {
   retentionExpiresAt
 } = require('../services/vision-storage-policy');
 const Metrics = require('../services/metrics');
+const healthSessionService = require('../services/health-session-service');
+const healthVideoKelly = require('../services/health-video-kelly-service');
+const healthSessionReport = require('../services/health-session-report-service');
+const healthVisionCaption = require('../services/health-vision-caption-bridge');
 const { visionFlags } = require('../services/vision-feature-flags');
 const { startVisionCaptureWorker } = require('../services/vision-capture-worker');
 
@@ -101,6 +109,7 @@ async function fetchAndBroadcastRealtimeCodes(roomId) {
 }
 
 function scheduleRealtimeCodeFetch(roomId, transcriptLength) {
+  if (healthSessionService.isHealthRoom(roomId)) return;
   if (transcriptLength < REALTIME_CODES_MIN_TRANSCRIPTS) return;
   const existing = realtimeCodeTimers.get(roomId);
   if (existing) clearTimeout(existing);
@@ -427,7 +436,26 @@ router.post('/agent-events', async (req, res) => {
         });
         videoConsultSse.broadcastTranscriptDelta(room, [deltaItem]);
         videoConsultSse.broadcastAssistantUpdate(room, buildAssistantUpdatePayload({ transcript_delta: [deltaItem], status: 'listening' }));
-        scheduleRealtimeCodeFetch(room, transcriptArr?.length || 0);
+        if (!healthSessionService.isHealthRoom(room)) {
+          scheduleRealtimeCodeFetch(room, transcriptArr?.length || 0);
+        }
+        if (
+          healthSessionService.isHealthRoom(room) &&
+          (transcriptPayload.speaker === 'patient' || transcriptPayload.speaker === 'user')
+        ) {
+          const isFinal = payload?.is_final !== false;
+          setImmediate(() => {
+            healthVideoKelly.maybeReplyToPatientTranscript(room, text, {
+              speaker: transcriptPayload.speaker,
+              is_final: isFinal,
+              text_original: text,
+              text_translated: transcriptPayload.text_translated,
+              timestamp: transcriptPayload?.timestamp,
+              source: 'stt'
+            }).catch(() => {});
+          });
+        }
+        if (!healthSessionService.isHealthRoom(room)) {
         const seenRules = videoConsultService.getRiskSeenRules(room);
         const riskResult = symptomTriage.detectRisk(text, room, seenRules);
         const unifiedSafety = SafetyPreScreen.evaluateSafety({ text, eventType: 'transcript', payload: transcriptPayload, roomId: room, seenRules });
@@ -456,6 +484,7 @@ router.post('/agent-events', async (req, res) => {
             });
           } catch (e) { console.warn('[video-consult] risk event persist failed:', e.message); }
         }
+        }
       }
       if (event === 'vision_frame') {
         if (payload?.participant_identity) {
@@ -472,8 +501,34 @@ router.post('/agent-events', async (req, res) => {
           return res.json({ success: true, skipped: true, reason: 'cost_limit' });
         }
         tokenBudget.addVideoConsultCost(room, frameCost);
-        
-        // Incremental frame persistence
+
+        if (healthSessionService.isHealthRoom(room)) {
+          const yoloRaw = payload?.detections || payload?.yolo_detections || [];
+          const captionResult = await healthVisionCaption.buildImageCaption({
+            detections: yoloRaw,
+            frameQuality: payload?.frame_quality || payload?.quality || 'fair',
+            imageBase64: payload?.image_base64 || null
+          });
+          const sessionId = healthSessionService.sessionIdFromRoom(room);
+          if (sessionId) {
+            const session = healthSessionService.getById(sessionId);
+            const artifacts = (session?.metadata?.vision_artifacts || []).concat([{
+              caption: captionResult.caption,
+              source: captionResult.source,
+              ts: payload?.timestamp || new Date().toISOString()
+            }]);
+            healthSessionService.updateMetadata(sessionId, { vision_artifacts: artifacts });
+          }
+          if (captionResult.caption) {
+            videoConsultSse.broadcastToolEvent(room, buildToolEventPayload({
+              name: 'vision_caption',
+              result: { caption: captionResult.caption, source: captionResult.source }
+            }));
+          }
+          return res.json({ success: true, skipped_provider_pipeline: true, caption: captionResult });
+        }
+
+        // Incremental frame persistence (provider appt-* rooms only)
         try {
           const db = require('../database');
           let appointmentId = options.appointment_id || null;
@@ -623,7 +678,16 @@ router.post('/agent-events', async (req, res) => {
       }
     }
 
-    const result = await videoConsultGraph.processEvent(room, event, payload || {}, options);
+    let result;
+    if (healthSessionService.isHealthRoom(room)) {
+      result = {
+        success: true,
+        stage: event === 'end_session' ? 'health_session_ended' : 'health_consumer_event',
+        skipped_provider_pipeline: true
+      };
+    } else {
+      result = await videoConsultGraph.processEvent(room, event, payload || {}, options);
+    }
 
     if (event === 'end_session') {
       tokenBudget.resetVideoConsult(room);
@@ -634,8 +698,27 @@ router.post('/agent-events', async (req, res) => {
         ended_at: new Date().toISOString()
       });
       videoConsultSse.broadcastSessionEnded(room, { stage: result.stage });
-      // Audit: persist suggested codes from RAG + local merge (validated)
-      if (result.rag_context?.merged_codes) {
+      if (healthSessionService.isHealthRoom(room)) {
+        try {
+          await healthSessionReport.finalizeSession(room);
+          try {
+            const dbMod = require('../database');
+            const sessionId = healthSessionService.sessionIdFromRoom(room);
+            if (dbMod.logHipaaAccess) {
+              dbMod.logHipaaAccess({
+                resource_type: 'health_session',
+                resource_id: sessionId,
+                action: 'session_end',
+                ip_address: req.ip
+              });
+            }
+          } catch (_) {}
+        } catch (e) {
+          console.warn('[video-consult] health session report failed:', e.message);
+        }
+      }
+      // Audit: persist suggested codes from RAG + local merge (validated) — provider rooms only
+      if (!healthSessionService.isHealthRoom(room) && result.rag_context?.merged_codes) {
         try {
           const merged = result.rag_context.merged_codes;
           const codeStrings = {
@@ -1023,6 +1106,12 @@ router.get('/vision/session/:sessionId', (req, res) => {
 router.get('/sse/:roomId', (req, res) => {
   const { roomId } = req.params;
   if (!roomId) return res.status(400).json({ error: 'Missing roomId' });
+  if (healthSessionService.isHealthRoom(roomId)) {
+    const token = req.query.token || req.headers['x-health-sse-token'];
+    if (!healthSessionService.verifySseToken(roomId, token)) {
+      return res.status(401).json({ error: 'Invalid or expired SSE token' });
+    }
+  }
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -1265,7 +1354,17 @@ router.post('/rooms/:roomId/client-transcript', express.json(), async (req, res)
     });
     videoConsultSse.broadcastTranscriptDelta(roomId, [deltaItem]);
     videoConsultSse.broadcastAssistantUpdate(roomId, buildAssistantUpdatePayload({ transcript_delta: [deltaItem], status: 'listening' }));
-    scheduleRealtimeCodeFetch(roomId, transcriptArr?.length || 0);
+    if (!healthSessionService.isHealthRoom(roomId)) {
+      scheduleRealtimeCodeFetch(roomId, transcriptArr?.length || 0);
+    } else if (payload.speaker === 'patient' || payload.speaker === 'user') {
+      setImmediate(() => {
+        healthVideoKelly.maybeReplyToPatientTranscript(roomId, text, {
+          speaker: payload.speaker,
+          is_final: true,
+          source: 'browser_stt'
+        }).catch(() => {});
+      });
+    }
     return res.json({ success: true });
   } catch (err) {
     console.error('[video-consult] client-transcript error:', err);
@@ -1353,6 +1452,9 @@ router.get('/assistant/:roomId', async (req, res) => {
     const { roomId } = req.params;
     if (!roomId) {
       return res.status(400).json({ success: false, error: 'Missing roomId' });
+    }
+    if (healthSessionService.isHealthRoom(roomId)) {
+      return res.json({ success: true, view: null, skipped: true, reason: 'health_consumer_room' });
     }
     const view = await videoConsultAssistant.getAssistantView(roomId);
     res.json({ success: true, view });

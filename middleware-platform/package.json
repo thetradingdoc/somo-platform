@@ -6,8 +6,11 @@
     "scripts": {
         "migrate": "node -e \"require('./database').runMigrations()\"",
         "start": "node scripts/ensure-face-read-env.cjs && node server.js",
+        "start:health": "LOCAL_DEV_ROOT=health node scripts/ensure-face-read-env.cjs && LOCAL_DEV_ROOT=health node server.js",
         "start:landing": "DEV_LIGHT_START=1 CATALOG_MASTER_SYNC_ENABLED=0 EHR_SYNC_ENABLED=0 NOTIFICATION_QUEUE_ENABLED=0 node scripts/ensure-face-read-env.cjs && node server.js",
         "dev": "nodemon server.js",
+        "health:dev": "node scripts/health-dev.cjs",
+        "health:verify-env": "node scripts/verify-health-env.cjs",
         "reconcile:langgraph": "node scripts/reconcile-langgraph-state.js",
         "migrate:langgraph": "node scripts/migrate-to-langgraph.js",
         "setup:wallets": "node scripts/setup-wallet-config.js",

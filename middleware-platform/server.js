@@ -11,6 +11,15 @@ try {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
 }
 
+// Local dev default: health MVP at http://localhost:4000/ (set LOCAL_DEV_ROOT=login in .env for provider portal)
+{
+  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+  const isProductionEnv = nodeEnv === 'production' || nodeEnv === 'prod';
+  if (!isProductionEnv && !String(process.env.LOCAL_DEV_ROOT || '').trim()) {
+    process.env.LOCAL_DEV_ROOT = 'health';
+  }
+}
+
 const bootDebug = ['1', 'true', 'yes'].includes(String(process.env.CLOUDRUN_BOOT_DEBUG || '').toLowerCase());
 function bootLog(msg) {
   if (!bootDebug) return;
@@ -2108,6 +2117,22 @@ function redirectMarketingRoot(res) {
   return res.redirect(302, '/business/trial-activation.html');
 }
 
+function getHealthVideoSpaDir() {
+  const candidates = [
+    path.join(__dirname, '..', 'unified-dashboard', 'health-video-landing', 'dist'),
+    path.join(__dirname, 'unified-dashboard', 'health-video-landing', 'dist')
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
+  }
+  return null;
+}
+
+function redirectHealthVideoEntry(res) {
+  if (getHealthVideoSpaDir()) return res.redirect(302, '/health-video/');
+  return res.redirect(302, '/health-video.html');
+}
+
 function redirectLegacyLandingPath(req, res) {
   const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
   return res.redirect(301, `/${qs}`);
@@ -2166,6 +2191,9 @@ app.get('/', (req, res) => {
         '<p><a href="/">Somo landing</a></p>' +
         '</body></html>'
       );
+    }
+    if (process.env.LOCAL_DEV_ROOT === 'health') {
+      return redirectHealthVideoEntry(res);
     }
     return redirectMarketingRoot(res);
   }
@@ -2478,6 +2506,33 @@ app.get('/index.html', (req, res) => {
   return res.status(404).type('text/plain').send('Not found');
 });
 
+if (process.env.LOCAL_DEV_ROOT === 'health') {
+  app.get('/business/trial-activation.html', (req, res) => {
+    redirectHealthVideoEntry(res);
+  });
+}
+
+{
+  const healthVideoSpaDir = getHealthVideoSpaDir();
+  if (healthVideoSpaDir) {
+    app.use('/health-video', express.static(healthVideoSpaDir, { index: 'index.html' }));
+    app.get('/health-video/*', (req, res) => {
+      res.sendFile(path.join(healthVideoSpaDir, 'index.html'));
+    });
+  }
+}
+
+app.get('/health-video.html', (req, res) => {
+  if (getHealthVideoSpaDir()) return res.redirect(302, '/health-video/');
+  res.sendFile(getUnifiedDashboardPath('health-video.html'));
+});
+app.get('/health-terms.html', (req, res) => {
+  res.sendFile(getUnifiedDashboardPath('health-terms.html'));
+});
+app.get('/health-privacy.html', (req, res) => {
+  res.sendFile(getUnifiedDashboardPath('health-privacy.html'));
+});
+
 // Serve unified-dashboard subdirectories
 app.use('/business', express.static(getUnifiedDashboardPath('business'), {
   index: false,
@@ -2637,6 +2692,8 @@ app.use('/api/rag', ragSearchRoutes);
 
 const videoConsultRoutes = require('./routes/video-consult');
 app.use('/api/video-consult', videoConsultRoutes);
+const healthSessionRoutes = require('./routes/health-session');
+app.use('/api/health-session', healthSessionRoutes);
 
 const { registerFaceReadPublicRoute } = require('./routes/public-face-read');
 registerFaceReadPublicRoute(app, { apiLimiter });
@@ -9690,6 +9747,13 @@ function onServerListening() {
   console.log('🚀 MIDDLEWARE PLATFORM - PRODUCTION READY');
   console.log('='.repeat(60));
   console.log(`\n📍 Server running on: http://${HOST}:${PORT}`);
+  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'prod') {
+    console.log(`🏥 LOCAL_DEV_ROOT=${process.env.LOCAL_DEV_ROOT || '(unset)'} — http://localhost:${PORT}/ → ${
+      process.env.LOCAL_DEV_ROOT === 'health' ? (getHealthVideoSpaDir() ? '/health-video/' : '/health-video.html') :
+      process.env.LOCAL_DEV_ROOT === 'login' ? '/login' :
+      '/business/trial-activation.html'
+    }`);
+  }
   console.log('✅ Ready to accept requests (background startup tasks may still be running)\n');
 
   if (process.env.DEV_LIGHT_START === '1') {
