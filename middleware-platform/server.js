@@ -11,15 +11,6 @@ try {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
 }
 
-// Local dev default: health MVP at http://localhost:4000/ (set LOCAL_DEV_ROOT=login in .env for provider portal)
-{
-  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
-  const isProductionEnv = nodeEnv === 'production' || nodeEnv === 'prod';
-  if (!isProductionEnv && !String(process.env.LOCAL_DEV_ROOT || '').trim()) {
-    process.env.LOCAL_DEV_ROOT = 'health';
-  }
-}
-
 const bootDebug = ['1', 'true', 'yes'].includes(String(process.env.CLOUDRUN_BOOT_DEBUG || '').toLowerCase());
 function bootLog(msg) {
   if (!bootDebug) return;
@@ -1685,6 +1676,7 @@ const {
   apiLimiter,
   publicCatalogReadLimiter,
   publicDiagnosticsLimiter,
+  publicCommerceLimiter,
   authLimiter,
   paymentLimiter,
   voiceLimiter,
@@ -2116,22 +2108,6 @@ function redirectMarketingRoot(res) {
   return res.redirect(302, '/business/trial-activation.html');
 }
 
-function getHealthVideoSpaDir() {
-  const candidates = [
-    path.join(__dirname, '..', 'unified-dashboard', 'health-video-landing', 'dist'),
-    path.join(__dirname, 'unified-dashboard', 'health-video-landing', 'dist')
-  ];
-  for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
-  }
-  return null;
-}
-
-function redirectHealthVideoEntry(res) {
-  if (getHealthVideoSpaDir()) return res.redirect(302, '/health-video/');
-  return res.redirect(302, '/health-video.html');
-}
-
 function redirectLegacyLandingPath(req, res) {
   const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
   return res.redirect(301, `/${qs}`);
@@ -2190,9 +2166,6 @@ app.get('/', (req, res) => {
         '<p><a href="/">Somo landing</a></p>' +
         '</body></html>'
       );
-    }
-    if (process.env.LOCAL_DEV_ROOT === 'health') {
-      return redirectHealthVideoEntry(res);
     }
     return redirectMarketingRoot(res);
   }
@@ -2505,22 +2478,7 @@ app.get('/index.html', (req, res) => {
   return res.status(404).type('text/plain').send('Not found');
 });
 
-if (process.env.LOCAL_DEV_ROOT === 'health') {
-  app.get('/business/trial-activation.html', (req, res) => {
-    redirectHealthVideoEntry(res);
-  });
-}
-
-{
-  const healthVideoSpaDir = getHealthVideoSpaDir();
-  if (healthVideoSpaDir) {
-    app.use('/health-video', express.static(healthVideoSpaDir, { index: 'index.html' }));
-    app.get('/health-video/*', (req, res) => {
-      res.sendFile(path.join(healthVideoSpaDir, 'index.html'));
-    });
-  }
-}
-
+// Serve unified-dashboard subdirectories
 app.use('/business', express.static(getUnifiedDashboardPath('business'), {
   index: false,
   extensions: ['html']
@@ -2550,17 +2508,6 @@ businessPages.forEach(page => {
   app.get(`/${page}`, (req, res) => {
     res.redirect(`/business/${page}`);
   });
-});
-
-app.get('/health-video.html', (req, res) => {
-  if (getHealthVideoSpaDir()) return res.redirect(302, '/health-video/');
-  res.sendFile(getUnifiedDashboardPath('health-video.html'));
-});
-app.get('/health-terms.html', (req, res) => {
-  res.sendFile(getUnifiedDashboardPath('health-terms.html'));
-});
-app.get('/health-privacy.html', (req, res) => {
-  res.sendFile(getUnifiedDashboardPath('health-privacy.html'));
 });
 
 app.use('/patients', express.static(getUnifiedDashboardPath('patients'), {
@@ -2690,8 +2637,6 @@ app.use('/api/rag', ragSearchRoutes);
 
 const videoConsultRoutes = require('./routes/video-consult');
 app.use('/api/video-consult', videoConsultRoutes);
-const healthSessionRoutes = require('./routes/health-session');
-app.use('/api/health-session', healthSessionRoutes);
 
 const { registerFaceReadPublicRoute } = require('./routes/public-face-read');
 registerFaceReadPublicRoute(app, { apiLimiter });
@@ -2740,6 +2685,7 @@ const { registerPatientBillingPortalRoutes } = require('./routes/patient-billing
 const { registerPatientBookingRoutes } = require('./routes/patient-booking');
 const { registerPublicLandingAssistantRoutes } = require('./routes/public-landing-assistant');
 const { registerPublicProductScanRoutes } = require('./routes/public-product-scan');
+const { registerPatientCheckoutChatRoutes } = require('./routes/patient-checkout-chat');
 const { registerPatientProfileRoutes } = require('./routes/patient-profile');
 const { registerPatientAuthRoutes } = require('./routes/patient-auth');
 const { registerPatientDocumentsRoutes } = require('./routes/patient-documents');
@@ -2795,6 +2741,16 @@ const patientRouteDeps = {
   parseProductRef,
 };
 registerPublicProductScanRoutes(app, { apiLimiter });
+registerPatientCheckoutChatRoutes(app, {
+  apiLimiter,
+  express,
+  requirePatientSession,
+  requireCsrfForCookieAuth,
+  validatePatientCheckoutChatBody,
+  rotatePatientSessionIfNeeded,
+  blockChatWhenDisabled,
+  db,
+});
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
 app.use('/api/retell', retellFunctionsRoutes);
@@ -2847,6 +2803,19 @@ app.use('/api/public/providers', publicCatalogReadLimiter, publicProviderSearchR
 // Public checkout (unauthenticated ensure customer)
 const publicCheckoutRoutes = require('./routes/public-checkout');
 app.use('/api/public/checkout', publicCheckoutRoutes);
+
+// Commerce quote + cart — separate rate bucket from global /api limiter so bursts do not starve catalog reads
+const publicCommerceQuoteRoutes = require('./routes/public-commerce-quote');
+const publicCommerceCartRoutes = require('./routes/public-commerce-cart');
+app.use('/api/public/commerce', publicCommerceLimiter);
+app.use('/api/public/commerce', publicCommerceQuoteRoutes);
+app.use('/api/public/commerce', publicCommerceCartRoutes);
+app.use('/public/commerce', publicCommerceLimiter);
+app.use('/public/commerce', publicCommerceQuoteRoutes);
+app.use('/public/commerce', publicCommerceCartRoutes);
+
+const publicCheckoutChatRoutes = require('./routes/public-checkout-chat');
+app.use('/api/public/checkout-chat', publicCheckoutChatRoutes);
 
 // ============================================
 // Customer Agent Routes (Prompt Management)
@@ -3002,20 +2971,14 @@ app.get('/wallet', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'customer', 'wallet.html'));
 });
 
-// Favicon: browsers still request /favicon.ico — serve Somo brand favicon.
+// Favicon: browsers still request /favicon.ico — serve Somo landing favicon when built.
 app.get('/favicon.ico', (req, res) => {
   const fs = require('fs');
-  const fromBrand = getUnifiedDashboardPath('assets', 'brand', 'favicon.ico');
-  if (fs.existsSync(fromBrand)) {
-    res.type('image/x-icon');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.sendFile(fromBrand);
-  }
-  const fromBrand32 = getUnifiedDashboardPath('assets', 'brand', 'favicon-32x32.png');
-  if (fs.existsSync(fromBrand32)) {
+  const fromAssets = getUnifiedDashboardPath('assets', 'images', 'somo-icon.png');
+  if (fs.existsSync(fromAssets)) {
     res.type('image/png');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.sendFile(fromBrand32);
+    return res.sendFile(fromAssets);
   }
   const svgFavicon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">S</text></svg>';
   res.setHeader('Content-Type', 'image/svg+xml');
@@ -9727,13 +9690,6 @@ function onServerListening() {
   console.log('🚀 MIDDLEWARE PLATFORM - PRODUCTION READY');
   console.log('='.repeat(60));
   console.log(`\n📍 Server running on: http://${HOST}:${PORT}`);
-  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'prod') {
-    console.log(`🏥 LOCAL_DEV_ROOT=${process.env.LOCAL_DEV_ROOT || '(unset)'} — http://localhost:${PORT}/ → ${
-      process.env.LOCAL_DEV_ROOT === 'health' ? (getHealthVideoSpaDir() ? '/health-video/' : '/health-video.html') :
-      process.env.LOCAL_DEV_ROOT === 'login' ? '/login' :
-      '/business/trial-activation.html'
-    }`);
-  }
   console.log('✅ Ready to accept requests (background startup tasks may still be running)\n');
 
   if (process.env.DEV_LIGHT_START === '1') {
@@ -9743,6 +9699,19 @@ function onServerListening() {
 
   // Defer heavy sync work so HTTP handlers are not blocked during long listen-callback work.
   setImmediate(() => {
+  try {
+    const checkoutSvc = require('./services/patient-checkout-chat-service');
+    if (typeof checkoutSvc._runCheckoutPreparedBackfillOnce === 'function') {
+      checkoutSvc._runCheckoutPreparedBackfillOnce().catch(() => {});
+    }
+    if (typeof checkoutSvc._runCheckoutContextBackfillOnce === 'function') {
+      checkoutSvc._runCheckoutContextBackfillOnce().catch(() => {});
+    }
+    if (typeof checkoutSvc._runCheckoutStaleInFlightRecoveryOnce === 'function') {
+      checkoutSvc._runCheckoutStaleInFlightRecoveryOnce();
+      setInterval(() => checkoutSvc._runCheckoutStaleInFlightRecoveryOnce(), 60 * 1000);
+    }
+  } catch (_) {}
   try {
     const cacheService = require('./services/cache-service');
     if (typeof cacheService.warm === 'function') cacheService.warm();

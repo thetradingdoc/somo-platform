@@ -8,7 +8,7 @@
 | Surface | Tokens / shell |
 |---------|----------------|
 | Provider portal | [`somo-tokens.css`](../../unified-dashboard/assets/css/somo-tokens.css), [`provider-portal.css`](../../unified-dashboard/assets/css/provider-portal.css), `pp-page-shell`, `pp-topbar--page` |
-| Marketing landing | [`SOMO_MARKETING_COLORS.md`](./SOMO_MARKETING_COLORS.md) — lizard `#1C35EA`, MSU `#000000` |
+| Marketing landing | [`SOMO_MARKETING_COLORS.md`](./SOMO_MARKETING_COLORS.md) — lizard `#b5e930`, MSU `#164437` |
 | Voice persona | UI: **Somo front desk**; spoken: **Kelly** (never Sam on demo) |
 
 ## Shell parity (2026-06-17)

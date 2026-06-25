@@ -1,9 +1,9 @@
-# Somo Platform — AI Front Desk + Video Health
-> Last reviewed: June 25, 2026
+# Somo Platform — AI Front Desk + RCM
+> Last reviewed: May 30, 2026
 
-**Version**: 3.2.0  
+**Version**: 3.1.0  
 **Status**: Production ready for defined surfaces — see [`docs/meta/PO_SURFACE_SCORECARD.md`](docs/meta/PO_SURFACE_SCORECARD.md)  
-**Last Updated:** 2026-06-25
+**Last Updated:** 2026-05-31
 
 > **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
@@ -19,12 +19,11 @@
 
 ## 📋 Overview
 
-**Somo** is an agentic AI front desk and revenue cycle platform for healthcare. B2B front desk handles inbound calls via Kelly; consumer video health chat (Kelly physician assistant) is the active consumer surface. Production runs on **callsomo.com** — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
+**Somo** is an agentic AI front desk and revenue cycle platform for healthcare and business. Somo front desk handles inbound calls; Somo pay runs eligibility, claims, and patient collections. Production runs on **callsomo.com** — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
 ### Key Features
 
 - ✅ **Voice Agent Integration**: Natural language appointment booking via Retell AI
-- ✅ **Video Health Chat**: LiveKit video + Kelly PA (physician assistant, not diagnosing MD)
 - ✅ **Appointment Management**: Scheduling, confirmation, cancellation, rescheduling
 - ✅ **Payment Processing**: Stripe integration with email verification flow
 - ✅ **Insurance Integration**: Stedi API for eligibility checks and claim submission
@@ -69,14 +68,15 @@
 somo/
 ├── middleware-platform/     # Backend API (Express, Stripe, Retell, voice LLM, FHIR, …)
 ├── unified-dashboard/       # Provider/patient HTML dashboards + static assets
+│   └── _archive/littlelab-landing/  # Retired CRA landing + assistant (2026-05-29)
+├── patient-app/             # Expo (React Native) patient app
 ├── livekit-agents/          # Python transcription / agent workers
-├── case-report-service/     # Post–video-consult report pipeline
 ├── docs/                    # Canonical documentation (start at docs/README.md)
 ├── todos/                   # Open work SSOT: todos/PENDING.md
 └── README.md                # This file
 ```
 
-**Consumer video health:** see [`docs/product/VIDEO_HEALTH.md`](docs/product/VIDEO_HEALTH.md). Legacy agentic commerce checkout and `patient-app/` were removed 2026-06.
+**Agentic commerce (chat → quote → pay):** see [docs/architecture/README.md#commerce-public-agentic-checkout](docs/architecture/README.md#commerce-public-agentic-checkout) and [todos/PENDING.md](todos/PENDING.md) (deferred checkout section). Legacy consumer code (`patient-app/`, Skin & Care portal) coexists with front-desk product; scheduled for future removal.
 
 ---
 
@@ -111,30 +111,29 @@ cp .env.example .env
 4. **Start the backend server**
 ```bash
 npm start
-# Or from repo root: ./run
-# Server runs on http://localhost:4000 — UI + API same origin
+# Server runs on http://localhost:4000
 ```
 
-5. **Open health MVP**
+5. **Start the frontend (optional, for local development)**
+```bash
+cd unified-dashboard
+python3 -m http.server 8000
+# Frontend runs on http://localhost:8000
 ```
-http://localhost:4000/
-```
-No separate frontend server or second terminal required. Static pages are served from `unified-dashboard/` by the middleware.
 
 ### Local domain routing (mirrors production)
 
-With `middleware-platform` running (`npm start` or `./run`), visit:
+With `middleware-platform` running (`npm start`), visit:
 
 | Surface                      | Local URL                       | Served From                              |
 |------------------------------|---------------------------------|------------------------------------------|
-| **Health MVP (default)**     | http://localhost:4000/          | Redirect → `/health-video.html` (`LOCAL_DEV_ROOT=health`) |
-| Provider portal sign-in      | http://localhost:4000/login    | Provider login                           |
-| Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
-| B2B trial entry              | http://localhost:4000/business/trial-activation.html | Provider signup |
+| Marketing / trial entry      | http://localhost:4000/          | Redirect → `/business/trial-activation.html` |
+| Consumer navigation (PSTN)   | +13639990205                    | `consumer-navigation-handler` when `NAVIGATION_ENABLED=1` |
 | Admin landing                | http://localhost:4000/admin     | `unified-dashboard/admin/index.html`     |
-| API health check             | http://localhost:4000/health    | Middleware health endpoint               |
+| Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
+| API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |
 
-Production hosts: `callsomo.com` (UI), `api.callsomo.com` (API + voice webhooks). Local health dev does not require ngrok. See [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](docs/runbooks/CALLSOMO_GCP_CUTOVER.md).
+Production hosts: `callsomo.com` (UI), `api.callsomo.com` (API). See [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](docs/runbooks/CALLSOMO_GCP_CUTOVER.md).
 
 > The `/admin` route now provides a lightweight launcher linking to the clinic, insurer, and patient portals plus the API hub.
 

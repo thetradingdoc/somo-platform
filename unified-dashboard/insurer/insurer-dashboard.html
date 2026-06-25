@@ -9,9 +9,9 @@
     <script src="../assets/js/config.js"></script>
     <style>
         :root {
-            --primary: #1C35EA;
+            --primary: #16a637;
             --primary-dark: #1e3a8a;
-            --primary-light: #1C35EA;
+            --primary-light: #16a637;
         }
 
         .layout {
@@ -272,7 +272,7 @@
         
         .status-submitted {
             background: #dbeafe;
-            color: #1C35EA;
+            color: #16a637;
         }
         
         .status-pending {
@@ -734,7 +734,7 @@
                                     </div>
                                     <div>
                                         <div style="font-size: 12px; color: #718096; margin-bottom: 4px;">Patient Owe</div>
-                                        <div style="font-size: 24px; font-weight: 700; color: #1C35EA;">$${(eobTotals.whatYouOwe || claim.total_amount || 0).toFixed(2)}</div>
+                                        <div style="font-size: 24px; font-weight: 700; color: #16a637;">$${(eobTotals.whatYouOwe || claim.total_amount || 0).toFixed(2)}</div>
                                     </div>
                                 </div>
                             </div>
@@ -764,7 +764,7 @@
                                                     <td style="padding: 10px; text-align: right;">$${(item.amountBilled || 0).toFixed(2)}</td>
                                                     <td style="padding: 10px; text-align: right;">$${(item.allowedAmount || 0).toFixed(2)}</td>
                                                     <td style="padding: 10px; text-align: right; color: #10b981;">$${(item.planPaid || 0).toFixed(2)}</td>
-                                                    <td style="padding: 10px; text-align: right; color: #1C35EA;">$${(item.whatYouOwe || 0).toFixed(2)}</td>
+                                                    <td style="padding: 10px; text-align: right; color: #16a637;">$${(item.whatYouOwe || 0).toFixed(2)}</td>
                                                 </tr>
                                             `).join('')}
                                         </tbody>
@@ -774,7 +774,7 @@
                                                 <td style="padding: 10px; text-align: right;">$${(eobTotals.amountBilled || 0).toFixed(2)}</td>
                                                 <td style="padding: 10px; text-align: right;">$${(eobTotals.allowedAmount || 0).toFixed(2)}</td>
                                                 <td style="padding: 10px; text-align: right; color: #10b981;">$${(eobTotals.planPaid || 0).toFixed(2)}</td>
-                                                <td style="padding: 10px; text-align: right; color: #1C35EA;">$${(eobTotals.whatYouOwe || 0).toFixed(2)}</td>
+                                                <td style="padding: 10px; text-align: right; color: #16a637;">$${(eobTotals.whatYouOwe || 0).toFixed(2)}</td>
                                             </tr>
                                         </tfoot>
                                     </table>

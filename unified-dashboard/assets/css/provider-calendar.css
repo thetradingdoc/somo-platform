@@ -2,7 +2,7 @@
  * Calendar page — FullCalendar, filters toolbar, modals (shell from provider-portal.css).
  */
 :root {
-  --cal-primary: #1C35EA;
+  --cal-primary: #16a637;
   --cal-border: #e5e7eb;
   --cal-card: #ffffff;
   --cal-muted: #6b7280;
@@ -48,7 +48,7 @@
 }
 
 .dot--available {
-  background: #1C35EA;
+  background: #16a637;
 }
 
 .dot--ooo {
@@ -79,7 +79,7 @@
 }
 
 .provider-portal--calendar .pp-toolbar .btn-primary:hover {
-  background: #1529C4;
+  background: #128a2e;
 }
 
 #todayPinnedWrap {
@@ -480,8 +480,8 @@
 
 .fc .fc-button-primary:not(:disabled).fc-button-active,
 .fc .fc-button-primary:not(:disabled):active {
-  background: #1529C4 !important;
-  border-color: #1529C4 !important;
+  background: #128a2e !important;
+  border-color: #128a2e !important;
 }
 
 .fc .fc-button-primary:disabled {
@@ -560,7 +560,7 @@
 }
 
 .online-offline-btn.online .toggle-track {
-  background: var(--somo-green, #1C35EA);
+  background: var(--somo-green, #16a637);
 }
 
 .toggle-thumb {

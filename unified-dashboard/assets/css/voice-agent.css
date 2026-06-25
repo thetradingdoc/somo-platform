@@ -46,7 +46,7 @@
 
 .va-wizard-dot--active,
 .va-wizard-dot--done {
-  background: var(--somo-green, #1C35EA);
+  background: var(--somo-green, #16a637);
 }
 
 .va-dual-grid {
@@ -157,7 +157,7 @@
 }
 
 .va-toggle.on {
-  background: var(--primary, #1C35EA);
+  background: var(--primary, #16a637);
 }
 
 .va-toggle::after {
@@ -240,7 +240,7 @@
 }
 
 .va-save-hint.ok {
-  color: #1C35EA;
+  color: #16a637;
 }
 
 .va-toast {
@@ -258,7 +258,7 @@
 
 .va-toast.success {
   background: #f0fdf4;
-  color: #121F9E;
+  color: #166534;
   border: 1px solid #bbf7d0;
 }
 

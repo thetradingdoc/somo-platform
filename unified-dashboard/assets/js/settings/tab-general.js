@@ -541,7 +541,7 @@ const SP = window.SettingsPage;
                         </div>
                         <div style="display: flex; gap: 12px; justify-content: flex-end;">
                             <button type="button" onclick="closePasswordModal()" style="padding: 12px 24px; border: 2px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer; font-weight: 600; color: #4a5568;">Cancel</button>
-                            <button type="submit" id="passwordChangeBtn" style="padding: 12px 24px; background: #1C35EA; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Change Password</button>
+                            <button type="submit" id="passwordChangeBtn" style="padding: 12px 24px; background: #16a637; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Change Password</button>
                         </div>
                     </form>
                 </div>

@@ -1,6 +1,6 @@
 # Canonical documentation map
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-06-17
 
 Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); see [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
 
@@ -17,8 +17,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Provider calendar** | [`design/PROVIDER_CALENDAR.md`](../design/PROVIDER_CALENDAR.md) | Board + FullCalendar views in `business/calendar.html` |
 | **Provider Today UI** | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) | [`todos/PENDING.md`](../../todos/PENDING.md) (UI polish section) |
 | **Staging profile** | [`meta/README.md`](./README.md#staging-profile) | [`testing/README.md`](../testing/README.md) |
-| **Consumer video health** | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) | [`product/VIDEO_HEALTH.md`](../product/VIDEO_HEALTH.md), `routes/health-session.js` |
-| **Consumer navigation** (platform DID) | [`runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md) | [`voice/PLATFORM_NUMBER_INBOUND_SPEC.md`](../voice/PLATFORM_NUMBER_INBOUND_SPEC.md) — delete later after video spine |
+| **Consumer navigation** (platform DID) | [`runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md) | [`voice/PLATFORM_NUMBER_INBOUND_SPEC.md`](../voice/PLATFORM_NUMBER_INBOUND_SPEC.md) |
 | **Kelly agentic orchestration** | [`architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md) | [`ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md), [`TURN_COMPLETION_CONTRACT.md`](../architecture/TURN_COMPLETION_CONTRACT.md) |
 | **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`kelly-rails/`](../../middleware-platform/services/kelly-rails/) in code |
 | **Conversation mode rails** | [`conversation/CONVERSATION_MODE_MATRIX.md`](../conversation/CONVERSATION_MODE_MATRIX.md) | [`runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md), `services/conversation-mode/*` |
@@ -28,7 +27,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Payor / provider search** | [`Payor/README.md`](../Payor/README.md) | [`Payor/OPERATIONS.md`](../Payor/OPERATIONS.md) |
 | **RCM** | [`RCM/README.md`](../RCM/README.md) | [`RCM/ARCHITECTURE.md`](../RCM/ARCHITECTURE.md) |
 | **Database** | [`Database/README.md`](../Database/README.md) | [`Database/OPERATIONS.md`](../Database/OPERATIONS.md) |
-| **Patient portal (web)** | [`architecture/LIVE.md`](../architecture/LIVE.md#patient-timeline-routine-and-billing) | `unified-dashboard/patients/` |
+| **Patient timeline APIs** | [`architecture/LIVE.md`](../architecture/LIVE.md#patient-timeline-routine-and-billing) | Legacy consumer app code in `patient-app/` (coexisting; not front-desk SSOT) |
 | **Medical coding** | [`Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) | [`Medical Coding/README.md`](../Medical%20Coding/README.md) |
 | **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
 | **Middleware depth** | [`middleware-platform/README.md`](../middleware-platform/README.md) | TOC anchors — do not duplicate |
@@ -39,4 +38,4 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 
 ## Middleware consolidated README
 
-Kelly, Retell, and LangGraph depth: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Consumer naming: [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md).
+Kelly, checkout, Retell, and LangGraph depth: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Consumer naming: [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md).

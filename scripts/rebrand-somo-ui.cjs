@@ -15,16 +15,16 @@ const SKIP_DIR = new Set(['node_modules', 'dist', '.git', 'playwright-report', '
 const EXT = new Set(['.html', '.css', '.js', '.jsx', '.json', '.webmanifest', '.md']);
 
 const COLOR_MAP = [
-  ['#1e40af', '#1C35EA'],
-  ['#1E40AF', '#1C35EA'],
-  ['#314db6', '#1C35EA'],
-  ['#314DB6', '#1C35EA'],
-  ['#3b82f6', '#1C35EA'],
-  ['#3B82F6', '#1C35EA'],
-  ['#1b5ee4', '#1C35EA'],
-  ['#2563eb', '#1529C4'],
-  ['#ffa51f', '#1C35EA'],
-  ['#e8951a', '#1529C4'],
+  ['#1e40af', '#16a637'],
+  ['#1E40AF', '#16a637'],
+  ['#314db6', '#16a637'],
+  ['#314DB6', '#16a637'],
+  ['#3b82f6', '#16a637'],
+  ['#3B82F6', '#16a637'],
+  ['#1b5ee4', '#16a637'],
+  ['#2563eb', '#128a2e'],
+  ['#ffa51f', '#16a637'],
+  ['#e8951a', '#128a2e'],
 ];
 
 const TEXT_REPLACEMENTS = [

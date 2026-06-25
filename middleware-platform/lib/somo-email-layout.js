@@ -15,11 +15,11 @@ const SUPPORT_EMAIL =
   process.env.SOMO_EMAIL_SUPPORT || process.env.SMTP_FROM_EMAIL || 'richard@callsomo.com';
 
 const TOKENS = {
-  primary: '#1C35EA',
-  primaryDark: '#1529C4',
-  primarySoft: '#EEF0FE',
-  ink: '#000000',
-  inkDark: '#0a0a0a',
+  green: '#16a637',
+  greenDark: '#128a2e',
+  greenSoft: '#e8f7ed',
+  msu: '#164437',
+  ink: '#0a0a0a',
   text: '#1a1a1a',
   muted: '#64748b',
   faint: '#94a3b8',
@@ -58,7 +58,7 @@ function baseCss() {
       box-shadow: 0 4px 24px rgba(10, 10, 10, 0.08);
     }
     .somo-header {
-      background: linear-gradient(135deg, ${TOKENS.ink} 0%, ${TOKENS.primary} 100%);
+      background: linear-gradient(135deg, ${TOKENS.msu} 0%, ${TOKENS.green} 100%);
       color: ${TOKENS.white};
       padding: 32px 28px 28px;
       text-align: center;
@@ -89,11 +89,11 @@ function baseCss() {
       margin: 0 0 12px;
     }
     .somo-body p { margin: 0 0 16px; }
-    .somo-body a { color: ${TOKENS.primary}; font-weight: 600; }
+    .somo-body a { color: ${TOKENS.green}; font-weight: 600; }
     .somo-panel {
-      background: ${TOKENS.primarySoft};
+      background: ${TOKENS.greenSoft};
       border: 1px solid ${TOKENS.border};
-      border-left: 4px solid ${TOKENS.primary};
+      border-left: 4px solid ${TOKENS.green};
       border-radius: 8px;
       padding: 20px;
       margin: 20px 0;
@@ -111,13 +111,13 @@ function baseCss() {
       font-size: 32px;
       font-weight: 700;
       letter-spacing: 10px;
-      color: ${TOKENS.primary};
+      color: ${TOKENS.green};
       font-family: 'Courier New', Courier, monospace;
       margin: 0;
     }
     .somo-code-box {
       background: ${TOKENS.white};
-      border: 2px solid ${TOKENS.primary};
+      border: 2px solid ${TOKENS.green};
       border-radius: 8px;
       padding: 28px 20px;
       text-align: center;
@@ -125,7 +125,7 @@ function baseCss() {
     }
     .somo-btn {
       display: inline-block;
-      background: ${TOKENS.primary};
+      background: ${TOKENS.green};
       color: ${TOKENS.white} !important;
       padding: 14px 28px;
       text-decoration: none;
@@ -134,11 +134,11 @@ function baseCss() {
       font-size: 16px;
       margin: 8px 4px;
     }
-    .somo-btn:hover { background: ${TOKENS.primaryDark}; }
+    .somo-btn:hover { background: ${TOKENS.greenDark}; }
     .somo-btn--secondary {
       background: ${TOKENS.white};
-      color: ${TOKENS.primary} !important;
-      border: 2px solid ${TOKENS.primary};
+      color: ${TOKENS.green} !important;
+      border: 2px solid ${TOKENS.green};
     }
     .somo-btn--danger { background: ${TOKENS.danger}; }
     .somo-btn--warning { background: ${TOKENS.warning}; }
@@ -150,7 +150,7 @@ function baseCss() {
       color: ${TOKENS.muted};
       font-size: 13px;
     }
-    .somo-footer a { color: ${TOKENS.primary}; text-decoration: none; font-weight: 600; }
+    .somo-footer a { color: ${TOKENS.green}; text-decoration: none; font-weight: 600; }
     .somo-tagline { font-size: 12px; color: ${TOKENS.faint}; margin-top: 16px; }
     @media (max-width: 480px) {
       .somo-body, .somo-header, .somo-footer { padding-left: 20px; padding-right: 20px; }

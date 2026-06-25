@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#1C35EA">
+  <meta name="theme-color" content="#16a637">
   <title>Somo Provider - Schedule</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -184,7 +184,7 @@
         <div id="avbError" style="color:#ef4444;font-size:14px;display:none;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
           <button type="button" onclick="closeAvailabilityModal()" class="btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="avbSubmitBtn" style="background:#1C35EA;">Save Block</button>
+          <button type="submit" class="btn btn-primary" id="avbSubmitBtn" style="background:#16a637;">Save Block</button>
         </div>
       </form>
     </div>
@@ -236,7 +236,7 @@
       <div id="calActionError" data-testid="cal-action-error" role="alert" hidden style="margin-top:8px;padding:8px 12px;border-radius:8px;background:#fee2e2;color:#991b1b;font-size:13px;"></div>
       <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; align-items:center; margin-top:12px; padding-top:12px; border-top:1px solid #e5e7eb;">
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button id="btnJoinVideo" class="btn" style="background:#1C35EA;color:#fff;border:none;">Join Video</button>
+          <button id="btnJoinVideo" class="btn" style="background:#16a637;color:#fff;border:none;">Join Video</button>
           <button id="btnCopyVideoLink" class="btn" style="background:#64748b;color:#fff;border:none;">Copy Link</button>
           <button id="btnSendVideoLink" class="btn" style="background:#059669;color:#fff;border:none;">Send Link</button>
         </div>
@@ -336,8 +336,8 @@
         title: (b.title || (b.block_type === 'out_of_office' ? 'Out of Office' : 'Available')),
         start: b.start_datetime,
         end: b.end_datetime,
-        backgroundColor: b.block_type === 'out_of_office' ? '#6b7280' : '#1C35EA',
-        borderColor: b.block_type === 'out_of_office' ? '#4b5563' : '#1529C4',
+        backgroundColor: b.block_type === 'out_of_office' ? '#6b7280' : '#16a637',
+        borderColor: b.block_type === 'out_of_office' ? '#4b5563' : '#128a2e',
         textColor: '#ffffff',
         extendedProps: { isAvailabilityBlock: true, blockId: b.id, blockType: b.block_type, title: b.title }
       }));
@@ -411,7 +411,7 @@
       const submitBtn = document.getElementById('avbSubmitBtn');
       titleEl.textContent = blockType === 'out_of_office' ? 'Out of Office' : 'Set Availability';
       submitBtn.textContent = blockType === 'out_of_office' ? 'Add Out of Office' : 'Add Available';
-      submitBtn.style.background = blockType === 'out_of_office' ? '#6b7280' : '#1C35EA';
+      submitBtn.style.background = blockType === 'out_of_office' ? '#6b7280' : '#16a637';
       const today = new Date();
       const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
       document.getElementById('avbStartDate').value = dateStr;
@@ -999,7 +999,7 @@
           ${d.ai_summary
             ? `<div style="margin-top:4px;font-size:12px;color:#334155;"><strong>AI:</strong> ${escapeHtml(d.ai_summary)}</div>`
             : `<div style="margin-top:4px;font-size:12px;color:#64748b;">No extracted text yet. Try Sync EHR or refresh later.</div>`}
-          ${d.detail_url ? `<div style="margin-top:6px;"><a href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener" style="font-size:12px;color:#1529C4;">View details</a></div>` : ''}
+          ${d.detail_url ? `<div style="margin-top:6px;"><a href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener" style="font-size:12px;color:#128a2e;">View details</a></div>` : ''}
         </div>
       `).join('') || '<div style="color:#6b7280;">No triage-linked documents.</div>';
 
@@ -1019,7 +1019,7 @@
           <div style="margin-top:6px;"><strong>Red flags:</strong> ${redFlagsHtml}</div>
           <div style="margin-top:6px;"><strong>Patient:</strong> ${escapeHtml(patientName)} · ${escapeHtml(patientPhone)} · ${escapeHtml(patientEmail)}</div>
           <div style="margin-top:6px;"><strong>FHIR Patient ID:</strong> ${escapeHtml(patientId || 'N/A')}</div>
-          <div style="margin-top:6px;"><a href="${profileHref}" target="_blank" rel="noopener" style="font-size:12px;color:#1529C4;">Open patient profile</a></div>
+          <div style="margin-top:6px;"><a href="${profileHref}" target="_blank" rel="noopener" style="font-size:12px;color:#128a2e;">Open patient profile</a></div>
           ${!phiAllowed ? '<div style="margin-top:4px;color:#92400e;font-size:12px;">PHI is masked by policy for this session.</div>' : ''}
         </div>
 
@@ -1283,7 +1283,7 @@
         const map = {
           queued: { bg: '#e0f2fe', fg: '#0369a1', text: 'queued' },
           in_progress: { bg: '#fef3c7', fg: '#92400e', text: 'in progress' },
-          done: { bg: '#dcfce7', fg: '#121F9E', text: 'synced' },
+          done: { bg: '#dcfce7', fg: '#166534', text: 'synced' },
           dead: { bg: '#fee2e2', fg: '#991b1b', text: 'failed' },
           not_synced: { bg: '#f3f4f6', fg: '#4b5563', text: 'not synced' }
         };

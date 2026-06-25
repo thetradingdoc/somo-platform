@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://callsomo.com/schemas/commerce-pstn-replay-call.json",
+  "title": "Commerce PSTN Replay Call",
+  "description": "One complete replayable voice or chat call transcript for Kelly commerce/appointment testing.",
+  "type": "object",
+  "required": ["id", "title", "channel", "call_metadata", "turns", "functions_tested", "min_turns"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^PSTN-[0-9]{3}$" },
+    "title": { "type": "string", "minLength": 10 },
+    "channel": { "enum": ["voice", "chat"] },
+    "call_metadata": {
+      "type": "object",
+      "required": ["direction", "merchant_id", "clinic_id", "locale"],
+      "properties": {
+        "direction": { "enum": ["inbound", "outbound"] },
+        "call_type": { "type": "string" },
+        "locale": { "type": "string" },
+        "caller_id": { "type": "string" },
+        "after_hours": { "type": "boolean" },
+        "duration_target_sec": { "type": "integer", "minimum": 30 },
+        "merchant_id": { "type": "string" },
+        "clinic_id": { "type": "string" }
+      }
+    },
+    "preconditions": { "type": "object" },
+    "turns": {
+      "type": "array",
+      "minItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["seq", "speaker", "text"],
+        "properties": {
+          "seq": { "type": "integer", "minimum": 1 },
+          "speaker": { "enum": ["agent", "caller"] },
+          "text": { "type": "string", "minLength": 1 },
+          "asr": {
+            "type": "object",
+            "properties": {
+              "noise": { "enum": ["clean", "noisy"] },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
+          "tool_call": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "args": { "type": "object" }
+            }
+          },
+          "tool_result_summary": { "type": "string" },
+          "state_snapshot": { "type": "object" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "functions_tested": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "assertions": { "type": "array", "items": { "type": "string" } },
+    "failure_codes": { "type": "array", "items": { "type": "string" } },
+    "min_turns": { "type": "integer", "minimum": 12 }
+  }
+}

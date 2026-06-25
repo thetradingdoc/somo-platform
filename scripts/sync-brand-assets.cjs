@@ -22,20 +22,17 @@ const SYNC_FILES = [
   'somo-logo.png',
   'somo-logo-master.png',
   'somo-icon.png',
+  'somo-icon-lizard.png',
   'favicon.ico',
   'favicon-16x16.png',
   'favicon-32x32.png',
   'apple-touch-icon.png',
-];
-
-/** Removed from sync — gecko / deprecated wordmarks (see _archive/gecko-legacy) */
-const DEPRECATED_FILES = new Set([
-  'somo-icon-lizard.png',
   'somo-gecko.svg',
   'somo-logo-wordmark.png',
-  'somo-logo-wordmark.svg',
-  'somo-wordmark-text.svg',
-]);
+];
+
+/** Not copied to API — deprecated text-only wordmark; do not use in UI */
+const SKIP_DEPRECATED = new Set(['somo-logo-wordmark.svg', 'somo-wordmark-text.svg']);
 
 function copyFile(src, dest) {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -58,14 +55,6 @@ for (const target of TARGETS) {
     copyFile(src, path.join(target, name));
     console.log('copied', name, '->', path.relative(ROOT, target));
   }
-  // Remove deprecated files from mirror targets
-  for (const name of DEPRECATED_FILES) {
-    const dest = path.join(target, name);
-    if (fs.existsSync(dest)) {
-      fs.unlinkSync(dest);
-      console.log('removed deprecated', name, 'from', path.relative(ROOT, target));
-    }
-  }
 }
 
 // Optional: copy signup icon SVGs if present
@@ -75,7 +64,7 @@ if (fs.existsSync(signupDir)) {
     const destSignup = path.join(target, 'signup');
     fs.mkdirSync(destSignup, { recursive: true });
     for (const entry of fs.readdirSync(signupDir)) {
-      if (DEPRECATED_FILES.has(entry)) continue;
+      if (SKIP_DEPRECATED.has(entry)) continue;
       copyFile(path.join(signupDir, entry), path.join(destSignup, entry));
     }
   }

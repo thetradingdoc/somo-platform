@@ -12,23 +12,14 @@ From repo root [`run`](../run): `export DB_PATH=./middleware-dev.db` in `middlew
 
 ## Local URLs on port 4000
 
-Default (`LOCAL_DEV_ROOT=health` in `.env.example` and `./run`):
-
 | URL | Purpose |
 |-----|---------|
-| `http://localhost:4000/` | **Safe VideoGPT for Healthcare** (redirect → `/health-video.html`) |
-| `http://localhost:4000/health-video.html` | Health MVP direct |
+| `http://localhost:4000/` | Somo marketing landing (requires `somo-landing/build`; built automatically on `npm start` / `npm run dev`) |
 | `http://localhost:4000/login` | Provider portal sign-in |
 | `http://localhost:4000/business/today.html` | Provider Today dashboard (after login) |
 | `http://localhost:4000/health` | API health check |
 
-**One command:** from repo root `./run` or `cd middleware-platform && npm start` — single Node process, no ngrok for health.
-
-**Voice / Retell webhooks** use production `https://api.callsomo.com` — no local tunnel required for health MVP.
-
-**Provider work only:** set `LOCAL_DEV_ROOT=login` in `middleware-platform/.env` so `/` redirects to login (remove `LOCAL_DEV_ROOT=health` if set).
-
-**Optional server STT (advanced):** `npm run health:stt-agent` in `middleware-platform/` — requires `DEEPGRAM_API_KEY`; default health MVP uses browser speech instead.
+**Provider work only:** use `/login` or set `LOCAL_DEV_ROOT=login` in `middleware-platform/.env` so `/` redirects to login.
 
 **Faster API startup:** `npm run start:landing` in `middleware-platform/` (skips heavy background workers; `DEV_LIGHT_START=1`).
 

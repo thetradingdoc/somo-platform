@@ -76,7 +76,7 @@
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data || !data.success || !data.kelly_session_id) return;
-                    var u = origin + '/patients/payment-success.html?kelly_session_id=' + encodeURIComponent(data.kelly_session_id);
+                    var u = origin + '/patients/checkout-chat.html?kelly_session_id=' + encodeURIComponent(data.kelly_session_id);
                     if (data.checkout_id) u += '&checkout_id=' + encodeURIComponent(data.checkout_id);
                     chatLink.href = u;
                     chatLink.classList.remove('hidden');

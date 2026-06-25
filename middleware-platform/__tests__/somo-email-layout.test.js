@@ -10,7 +10,7 @@ describe('somo-email-layout', () => {
       bodyHtml: '<p>Hello</p>'
     });
     expect(html).toContain(SomoEmail.LOGO_URL);
-    expect(html).toContain('#1C35EA');
+    expect(html).toContain('#16a637');
     expect(html).toContain('Somo — never answer business calls again');
     expect(html).not.toContain('DocLittle');
     expect(html).not.toMatch(/class="doc"/);

@@ -8,15 +8,7 @@ const { registerEarlySomoLandingStatic } = require('../bootstrap/static-hosting'
 const rootDir = path.join(__dirname, '..');
 
 describe('Marketing root on localhost', () => {
-  const prev = process.env.LOCAL_DEV_ROOT;
-
-  afterEach(() => {
-    if (prev === undefined) delete process.env.LOCAL_DEV_ROOT;
-    else process.env.LOCAL_DEV_ROOT = prev;
-  });
-
-  it('GET / redirects to trial activation on localhost when LOCAL_DEV_ROOT unset', async () => {
-    delete process.env.LOCAL_DEV_ROOT;
+  it('GET / redirects to trial activation on localhost', async () => {
     const app = express();
     registerEarlySomoLandingStatic(app, { express, rootDir });
 
@@ -27,20 +19,6 @@ describe('Marketing root on localhost', () => {
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('/business/trial-activation.html');
-  });
-
-  it('GET / redirects to health-video when LOCAL_DEV_ROOT=health', async () => {
-    process.env.LOCAL_DEV_ROOT = 'health';
-    const app = express();
-    registerEarlySomoLandingStatic(app, { express, rootDir });
-
-    const res = await request(app)
-      .get('/')
-      .set('Host', 'localhost:4000')
-      .set('Connection', 'close');
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toMatch(/health-video/);
   });
 
   it('GET /fhir/* is not captured by marketing static on localhost', async () => {

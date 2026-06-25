@@ -6,7 +6,7 @@
 |------|-------------------|-------|
 | Voice multitenancy | `voice-inbound-tenant.test.js`, `voice-incoming-handler.test.js`, `voice-call-tenant-scope.test.js` | HTTP T2.6 in `billing:test-gate` (restart server after gate changes) |
 | Signup / trial | `trial-lifecycle.test.js`, `billing-access-gate.test.js` | Staging: `test:e2e:staging-signup` |
-| Checkout / commerce | `stripe-webhook-canceled.test.js` | Retired 2026-06 — agentic checkout removed |
+| Checkout / commerce | `stripe-webhook-canceled.test.js`, repo `verify-agentic-checkout.cjs` | Staging-dependent HTTP gates documented as norm |
 | RCM / Kelly | `rcm-tenant-isolation.test.js`, `rcm-payment-idempotency.test.js`, `e2e/kelly-rcm-golden-path.spec.cjs` | Conversation E2E: `test:e2e:rcm:conversation` |
 | Payor | `payor-*.test.js` suites | HTTP smoke optional with `RUN_PAYOR_HTTP_SMOKE=1` |
 | Reasoning | `reasoning-pipeline.test.js`, `reasoning-gates-fsm.test.js`, `result-summary-contract-guards.test.js` | CI: `npm run test:reasoning-regression` + `eval:reasoning:harness` |

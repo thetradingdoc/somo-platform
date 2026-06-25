@@ -13,10 +13,10 @@
   --surface: #ffffff;
   --bg: #f4f7fa;
   --bg2: #eef2f7;
-  --blue: #1C35EA;
-  --blue2: #1529C4;
-  --blue-soft: #EEF0FE;
-  --blue-mid: #C5CCFA;
+  --blue: #16a637;
+  --blue2: #128a2e;
+  --blue-soft: #e8f7ed;
+  --blue-mid: #bbf7d0;
   --amber: #d97706;
   --amber2: #f59e0b;
   --amber-soft: #fffbeb;
@@ -133,7 +133,7 @@ body.provider-portal.provider-portal--scroll .pp-app {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: linear-gradient(135deg, #1C35EA 0%, #1529C4 100%);
+  background: linear-gradient(135deg, #16a637 0%, #0d9488 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -384,7 +384,7 @@ body.provider-portal.provider-portal--scroll .pp-app {
 
 .pp-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--somo-green, #1C35EA);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--somo-green, #16a637);
 }
 
 .btn:focus-visible,
@@ -416,7 +416,7 @@ body.provider-portal.provider-portal--scroll .pp-app {
 }
 
 .pp-link {
-  color: var(--somo-green, #1C35EA);
+  color: var(--somo-green, #16a637);
   font-weight: 600;
   text-decoration: none;
 }
@@ -527,7 +527,7 @@ body.provider-portal.provider-portal--scroll .pp-app {
   height: 30px;
   border-radius: 7px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #1C35EA, #1529C4);
+  background: linear-gradient(135deg, #16a637, #0d9488);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -727,7 +727,7 @@ body.provider-portal.provider-portal--today .pp-content {
 }
 
 .pp-btn-primary:hover {
-  background: var(--somo-green-hover, #1529C4);
+  background: var(--somo-green-hover, #128a2e);
 }
 
 .pp-btn-primary:active {
@@ -1032,7 +1032,7 @@ body.provider-portal.provider-portal--today .pp-content {
   height: 34px;
   border-radius: 50%;
   background: #e0ecff;
-  color: #1C35EA;
+  color: #16a637;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1410,7 +1410,7 @@ a:focus-visible:not(.pp-btn):not(.pp-btn-link):not(.pp-link-cta),
   color: var(--muted);
 }
 
-.pp-pc-blue { border-top: 3px solid #1C35EA; }
+.pp-pc-blue { border-top: 3px solid #16a637; }
 .pp-pc-green { border-top: 3px solid #16a34a; }
 .pp-pc-amber { border-top: 3px solid #d97706; }
 .pp-pc-red { border-top: 3px solid #dc2626; }
@@ -1695,7 +1695,7 @@ body.pp-sidebar-open {
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: var(--blue, #1C35EA);
+  background: var(--blue, #16a637);
   color: #fff;
   border: none;
   font-size: 20px;
@@ -1817,7 +1817,7 @@ body.pp-sidebar-open {
 
 .pp-alert--success {
   background: var(--green-soft);
-  color: #121F9E;
+  color: #166534;
   border-color: var(--green-mid);
 }
 

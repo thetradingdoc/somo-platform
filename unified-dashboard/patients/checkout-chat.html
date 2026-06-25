@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<!--
+  Somo — checkout chat (agentic commerce). Full cross-surface map:
+  docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md
+  Search hints in this file: applyKellyCopy, sendMessage, fetchQuote, checkout-chat/turn,
+  btnPayInThread, openPayConfirmationModal, SSE, stream, emitFunnelEvent.
+-->
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#16a637" />
+  <title>Skin &amp; Care — Checkout</title>
+  <link rel="icon" href="/images/branding/logo-panda.png?v=4" type="image/png" />
+  <link rel="shortcut icon" href="/images/branding/logo-panda.png?v=4" type="image/png" />
+  <link rel="apple-touch-icon" href="/images/branding/logo-panda.png?v=4" />
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <link rel="stylesheet" href="../assets/css/skin-care-tokens.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gloock&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="../assets/js/config.js" defer></script>
+  <script src="https://js.stripe.com/v3" defer></script>
+  <script>
+    (function () {
+      const sid = localStorage.getItem('patient_session_id');
+      const params = new URLSearchParams(window.location.search);
+      const isLandingCheckout =
+        params.get('source') === 'landing' && params.get('intent') === 'checkout_chat';
+      if (!sid && !isLandingCheckout) {
+        const q = window.location.pathname + window.location.search;
+        window.location.replace('patient-login.html?return=' + encodeURIComponent(q));
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="checkout-chat.css?v=2" />
+</head>
+
+<body class="cc-body">
+  <header class="cc-header">
+    <div class="cc-header-shell">
+    <div class="cc-header-bar">
+      <div class="cc-header-brand-block">
+        <a class="cc-brand-mark" id="ccBrandHome" href="/">Somo</a>
+      </div>
+      <button type="button" class="cc-back-shop cc-header-cart hidden" id="btnHeaderCart" aria-label="Open cart and checkout">
+        <img class="cc-header-cart-logo" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
+        <span>Cart</span><span id="headerCartCount" class="cc-header-cart-count">0</span>
+      </button>
+      <a class="cc-back-shop" id="backToShop" href="/">Back to Somo</a>
+    </div>
+    <div class="cc-product-strip" id="productStrip">
+      <img id="productStripImg" class="cc-product-strip-img" src="" alt="" width="64" height="64" hidden />
+      <div class="cc-product-strip-text">
+        <h1 id="productTitle">Loading…</h1>
+        <p id="productSubtitle" class="cc-product-strip-subtitle"></p>
+        <div id="productPrice" class="cc-price cc-product-strip-price" role="status" aria-live="polite" aria-atomic="true"></div>
+      </div>
+      <button type="button" id="btnProductSwitch" class="cc-switch-pill hidden" aria-haspopup="dialog" aria-expanded="false">
+        Switch
+      </button>
+    </div>
+    <details id="whyPriceDetails" class="cc-why-price" hidden>
+      <summary id="whyPriceSummary" class="cc-why-price-summary">Why this price?</summary>
+      <p id="whyPriceBody" class="cc-why-price-body"></p>
+    </details>
+    <div id="productPickerWrap" class="hidden" aria-hidden="true">
+      <label id="productPickerLabel" class="cc-sr-only" for="productPicker">Switch product</label>
+      <select id="productPicker" class="cc-picker cc-sr-only" aria-hidden="true" tabindex="-1" aria-label="Choose a product"></select>
+    </div>
+    <p id="sessionNote" class="hidden" style="margin:8px 16px 12px;font-size:0.8rem;color:var(--brand-gray);"></p>
+    <p id="ccGuestAppHint" class="cc-guest-app-hint hidden" role="note" hidden></p>
+    </div>
+  </header>
+
+  <a class="cc-skip-link" href="#cc-main">Skip to chat</a>
+  <main class="cc-main-scroll" id="cc-main" tabindex="-1">
+    <div id="loadErr" class="cc-load-error hidden" role="alert">
+      <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+      </svg>
+      <div class="cc-load-error-body">
+        <p id="loadErrText"></p>
+        <div class="cc-load-error-actions">
+          <button type="button" id="loadErrRetry" class="cc-load-error-retry hidden">Retry catalog</button>
+          <a id="loadErrShop" href="/">Back to Somo</a>
+        </div>
+      </div>
+    </div>
+    <section class="cc-chat" aria-label="Chat with Kelly">
+      <div class="cc-msg" id="sysMsg">
+        <strong>Skin &amp; Care</strong> — your guide can answer questions about this product, ingredients, and your
+        routine. Your total is always <strong>server-locked</strong> at checkout (no surprise prices). Start with chat
+        below; when you are ready, use <em>Pay securely</em> in the thread, or the optional shortcut at the bottom.
+      </div>
+      <div id="chatEmptyState" class="cc-chat-empty is-visible" aria-hidden="false">
+        <div class="cc-chat-empty-visual" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m0 0v-.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-3.75zm0 0h7.5m-7.5 0H12" />
+          </svg>
+        </div>
+        <div id="chatEmptyCopy" class="cc-chat-empty-copy">
+          <p id="chatEmptyTitle" class="cc-chat-empty-title hidden" aria-hidden="true"></p>
+          <p id="chatEmptyBody" class="cc-chat-empty-body">
+            Ask your Skin &amp; Care guide anything about this product — or continue when you are ready to pay.
+          </p>
+        </div>
+      </div>
+      <div id="learnPromptChips" class="cc-conversion-chip hidden" aria-label="Suggested starter prompts">
+        <button type="button" class="cc-chip-btn" data-learn-prompt="Is this good for oily skin?">Oily skin?</button>
+        <button type="button" class="cc-chip-btn" data-learn-prompt="Can I use this every day?">Daily use?</button>
+        <button type="button" class="cc-chip-btn" data-learn-prompt="What ingredients help with dark spots?">Dark spots?</button>
+        <button type="button" class="cc-chip-btn cc-chip-btn--primary hidden" id="btnLearnProceed">Pay securely</button>
+      </div>
+      <div id="chatLog" class="cc-chat-log" aria-live="polite" aria-relevant="additions">
+      <div id="ccCheckoutCartBlock" class="cc-msg cc-msg-assistant cc-checkout-cart-flow hidden" aria-live="polite">
+        <p class="cc-checkout-cart-lead" id="ccCheckoutCartLead">
+          When you are ready to pay, your cart and secure total show here. Keep chatting below anytime.
+        </p>
+        <section class="cc-cart-panel cc-cart-panel--in-flow" id="cartPanel" aria-label="Cart">
+          <div class="cc-cart-head">
+            <strong>Cart</strong>
+            <button type="button" class="cc-cart-clear-btn" id="btnClearCart" aria-label="Clear cart" title="Clear cart">
+              <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
+          </div>
+          <div id="cartItems" class="cc-cart-items"></div>
+          <div class="cc-cart-foot">
+            <span>Subtotal</span>
+            <strong id="cartSubtotal">$0.00</strong>
+          </div>
+        </section>
+        <p class="cc-footer-secondary-hint cc-checkout-hint" id="ccFooterPayHint"></p>
+        <p class="cc-checkout-hint cc-checkout-hint--meta hidden" id="ccCartLockHint" role="status"></p>
+        <p class="cc-checkout-hint cc-checkout-hint--meta hidden" id="ccSecurePayExplain"></p>
+        <div id="orderSummaryCard" class="cc-order-summary cc-order-summary--in-cart hidden">
+          <div id="inThreadPayWrap" class="cc-in-thread-pay hidden" aria-live="polite">
+            <p id="inThreadPayNote" class="cc-in-thread-pay-note"></p>
+            <button type="button" class="cc-btn-pay-hero" id="btnPayInThread" disabled></button>
+          </div>
+        </div>
+        <div id="ccInlinePayConfirm" class="cc-inline-pay-confirm hidden" role="region" aria-labelledby="payTitleText">
+          <p class="cc-inline-pay-kelly" id="ccInlinePayKellyLead"></p>
+          <div class="cc-inline-pay-card">
+            <div class="cc-modal-head">
+              <h2 id="payTitle" class="cc-modal-title-row">
+                <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                  stroke="currentColor" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <span id="payTitleText">Secure checkout</span>
+              </h2>
+            </div>
+            <p class="cc-line" id="payLineItem"></p>
+            <p class="cc-total" id="payTotal"></p>
+            <div class="cc-modal-trust" id="payTrustRow">
+              <div class="cc-pay-marks" aria-hidden="true">
+                <span class="cc-pay-mark cc-pay-mark--visa">VISA</span>
+                <span class="cc-pay-mark cc-pay-mark--mc">MC</span>
+                <span class="cc-pay-mark cc-pay-mark--amex">AMEX</span>
+              </div>
+              <div class="cc-modal-trust-line">
+                <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                  stroke="currentColor" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+                <span id="payTrustText">Stripe · Encrypted checkout</span>
+              </div>
+            </div>
+            <p id="payRedirectNote" class="cc-modal-redirect-note"></p>
+            <label for="payEmail">Email for receipt</label>
+            <input type="email" id="payEmail" class="cc-input" autocomplete="email" />
+            <p id="payErr" class="cc-error hidden"></p>
+            <div class="cc-modal-actions">
+              <button type="button" class="cc-btn cc-btn-primary cc-btn-pay-modal-primary cc-btn-with-icon" id="btnPayStripe" aria-label="Pay with Stripe">
+                <span id="btnPayStripeLabel">Pay with Stripe</span>
+              </button>
+              <button type="button" class="cc-btn cc-btn-secondary cc-btn-with-icon" id="btnPayCancel">
+                <span id="btnPayCancelLabel">Cancel</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+        </div>
+    </section>
+  </main>
+
+  <div class="cc-bottom-dock">
+    <div id="turnNudge" class="cc-nudge-strip" role="region" aria-label="Gentle reminder">
+      <span id="turnNudgeText"></span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button type="button" class="cc-btn cc-btn-primary" id="turnNudgeCta" style="min-height:44px;padding:0 14px;">
+          Continue
+        </button>
+        <button type="button" class="cc-nudge-dismiss" id="turnNudgeDismiss" aria-label="Dismiss">×</button>
+      </div>
+    </div>
+    <div id="ccCheckoutDockProgress" class="cc-checkout-dock-progress hidden" aria-label="Checkout progress">
+      <div class="cc-checkout-dock-progress-row">
+        <div class="cc-cart-progress" id="checkoutProgress">
+          <span class="cc-step is-active" data-step="cart">Cart</span>
+          <span class="cc-step" data-step="shipping">Shipping</span>
+          <span class="cc-step" data-step="payment">Payment</span>
+          <span class="cc-step" data-step="confirm">Confirm</span>
+        </div>
+      </div>
+    </div>
+    <div class="cc-composer-wrap">
+      <p class="cc-composer-eyebrow" id="composerEyebrow">Chat with a Skin &amp; Care Assistant</p>
+      <label for="composer" class="hidden">Message to Somo guide</label>
+      <div class="cc-composer-row">
+        <textarea id="composer" class="cc-composer-pill" placeholder="Ask about this product, ingredients, or your routine…" rows="1"></textarea>
+        <button type="button" class="cc-send-fab" id="btnSendChat" aria-label="Send message">
+          <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+            stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </button>
+      </div>
+      <div style="margin-top:6px;text-align:center;">
+        <span id="chatStatusWrap" class="cc-chat-status-row" style="font-size:0.85rem;color:var(--brand-gray);justify-content:center;" role="status" aria-live="polite">
+          <img id="chatStatusIcon" class="cc-chat-status-panda hidden" src="../assets/images/logo-panda.svg" alt="" aria-hidden="true" />
+          <span id="chatStatus"></span>
+        </span>
+      </div>
+      <span id="btnSendChatLabel" class="hidden">Send</span>
+    </div>
+  </div>
+
+  <div id="productSwitchSheet" class="cc-sheet-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="cc-sheet-backdrop" id="productSheetBackdrop" tabindex="-1"></div>
+    <div class="cc-sheet">
+      <div class="cc-sheet-handle" aria-hidden="true"></div>
+      <h2 id="sheetTitle" class="cc-sheet-title">Switch product</h2>
+      <div id="productSheetList" class="cc-sheet-list"></div>
+      <div id="productSwitchConfirm" class="cc-sheet-confirm hidden">
+        <p id="productSwitchConfirmText"></p>
+        <div class="cc-sheet-confirm-actions">
+          <button type="button" id="btnSwitchCancel">Cancel</button>
+          <button type="button" class="cc-sheet-confirm-primary" id="btnSwitchConfirm">Switch</button>
+        </div>
+        <label class="cc-sheet-skip-label">
+          <input type="checkbox" id="chkSkipSwitchConfirm" />
+          <span id="chkSkipSwitchConfirmLabel">Don’t ask again this session</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div id="ccBridgeOverlay" aria-hidden="true">
+    <img src="../assets/images/logo-panda.svg" width="56" height="56" alt="" />
+    <p id="ccBridgeCopy">Taking you to your Skin &amp; Care guide…</p>
+  </div>
+
+  <script src="../assets/js/checkout-chat/journey-state.js?v=1"></script>
+  <script src="../assets/js/checkout-chat/catalog.js?v=1"></script>
+  <script src="../assets/js/checkout-chat/sse-turns.js?v=1"></script>
+  <script src="../assets/js/checkout-chat/payment-poll.js?v=1"></script>
+  <script src="checkout-phone-e164.js?v=1"></script>
+  <script src="checkout-chat.js?v=3" defer></script>
+</body>
+
+</html>

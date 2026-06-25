@@ -22,6 +22,7 @@ const SCAN_ROOTS = [
   path.join(ROOT, 'middleware-platform/adapters'),
   path.join(ROOT, 'middleware-platform/configure-retell.js'),
   path.join(ROOT, 'docs/voice-agent'),
+  path.join(ROOT, 'patient-app'),
   path.join(ROOT, 'unified-dashboard/admin'),
   path.join(ROOT, 'unified-dashboard/assets/css/admin-portal.css'),
 ];

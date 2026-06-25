@@ -1,14 +1,22 @@
 const path = require('path');
 const { defineConfig } = require('@playwright/test');
 
+const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'somo-landing', 'build');
+const serveScript = path.join(__dirname, 'scripts', 'serve-cra-build.cjs');
+
 const headed = process.env.HEADED === '1';
 const tenantAuditOnly = process.argv.some((a) => a.includes('tenant-audit') || a.includes('tenant-front-desk-audit'));
 
-const apiBase = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
+/** Static server port (Playwright webServer + baseURL). Override if 5199 is busy: `PW_LANDING_PORT=5200 npx playwright test …` */
+const landingPort = String(process.env.PW_LANDING_PORT || '5199').trim() || '5199';
+const landingOrigin = `http://127.0.0.1:${landingPort}`;
 
 /**
- * Provider / API E2E against middleware (default :4000).
- * Headed: `HEADED=1 npx playwright test --project provider-portal`
+ * Somo landing E2E: serves `somo-landing/build` (default :5199).
+ * - Landing UI: `npm run test:e2e-landing` (builds first)
+ * - Headed: `HEADED=1 npx playwright test --project landing`
+ *
+ * API tests use PW_API_BASE_URL (default :4000).
  */
 module.exports = defineConfig({
   timeout: 90_000,
@@ -23,7 +31,7 @@ module.exports = defineConfig({
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
   ],
   use: {
-    baseURL: apiBase,
+    baseURL: landingOrigin,
     ignoreHTTPSErrors: true,
     headless: !headed,
     serviceWorkers: 'block',
@@ -32,6 +40,12 @@ module.exports = defineConfig({
     video: process.env.CI ? 'retain-on-failure' : 'off',
   },
   projects: [
+    {
+      name: 'landing',
+      testDir: './e2e',
+      testMatch: '**/somo-landing.spec.cjs',
+      use: { browserName: 'chromium' },
+    },
     {
       name: 'signup-wizard',
       testDir: './e2e',
@@ -85,30 +99,6 @@ module.exports = defineConfig({
         KELLY_RAILS_FAST_RAG: '1',
         RCM_E2E_RECORD_EMAIL: '1',
         SKIP_STARTUP_MIGRATIONS: '1',
-      },
-    },
-    {
-      name: 'health-video',
-      testDir: './e2e',
-      testMatch: '**/health-video-demo.spec.cjs',
-      timeout: 120_000,
-      use: {
-        browserName: 'chromium',
-        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
-        viewport: { width: 1280, height: 720 },
-      },
-    },
-    {
-      name: 'health-video-mobile',
-      testDir: './e2e',
-      testMatch: '**/health-video-demo.spec.cjs',
-      timeout: 120_000,
-      use: {
-        browserName: 'chromium',
-        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
-        viewport: { width: 390, height: 844 },
-        isMobile: true,
-        hasTouch: true,
       },
     },
     {
@@ -191,4 +181,12 @@ module.exports = defineConfig({
       },
     },
   ],
+  webServer: tenantAuditOnly
+    ? undefined
+    : {
+        command: `node "${serveScript}" "${landingBuild}" ${landingPort}`,
+        url: landingOrigin,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });

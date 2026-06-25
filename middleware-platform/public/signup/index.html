@@ -17,7 +17,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
-            background: linear-gradient(135deg, #1C35EA 0%, #1C35EA 100%);
+            background: linear-gradient(135deg, #16a637 0%, #16a637 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -107,7 +107,7 @@
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: #1C35EA;
+            border-color: #16a637;
         }
 
         .form-group textarea {
@@ -125,7 +125,7 @@
         .btn {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, #1C35EA 0%, #1C35EA 100%);
+            background: linear-gradient(135deg, #16a637 0%, #16a637 100%);
             color: white;
             border: none;
             border-radius: 10px;
@@ -140,7 +140,7 @@
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4);
-            background: linear-gradient(135deg, #1e3a8a 0%, #1529C4 100%);
+            background: linear-gradient(135deg, #1e3a8a 0%, #128a2e 100%);
         }
 
         .btn:disabled {
@@ -149,7 +149,7 @@
         }
 
         .btn-secondary {
-            background: #1C35EA;
+            background: #16a637;
             color: white;
             border: none;
         }
@@ -178,7 +178,7 @@
         }
 
         .resend-link a {
-            color: #1C35EA;
+            color: #16a637;
             text-decoration: none;
             font-size: 0.9rem;
         }
@@ -208,8 +208,8 @@
 
         .alert-info {
             background: #dbeafe;
-            color: #1C35EA;
-            border: 1px solid #1C35EA;
+            color: #16a637;
+            border: 1px solid #16a637;
         }
 
         .loading {
@@ -254,7 +254,7 @@
             transform: translateX(-50%);
             width: 0;
             height: 2px;
-            background: linear-gradient(90deg, #1C35EA 0%, #1C35EA 100%);
+            background: linear-gradient(90deg, #16a637 0%, #16a637 100%);
             z-index: 1;
             transition: width 0.5s ease;
         }
@@ -278,16 +278,16 @@
         }
 
         .step-dot.active {
-            background: linear-gradient(135deg, #1C35EA 0%, #1C35EA 100%);
-            border-color: #1C35EA;
+            background: linear-gradient(135deg, #16a637 0%, #16a637 100%);
+            border-color: #16a637;
             color: white;
             box-shadow: 0 4px 8px rgba(30, 64, 175, 0.3);
             transform: scale(1.1);
         }
 
         .step-dot.completed {
-            background: linear-gradient(135deg, #1C35EA 0%, #1C35EA 100%);
-            border-color: #1C35EA;
+            background: linear-gradient(135deg, #16a637 0%, #16a637 100%);
+            border-color: #16a637;
             color: white;
             box-shadow: 0 2px 6px rgba(30, 64, 175, 0.2);
         }
@@ -317,7 +317,7 @@
         /* Fill progress line when previous step is completed */
         .step-dot.completed ~ .step-dot::before,
         .step-dot.completed + .step-dot.active::before {
-            background: linear-gradient(90deg, #1C35EA 0%, #1C35EA 100%);
+            background: linear-gradient(90deg, #16a637 0%, #16a637 100%);
         }
 
         /* Remove the background line behind active/completed dots */
@@ -337,7 +337,7 @@
         }
 
         .feature-checkbox-label:hover {
-            border-color: #1C35EA;
+            border-color: #16a637;
             background: #f8fafc;
         }
 
@@ -361,12 +361,12 @@
         }
 
         .features-dropdown-button:hover {
-            border-color: #1C35EA;
+            border-color: #16a637;
             background: #f8fafc;
         }
 
         .features-dropdown-button.open {
-            border-color: #1C35EA;
+            border-color: #16a637;
             background: #f8fafc;
         }
 
@@ -403,7 +403,7 @@
         }
 
         .features-selected-count.has-selection {
-            color: #1C35EA;
+            color: #16a637;
             font-weight: 600;
         }
 
@@ -429,7 +429,7 @@
 
         <div style="display: flex; gap: 8px; margin-bottom: 20px; border: 2px solid #e2e8f0; border-radius: 8px; padding: 4px; background: #f8fafc;">
             <button id="tab-signup" class="tab-btn" style="flex: 1; padding: 10px; border: none; background: transparent; color: #64748b; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s;">Sign Up</button>
-            <button id="tab-signin" class="tab-btn active" style="flex: 1; padding: 10px; border: none; background: #1C35EA; color: white; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s;">Sign In</button>
+            <button id="tab-signin" class="tab-btn active" style="flex: 1; padding: 10px; border: none; background: #16a637; color: white; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s;">Sign In</button>
         </div>
 
         <div class="step-indicator" id="signup-indicator" style="display: none; margin-bottom: 30px;">
@@ -462,7 +462,7 @@
             </form>
 
             <div class="resend-link" style="margin-top: 20px; text-align: center; display: flex; flex-direction: column; gap: 8px;">
-                <a href="#" id="forgot-password-link" style="color: #1529C4; text-decoration: none; font-weight: 500;">Forgot Password?</a>
+                <a href="#" id="forgot-password-link" style="color: #128a2e; text-decoration: none; font-weight: 500;">Forgot Password?</a>
                 <a href="#" id="switch-to-signup" style="color: #64748b; text-decoration: none;">Don't have an account? Sign up</a>
             </div>
         </div>
@@ -483,7 +483,7 @@
             </form>
 
             <div class="resend-link" style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
-                <a href="#" id="signin-resend-link" style="color: #1529C4; text-decoration: none; font-weight: 500;">Resend code</a>
+                <a href="#" id="signin-resend-link" style="color: #128a2e; text-decoration: none; font-weight: 500;">Resend code</a>
                 <a href="#" id="forgot-password-link-step2" style="color: #64748b; text-decoration: none; font-size: 0.9rem;">Need help? Contact support</a>
             </div>
         </div>
@@ -657,9 +657,9 @@
         </div>
 
         <p style="text-align: center; margin-top: 24px; font-size: 0.85rem; color: #64748b;">
-            <a href="/terms" style="color: #1529C4;">Terms of Service</a>
+            <a href="/terms" style="color: #128a2e;">Terms of Service</a>
             ·
-            <a href="/privacy" style="color: #1529C4;">Privacy Policy</a>
+            <a href="/privacy" style="color: #128a2e;">Privacy Policy</a>
         </p>
     </div>
 
@@ -980,7 +980,7 @@
 
         document.getElementById('tab-signup').addEventListener('click', () => {
             isSigninMode = false;
-            document.getElementById('tab-signup').style.background = '#1C35EA';
+            document.getElementById('tab-signup').style.background = '#16a637';
             document.getElementById('tab-signup').style.color = 'white';
             document.getElementById('tab-signin').style.background = 'transparent';
             document.getElementById('tab-signin').style.color = '#64748b';
@@ -995,7 +995,7 @@
 
         document.getElementById('tab-signin').addEventListener('click', () => {
             isSigninMode = true;
-            document.getElementById('tab-signin').style.background = '#1C35EA';
+            document.getElementById('tab-signin').style.background = '#16a637';
             document.getElementById('tab-signin').style.color = 'white';
             document.getElementById('tab-signup').style.background = 'transparent';
             document.getElementById('tab-signup').style.color = '#64748b';
@@ -1134,7 +1134,7 @@
                 alert.innerHTML = `<div class="alert alert-info">
                     <strong>Need Help Signing In?</strong><br>
                     Enter your email address above and click "Send Sign-In Code" to receive a verification code.<br><br>
-                    If you can't access your email or need additional help, please contact support at <a href="mailto:support@callsomo.com" style="color: #1529C4;">support@callsomo.com</a>
+                    If you can't access your email or need additional help, please contact support at <a href="mailto:support@callsomo.com" style="color: #128a2e;">support@callsomo.com</a>
                 </div>`;
                 emailInput.focus();
                 return;
@@ -1174,20 +1174,20 @@
                     if (result.error === 'Account not found') {
                         alert.innerHTML = `<div class="alert alert-error">
                             <strong>Account not found</strong><br>
-                            No account found with this email address. <a href="#" id="switch-to-signup-recovery" style="color: #1529C4; text-decoration: underline;">Sign up for a new account</a> or contact support at <a href="mailto:support@callsomo.com" style="color: #1529C4;">support@callsomo.com</a>
+                            No account found with this email address. <a href="#" id="switch-to-signup-recovery" style="color: #128a2e; text-decoration: underline;">Sign up for a new account</a> or contact support at <a href="mailto:support@callsomo.com" style="color: #128a2e;">support@callsomo.com</a>
                         </div>`;
                         document.getElementById('switch-to-signup-recovery').addEventListener('click', (e) => {
                             e.preventDefault();
                             document.getElementById('tab-signup').click();
                         });
                     } else {
-                        alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}<br><br>If you continue to have issues, please contact support at <a href="mailto:support@callsomo.com" style="color: #1529C4;">support@callsomo.com</a></div>`;
+                        alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}<br><br>If you continue to have issues, please contact support at <a href="mailto:support@callsomo.com" style="color: #128a2e;">support@callsomo.com</a></div>`;
                     }
                 }
             } catch (error) {
                 alert.innerHTML = `<div class="alert alert-error">
                     Failed to send sign-in code: ${error.message}<br><br>
-                    If you need help, please contact support at <a href="mailto:support@callsomo.com" style="color: #1529C4;">support@callsomo.com</a>
+                    If you need help, please contact support at <a href="mailto:support@callsomo.com" style="color: #128a2e;">support@callsomo.com</a>
                 </div>`;
             } finally {
                 btn.disabled = false;
@@ -1204,7 +1204,7 @@
                 If you didn't receive the code, try:<br>
                 • Check your spam/junk folder<br>
                 • Click "Resend code" above<br>
-                • Contact support at <a href="mailto:support@callsomo.com" style="color: #1529C4;">support@callsomo.com</a><br>
+                • Contact support at <a href="mailto:support@callsomo.com" style="color: #128a2e;">support@callsomo.com</a><br>
                 • Go back and request a new code
             </div>`;
         });

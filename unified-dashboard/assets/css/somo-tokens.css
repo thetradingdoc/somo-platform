@@ -4,33 +4,25 @@
  */
 
 :root {
-  /* Primary brand (blue) */
-  --somo-primary: #1C35EA;
-  --somo-primary-hover: #1529C4;
-  --somo-primary-soft: #EEF0FE;
-  --somo-primary-mid: #C5CCFA;
-
-  /* Deprecated green aliases — use --somo-primary* */
-  --somo-green: var(--somo-primary);
-  --somo-green-hover: var(--somo-primary-hover);
-  --somo-green-soft: var(--somo-primary-soft);
-  --somo-green-mid: var(--somo-primary-mid);
-
-  --somo-ink: #000000;
+  --somo-green: #16a637;
+  --somo-green-hover: #128a2e;
+  --somo-green-soft: #e8f7ed;
+  --somo-green-mid: #bbf7d0;
+  --somo-ink: #0a0a0a;
   --somo-surface: #111111;
   --somo-text: #ffffff;
   --somo-muted: #9ca3af;
   --font-brand: 'League Spartan', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Aliases for legacy --brand-* imports */
-  --brand-accent: var(--somo-primary);
-  --brand-accent-hover: var(--somo-primary-hover);
+  --brand-accent: var(--somo-green);
+  --brand-accent-hover: var(--somo-green-hover);
   --brand-black: var(--somo-ink);
   --brand-gray: var(--somo-muted);
   --brand-white: var(--somo-text);
   --brand-border: #e5e7eb;
   --brand-cream: #f9fafb;
-  --brand-assistant-bubble: var(--somo-primary-soft);
+  --brand-assistant-bubble: var(--somo-green-soft);
   --brand-header-h: 72px;
   --font-ui: var(--font-brand);
   --font-display: var(--font-brand);
@@ -41,30 +33,30 @@
   --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.06);
   --cc-step-idle-bg: #f9fafb;
   --cc-step-idle-border: #e5e7eb;
-  --cc-step-active-bg: var(--somo-primary-soft);
-  --cc-step-active-border: var(--somo-primary-mid);
-  --cc-step-active-color: #121F9E;
-  --cc-step-done-bg: var(--somo-primary-soft);
-  --cc-step-done-border: var(--somo-primary-mid);
-  --cc-step-done-color: #121F9E;
-  --primary: var(--somo-primary);
-  --primary-hover: var(--somo-primary-hover);
+  --cc-step-active-bg: var(--somo-green-soft);
+  --cc-step-active-border: var(--somo-green-mid);
+  --cc-step-active-color: #14532d;
+  --cc-step-done-bg: var(--somo-green-soft);
+  --cc-step-done-border: var(--somo-green-mid);
+  --cc-step-done-color: #166534;
+  --primary: var(--somo-green);
+  --primary-hover: var(--somo-green-hover);
 
-  /* Deprecated marketing aliases — unified blue palette */
-  --somo-msu: #000000;
-  --somo-lizard: var(--somo-primary);
-  --somo-lizard-hover: var(--somo-primary-hover);
-  --somo-grass: var(--somo-primary-hover);
-  --somo-lizard-10: var(--somo-primary-soft);
-  --somo-lizard-20: #E8EBFD;
-  --somo-rail-gradient: linear-gradient(180deg, #1C35EA 0%, #1529C4 55%, #000000 100%);
-  --somo-green-marketing: var(--somo-primary);
-  --somo-green-marketing-hover: var(--somo-primary-hover);
-  --somo-green-marketing-dark: var(--somo-ink);
-  --somo-bg-marketing: #ffffff;
+  /* Marketing landing (Image 1: MSU Green + Green Lizard) */
+  --somo-msu: #164437;
+  --somo-lizard: #b5e930;
+  --somo-lizard-hover: #9fd628;
+  --somo-grass: #238108;
+  --somo-lizard-10: #f4fbe8;
+  --somo-lizard-20: #e8f7d0;
+  --somo-rail-gradient: linear-gradient(180deg, #b5e930 0%, #238108 55%, #164437 100%);
+  --somo-green-marketing: var(--somo-lizard);
+  --somo-green-marketing-hover: var(--somo-lizard-hover);
+  --somo-green-marketing-dark: var(--somo-msu);
+  --somo-bg-marketing: #fbf9f4;
   --somo-text-marketing: #1a1a1a;
   --somo-muted-marketing: #6b6b6b;
   --somo-border-marketing: #e8e4dc;
-  --somo-cap-surface: var(--somo-primary-soft);
-  --somo-cap-border: var(--somo-primary-mid);
+  --somo-cap-surface: var(--somo-lizard-10);
+  --somo-cap-border: #d0ddd6;
 }

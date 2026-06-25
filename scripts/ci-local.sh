@@ -31,6 +31,7 @@ node scripts/check-performance-budgets.cjs
 node scripts/check-auth-ui-guardrails.cjs
 node scripts/check-landing-route-canonicalization.cjs
 RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs
+node scripts/verify-agentic-checkout.cjs
 node scripts/verify-repo-layout.cjs
 
 step "Kelly Rails env + gates"

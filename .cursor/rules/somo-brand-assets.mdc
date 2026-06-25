@@ -1,5 +1,5 @@
 ---
-description: Use official Somo logo and botanical icon only — never invent brand marks
+description: Use official Somo logo and gecko favicon only — never invent brand marks
 globs:
   - "**/*.html"
   - "**/*.jsx"
@@ -12,14 +12,14 @@ globs:
 
 Before adding or changing logos, favicons, or nav marks:
 
-1. Read [docs/Brand/LOGO_AND_ICON_SSOT.md](docs/Brand/LOGO_AND_ICON_SSOT.md) (in [docs/Brand/README.md](docs/Brand/README.md)).
+1. Read [docs/Brand/LOGO_AND_ICON_SSOT.md](docs/Brand/LOGO_AND_ICON_SSOT.md).
 2. Use files from `unified-dashboard/assets/brand/` only.
 3. Run `npm run brand:sync` after updating SSOT — do not hand-copy one-off logos into `middleware-platform/public/`.
 
-**Logo (light UI):** `somo-logo.png` (Somo title-case lockup).
+**Logo (light UI):** `somo-logo.png` (gecko + wordmark).
 
-**Icon / favicon:** `somo-icon.png` and generated `favicon.*` — never legacy gecko/lizard/dot-cluster assets, never CSS text logos.
+**Icon / favicon:** `somo-icon.png` and generated `favicon.*` — never `somo-logo-wordmark.svg`, never CSS text logos, never new gecko SVGs for nav or favicon.
 
-**Dark ink bars:** `somo-icon.png` + League Spartan “Somo” text, or full lockup per SSOT doc. Accent color: `#1C35EA`.
+**Dark green bars:** `somo-icon.png` + League Spartan “Somo” text, or full lockup per SSOT doc — not text-only SVG.
 
 Do not create DocLittle spans, dodgecall marks, or AI-generated wordmarks.

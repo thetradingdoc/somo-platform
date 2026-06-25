@@ -16,8 +16,5 @@ module.exports = {
   hipaa_access_log: 2555,     // 7 years - HIPAA requirement
   video_consult_sessions: 30, // 30 days - P2 data retention
   video_consult_ai_decisions: 30,
-  video_consult_review_tasks: 90,  // Keep HITL tasks longer for audit
-  health_sessions: 90,
-  health_session_transcripts: 90,
-  health_session_reports: 365
+  video_consult_review_tasks: 90  // Keep HITL tasks longer for audit
 };

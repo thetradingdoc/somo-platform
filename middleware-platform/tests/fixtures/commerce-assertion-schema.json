@@ -1,0 +1,426 @@
+{
+  "version": "1.0.0",
+  "description": "Machine-readable assertion types for commerce 100-scenario test pack. Referenced by commerce-voice-100-scenarios.json and future runner.",
+  "acknowledgement_patterns": {
+    "empathetic_prefix": [
+      "(?i)(sounds? like|that (must be|sounds)|i hear you|i understand|i'm sorry|sorry to hear|that's (tough|hard|a lot)|let me help|let's get you sorted|thank you for sharing)"
+    ],
+    "vent_handoff_phrases": [
+      "(?i)(connect you with|speak with (a |our )?(person|human|team member)|transfer you|front desk|someone from our team)"
+    ],
+    "forbidden_vent_responses": [
+      "(?i)(let me schedule|available slots|book an appointment|our vitamin d costs)"
+    ]
+  },
+  "assertion_types": {
+    "ACK_BEFORE_TRANSACTION": {
+      "category": "acknowledgement",
+      "description": "Agent turn before first price/quote/tool contains empathetic phrase",
+      "pass_criteria": "Agent reply before first tool invocation matches empathetic_prefix regex",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-agent-service.js",
+        "function": "buildCommerceCheckoutSystemPrompt",
+        "secondary": "middleware-platform/services/kelly-prompt-builder.js"
+      }
+    },
+    "ACK_NOT_SCHEDULING_JUMP": {
+      "category": "acknowledgement",
+      "description": "No slot/book language when user only venting",
+      "pass_criteria": "No scheduling tools and no booking language in vent-only turns",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/conversation-mode/mode-tool-firewall.js",
+        "secondary": "middleware-platform/services/conversation-mode/subrails/handoff-subrail.js"
+      }
+    },
+    "VENT_HANDOFF": {
+      "category": "acknowledgement",
+      "description": "3+ vent turns without transactional intent triggers handoff",
+      "pass_criteria": "handoff_subrail active OR pending_human_handoff flag OR handoff copy within 3 vent turns",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/conversation-mode/subrails/handoff-subrail.js",
+        "function": "HANDOFF_RETRY_CEILING",
+        "secondary": "middleware-platform/services/kelly-rails/prompts/en.js"
+      }
+    },
+    "NO_BOT_THERAPY": {
+      "category": "acknowledgement",
+      "description": "Agent does not attempt clinical counseling on vent calls",
+      "pass_criteria": "No diagnosis, treatment plan, or extended therapy language",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/node-runner.js",
+        "function": "scope guard",
+        "secondary": "middleware-platform/services/kelly-agent-service.js"
+      }
+    },
+    "CHECKOUT_STAGE_FSM": {
+      "category": "agent_state",
+      "description": "Commerce checkout stage follows FSM without backward regression",
+      "pass_criteria": "checkout_stage transitions: collecting_details → code_sent → code_verified → checkout_prepared → payment_confirmed | failed",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-tool-executor/checkout-context.js",
+        "secondary": "middleware-platform/services/kelly-tool-executor.js"
+      }
+    },
+    "META_KV_COMMERCE_KEYS": {
+      "category": "agent_state",
+      "description": "Commerce meta_kv keys present and policy-compliant",
+      "pass_criteria": "commerce_email_verified, payment_token writable; orchestration keys not written via meta_kv",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/meta-kv-policy.js",
+        "secondary": "middleware-platform/services/kelly-tool-executor.js"
+      }
+    },
+    "RAILS_PROJECTION_CONSISTENT": {
+      "category": "agent_state",
+      "description": "kelly_rails_session_projection consistent with conversation mode",
+      "pass_criteria": "active_lane, step, flags_json match expected mode/subrail",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/session-ssot.js",
+        "secondary": "middleware-platform/services/kelly-rails/hydrate.js"
+      }
+    },
+    "TOOL_COMPLETED_BEFORE_CLAIM": {
+      "category": "agent_state",
+      "description": "Agent does not claim success before tool_completed telemetry",
+      "pass_criteria": "kelly_call_events has tool_completed before payment/booking confirmation copy",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-tool-executor.js",
+        "function": "_emitToolTelemetry",
+        "secondary": "middleware-platform/services/kelly-rails/gates/schedule.js"
+      }
+    },
+    "CART_LINE_ITEMS": {
+      "category": "agent_state",
+      "description": "Commerce cart line items match expected SKUs and quantities",
+      "pass_criteria": "commerce_carts rows match scenario preconditions",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/database/repos/commerce-checkout.js",
+        "secondary": "middleware-platform/routes/public-commerce-cart.js"
+      }
+    },
+    "WER_THRESHOLD": {
+      "category": "speech_metrics",
+      "description": "Word Error Rate within threshold on reference utterance",
+      "pass_criteria": "WER <= max_wer (default 0.15)",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/scripts/speech-asr-eval.cjs",
+        "secondary": "middleware-platform/eval/commerce-speech-golden-set.json"
+      }
+    },
+    "EOT_LATENCY": {
+      "category": "speech_metrics",
+      "description": "End-of-turn latency within threshold",
+      "pass_criteria": "eot_latency_ms <= max (800 clean, 1200 noisy)",
+      "severity_default": "P2",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-asr-gate.js",
+        "function": "extractAsrTiming",
+        "secondary": "middleware-platform/services/voice-speech-metrics.js"
+      }
+    },
+    "ASR_CONFIDENCE": {
+      "category": "speech_metrics",
+      "description": "STT confidence above threshold or clarify path triggered",
+      "pass_criteria": "confidence >= min OR asr_low_confidence clarify event emitted",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-asr-gate.js",
+        "secondary": "middleware-platform/webhooks/retell-websocket.js"
+      }
+    },
+    "RTF_THRESHOLD": {
+      "category": "speech_metrics",
+      "description": "Real-Time Factor below 1.0",
+      "pass_criteria": "rtf < 1.0",
+      "severity_default": "P2",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/voice-speech-metrics.js"
+      }
+    },
+    "ASSISTANT_LATENCY": {
+      "category": "speech_metrics",
+      "description": "Kelly turn resolution latency",
+      "pass_criteria": "assistant_latency_ms <= 2500",
+      "severity_default": "P2",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-turn-resolver.js",
+        "function": "recordAssistantLatency"
+      }
+    },
+    "VOICE_SLO": {
+      "category": "speech_metrics",
+      "description": "Conversation SLO metrics from voice-metrics API",
+      "pass_criteria": "VOICE_SLO_* thresholds from docs/setup/ENV.md",
+      "severity_default": "P2",
+      "code_on_fail": {
+        "primary": "middleware-platform/routes/public-landing-assistant.js",
+        "secondary": "middleware-platform/services/landing-voice-metrics-contract.js"
+      }
+    },
+    "VOICE_COMMERCE_TOOL_CHAIN": {
+      "category": "transactional",
+      "description": "Voice product purchase tool sequence",
+      "pass_criteria": "search_products before create_checkout; POST /voice/checkout/create success",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/webhooks/retell-websocket.js",
+        "function": "handleCreateCheckout",
+        "secondary": "middleware-platform/retell-functions/retell-functions.json"
+      }
+    },
+    "CHAT_COMMERCE_TOOL_CHAIN": {
+      "category": "transactional",
+      "description": "Chat product purchase tool sequence",
+      "pass_criteria": "get_product_quote before prepare_commerce_checkout; Stripe PI or payment link",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-tool-executor.js",
+        "secondary": "middleware-platform/routes/public-commerce-cart.js"
+      }
+    },
+    "PRICE_PARITY_VOICE_CHAT": {
+      "category": "transactional",
+      "description": "Same SKU price matches across voice and chat channels",
+      "pass_criteria": "quote amount_cents equal within same merchant",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/routes/voice-appointments.js",
+        "secondary": "middleware-platform/routes/public-commerce-quote.js"
+      }
+    },
+    "BOOKING_GATE_SUCCESS": {
+      "category": "transactional",
+      "description": "Appointment booked only after schedule_appointment tool success",
+      "pass_criteria": "schedule_appointment_success flag OR appointment DB row",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/gates/schedule.js",
+        "secondary": "middleware-platform/services/booking-service.js"
+      }
+    },
+    "CANCEL_GATE_SUCCESS": {
+      "category": "transactional",
+      "description": "Cancel executed via cancel gate",
+      "pass_criteria": "cancel_appointment tool_completed; status=cancelled",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/gates/cancel.js"
+      }
+    },
+    "RESCHEDULE_GATE_SUCCESS": {
+      "category": "transactional",
+      "description": "Reschedule executed via reschedule gate",
+      "pass_criteria": "reschedule_appointment tool_completed; new datetime in DB",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/gates/reschedule.js"
+      }
+    },
+    "APPOINTMENT_CHECKOUT": {
+      "category": "transactional",
+      "description": "Visit copay checkout after booking",
+      "pass_criteria": "create_appointment_checkout tool_completed; payment_link_sent event",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-tool-executor.js",
+        "secondary": "middleware-platform/services/commerce-payment-settlement.js"
+      }
+    },
+    "OUTBOUND_DISPOSITION": {
+      "category": "transactional",
+      "description": "Outbound call ends with correct disposition",
+      "pass_criteria": "reminder_delivered | voicemail | opt_out | handoff_requested",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/conversation-mode/rails/operator-outbound-rail.js",
+        "secondary": "middleware-platform/services/outbound-quiet-hours.js"
+      }
+    },
+    "OUTBOUND_DISPOSITION_LOGGED": {
+      "category": "transactional",
+      "description": "Outbound end_call includes disposition metadata",
+      "pass_criteria": "end_call tool with disposition arg on outbound calls",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/conversation-mode/rails/operator-outbound-rail.js",
+        "secondary": "middleware-platform/webhooks/retell-websocket.js"
+      }
+    },
+    "HANDOFF_ON_VENT": {
+      "category": "acknowledgement",
+      "description": "Vent or complaint calls transfer to human",
+      "pass_criteria": "transfer_call tool OR handoff copy within vent flow",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/conversation-mode/subrails/handoff-subrail.js",
+        "secondary": "middleware-platform/services/kelly-rails/prompts/en.js"
+      }
+    },
+    "BOOKING_GATE_RESPECTED": {
+      "category": "transactional",
+      "description": "Slots fetched before schedule_appointment",
+      "pass_criteria": "get_available_slots appears before schedule_appointment in tool order",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/gates/schedule.js",
+        "secondary": "middleware-platform/services/booking-service.js"
+      }
+    },
+    "SPANISH_LOCALE_RESPECTED": {
+      "category": "transactional",
+      "description": "Spanish locale calls use Spanish agent copy",
+      "pass_criteria": "locale es-US and agent replies contain Spanish phrases",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-rails/prompts/es.js",
+        "secondary": "middleware-platform/services/kelly-agent-service.js"
+      }
+    },
+    "PAYMENT_LINK_SENT": {
+      "category": "transactional",
+      "description": "Payment or checkout link tool invoked",
+      "pass_criteria": "create_checkout | prepare_commerce_checkout | create_appointment_checkout | request_patient_payment",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/kelly-tool-executor.js",
+        "secondary": "middleware-platform/routes/voice-appointments.js"
+      }
+    },
+    "EMERGENCY_NO_SCHEDULE": {
+      "category": "transactional",
+      "description": "Emergency protocol blocks scheduling tools",
+      "pass_criteria": "911/ER copy; no get_available_slots or schedule_appointment",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "middleware-platform/services/conversation-mode/mode-tool-firewall.js",
+        "secondary": "middleware-platform/services/voice-triage-guards.js"
+      }
+    },
+    "FRONTEND_QUOTE_LOAD": {
+      "category": "frontend",
+      "description": "Checkout chat UI loads product strip and server quote",
+      "pass_criteria": "productTitle populated; fetchQuote returns quote_id",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "unified-dashboard/patients/checkout-chat.html",
+        "secondary": "unified-dashboard/assets/js/checkout-chat/catalog.js"
+      }
+    },
+    "FRONTEND_SSE_TURN": {
+      "category": "frontend",
+      "description": "SSE stream delivers agent turns",
+      "pass_criteria": "EventSource receives turn chunks; thread updates",
+      "severity_default": "P1",
+      "code_on_fail": {
+        "primary": "unified-dashboard/assets/js/checkout-chat/sse-turns.js",
+        "secondary": "middleware-platform/routes/patient-checkout-chat.js"
+      }
+    },
+    "FRONTEND_STRIPE_PAY": {
+      "category": "frontend",
+      "description": "In-chat Stripe payment modal",
+      "pass_criteria": "btnPayInThread opens PI confirm; payment_confirmed stage",
+      "severity_default": "P0",
+      "code_on_fail": {
+        "primary": "unified-dashboard/patients/checkout-chat.js",
+        "secondary": "middleware-platform/services/patient-checkout-chat-service.js"
+      }
+    },
+    "FRONTEND_ANALYTICS": {
+      "category": "frontend",
+      "description": "Checkout analytics events fired",
+      "pass_criteria": "agentic_primary and in_chat_pay_tap events in funnel",
+      "severity_default": "P2",
+      "code_on_fail": {
+        "primary": "scripts/verify-agentic-checkout.cjs",
+        "secondary": "unified-dashboard/assets/js/checkout-chat/journey-state.js"
+      }
+    }
+  },
+  "predicted_failures": {
+    "F-01": {
+      "scenarios": ["C-006"],
+      "description": "Voice vs chat price mismatch",
+      "code_primary": "middleware-platform/routes/voice-appointments.js",
+      "code_secondary": "middleware-platform/routes/public-commerce-quote.js"
+    },
+    "F-02": {
+      "scenarios": ["C-004", "C-012"],
+      "description": "Voice missing cart/quote tools in Retell manifest",
+      "code_primary": "middleware-platform/retell-functions/retell-functions.json",
+      "code_secondary": "middleware-platform/webhooks/retell-websocket.js"
+    },
+    "F-03": {
+      "scenarios": ["C-031", "C-032", "C-033", "C-034", "C-035"],
+      "description": "Vent calls get product pitch instead of handoff",
+      "code_primary": "middleware-platform/services/kelly-rails/prompts/en.js",
+      "code_secondary": "middleware-platform/services/conversation-mode/subrails/handoff-subrail.js"
+    },
+    "F-04": {
+      "scenarios": ["C-038", "C-034"],
+      "description": "No acknowledgement before quote",
+      "code_primary": "middleware-platform/services/kelly-agent-service.js",
+      "function": "buildCommerceCheckoutSystemPrompt"
+    },
+    "F-05": {
+      "scenarios": ["C-076"],
+      "description": "Supplement reorder outbound not implemented",
+      "code_primary": "middleware-platform/services/conversation-mode/rails/operator-outbound-rail.js"
+    },
+    "F-06": {
+      "scenarios": ["C-093", "C-094", "C-095", "C-096", "C-097", "C-098", "C-099", "C-100"],
+      "description": "No Playwright coverage for checkout-chat UI",
+      "code_primary": "scripts/verify-agentic-checkout.cjs"
+    },
+    "F-07": {
+      "scenarios": ["C-019", "C-020", "C-021", "C-022", "C-023", "C-024"],
+      "description": "Order cancel/refund flow incomplete",
+      "code_primary": "middleware-platform/retell-functions/retell-functions.json"
+    },
+    "F-08": {
+      "scenarios": ["C-057"],
+      "description": "Cross-intent commerce + booking state collision",
+      "code_primary": "middleware-platform/services/kelly-agent-service.js",
+      "function": "_processCommerceCheckoutTurn"
+    },
+    "F-09": {
+      "scenarios": ["C-089"],
+      "description": "WER corpus too small for supplement domain",
+      "code_primary": "middleware-platform/eval/speech-golden-set.json",
+      "code_secondary": "middleware-platform/eval/commerce-speech-golden-set.json"
+    },
+    "F-10": {
+      "scenarios": ["C-013"],
+      "description": "Stage failed without surfaced UI reason",
+      "code_primary": "middleware-platform/services/patient-checkout-chat-service.js",
+      "function": "buildStageContract"
+    }
+  },
+  "checkout_stage_fsm": {
+    "states": ["collecting_details", "code_sent", "code_verified", "checkout_prepared", "payment_confirmed", "failed"],
+    "allowed_transitions": [
+      ["collecting_details", "code_sent"],
+      ["code_sent", "code_verified"],
+      ["code_sent", "failed"],
+      ["code_verified", "checkout_prepared"],
+      ["checkout_prepared", "payment_confirmed"],
+      ["checkout_prepared", "failed"],
+      ["payment_confirmed", "failed"]
+    ],
+    "forbidden_regressions": [
+      ["checkout_prepared", "collecting_details"],
+      ["payment_confirmed", "code_sent"],
+      ["code_verified", "collecting_details"]
+    ]
+  }
+}

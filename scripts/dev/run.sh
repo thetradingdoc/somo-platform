@@ -60,7 +60,6 @@ export DEV_LIGHT_START="${DEV_LIGHT_START:-1}"
 export CATALOG_MASTER_SYNC_ENABLED="${CATALOG_MASTER_SYNC_ENABLED:-0}"
 export EHR_SYNC_ENABLED="${EHR_SYNC_ENABLED:-0}"
 export NOTIFICATION_QUEUE_ENABLED="${NOTIFICATION_QUEUE_ENABLED:-0}"
-export LOCAL_DEV_ROOT="${LOCAL_DEV_ROOT:-health}"
 
 if [[ -s "$HOME/.nvm/nvm.sh" ]]; then
   export NVM_DIR="$HOME/.nvm"
@@ -73,6 +72,5 @@ elif command -v brew >/dev/null 2>&1 && [[ -s "$(brew --prefix nvm 2>/dev/null)/
 fi
 
 echo "📁 DB_PATH=$DB_PATH"
-echo "🏥 LOCAL_DEV_ROOT=${LOCAL_DEV_ROOT:-health}"
 echo "🚀 Starting middleware (DEV_LIGHT_START=$DEV_LIGHT_START)…"
 exec npm start

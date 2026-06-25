@@ -399,13 +399,17 @@ Open roadmap items: TODO-01–04 (P0 Kelly status/provisioning), TODO-05–07 (j
 
 ## P3 — Deferred / blocked / legacy
 
+### Agentic checkout (commerce-adjacent)
+
+Open: #2, #4–#7, #9–#10, #12 — webhook convergence, shipping address, quote linkage, orphaned sessions, merchant-orders UI, tool-only silence, post-payment chat context.
+
 ### LangGraph Step 10
 
-Blocked on payment-rail prereqs. Open: sections 1.1–1.7, 2.1–2.7, 3.1–3.6, 4.1–4.6 (guardrails, graph skeleton, LangSmith, API, rollout).
+Blocked on checkout payment-rail prereqs. Open: sections 1.1–1.7, 2.1–2.7, 3.1–3.6, 4.1–4.6 (guardrails, graph skeleton, LangSmith, API, rollout).
 
 ### Derm patient Q&A (consumer education — DEFERRED)
 
-P1.4 clinician spot-check; P8 UI; P6 eval runner; P7 corpus versioning.
+P1.4 clinician spot-check; P8 UI (chat surface, clarifying questions, disclaimers, escalation, citations, feedback, image upload, a11y); P6 eval runner/metrics/CI/online; P7 corpus versioning, conflict policy, incident playbook.
 
 ### Landing navigator ZIP regression (legacy funnel — DEFERRED)
 
@@ -426,19 +430,6 @@ Azure sections in legacy checklist are historical; use GCP runbooks: [`docs/depl
 
 ---
 
-## Delete later — post video-health architecture
-
-Do not remove until health-session spine is live and traffic confirms cutover.
-
-| Bucket | Paths | Gate |
-|--------|-------|------|
-| **Navigation PSTN** | `consumer-navigation-handler.js`, `navigation-orchestrator*`, `navigation-*-live.cjs` scripts, [`NAVIGATION_OPERATOR_RUNBOOK.md`](../docs/runbooks/NAVIGATION_OPERATOR_RUNBOOK.md) | New architecture live + DID strategy |
-| **Kelly skincare/commerce tools** | `commerce-tools.js`, `skincare-post-turn-compose.js`, `funnel-clinical-triage.js`, `public-landing-assistant.js` | Video Kelly tool allowlist replaces them |
-| **LangGraph ops** | `migrate-to-langgraph.js`, `reconcile-langgraph-state.js` | Verify zero prod usage |
-| **Script sprawl** | RS-2-06: reorganize `middleware-platform/scripts/` | Deferred refactor |
-
----
-
 ## Summary
 
 | Priority | Workstream | ~Open items |
@@ -450,4 +441,4 @@ Do not remove until health-session spine is live and traffic confirms cutover.
 | **P1** | Demo operator sign-off | **3** (operator) |
 | **P1** | Kelly Phase C sign-off | **~24** (clinical/operator) |
 | **P2** | RCM, telemedicine, payor, GCP, photo-to-bill, UI polish | **~40** (deferred) |
-| **P3** | LangGraph, derm Q&A, legacy funnel | deferred |
+| **P3** | Commerce checkout, LangGraph, derm Q&A, legacy funnel | deferred |

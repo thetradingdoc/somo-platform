@@ -248,19 +248,6 @@ function appendShortTermThreadEvent(roomId, event = {}) {
  * @returns {Promise<{encounter_id, patient_id, provider_id, clinic_id}|null>}
  */
 async function resolveRoomToEncounter(roomId) {
-  if (roomId && roomId.startsWith('health-')) {
-    const healthSessionService = require('./health-session-service');
-    const session = healthSessionService.getByRoom(roomId);
-    if (session) {
-      return {
-        encounter_id: session.id,
-        patient_id: null,
-        provider_id: null,
-        clinic_id: null,
-        session_type: 'health_video'
-      };
-    }
-  }
   if (!roomId || !roomId.startsWith('appt-')) return null;
   const appointmentId = roomId.replace(/^appt-/, '');
   try {
@@ -363,10 +350,6 @@ function logAiDecision(roomId, stage, findings, codes, confidence, patientId, mo
   return db.insertVideoConsultAiDecision(roomId, stage, findings, codes, confidence, patientId, modelUsed);
 }
 
-function getLiveTranscript(roomId) {
-  return liveTranscripts.get(roomId) || [];
-}
-
 module.exports = {
   resolveRoomToEncounter,
   createSession,
@@ -375,7 +358,6 @@ module.exports = {
   mergeSessionMetadata,
   getSessionState,
   appendLiveTranscript,
-  getLiveTranscript,
   clearLiveTranscript,
   setTranscriptTranslationConfig,
   getTranscriptTranslationConfig,

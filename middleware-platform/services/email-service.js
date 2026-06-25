@@ -807,9 +807,9 @@ class EmailService {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #1C35EA; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .header { background: #16a637; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
           .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .claim-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #1C35EA; }
+          .claim-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #16a637; }
           .detail-row { margin: 10px 0; }
           .label { font-weight: bold; color: #666; }
           .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
@@ -1216,7 +1216,7 @@ class EmailService {
             overflow: hidden;
           }
           .header {
-            background: linear-gradient(135deg, #1C35EA 0%, #3b82f6 100%);
+            background: linear-gradient(135deg, #16a637 0%, #3b82f6 100%);
             color: white;
             padding: 30px;
             text-align: center;
@@ -1425,7 +1425,7 @@ class EmailService {
           .button { 
             display: inline-block; 
             padding: 16px 32px; 
-            background: linear-gradient(135deg, #1C35EA 0%, #3b82f6 100%); 
+            background: linear-gradient(135deg, #16a637 0%, #3b82f6 100%); 
             color: white; 
             text-decoration: none; 
             border-radius: 8px; 
@@ -1483,15 +1483,15 @@ class EmailService {
 
               <p style="margin-top: 20px; color: #64748b; font-size: 14px;">
                 <strong>Need help?</strong><br>
-                Contact us at <a href="mailto:support@callsomo.com" style="color: #1C35EA;">support@callsomo.com</a> 
+                Contact us at <a href="mailto:support@callsomo.com" style="color: #16a637;">support@callsomo.com</a> 
                 or visit your dashboard to manage your account.
               </p>
             </div>
             <div class="footer">
               <p>This is an automated alert from Somo.</p>
               <p style="margin-top: 10px;">
-                <a href="${dashboardUrl}" style="color: #1C35EA; text-decoration: none;">Manage Credits</a> | 
-                <a href="https://callsomo.com" style="color: #1C35EA; text-decoration: none;">Visit Website</a>
+                <a href="${dashboardUrl}" style="color: #16a637; text-decoration: none;">Manage Credits</a> | 
+                <a href="https://callsomo.com" style="color: #16a637; text-decoration: none;">Visit Website</a>
               </p>
             </div>
           </div>
@@ -1562,7 +1562,7 @@ class EmailService {
           <a href="${feedbackUrl + '&helpful=1'}" style="display:inline-block;padding:10px 16px;margin-right:8px;background:#16a34a;color:white!important;text-decoration:none;border-radius:8px;font-weight:600;">👍 Yes</a>
           <a href="${feedbackUrl + '&helpful=0'}" style="display:inline-block;padding:10px 16px;background:#dc2626;color:white!important;text-decoration:none;border-radius:8px;font-weight:600;">👎 No</a>
         </p>
-        <p style="margin-top:12px;font-size:13px;color:#6b7280;">Or leave detailed feedback: <a href="${feedbackUrl}" style="color:#1C35EA;">${feedbackUrl}</a></p>
+        <p style="margin-top:12px;font-size:13px;color:#6b7280;">Or leave detailed feedback: <a href="${feedbackUrl}" style="color:#16a637;">${feedbackUrl}</a></p>
       </div>
     `;
     return this.sendEmail({ to: appointment.patient_email, subject, html });

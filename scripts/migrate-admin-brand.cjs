@@ -66,7 +66,7 @@ function migrateIndex() {
     text = text.replace(
       oldLogo[0],
       `<div class="logo admin-sidebar-logo">
-        <img src="/assets/brand/somo-icon.png" alt="Somo" width="36" height="36" />
+        <img src="/assets/brand/somo-icon-lizard.png" alt="Somo" width="36" height="36" />
       </div>
       <div class="nav-icon" title="Dashboard"`
     );
@@ -174,7 +174,7 @@ function migrateStandalone(filename, extraHead = '', extraCss = '') {
 
   text = text.replace(
     /<div class="logo">[\s\S]*?<\/div>/,
-    `<div class="logo admin-sidebar-logo"><img src="/assets/brand/somo-icon.png" alt="Somo" width="36" height="36" /></div>`
+    `<div class="logo admin-sidebar-logo"><img src="/assets/brand/somo-icon-lizard.png" alt="Somo" width="36" height="36" /></div>`
   );
 
   fs.writeFileSync(file, text);
@@ -198,7 +198,7 @@ function migrateAiAssistant() {
     '.admin-ai-send {\n  padding: 10px 20px;\n  background: var(--admin-cta, var(--somo-lizard));\n  color: var(--somo-msu);'
   );
   css = css.replace(
-    '.admin-ai-send:hover:not(:disabled) {\n  background: #1529C4;',
+    '.admin-ai-send:hover:not(:disabled) {\n  background: #128a2e;',
     '.admin-ai-send:hover:not(:disabled) {\n  background: var(--admin-cta-hover, var(--somo-lizard-hover));'
   );
   fs.writeFileSync(file, css);

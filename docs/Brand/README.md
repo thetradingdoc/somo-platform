@@ -144,7 +144,7 @@ Deploy SSOT: [`../deployment/SOMO_CLOUD_RUN_DEPLOY.md`](../deployment/SOMO_CLOUD
 
 # Somo logo and icon — single source of truth
 
-> **Last reviewed:** 2026-06-25
+> **Last reviewed:** 2026-06-01
 
 Read this before changing any logo, favicon, or nav mark in the repo.
 
@@ -154,17 +154,15 @@ All official raster assets live in **[`unified-dashboard/assets/brand/`](../../u
 
 | Role | File | Use |
 |------|------|-----|
-| **Logo** (full lockup) | `somo-logo.png` | Nav, signup cards, login, API signup — **Somo** title case + botanical mark (black on transparent) |
+| **Logo** (full lockup) | `somo-logo.png` | Nav, signup cards, login, API signup on light backgrounds — green gecko + “Somo” wordmark |
 | **Master / archive** | `somo-logo-master.png` | Same as logo; keep in sync with `somo-logo.png` |
-| **Icon** | `somo-icon.png` | Favicon source, sidebars, dark headers (botanical mark cropped from lockup) |
+| **Icon** (gecko only) | `somo-icon.png`, `somo-icon-lizard.png` | Favicon source, app icon, dark headers beside typography |
 | **Favicon** | `favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png` | Browser tab |
 | **Apple touch** | `apple-touch-icon.png` | iOS home screen |
 
-Regenerate icon from logo crop and favicon sizes:
+Regenerate favicon sizes after updating the icon:
 
 ```bash
-node scripts/prepare-somo-logo.cjs <source.png>   # solid black on transparent (handles white or black PSD bg)
-npm run brand:crop-icon   # after updating somo-logo.png
 npm run brand:favicons
 ```
 
@@ -176,13 +174,14 @@ npm run brand:sync
 
 ## Forbidden in product UI
 
-- **Do not** use archived wordmark SVGs or legacy gecko/lizard files (`_archive/gecko-legacy/`).
-- **Do not** build logos from CSS (`<span class="doc">`), inline SVG text, or one-off PNGs under `public/`.
+- **Do not** use text-only `somo-logo-wordmark.svg` or `somo-wordmark-text.svg` as a logo.
+- **Do not** build logos from CSS (`<span class="doc">`), inline SVG text, or AI-generated geckos.
+- **Do not** use `somo-gecko.svg` for favicon, nav lockup, or signup header (decorative marketing only).
 - **Do not** add new logo files under `public/` without updating SSOT first.
 
-## Dark ink headers (API profile, docs sidebar)
+## Dark green headers (API profile, docs sidebar)
 
-Use **botanical icon + typography**, not a text-only wordmark:
+Use **gecko icon + typography**, not the text-only wordmark:
 
 ```html
 <div class="logo-brand logo-brand--on-dark">
@@ -191,7 +190,7 @@ Use **botanical icon + typography**, not a text-only wordmark:
 </div>
 ```
 
-League Spartan “Somo” beside the official icon is allowed; inventing a new mark is not.
+League Spartan “Somo” beside the official gecko is allowed; inventing a new mark is not.
 
 ## Light surfaces (signup card, terms)
 
@@ -204,7 +203,7 @@ League Spartan “Somo” beside the official icon is allowed; inventing a new m
 All outbound templates use [`middleware-platform/lib/somo-email-layout.js`](../../middleware-platform/lib/somo-email-layout.js):
 
 - Header: official logo from `https://callsomo.com/assets/brand/somo-logo.png` (override with `SOMO_EMAIL_LOGO_URL`)
-- Colors: Somo blue `#1C35EA`, black-to-blue header gradient, League Spartan stack
+- Colors: Somo green `#16a637`, MSU green header gradient, League Spartan stack
 - Footer: tagline, `callsomo.com`, `info@callsomo.com`
 
 Do not use CSS text logos (`<span class="doc">`) or legacy blue `#1e40af` in new templates.
@@ -239,18 +238,17 @@ Run after brand changes; production host may still be **callsomo.com**.
 
 | Surface | URL (local :4000) | Check |
 |---------|-------------------|--------|
-| Marketing landing | `/` | Somo title-case wordmark; hero on white; blue CTA `#1C35EA`; black `#000000` headings |
-| Provider login | `/login` or `/business/login.html` | Somo branding, blue `#1C35EA` CTAs |
-| Provider Today | `/business/today.html` | Greeting in topbar; alerts → KPIs → appointments (main) + calls/messages (aside); no Urgent/HITL panels; `somo-icon.png`; primary CTAs `#1C35EA` |
-| RCM | `/business/rcm.html` | Provider shell “Somo”, blue accents |
+| Marketing landing | `/` | Somo gecko wordmark; hero on white; lizard CTA `#b5e930` (not legacy `#93d33b`); MSU `#164437` on headings/pills; capability panels without gray taglines under tab labels; muted free pricing card + single lizard primary on Practice |
+| Provider login | `/login` or `/business/login.html` | Somo branding, product green `#16a637` CTAs |
+| Provider Today | `/business/today.html` | Greeting in topbar; alerts → KPIs → appointments (main) + calls/messages (aside); no Urgent/HITL panels; `somo-icon.png`; primary CTAs `#16a637` |
+| RCM | `/business/rcm.html` | Provider shell “Somo”, green accents |
 | Patient wallet | `/patients/wallet.html` | Somo colors, no Skin & Care |
-| Signup terms | `/public/signup/terms.html` | Party name Somo, blue header |
-| Health video | `/health-video/` | Black headlines, blue CTAs, `somo-logo.png` |
+| Signup terms | `/public/signup/terms.html` | Party name Somo, green header |
 | Privacy | `/public/signup/privacy.html` | Somo privacy policy |
-| PWA manifest | `manifest.webmanifest` | `name` Somo, `theme_color` `#1C35EA` (product) |
+| PWA manifest | `manifest.webmanifest` | `name` Somo, `theme_color` `#16a637` (product) |
 
 **Automated:** `npm run check:brand` from repo root.
 
 **E2E:** `npm run test:e2e-somo-landing --prefix middleware-platform` (Somo hero, capabilities, pricing hierarchy).
 
-**Palette SSOT:** [`docs/design/SOMO_COLORS.md`](../design/SOMO_COLORS.md).
+**Palette SSOT:** [`docs/design/SOMO_MARKETING_COLORS.md`](../design/SOMO_MARKETING_COLORS.md).

@@ -6,11 +6,6 @@ const { spawn } = require('child_process');
 const procs = [];
 let shuttingDown = false;
 
-const devEnv = {
-  ...process.env,
-  LOCAL_DEV_ROOT: process.env.LOCAL_DEV_ROOT || 'health'
-};
-
 function prefixedPipe(stream, prefix) {
   stream.setEncoding('utf8');
   stream.on('data', (chunk) => {
@@ -26,7 +21,7 @@ function prefixedPipe(stream, prefix) {
 function start(name, args) {
   const child = spawn('npm', args, {
     stdio: ['inherit', 'pipe', 'pipe'],
-    env: devEnv,
+    env: process.env,
     shell: true
   });
   procs.push(child);
@@ -55,7 +50,7 @@ process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
 console.log('[dev:one-place] Starting middleware API on :4000');
-console.log('[dev:one-place] Health MVP: http://localhost:4000/ → /health-video.html');
-console.log('[dev:one-place] Provider portal: http://localhost:4000/login');
+console.log('[dev:one-place] API: http://localhost:4000');
+console.log('[dev:one-place] Root redirects to /business/trial-activation.html');
 
 start('api', ['start', '--prefix', 'middleware-platform']);
