@@ -1,3 +1,9 @@
+/**
+ * DATABASE FACADE — POLICY (2026-06-25):
+ * - No new CREATE TABLE here — use middleware-platform/migrations/NNN_*.js
+ * - New domain SQL → database/repos/*.js
+ * - This file remains the stable import path; shrink over time via repos
+ */
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');

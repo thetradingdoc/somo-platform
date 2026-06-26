@@ -14,17 +14,18 @@ const required = [
   'GROQ_API_KEY'
 ];
 
-/** Nice for full STT pipeline; browser STT fallback works without Deepgram in dev */
+/** Phase 1 uses browser STT — no Deepgram required */
 const recommended = [
-  'DEEPGRAM_API_KEY',
   'VIDEO_CONSULT_AGENT_SECRET'
 ];
 
 const optional = [
   'DERM_EDUCATION_PIPELINE_ENABLED',
   'RAG_EDUCATION_URL',
-  'MIDDLEWARE_URL',
-  'ANTHROPIC_API_KEY'
+  'HEALTH_VISION_ANTHROPIC_ENABLED',
+  'HEALTH_BROWSER_STT_ONLY',
+  'HEALTH_TTS_ENABLED',
+  'HEALTH_SERVER_STT_ENABLED'
 ];
 
 let failed = false;
@@ -45,7 +46,7 @@ for (const key of recommended) {
       console.error(msg);
       failed = true;
     } else {
-      console.warn(`${msg} (dev continues — browser STT / local secret fallback)`);
+      console.warn(`${msg} (dev continues — agent-events auth skipped when unset)`);
     }
   } else {
     console.log(`[health-env] OK ${key}`);
@@ -55,6 +56,13 @@ for (const key of recommended) {
 for (const key of optional) {
   console.log(`[health-env] ${process.env[key] ? 'OK' : 'skip'} ${key}`);
 }
+
+if (process.env.DERM_EDUCATION_PIPELINE_ENABLED === 'true') {
+  const ragUrl = process.env.RAG_EDUCATION_URL || 'http://localhost:4000/api/rag';
+  console.log(`[health-env] RAG target: ${ragUrl} (verify /retrieve_passages separately)`);
+}
+
+console.log('[health-env] Phase 1 default: browser STT + Groq text UI (no Deepgram/TTS required)');
 
 if (failed) {
   process.exit(1);

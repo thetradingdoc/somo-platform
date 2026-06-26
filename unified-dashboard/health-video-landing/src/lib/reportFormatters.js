@@ -98,11 +98,16 @@ export function formatRichReport(report) {
       }
     : null;
 
+  const citations = (report?.citations || [])
+    .map((c) => (typeof c === 'string' ? c : c.label || c.title || c.source))
+    .filter(Boolean);
+
   return {
     ...plain,
     symptomTags: [...new Set(symptomTags)].slice(0, 8),
     timeline,
     escalation,
-    opqrstRows
+    opqrstRows,
+    citations
   };
 }

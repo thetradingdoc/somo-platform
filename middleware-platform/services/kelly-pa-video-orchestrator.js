@@ -7,13 +7,17 @@ const toolRegistry = require('./video-tool-registry');
 const SafetyPreScreen = require('./safety-prescreen');
 const healthVideoOpqrst = require('./health-video-opqrst');
 const healthSessionService = require('./health-session-service');
+const skinRouter = require('./health-video-skin-router');
+const tokenBudget = require('../utils/token-budget');
 
 const MAX_TOOL_ROUNDS = 3;
+const MAX_RAG_PER_TURN = 1;
 
 let ChatGroq = null;
 let SystemMessage = null;
 let HumanMessage = null;
 let AIMessage = null;
+let buildHealthLangChainTools = null;
 try {
   const groqPkg = require('@langchain/groq');
   const corePkg = require('@langchain/core/messages');
@@ -21,10 +25,28 @@ try {
   SystemMessage = corePkg.SystemMessage;
   HumanMessage = corePkg.HumanMessage;
   AIMessage = corePkg.AIMessage;
+  buildHealthLangChainTools = require('./health-langchain-tools').buildHealthLangChainTools;
 } catch (_) {}
 
+const USER_FACING_ERRORS = {
+  RATE_LIMIT: 'Kelly is busy right now. Please wait a moment and try again.',
+  LLM_UNAVAILABLE: 'Kelly is temporarily unavailable. You can keep typing or end the session.',
+  BUDGET_EXCEEDED: 'This session has reached its usage limit. Please end and start a new chat if needed.'
+};
+
+function mapLlmError(err) {
+  const status = err?.status || err?.statusCode || err?.response?.status;
+  if (status === 429) return { code: 'RATE_LIMIT', message: USER_FACING_ERRORS.RATE_LIMIT };
+  if (status >= 500 || status === 503) return { code: 'LLM_UNAVAILABLE', message: USER_FACING_ERRORS.LLM_UNAVAILABLE };
+  return { code: 'LLM_ERROR', message: USER_FACING_ERRORS.LLM_UNAVAILABLE };
+}
+
+function _sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 function _useLangChain() {
-  return ChatGroq && process.env.LANGCHAIN_TRACING_V2 !== 'false' && process.env.GROQ_API_KEY;
+  return ChatGroq && process.env.GROQ_API_KEY;
 }
 
 async function _langChainInvoke(model, messages, tools) {
@@ -52,6 +74,47 @@ function _messageContent(msg) {
   return String(msg.content || '').trim();
 }
 
+async function _invokeLlm(model, messages, tools) {
+  const attempt = async () => {
+    if (_useLangChain()) {
+      return _langChainInvoke(model, messages, tools);
+    }
+    const completion = await modelRouter.chatCompletion({ messages, tools, model });
+    return completion.choices?.[0]?.message;
+  };
+  try {
+    return await attempt();
+  } catch (err) {
+    const status = err?.status || err?.statusCode || err?.response?.status;
+    if (status === 429 || (status >= 500 && status < 600)) {
+      await _sleep(600);
+      return attempt();
+    }
+    throw err;
+  }
+}
+
+function _resolveTools(sessionId, roomId) {
+  if (buildHealthLangChainTools && _useLangChain()) {
+    return buildHealthLangChainTools({ sessionId, roomId });
+  }
+  return toolRegistry.getToolDefinitions();
+}
+
+async function _maybeForceSkinTool(text, session, sessionId, roomId, toolEvents, ragUsed) {
+  if (!skinRouter.isSkinConcern(text)) return ragUsed;
+  if (ragUsed >= MAX_RAG_PER_TURN) return ragUsed;
+  const metadata = session?.metadata || {};
+  const caption = skinRouter.latestVisionCaption(metadata);
+  const result = await toolRegistry.executeTool(
+    'analyze_skin_concern',
+    { message: text, image_caption: caption },
+    { sessionId, roomId }
+  );
+  toolEvents.push({ name: 'analyze_skin_concern', args: { message: text, image_caption: caption }, result });
+  return ragUsed + 1;
+}
+
 /**
  * Process one patient turn through Groq tool loop (max 3 rounds).
  */
@@ -59,6 +122,19 @@ async function processTurn({ text, history = [], session = null, roomId = null }
   const replyLanguage = session?.reply_language || 'en';
   const locale = session?.locale || 'en';
   const sessionId = session?.id || healthSessionService.sessionIdFromRoom(roomId);
+
+  const estTokens = tokenBudget.estimateTokens(text) + tokenBudget.estimateTokens(JSON.stringify(history.slice(-10)));
+  if (sessionId && !tokenBudget.canProceedHealthSession(sessionId, { tokens: estTokens + 800 })) {
+    return {
+      text: USER_FACING_ERRORS.BUDGET_EXCEEDED,
+      toolEvents: [],
+      safety: { emergency: false, flags: [] },
+      meta: { error: 'BUDGET_EXCEEDED' },
+      error: { code: 'BUDGET_EXCEEDED', message: USER_FACING_ERRORS.BUDGET_EXCEEDED }
+    };
+  }
+
+  try {
 
   const safety = SafetyPreScreen.evaluateSafety({
     text,
@@ -75,66 +151,60 @@ async function processTurn({ text, history = [], session = null, roomId = null }
     };
   }
 
+  let metadata = session?.metadata || {};
   if (sessionId) {
-    const meta = healthVideoOpqrst.updateFromUtterance(session?.metadata || {}, text);
-    healthSessionService.updateMetadata(sessionId, meta);
+    metadata = healthVideoOpqrst.updateFromUtterance(metadata, text);
+    healthSessionService.updateMetadata(sessionId, metadata);
+    session = { ...session, metadata };
   }
 
   const messages = [
-    { role: 'system', content: buildSystemPrompt({ replyLanguage, locale }) },
+    {
+      role: 'system',
+      content: buildSystemPrompt({ replyLanguage, locale, metadata })
+    },
     ...history.slice(-10),
     { role: 'user', content: text }
   ];
-  const tools = toolRegistry.getToolDefinitions();
+  const tools = _resolveTools(sessionId, roomId);
   const toolEvents = [];
   let priorToolCount = 0;
+  let ragUsed = 0;
   let finalText = '';
+  let tokensUsed = estTokens;
+
+  ragUsed = await _maybeForceSkinTool(text, session, sessionId, roomId, toolEvents, ragUsed);
+  if (toolEvents.length) priorToolCount = toolEvents.length;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const model = modelRouter.selectOrchestratorModel({ toolRound: round, priorToolCount });
-    let completion;
+    const msg = await _invokeLlm(model, messages, tools);
+    const toolCalls = msg.tool_calls
+      || msg.additional_kwargs?.tool_calls
+      || (msg.tool_calls ? msg.tool_calls : []);
 
-    if (_useLangChain()) {
-      const lcResult = await _langChainInvoke(model, messages, tools);
-      const toolCalls = lcResult.tool_calls || lcResult.additional_kwargs?.tool_calls || [];
-      if (toolCalls.length) {
-        messages.push({
-          role: 'assistant',
-          content: _messageContent(lcResult) || null,
-          tool_calls: toolCalls
-        });
-        for (const tc of toolCalls) {
-          const fn = tc.name || tc.function?.name;
-          let args = tc.args || {};
-          if (typeof tc.function?.arguments === 'string') {
-            try { args = JSON.parse(tc.function.arguments); } catch (_) {}
-          }
-          const result = await toolRegistry.executeTool(fn, args, { sessionId, roomId });
-          toolEvents.push({ name: fn, args, result });
-          priorToolCount++;
-          messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
-        }
-        continue;
-      }
-      finalText = _messageContent(lcResult);
-      break;
-    }
+    const normalizedCalls = Array.isArray(toolCalls) ? toolCalls : [];
 
-    completion = await modelRouter.chatCompletion({ messages, tools, model });
-    const choice = completion.choices?.[0]?.message;
-    if (!choice) break;
-
-    if (choice.tool_calls?.length) {
+    if (normalizedCalls.length) {
       messages.push({
         role: 'assistant',
-        content: choice.content || null,
-        tool_calls: choice.tool_calls
+        content: _messageContent(msg) || null,
+        tool_calls: normalizedCalls
       });
-      for (const tc of choice.tool_calls) {
-        const fn = tc.function?.name;
-        let args = {};
-        try { args = JSON.parse(tc.function?.arguments || '{}'); } catch (_) {}
-        const result = await toolRegistry.executeTool(fn, args, { sessionId, roomId });
+      for (const tc of normalizedCalls) {
+        const fn = tc.name || tc.function?.name;
+        if (fn === 'analyze_skin_concern') {
+          if (ragUsed >= MAX_RAG_PER_TURN) continue;
+          ragUsed++;
+        }
+        let args = tc.args || {};
+        if (typeof tc.function?.arguments === 'string') {
+          try { args = JSON.parse(tc.function.arguments); } catch (_) {}
+        }
+        if (fn === 'analyze_skin_concern' && !args.image_caption) {
+          args.image_caption = skinRouter.latestVisionCaption(session?.metadata || {});
+        }
+        const result = await toolRegistry.executeTool(fn, args, { sessionId, roomId, session });
         toolEvents.push({ name: fn, args, result });
         priorToolCount++;
         messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
@@ -142,18 +212,28 @@ async function processTurn({ text, history = [], session = null, roomId = null }
       continue;
     }
 
-    finalText = (choice.content || '').trim();
+    finalText = _messageContent(msg) || (msg.content || '').trim();
+    tokensUsed += tokenBudget.estimateTokens(finalText);
     break;
   }
 
   if (!finalText && toolEvents.length) {
-    const last = toolEvents[toolEvents.length - 1];
-    if (last.name === 'analyze_skin_concern' && last.result?.answer) {
-      finalText = last.result.answer;
-    } else if (last.name === 'request_body_region_capture') {
-      finalText = last.result.guidance || 'Please adjust your camera as guided.';
-    } else if (last.name === 'recommend_care_pathway') {
-      finalText = last.result.summary || 'Based on what you shared, consider following up with a clinician.';
+    const skin = toolEvents.find((t) => t.name === 'analyze_skin_concern');
+    if (skin?.result?.answer) {
+      finalText = skin.result.answer;
+      if (skin.result.citations?.length) {
+        const cites = skin.result.citations.map((c) => c.label || c.title || c.source).filter(Boolean).slice(0, 3);
+        if (cites.length) finalText += `\n\nSources: ${cites.join('; ')}`;
+      }
+    } else {
+      const last = toolEvents[toolEvents.length - 1];
+      if (last.name === 'request_body_region_capture') {
+        finalText = last.result.guidance || 'Please adjust your camera as guided.';
+      } else if (last.name === 'recommend_care_pathway') {
+        finalText = last.result.summary || 'Based on what you shared, consider following up with a clinician.';
+      } else if (last.name === 'generate_visit_summary') {
+        finalText = last.result.summary?.pathway_summary || 'Here is a summary of our conversation.';
+      }
     }
   }
 
@@ -163,6 +243,10 @@ async function processTurn({ text, history = [], session = null, roomId = null }
       : 'Thank you for sharing. Can you tell me more about your symptoms?';
   }
 
+  if (sessionId) {
+    tokenBudget.addHealthSessionUsage(sessionId, { tokens: tokensUsed, rag: ragUsed });
+  }
+
   return {
     text: finalText,
     toolEvents,
@@ -170,9 +254,21 @@ async function processTurn({ text, history = [], session = null, roomId = null }
     meta: {
       promptVersion: PROMPT_VERSION,
       model: modelRouter.DEFAULT_MODEL,
-      toolRounds: toolEvents.length
+      toolRounds: toolEvents.length,
+      ragUsed
     }
   };
+  } catch (err) {
+    const mapped = mapLlmError(err);
+    console.warn('[kelly-pa-video-orchestrator] turn failed:', err.message);
+    return {
+      text: mapped.message,
+      toolEvents: [],
+      safety: { emergency: false, flags: [] },
+      meta: { error: mapped.code },
+      error: mapped
+    };
+  }
 }
 
 module.exports = {

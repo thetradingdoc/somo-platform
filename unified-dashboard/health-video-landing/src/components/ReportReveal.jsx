@@ -75,6 +75,17 @@ export default function ReportReveal({
             <div className="hv-report-section-label">What Kelly noticed</div>
             <p className="hv-report-section-text">{rich.kellyNoticed}</p>
 
+            {rich.citations?.length > 0 && (
+              <>
+                <div className="hv-report-section-label">Sources</div>
+                <ul className="hv-report-citations">
+                  {rich.citations.map((cite) => (
+                    <li key={cite}>{cite}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+
             {rich.escalation && (
               <div className="hv-report-escalation">
                 <strong>{rich.escalation.title}</strong>

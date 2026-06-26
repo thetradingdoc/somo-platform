@@ -18,6 +18,11 @@ export const TOOL_CARD_MAP = {
     title: 'Care pathway',
     icon: 'MapIcon',
     iconClass: 'hv-tool-icon-green'
+  },
+  generate_visit_summary: {
+    title: 'Visit summary',
+    icon: 'InformationCircleIcon',
+    iconClass: 'hv-tool-icon-gray'
   }
 };
 
@@ -41,14 +46,25 @@ export function extractToolBody(payload) {
       return result.answer || '';
     case 'recommend_care_pathway':
       return result.summary || '';
+    case 'generate_visit_summary':
+      return result.summary?.pathway_summary || result.summary?.chief_complaint || '';
     default:
       return typeof result === 'string' ? result : '';
   }
 }
 
+export function extractCitations(payload) {
+  const cites = payload?.result?.citations || payload?.citations || [];
+  if (!Array.isArray(cites)) return [];
+  return cites
+    .map((c) => c.label || c.title || c.source || c.id)
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
 export function extractBodyRegionGuidance(payload) {
   if (payload?.name !== 'request_body_region_capture') return null;
-  return payload?.result?.guidance || 'Position the area of concern in view.';
+  return payload?.result?.guidance || 'Align the skin lesion in frame.';
 }
 
 export function extractCareUrgency(payload) {

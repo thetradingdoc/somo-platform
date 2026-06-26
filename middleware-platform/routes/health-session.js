@@ -6,8 +6,11 @@ const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
 const healthSessionService = require('../services/health-session-service');
 const healthSessionReport = require('../services/health-session-report-service');
-const healthVideoKelly = require('../services/health-video-kelly-service');
+const tokenBudget = require('../utils/token-budget');
+const healthTurnService = require('../services/health-turn-service');
 const videoConsultService = require('../services/video-consult-service');
+const healthRoutingService = require('../services/health-session-routing-service');
+const healthEligibilityService = require('../services/health-session-eligibility-service');
 
 const healthSessionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -150,16 +153,73 @@ router.get('/:id/transcript', (req, res) => {
 });
 
 router.post('/:id/turn', express.json(), async (req, res) => {
+  try {
+    const session = healthSessionService.getById(req.params.id);
+    if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+    if (!requireSessionToken(req, res, req.params.id)) return;
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ success: false, error: 'text is required' });
+    const result = await healthTurnService.processPatientTurn(session.room_id, text, {
+      speaker: 'patient',
+      is_final: true,
+      source: req.body?.source || 'turn'
+    });
+    if (!result?.success) {
+      const status = result?.code === 'QUEUE_FULL' ? 429 : 502;
+      return res.status(status).json({ success: false, error: result.error, code: result.code });
+    }
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.get('/:id/routing', (req, res) => {
   const session = healthSessionService.getById(req.params.id);
   if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
-  const text = String(req.body?.text || '').trim();
-  if (!text) return res.status(400).json({ success: false, error: 'text is required' });
-  const result = await healthVideoKelly.maybeReplyToPatientTranscript(session.room_id, text, {
-    speaker: 'patient',
-    is_final: true,
-    source: 'dev_turn'
-  });
-  res.json({ success: true, result });
+  if (!requireSessionToken(req, res, req.params.id)) return;
+  if (!healthEligibilityService.financeEnabled()) {
+    return res.status(503).json({ success: false, error: 'Finance rails disabled' });
+  }
+  const routing = healthRoutingService.getRouting(req.params.id);
+  res.json({ success: true, routing: routing || { session_id: req.params.id, payment_status: 'none' } });
+});
+
+router.post('/:id/eligibility', express.json(), async (req, res) => {
+  try {
+    const session = healthSessionService.getById(req.params.id);
+    if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+    if (!requireSessionToken(req, res, req.params.id)) return;
+    const routing = await healthEligibilityService.runEligibilityCheck(req.params.id, req.body || {});
+    res.json({ success: true, routing });
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/:id/route', express.json(), async (req, res) => {
+  try {
+    const session = healthSessionService.getById(req.params.id);
+    if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+    if (!requireSessionToken(req, res, req.params.id)) return;
+    const routing = await healthRoutingService.createCopayRoute(req.params.id, req.body || {});
+    res.json({ success: true, routing });
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/:id/pay/mock', express.json(), async (req, res) => {
+  try {
+    const session = healthSessionService.getById(req.params.id);
+    if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+    if (!requireSessionToken(req, res, req.params.id)) return;
+    const routing = await healthRoutingService.mockPay(req.params.id);
+    logHipaaAccess(req, req.params.id, 'mock_payment');
+    res.json({ success: true, routing });
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ success: false, error: e.message });
+  }
 });
 
 router.post('/:id/end', express.json(), async (req, res) => {
@@ -168,6 +228,8 @@ router.post('/:id/end', express.json(), async (req, res) => {
     if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
     if (!requireSessionToken(req, res, req.params.id)) return;
     const ended = await healthSessionReport.finalizeSession(session.room_id);
+    tokenBudget.resetHealthSession(session.id);
+    healthTurnService.resetQueue(session.room_id);
     videoConsultService.endSession(session.room_id, { ended_at: new Date().toISOString(), health_report: ended?.report });
     logHipaaAccess(req, req.params.id, 'session_end');
     res.json({ success: true, session: healthSessionService.toPublicSession(ended) });

@@ -667,6 +667,26 @@ function onRemittancePosted({ clinicId, claimId, amount, payload = {} }) {
   return enrichJourney(getJourney(clinicId, journey.id));
 }
 
+/** P3 stub — health session copay paid (Circle/RCM journey hook). */
+async function recordHealthSessionCopayStub(sessionId, routingRow) {
+  ensureKellyRcmTables();
+  const journeyId = `hsj_${String(sessionId || '').slice(0, 8)}`;
+  const amount = routingRow?.copay_cents ? routingRow.copay_cents / 100 : 0;
+  try {
+    db.db.prepare(`
+      INSERT OR IGNORE INTO rcm_journeys (id, clinic_id, patient_id, source, stage, status, amount_due, metadata_json, created_at, updated_at)
+      VALUES (?, 'health-consumer', NULL, 'health_video', 'copay_collected', 'open', ?, ?, datetime('now'), datetime('now'))
+    `).run(
+      journeyId,
+      amount,
+      JSON.stringify({ health_session_id: sessionId, stub: true, copay_cents: routingRow?.copay_cents || null })
+    );
+  } catch (e) {
+    console.warn('[RCM] health session copay stub (non-fatal):', e.message);
+  }
+  return { journey_id: journeyId, amount_due: amount };
+}
+
 module.exports = {
   RCM_STAGE_CONTRACT,
   appendEvent,
@@ -695,4 +715,5 @@ module.exports = {
   onRemittancePosted,
   safeJsonParse,
   syncCopayFromEligibility,
+  recordHealthSessionCopayStub,
 };

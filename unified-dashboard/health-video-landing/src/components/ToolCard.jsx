@@ -5,7 +5,7 @@ import {
   MapIcon,
   InformationCircleIcon
 } from '@heroicons/react/24/outline';
-import { getToolCardMeta, extractToolBody } from '../lib/toolCardMap.js';
+import { getToolCardMeta, extractToolBody, extractCitations } from '../lib/toolCardMap.js';
 import { urgencyClass } from '../lib/reportFormatters.js';
 
 const ICONS = {
@@ -19,6 +19,7 @@ const ICONS = {
 export default function ToolCard({ payload }) {
   const meta = getToolCardMeta(payload?.name);
   const body = extractToolBody(payload);
+  const citations = extractCitations(payload);
   const urgency = payload?.name === 'recommend_care_pathway' ? payload?.result?.urgency : null;
   const Icon = ICONS[meta.icon] || InformationCircleIcon;
 
@@ -33,6 +34,11 @@ export default function ToolCard({ payload }) {
           <div className={`hv-urgency-pill ${urgencyClass(urgency)}`}>{urgency}</div>
         )}
         {body && <p className="hv-tool-card-body">{body}</p>}
+        {citations.length > 0 && (
+          <p className="hv-tool-card-citations">
+            Sources: {citations.join(' · ')}
+          </p>
+        )}
       </div>
     </div>
   );

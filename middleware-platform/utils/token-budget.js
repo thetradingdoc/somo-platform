@@ -11,7 +11,11 @@ const MAX_TOKENS_PER_CALL = parseInt(process.env.MAX_TOKENS_PER_CALL || '10000',
 const ABUSE_THRESHOLD = parseInt(process.env.TOKEN_ABUSE_ALERT_THRESHOLD || '50000', 10);
 const VIDEO_CONSULT_MAX_COST = parseFloat(process.env.VIDEO_CONSULT_MAX_COST_PER_SESSION || '10', 10);
 
-const callTokens = new Map();
+const HEALTH_SESSION_MAX_TOKENS = parseInt(process.env.HEALTH_SESSION_MAX_TOKENS || '25000', 10);
+const HEALTH_SESSION_MAX_RAG = parseInt(process.env.HEALTH_SESSION_MAX_RAG_CALLS || '24', 10);
+const HEALTH_SESSION_MAX_FRAMES = parseInt(process.env.HEALTH_SESSION_MAX_FRAMES || '12', 10);
+
+const healthSessionUsage = new Map();
 const videoConsultCosts = new Map();
 const PERSIST_PATH = process.env.TOKEN_BUDGET_PERSIST_PATH || '';
 
@@ -135,9 +139,49 @@ function resetVideoConsult(roomId) {
   if (roomId) videoConsultCosts.delete(roomId);
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Health session usage (Groq tokens, RAG calls, vision frames)
+// ═══════════════════════════════════════════════════════════════════
+
+function _healthKey(sessionId) {
+  return sessionId || 'unknown';
+}
+
+function getHealthSessionUsage(sessionId) {
+  const key = _healthKey(sessionId);
+  return healthSessionUsage.get(key) || { tokens: 0, rag: 0, frames: 0 };
+}
+
+function canProceedHealthSession(sessionId, { tokens = 0, rag = 0, frames = 0 } = {}) {
+  const used = getHealthSessionUsage(sessionId);
+  if (used.tokens + tokens > HEALTH_SESSION_MAX_TOKENS) return false;
+  if (used.rag + rag > HEALTH_SESSION_MAX_RAG) return false;
+  if (used.frames + frames > HEALTH_SESSION_MAX_FRAMES) return false;
+  return true;
+}
+
+function addHealthSessionUsage(sessionId, { tokens = 0, rag = 0, frames = 0 } = {}) {
+  const key = _healthKey(sessionId);
+  const used = getHealthSessionUsage(sessionId);
+  const next = {
+    tokens: used.tokens + (tokens || 0),
+    rag: used.rag + (rag || 0),
+    frames: used.frames + (frames || 0)
+  };
+  healthSessionUsage.set(key, next);
+  return next;
+}
+
+function resetHealthSession(sessionId) {
+  if (sessionId) healthSessionUsage.delete(_healthKey(sessionId));
+}
+
 module.exports = {
   MAX_TOKENS_PER_CALL,
   VIDEO_CONSULT_MAX_COST,
+  HEALTH_SESSION_MAX_TOKENS,
+  HEALTH_SESSION_MAX_RAG,
+  HEALTH_SESSION_MAX_FRAMES,
   estimateTokens,
   addTokens,
   getUsed,
@@ -147,5 +191,9 @@ module.exports = {
   addVideoConsultCost,
   getVideoConsultCost,
   canProceedVideoConsult,
-  resetVideoConsult
+  resetVideoConsult,
+  getHealthSessionUsage,
+  canProceedHealthSession,
+  addHealthSessionUsage,
+  resetHealthSession
 };

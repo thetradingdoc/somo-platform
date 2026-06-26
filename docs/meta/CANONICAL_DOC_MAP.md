@@ -6,6 +6,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 
 | Topic | Read first | Companion / depth |
 |-------|------------|-------------------|
+| **Healthcare financial agent (SSOT)** | Master plan `~/.cursor/plans/somo_health_session_architecture_723cc4d3.plan.md` | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) |
 | **Repo overview** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
 | **Deploy / CI / GCP (live)** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#callsomo-gcp-cutover) | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md), [`deployment/README.md`](../deployment/README.md) (historical) |
 | **Retell agent inventory** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#retell-agent-inventory) + [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) | `npm run verify:agent-config` |
@@ -36,6 +37,13 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
 | **Active work** | [`todos/PENDING.md`](../../todos/PENDING.md) | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) (CR/FE detail) |
 | **Customer-ready gates** | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) | [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md) |
+| **Brand prune / legacy DELETE** | [`todos/PENDING.md`](../../todos/PENDING.md#brand-prune-2026) | [`architecture/LIVE.md`](../architecture/LIVE.md#route-ownership-pre-phase-3) — DocLittle, LittleLab, commerce PSTN docs are archive only |
+
+## Archived narratives (not active SSOT)
+
+- DocLittle / doctorlittle — legacy RAG export filenames only
+- LittleLab / Skin & Care / myskinandcare — `_archive/littlelab-landing/`, gated commerce
+- Commerce PSTN replay — `docs/qa/commerce-pstn-*` — DELETE LATER per master plan
 
 ## Middleware consolidated README
 

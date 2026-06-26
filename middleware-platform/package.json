@@ -11,6 +11,7 @@
         "dev": "nodemon server.js",
         "health:dev": "node scripts/health-dev.cjs",
         "health:verify-env": "node scripts/verify-health-env.cjs",
+        "test:e2e:health-video": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test --project health-video --project health-video-mobile",
         "reconcile:langgraph": "node scripts/reconcile-langgraph-state.js",
         "migrate:langgraph": "node scripts/migrate-to-langgraph.js",
         "setup:wallets": "node scripts/setup-wallet-config.js",

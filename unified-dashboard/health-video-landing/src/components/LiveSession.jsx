@@ -5,6 +5,8 @@ import { useHealthSession } from '../lib/HealthSessionContext.jsx';
 import { useLiveKit } from '../lib/useLiveKit.js';
 import { useKellySse } from '../lib/useKellySse.js';
 import { useBrowserStt, sttSupported } from '../lib/useBrowserStt.js';
+import { useFrameCapture } from '../lib/useFrameCapture.js';
+import { useKellyTts } from '../lib/useKellyTts.js';
 import { sendTurn, endSession, resolveSseUrl } from '../lib/healthSessionApi.js';
 import { extractBodyRegionGuidance, extractCareUrgency } from '../lib/toolCardMap.js';
 import { useJourneyGuard } from '../lib/useJourneyGuard.js';
@@ -26,6 +28,7 @@ import CameraEducationSheet from './journey/CameraEducationSheet.jsx';
 import PermissionDeniedSheet from './journey/PermissionDeniedSheet.jsx';
 import IntakeSummarySheet from './journey/IntakeSummarySheet.jsx';
 import EndSessionSheet from './EndSessionSheet.jsx';
+import CopayPanel from './CopayPanel.jsx';
 
 let msgId = 0;
 
@@ -59,7 +62,13 @@ export default function LiveSession() {
   const [connected, setConnected] = useState(false);
   const [startWithCamera, setStartWithCamera] = useState(false);
   const [showPermDenied, setShowPermDenied] = useState(false);
+  const [captureRegion, setCaptureRegion] = useState(null);
+  const [visionThumbnail, setVisionThumbnail] = useState(null);
   const [cameraEducated, setCameraEducated] = useState(false);
+
+  const serverSttEnabled = import.meta.env.VITE_HEALTH_SERVER_STT_ENABLED === 'true';
+  const copayPanelEnabled = import.meta.env.VITE_HEALTH_COPAY_ENABLED === 'true';
+  const browserSttEnabled = !serverSttEnabled && phase === 'live' && micOn && !textOnly && sttSupported();
 
   const patientMessageCount = messages.filter((m) => m.speaker === 'patient').length;
   const lastKellyText = [...messages].reverse().find((m) => m.speaker === 'assistant')?.text || '';
@@ -73,15 +82,37 @@ export default function LiveSession() {
   const symptomNotes = useSymptomNotes(messages, toolEvents);
   const topicChips = buildTopicChips(messages);
 
+  const { maybeSpeak } = useKellyTts({
+    enabled: import.meta.env.VITE_HEALTH_TTS_ENABLED === 'true',
+    locale: session?.replyLanguage || session?.locale || 'en'
+  });
+
   const appendMsg = useCallback((speaker, text) => {
     setThinking(false);
     if (speaker === 'assistant') {
       setMessages((prev) => mergeAssistantMessage(prev, text));
       setBodyGuidance(null);
+      maybeSpeak(text);
     } else {
       setMessages((prev) => [...prev, { id: ++msgId, speaker, text }]);
     }
-  }, []);
+  }, [maybeSpeak]);
+
+  const frameCaptureRef = useRef(null);
+
+  const frameCapture = useFrameCapture({
+    roomId: session?.roomId,
+    videoRef,
+    agentSecret: import.meta.env.VITE_VIDEO_CONSULT_AGENT_SECRET || '',
+    enabled: false,
+    region: captureRegion,
+    onCaption: () => {
+      setShowCaptureConfirm(true);
+      setTimeout(() => setShowCaptureConfirm(false), 3000);
+    },
+    onError: (msg) => setError(msg)
+  });
+  frameCaptureRef.current = frameCapture;
 
   const onToolEvent = useCallback((payload) => {
     setToolEvents((prev) => [...prev, payload]);
@@ -90,16 +121,25 @@ export default function LiveSession() {
     if (guidance) {
       setCameraFlow('consent');
       setBodyGuidance(guidance);
+      const region = payload?.result?.region || payload?.args?.region || 'general';
+      setCaptureRegion(region);
+      if (!camOn) {
+        setCamOn(true);
+        toggleCamera(true, videoRef.current);
+      }
+      frameCaptureRef.current?.start();
     }
 
     const urgency = extractCareUrgency(payload);
     if (urgency) setUrgencyLevel(urgency);
 
     if (payload?.name === 'vision_caption') {
+      setVisionThumbnail(payload?.result?.caption || null);
       setShowCaptureConfirm(true);
+      frameCaptureRef.current?.stop();
       setTimeout(() => setShowCaptureConfirm(false), 3000);
     }
-  }, []);
+  }, [camOn, toggleCamera]);
 
   const sseUrl = session?.sseUrl ? resolveSseUrl(session.sseUrl) : null;
   const sseEnabled = (phase === 'live' || phase === 'preview') && !!sseUrl;
@@ -122,18 +162,18 @@ export default function LiveSession() {
     appendMsg('patient', trimmed);
     setInputText('');
     try {
-      await sendTurn(session.sessionId, trimmed);
+      await sendTurn(session.sessionId, trimmed, session.sessionToken);
     } catch (e) {
       setError(e.message);
     }
-  }, [session?.sessionId, appendMsg]);
+  }, [session?.sessionId, session?.sessionToken, appendMsg]);
 
   const handleSttFinal = useCallback(async (text) => {
     await submitText(text);
   }, [submitText]);
 
   const { listening } = useBrowserStt({
-    enabled: phase === 'live' && micOn && !textOnly && sttSupported(),
+    enabled: browserSttEnabled,
     locale: session?.locale || 'en',
     onFinal: handleSttFinal
   });
@@ -409,6 +449,11 @@ export default function LiveSession() {
 
         {isLive && (
           <>
+            {serverSttEnabled && (
+              <p className="hv-server-stt-banner" role="status">
+                Using LiveKit server speech recognition — speak after connecting your mic.
+              </p>
+            )}
             <SessionHeaderLive
               connStatus={connStatus}
               statusLabel={statusLabel}
@@ -420,6 +465,11 @@ export default function LiveSession() {
             ) : (
               <SessionLayoutMobile {...layoutProps} />
             )}
+            <CopayPanel
+              sessionId={session?.sessionId}
+              sessionToken={session?.sessionToken}
+              enabled={copayPanelEnabled}
+            />
           </>
         )}
 

@@ -5,6 +5,23 @@
 
 Consumer product: **Safe VideoGPT for Healthcare** — educational multilingual video health chat. Kelly is a **physician assistant**, not a diagnosing physician.
 
+**Platform positioning:** Somo is a **healthcare financial agent**. P0–P2 delivers the chat spine; P3+ attaches finance rails below.
+
+---
+
+## Phase 3 finance rail (preview — not built yet)
+
+After P2 is stable, the same `health_session_id` threads into payment:
+
+1. `recommend_care_pathway` → urgency tier
+2. **Stedi eligibility** (background) → network status, copay estimate
+3. UI copay panel — "Est. copay $XX · Pay to confirm"
+4. **Stripe** checkout with `health_session_id` on PaymentIntent metadata
+5. Webhook `payment_intent.succeeded` → session `paid` state
+6. Circle USDC provider payout + RCM journey stub
+
+Build on existing: `stedi-webhooks.js`, `stripe-webhook-handler.js`, `payment-orchestrator.js`, `rcm.js`. New tables via `migrations/` only — not `database.js`.
+
 ---
 
 ## UI surfaces
@@ -19,14 +36,17 @@ Consumer product: **Safe VideoGPT for Healthcare** — educational multilingual 
 
 ---
 
-## Data journey
+## Data journey (Phase 1 — lowest cost)
 
 ```
 Terms → POST /api/health-session/start → health_sessions + session_token + sse_token
-Call  → LiveKit connect + Deepgram STT → agent-events transcript (is_final)
-Chat  → kelly-pa-video-orchestrator → SSE assistant_message + tool_event
-Report → POST /:id/end + session_token → health_session_reports
+Call  → LiveKit (camera optional) + browser STT or typed text
+Chat  → POST /api/health-session/:id/turn (auth token) → health-turn-service → kelly-pa-video-orchestrator
+Vision → snapshot canvas → POST agent-events vision_frame → YOLO caption (Anthropic optional)
+Report → POST /:id/end + session_token → health_session_reports (full dialog from DB)
 ```
+
+**Not in Phase 1 default:** Deepgram server STT, Retell, TTS (optional `HEALTH_TTS_ENABLED` / `VITE_HEALTH_TTS_ENABLED`).
 
 ### Database (migration 085 + 086)
 
@@ -66,7 +86,7 @@ Health MVP uses a **lightweight Groq tool loop** — intentionally outside `kell
 |-------|------|
 | API routes | `routes/health-session.js` |
 | Session service | `services/health-session-service.js` |
-| Kelly wire | `services/health-video-kelly-service.js` |
+| Kelly wire | `services/health-turn-service.js`, `services/health-video-kelly-service.js` |
 | PA prompt | `services/kelly-pa-video-prompt.js` |
 | Orchestrator | `services/kelly-pa-video-orchestrator.js` |
 | Model router | `services/health-video-model-router.js` |
@@ -138,9 +158,9 @@ Dev bootstrap: `npm run health:dev` (server + env verify + transcription agent).
 
 ---
 
-## MVP out of scope
+## MVP out of scope (P2)
 
-- Payment / copay (P3)
+- Payment / copay UI (P3 — see finance rail preview above)
 - Specialist booking / provider handoff (P4)
 - Claims / USDC payout (P5)
 - `kelly-rails` voice booking complexity

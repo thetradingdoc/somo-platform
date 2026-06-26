@@ -213,7 +213,8 @@ test.describe('health video demo', () => {
     const token = start.session_token;
 
     const turnRes = await request.post(`/api/health-session/${sessionId}/turn`, {
-      data: { text: 'I have a mild rash on my arm for two days' }
+      data: { text: 'I have a mild rash on my arm for two days' },
+      headers: { 'x-health-session-token': token }
     });
     expect(turnRes.ok()).toBeTruthy();
     const turn = await turnRes.json();
@@ -241,6 +242,45 @@ test.describe('health video demo', () => {
     expect(reportRes.ok()).toBeTruthy();
     const reportBody = await reportRes.json();
     expect(reportBody.report).toBeTruthy();
+  });
+
+  test('API journey: turn without token is rejected', async ({ request }) => {
+    const startRes = await request.post('/api/health-session/start', {
+      data: { terms_accepted: true, locale: 'en' }
+    });
+    const start = await startRes.json();
+    const turnRes = await request.post(`/api/health-session/${start.session.id}/turn`, {
+      data: { text: 'rash on arm' }
+    });
+    expect(turnRes.status()).toBe(401);
+  });
+
+  test('UI journey: type turn → Kelly reply → end → report', async ({ page }) => {
+    test.skip(!process.env.GROQ_API_KEY, 'requires GROQ_API_KEY for live Kelly turn');
+
+    await page.goto('/health-video/');
+    await page.getByRole('button', { name: /Start health chat/i }).click();
+    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
+    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
+    await page.getByRole('button', { name: /I understand — start chat/i }).click();
+    await page.getByRole('button', { name: /Continue to chat/i }).click({ timeout: 15000 });
+    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+
+    const input = page.getByRole('textbox', { name: /Message to Kelly/i });
+    await input.fill('I have a mild rash on my arm for two days');
+    await page.getByRole('button', { name: /Send message/i }).click();
+
+    await expect(page.locator('.hv-chat-area')).toContainText(/rash|Kelly|tell me|when|symptom/i, {
+      timeout: 45000
+    });
+
+    await page.getByRole('button', { name: /^Finish$/i }).click();
+    await page.getByRole('button', { name: /Get my summary/i }).click();
+    await page.getByRole('button', { name: /End chat \+ get summary/i }).click();
+
+    await expect(page.getByRole('heading', { name: /Your health chat summary/i })).toBeVisible({
+      timeout: 60000
+    });
   });
 
   test('LOCAL_DEV_ROOT=health redirects root to health-video SPA', async ({ request }) => {

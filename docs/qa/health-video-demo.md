@@ -15,7 +15,7 @@
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Yes | Video rooms |
-| `DEEPGRAM_API_KEY` | STT agent | Optional in dev — browser STT fallback in UI |
+| `DEEPGRAM_API_KEY` | **Not Phase 1** — use browser STT; enable `HEALTH_SERVER_STT_ENABLED` for Post-MVP | Optional in dev — browser STT fallback in UI |
 | `VIDEO_CONSULT_AGENT_SECRET` | agent-events auth | Optional in dev |
 | `GROQ_API_KEY` | Yes | Kelly PA + report |
 | `DERM_EDUCATION_PIPELINE_ENABLED` | Derm tool | `true` to enable skin Q&A |
@@ -43,7 +43,12 @@ npm start
 
 Single Node process on `:4000`. Browser STT in health-video React app — no Deepgram or Python agent required.
 
-Advanced server STT only: `npm run health:stt-agent` (needs `DEEPGRAM_API_KEY`).
+## Post-MVP (optional)
+
+| Feature | Env | Notes |
+|---------|-----|-------|
+| Server STT (Deepgram + LiveKit agent) | `HEALTH_SERVER_STT_ENABLED=true`, `VITE_HEALTH_SERVER_STT_ENABLED=true` | Run `livekit-agents/transcription_agent.py`; browser STT disabled in UI |
+| Kelly TTS | `VITE_HEALTH_TTS_ENABLED=true` | Free browser `speechSynthesis` via `useKellyTts.js` |
 
 Voice / Retell webhooks in production use `https://api.callsomo.com` — no local ngrok for health MVP.
 

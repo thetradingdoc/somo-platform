@@ -7,6 +7,8 @@
 
 Somo consumer surface: **Safe VideoGPT for Healthcare** — landing → consent → live session → report.
 
+**Roadmap:** Chat and report ship in P2. **Copay quote and payment** attach in P3 (healthcare financial agent) — eligibility via Stedi, Stripe checkout with `health_session_id`, then routed care.
+
 Kelly is a **physician assistant** (Groq tool-loop via `kelly-pa-video-orchestrator.js`), **not** `AgentBrainService` or LangGraph.
 
 ## Quick start

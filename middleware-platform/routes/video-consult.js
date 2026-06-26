@@ -503,14 +503,18 @@ router.post('/agent-events', async (req, res) => {
         tokenBudget.addVideoConsultCost(room, frameCost);
 
         if (healthSessionService.isHealthRoom(room)) {
+          const sessionId = healthSessionService.sessionIdFromRoom(room);
+          if (sessionId && !tokenBudget.canProceedHealthSession(sessionId, { frames: 1 })) {
+            return res.json({ success: true, skipped: true, reason: 'health_frame_limit' });
+          }
           const yoloRaw = payload?.detections || payload?.yolo_detections || [];
           const captionResult = await healthVisionCaption.buildImageCaption({
             detections: yoloRaw,
             frameQuality: payload?.frame_quality || payload?.quality || 'fair',
             imageBase64: payload?.image_base64 || null
           });
-          const sessionId = healthSessionService.sessionIdFromRoom(room);
           if (sessionId) {
+            tokenBudget.addHealthSessionUsage(sessionId, { frames: 1 });
             const session = healthSessionService.getById(sessionId);
             const artifacts = (session?.metadata?.vision_artifacts || []).concat([{
               caption: captionResult.caption,

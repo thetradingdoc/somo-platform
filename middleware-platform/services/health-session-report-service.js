@@ -4,6 +4,7 @@ const Groq = require('groq-sdk');
 const videoConsultService = require('./video-consult-service');
 const healthSessionService = require('./health-session-service');
 const healthVideoOpqrst = require('./health-video-opqrst');
+const { loadProjection } = require('./health-session-projection');
 
 const groqClient = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 
@@ -47,13 +48,17 @@ async function buildPatientReport(roomId) {
   const transcript = transcriptLines(roomId, sessionId);
   const replyLanguage = session?.reply_language || 'en';
   const metadata = session?.metadata || {};
-  const opqrst = healthVideoOpqrst.toReportSection(metadata.opqrst || {});
+  const projection = sessionId ? loadProjection(sessionId) : null;
+  const opqrst = projection?.opqrstReport || healthVideoOpqrst.toReportSection(metadata.opqrst || {}, metadata.negations || {});
+  const visitSummary = projection?.visitSummary || metadata.visit_summary || null;
 
   const base = {
-    chief_complaint: extractChiefComplaint(transcript),
+    chief_complaint: visitSummary?.chief_complaint || extractChiefComplaint(transcript),
     opqrst,
+    visit_summary: visitSummary,
     vision_artifacts: metadata.vision_artifacts || [],
     safety_flags: metadata.safety_flags || [],
+    citations: projection?.lastRag || metadata.last_citations || [],
     languages: { ui: session?.locale || 'en', reply: replyLanguage },
     transcript_excerpt: transcript.slice(0, 2000),
     generated_at: new Date().toISOString()

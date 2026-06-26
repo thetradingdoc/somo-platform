@@ -30,14 +30,20 @@ export async function startSession({
   return data;
 }
 
-export async function sendTurn(sessionId, text) {
+export async function sendTurn(sessionId, text, sessionToken) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (sessionToken) headers['x-health-session-token'] = sessionToken;
   const res = await fetch(url(`/api/health-session/${sessionId}/turn`), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text })
+    headers,
+    body: JSON.stringify({ text, source: 'ui_turn' })
   });
   const data = await res.json();
-  if (!data.success) throw new Error(data.error || 'Turn failed');
+  if (!data.success) {
+    const err = new Error(data.error || 'Turn failed');
+    err.code = data.code;
+    throw err;
+  }
   return data;
 }
 
@@ -67,4 +73,52 @@ export function resolveSseUrl(sseUrl) {
   if (!sseUrl) return null;
   if (sseUrl.startsWith('http')) return sseUrl;
   return url(sseUrl);
+}
+
+function authHeaders(sessionToken) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (sessionToken) headers['x-health-session-token'] = sessionToken;
+  return headers;
+}
+
+export async function fetchRouting(sessionId, sessionToken) {
+  const res = await fetch(url(`/api/health-session/${sessionId}/routing`), {
+    headers: authHeaders(sessionToken)
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Routing fetch failed');
+  return data.routing;
+}
+
+export async function requestEligibilityQuote(sessionId, sessionToken, body = {}) {
+  const res = await fetch(url(`/api/health-session/${sessionId}/eligibility`), {
+    method: 'POST',
+    headers: authHeaders(sessionToken),
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Eligibility failed');
+  return data.routing;
+}
+
+export async function startCopayRoute(sessionId, sessionToken, body = {}) {
+  const res = await fetch(url(`/api/health-session/${sessionId}/route`), {
+    method: 'POST',
+    headers: authHeaders(sessionToken),
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Route failed');
+  return data.routing;
+}
+
+export async function mockPayCopay(sessionId, sessionToken) {
+  const res = await fetch(url(`/api/health-session/${sessionId}/pay/mock`), {
+    method: 'POST',
+    headers: authHeaders(sessionToken),
+    body: JSON.stringify({})
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Mock pay failed');
+  return data.routing;
 }

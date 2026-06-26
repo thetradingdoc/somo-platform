@@ -2,14 +2,10 @@
 
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
-const db = require('../database');
+const healthRepo = require('../database/repos/health-session');
 
 const TERMS_VERSION = process.env.HEALTH_TERMS_VERSION || '2026-06-25';
 const SSE_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-
-function getDb() {
-  return db.db || db;
-}
 
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -35,55 +31,47 @@ function createSession({
   const sseToken = generateToken();
   const sseExpires = new Date(Date.now() + SSE_TOKEN_TTL_MS).toISOString();
 
-  getDb()
-    .prepare(
-      `INSERT INTO health_sessions
-       (id, room_id, session_status, locale, reply_language, terms_accepted_at, terms_version, session_token, sse_token, sse_token_expires_at, metadata_json)
-       VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      id,
-      roomId,
-      locale,
-      replyLanguage || locale,
-      now,
-      termsVersion,
-      sessionToken,
-      sseToken,
-      sseExpires,
-      JSON.stringify({
-        channel: 'video_health',
-        consent: { terms_version: termsVersion, accepted_at: now },
-        ...(displayName ? { display_name: displayName } : {}),
-        ...metadata
-      })
-    );
+  healthRepo.insertSession({
+    id,
+    roomId,
+    locale,
+    replyLanguage: replyLanguage || locale,
+    termsAcceptedAt: now,
+    termsVersion,
+    sessionToken,
+    sseToken,
+    sseExpires,
+    metadataJson: JSON.stringify({
+      channel: 'video_health',
+      consent: { terms_version: termsVersion, accepted_at: now },
+      ...(displayName ? { display_name: displayName } : {}),
+      ...metadata
+    })
+  });
   return getById(id);
 }
 
 function getById(sessionId) {
-  const row = getDb().prepare('SELECT * FROM health_sessions WHERE id = ?').get(sessionId);
+  const row = healthRepo.getSessionById(sessionId);
   if (!row) return null;
   return formatRow(row);
 }
 
 function getByRoom(roomId) {
-  const row = getDb().prepare('SELECT * FROM health_sessions WHERE room_id = ?').get(roomId);
+  const row = healthRepo.getSessionByRoom(roomId);
   if (!row) return null;
   return formatRow(row);
 }
 
 function verifySessionToken(sessionId, token) {
   if (!sessionId || !token) return false;
-  const row = getDb().prepare('SELECT session_token FROM health_sessions WHERE id = ?').get(sessionId);
+  const row = healthRepo.getSessionTokenRow(sessionId);
   return row?.session_token === token;
 }
 
 function verifySseToken(roomId, token) {
   if (!isHealthRoom(roomId) || !token) return false;
-  const row = getDb()
-    .prepare('SELECT sse_token, sse_token_expires_at FROM health_sessions WHERE room_id = ?')
-    .get(roomId);
+  const row = healthRepo.getSseTokenRow(roomId);
   if (!row || row.sse_token !== token) return false;
   if (row.sse_token_expires_at && new Date(row.sse_token_expires_at) < new Date()) return false;
   return true;
@@ -92,9 +80,7 @@ function verifySseToken(roomId, token) {
 function refreshSseToken(sessionId) {
   const sseToken = generateToken();
   const sseExpires = new Date(Date.now() + SSE_TOKEN_TTL_MS).toISOString();
-  getDb()
-    .prepare('UPDATE health_sessions SET sse_token = ?, sse_token_expires_at = ? WHERE id = ?')
-    .run(sseToken, sseExpires, sessionId);
+  healthRepo.updateSseToken(sessionId, sseToken, sseExpires);
   return { sse_token: sseToken, sse_token_expires_at: sseExpires };
 }
 
@@ -102,50 +88,32 @@ function updateMetadata(sessionId, patch) {
   const existing = getById(sessionId);
   if (!existing) return null;
   const merged = { ...(existing.metadata || {}), ...patch };
-  getDb()
-    .prepare('UPDATE health_sessions SET metadata_json = ? WHERE id = ?')
-    .run(JSON.stringify(merged), sessionId);
+  healthRepo.updateMetadataJson(sessionId, JSON.stringify(merged));
   return getById(sessionId);
 }
 
 function persistTranscript(sessionId, roomId, item) {
   if (!sessionId || !item?.text) return null;
-  getDb()
-    .prepare(
-      `INSERT INTO health_session_transcripts
-       (session_id, room_id, speaker, text, text_original, text_translated, source, ts)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      sessionId,
-      roomId,
-      item.speaker || 'unknown',
-      item.text,
-      item.text_original || null,
-      item.text_translated || null,
-      item.source || 'stt',
-      item.ts || new Date().toISOString()
-    );
+  healthRepo.insertTranscript({
+    sessionId,
+    roomId,
+    speaker: item.speaker || 'unknown',
+    text: item.text,
+    textOriginal: item.text_original || null,
+    textTranslated: item.text_translated || null,
+    source: item.source || 'stt',
+    ts: item.ts || new Date().toISOString()
+  });
   return true;
 }
 
 function listTranscripts(sessionId) {
-  return getDb()
-    .prepare('SELECT * FROM health_session_transcripts WHERE session_id = ? ORDER BY ts ASC')
-    .all(sessionId);
+  return healthRepo.listTranscriptsBySession(sessionId);
 }
 
 function saveReport(sessionId, report) {
   const json = JSON.stringify(report);
-  getDb()
-    .prepare(
-      `INSERT INTO health_session_reports (session_id, report_json) VALUES (?, ?)
-       ON CONFLICT(session_id) DO UPDATE SET report_json = excluded.report_json`
-    )
-    .run(sessionId, json);
-  getDb()
-    .prepare('UPDATE health_sessions SET report_json = ? WHERE id = ?')
-    .run(json, sessionId);
+  healthRepo.upsertReport(sessionId, json);
 }
 
 function endSession(sessionId, report = null) {
@@ -153,9 +121,7 @@ function endSession(sessionId, report = null) {
   if (!existing) return null;
   const endedAt = new Date().toISOString();
   if (report) saveReport(sessionId, report);
-  getDb()
-    .prepare(`UPDATE health_sessions SET session_status = 'ended', ended_at = ? WHERE id = ?`)
-    .run(endedAt, sessionId);
+  healthRepo.endSessionRow(sessionId, endedAt);
   return getById(sessionId);
 }
 
