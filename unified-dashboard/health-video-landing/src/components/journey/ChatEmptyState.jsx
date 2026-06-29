@@ -9,7 +9,7 @@ const TOPICS = [
 export default function ChatEmptyState({ onSelect }) {
   return (
     <div className="hv-chat-empty-state">
-      <p className="hv-chat-empty-title">What can Kelly help with today?</p>
+      <p className="hv-chat-empty-title">What can Somo help with today?</p>
       <div className="hv-topic-chips" role="group" aria-label="Common topics">
         {TOPICS.map((t) => (
           <button

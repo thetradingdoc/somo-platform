@@ -360,7 +360,7 @@ export default function LiveSession() {
   };
 
   const statusLabel = connStatus === 'connected'
-    ? 'Connected · Kelly'
+    ? 'Connected · Somo'
     : connStatus === 'connecting'
       ? 'Connecting…'
       : connStatus === 'reconnecting'

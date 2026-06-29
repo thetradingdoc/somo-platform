@@ -9,6 +9,15 @@
 - [x] `.cursor/rules/health-session-architecture.mdc` exists
 - [x] `VIDEO_HEALTH.md` points to arch doc (not AgentBrain)
 - [x] `npm run ci:phase0` green
+- [x] **Acceptance contract:** [`HEALTH_ACCEPTANCE_CONTRACT.md`](./HEALTH_ACCEPTANCE_CONTRACT.md)
+
+## Acceptance gates
+
+```bash
+cd middleware-platform
+npm run health:acceptance -- --offline   # CI / every session close
+npm run health:acceptance -- --live      # + Groq golden + RAG (needs server :4000)
+```
 
 ## Env (middleware-platform/.env)
 
@@ -17,7 +26,7 @@
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Yes | Video rooms |
 | `DEEPGRAM_API_KEY` | **Not Phase 1** — use browser STT; enable `HEALTH_SERVER_STT_ENABLED` for Post-MVP | Optional in dev — browser STT fallback in UI |
 | `VIDEO_CONSULT_AGENT_SECRET` | agent-events auth | Optional in dev |
-| `GROQ_API_KEY` | Yes | Kelly PA + report |
+| `GROQ_API_KEY` | Yes | Somo health assistant + report |
 | `DERM_EDUCATION_PIPELINE_ENABLED` | Derm tool | `true` to enable skin Q&A |
 | `RAG_EDUCATION_URL` | Derm tool | Education RAG `/retrieve_passages` |
 | `LOCAL_DEV_ROOT=health` | Dev root | Default — `localhost:4000/` → `/health-video/` |
@@ -48,7 +57,7 @@ Single Node process on `:4000`. Browser STT in health-video React app — no Dee
 | Feature | Env | Notes |
 |---------|-----|-------|
 | Server STT (Deepgram + LiveKit agent) | `HEALTH_SERVER_STT_ENABLED=true`, `VITE_HEALTH_SERVER_STT_ENABLED=true` | Run `livekit-agents/transcription_agent.py`; browser STT disabled in UI |
-| Kelly TTS | `VITE_HEALTH_TTS_ENABLED=true` | Free browser `speechSynthesis` via `useKellyTts.js` |
+| Somo TTS | `VITE_HEALTH_TTS_ENABLED=true` | Free browser `speechSynthesis` via `useKellyTts.js` |
 
 Voice / Retell webhooks in production use `https://api.callsomo.com` — no local ngrok for health MVP.
 
@@ -75,16 +84,16 @@ curl -s -X POST "http://localhost:4000/api/health-session/$SID/turn" \
   -d '{"text":"I have a mild rash on my arm"}'
 ```
 
-Kelly reply should appear via SSE within 10s.
+Somo reply should appear via SSE within 10s.
 
 ## P2 acceptance (full journey)
 
 ```
 open http://localhost:4000  (LOCAL_DEV_ROOT=health)
-→ Safe VideoGPT for Healthcare home
-→ accept terms + privacy link
-→ permission primer → camera/mic
-→ speak → patient + Kelly bubbles visible
+→ Somo Health landing — Call Somo →
+→ language → name (optional) → privacy
+→ session preview → Continue to Somo →
+→ speak or type → patient + Somo bubbles visible
 → end (confirm) → structured report
 → ci:phase0 green
 ```

@@ -69,7 +69,7 @@ export default function ChatPanel({
             </div>
             <div className="hv-msg-col">
               {m.speaker === 'assistant' && (
-                <span className="hv-bubble-label">Kelly</span>
+                <span className="hv-bubble-label">Somo</span>
               )}
               {m.speaker === 'assistant' && isMemoryMessage(m.text) ? (
                 <MemoryCallout>
@@ -129,7 +129,7 @@ export default function ChatPanel({
       <SessionAVControls camOn={camOn} onCameraToggle={onCameraToggle} />
 
       {connStatus === 'reconnecting' && (
-        <p className="hv-reconnect-banner">Reconnecting to Kelly…</p>
+        <p className="hv-reconnect-banner">Reconnecting to Somo…</p>
       )}
 
       {error && <p className="hv-session-error">{error}</p>}

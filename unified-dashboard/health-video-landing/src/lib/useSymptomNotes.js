@@ -27,7 +27,7 @@ export function useSymptomNotes(messages, toolEvents) {
 
     for (const ev of toolEvents || []) {
       if (ev?.name === 'vision_caption' && ev?.result?.caption) {
-        notes.push({ label: 'Kelly noticed', value: ev.result.caption.slice(0, 100) });
+        notes.push({ label: 'Somo noticed', value: ev.result.caption.slice(0, 100) });
       }
     }
 

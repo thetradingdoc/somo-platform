@@ -41,8 +41,8 @@ export default function EndSessionSheet({ open, loading, chips = [], onConfirm, 
         </h3>
         <p className="hv-sheet-sub">
           {loading
-            ? 'Kelly is preparing your session report. This may take a few seconds.'
-            : 'Kelly will generate a plain-language summary you can read, share, or send to a clinic.'}
+            ? 'Somo is preparing your session report. This may take a few seconds.'
+            : 'Somo will generate a plain-language summary you can read, share, or send to a clinic.'}
         </p>
         {loading && (
           <ul className="hv-end-checklist" aria-live="polite">
@@ -69,7 +69,7 @@ export default function EndSessionSheet({ open, loading, chips = [], onConfirm, 
             <BtnPrimary className="hv-end-sheet-primary" onClick={onConfirm}>
               End chat + get summary →
             </BtnPrimary>
-            <BtnSecondary onClick={onCancel}>Keep talking to Kelly</BtnSecondary>
+            <BtnSecondary onClick={onCancel}>Keep talking to Somo</BtnSecondary>
           </>
         )}
       </div>

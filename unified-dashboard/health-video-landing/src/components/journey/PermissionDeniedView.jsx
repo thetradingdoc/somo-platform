@@ -11,7 +11,7 @@ export default function PermissionDeniedView({ onTextOnly, onRetryMic }) {
         </div>
         <h2 className="hv-perm-title">Microphone access needed</h2>
         <p className="hv-perm-sub">
-          Kelly works best when she can hear you — but you can also type your messages if you prefer.
+          Somo works best when it can hear you — but you can also type your messages if you prefer.
         </p>
         <button type="button" className="hv-perm-option recommended" onClick={onRetryMic}>
           <span className="hv-perm-opt-icon" aria-hidden="true">
@@ -19,7 +19,7 @@ export default function PermissionDeniedView({ onTextOnly, onRetryMic }) {
           </span>
           <div>
             <div className="hv-perm-opt-title">Allow microphone</div>
-            <div className="hv-perm-opt-sub">Recommended — talk naturally to Kelly</div>
+            <div className="hv-perm-opt-sub">Recommended — talk naturally to Somo</div>
           </div>
         </button>
         <button type="button" className="hv-perm-option" onClick={onTextOnly}>

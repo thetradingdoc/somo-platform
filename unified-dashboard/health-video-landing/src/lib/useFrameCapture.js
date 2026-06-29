@@ -38,7 +38,7 @@ export function useFrameCapture({ roomId, videoRef, agentSecret, enabled, region
     if (agentSecret) headers['X-Video-Consult-Secret'] = agentSecret;
 
     try {
-      const res = await fetch('/api/video-consult/agent-events', {
+      const res = await fetch('/api/health-session/agent-events', {
         method: 'POST',
         headers,
         body: JSON.stringify({

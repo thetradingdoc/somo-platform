@@ -6,19 +6,36 @@ async function enterJourney(page) {
 
 async function enterJourneyFromLanding(page) {
   await page.goto('/health-video/');
-  await page.getByRole('button', { name: /Start health chat/i }).click();
+  await page.getByRole('button', { name: /Call Somo/i }).click();
+}
+
+async function advanceToPrivacy(page) {
+  await page.getByRole('button', { name: /Continue →/i }).click();
+  await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
+}
+
+async function advanceToPreview(page) {
+  await advanceToPrivacy(page);
+  await page.getByRole('button', { name: /I understand — call Somo/i }).click();
+}
+
+async function enterLiveSession(page) {
+  await advanceToPreview(page);
+  await expect(page.getByText(/Almost ready/i)).toBeVisible({ timeout: 15000 });
+  await page.getByRole('button', { name: /Continue to Somo/i }).click();
+  await expect(page.getByText(/I'm Somo/i)).toBeVisible({ timeout: 10000 });
 }
 
 test.describe('health video demo', () => {
   test('marketing landing shows split hero and CTA', async ({ page }) => {
     await page.goto('/health-video/');
     await expect(page.locator('.hv-marketing-split')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /what's bothering you/i })).toBeVisible();
-    await expect(page.getByText(/Private AI health guide/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Have a health problem/i })).toBeVisible();
+    await expect(page.getByText(/Somo Health/i)).toBeVisible();
     await expect(page.getByText(/Encrypted/i)).toBeVisible();
     await expect(page.getByText(/You control the camera/i)).toBeVisible();
     await expect(page.getByText(/Not a diagnosis/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Start health chat/i }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Call Somo/i }).first()).toBeVisible();
     await expect(page.getByText(/If this is an emergency/i)).not.toBeVisible();
     await expect(page.getByRole('radio', { name: /English/i })).not.toBeVisible();
   });
@@ -26,7 +43,7 @@ test.describe('health video demo', () => {
   test('language start screen at /start', async ({ page }) => {
     await enterJourney(page);
     await expect(page.getByText(/Choose your language/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Start talking to Kelly/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Continue →/i })).toBeVisible();
     await expect(page.getByRole('radio', { name: /English/i })).toBeVisible();
   });
 
@@ -55,13 +72,12 @@ test.describe('health video demo', () => {
     test.skip(testInfo.project.name === 'health-video', 'mobile layout check only');
     await page.goto('/health-video/');
     await expect(page.locator('.hv-marketing-split')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Start health chat/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Call Somo/i })).toBeVisible();
   });
 
   test('privacy screen shows Heroicons', async ({ page }) => {
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
+    await advanceToPrivacy(page);
     await expect(page.locator('.hv-privacy-icon svg')).toHaveCount(2);
     await expect(page.locator('.hv-sensitive-icon svg')).toHaveCount(1);
   });
@@ -69,12 +85,7 @@ test.describe('health video demo', () => {
   test('session page uses light live shell on desktop', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === 'health-video-mobile', 'desktop session layout');
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await expect(page.getByText(/Almost ready/i)).toBeVisible({ timeout: 15000 });
-    await page.getByRole('button', { name: /Continue to chat/i }).click();
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await enterLiveSession(page);
     await expect(page.locator('.hv-session-outer--live')).toBeVisible();
     const bg = await page.locator('.hv-session-outer--live').evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bg).toBe('rgb(255, 255, 255)');
@@ -85,12 +96,7 @@ test.describe('health video demo', () => {
   test('mobile live session shows Kelly stage without urgency ladder', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === 'health-video', 'mobile session layout');
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await expect(page.getByText(/Almost ready/i)).toBeVisible({ timeout: 15000 });
-    await page.getByRole('button', { name: /Continue to chat/i }).click();
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await enterLiveSession(page);
     await expect(page.locator('[data-testid="kelly-stage"]')).toBeVisible();
     await expect(page.getByText(/^Routine$/)).not.toBeVisible();
     await expect(page.locator('.hv-session-video-col')).toHaveCount(0);
@@ -99,11 +105,7 @@ test.describe('health video demo', () => {
   test('desktop camera does not cover chat panel', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === 'health-video-mobile', 'desktop camera layout');
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await page.getByRole('button', { name: /Continue to chat/i }).click({ timeout: 15000 });
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await enterLiveSession(page);
     await expect(page.locator('.hv-transcript-overlay')).toHaveCount(0);
     await page.getByRole('button', { name: /Turn on camera/i }).click();
     await expect(page.getByText(/Before you turn on camera/i)).toBeVisible();
@@ -125,34 +127,22 @@ test.describe('health video demo', () => {
   test('mobile chat stays visible when camera on', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === 'health-video', 'mobile camera layout');
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await page.getByRole('button', { name: /Continue to chat/i }).click({ timeout: 15000 });
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await enterLiveSession(page);
     await page.getByRole('button', { name: /Turn on camera/i }).click();
     await page.getByRole('button', { name: /Continue with camera/i }).click();
     await expect(page.locator('.hv-chat-area')).toBeVisible();
     await expect(page.locator('.hv-chat-fab')).toHaveCount(0);
   });
 
-  test('live chat shows Kelly greeting after continue', async ({ page }) => {
+  test('live chat shows Somo greeting after continue', async ({ page }) => {
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await expect(page.getByText(/Almost ready/i)).toBeVisible({ timeout: 15000 });
-    await page.getByRole('button', { name: /Continue to chat/i }).click();
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await enterLiveSession(page);
+    await expect(page.getByText(/I'm Somo/i)).toBeVisible();
   });
 
   test('single mic control in live session', async ({ page }) => {
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await page.getByRole('button', { name: /Continue to chat/i }).click({ timeout: 15000 });
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await enterLiveSession(page);
     const micButtons = page.getByRole('button', { name: /Microphone|Turn microphone/i });
     await expect(micButtons).toHaveCount(1);
     await expect(page.getByRole('button', { name: /^Finish$/i })).toBeVisible();
@@ -161,19 +151,15 @@ test.describe('health video demo', () => {
 
   test('camera education sheet before voluntary camera', async ({ page }) => {
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await page.getByRole('button', { name: /Continue to chat/i }).click({ timeout: 15000 });
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await enterLiveSession(page);
     await page.getByRole('button', { name: /^Turn on camera$/i }).click();
     await expect(page.getByText(/Before you turn on camera/i)).toBeVisible();
   });
 
   test('journey flow: landing → language → name skip → privacy', async ({ page }) => {
     await enterJourneyFromLanding(page);
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await expect(page.getByText(/What should Kelly call you/i)).toBeVisible();
+    await page.getByRole('button', { name: /Continue →/i }).click();
+    await expect(page.getByText(/What should Somo call you/i)).toBeVisible();
     await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
     await expect(page.getByText(/Before we start/i)).toBeVisible();
     await expect(page.getByText(/Private by design/i)).toBeVisible();
@@ -181,8 +167,8 @@ test.describe('health video demo', () => {
 
   test('consent route redirects to marketing landing', async ({ page }) => {
     await page.goto('/health-video/consent');
-    await expect(page.getByRole('heading', { name: /what's bothering you/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Start health chat/i }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Have a health problem/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Call Somo/i }).first()).toBeVisible();
   });
 
   test('terms and privacy pages link back to health chat', async ({ page }) => {
@@ -255,22 +241,18 @@ test.describe('health video demo', () => {
     expect(turnRes.status()).toBe(401);
   });
 
-  test('UI journey: type turn → Kelly reply → end → report', async ({ page }) => {
-    test.skip(!process.env.GROQ_API_KEY, 'requires GROQ_API_KEY for live Kelly turn');
+  test('UI journey: type turn → Somo reply → end → report', async ({ page }) => {
+    test.skip(!process.env.GROQ_API_KEY, 'requires GROQ_API_KEY for live Somo turn');
 
     await page.goto('/health-video/');
-    await page.getByRole('button', { name: /Start health chat/i }).click();
-    await page.getByRole('button', { name: /Start talking to Kelly/i }).click();
-    await page.getByRole('button', { name: /Skip — stay anonymous/i }).click();
-    await page.getByRole('button', { name: /I understand — start chat/i }).click();
-    await page.getByRole('button', { name: /Continue to chat/i }).click({ timeout: 15000 });
-    await expect(page.getByText(/I'm Kelly/i)).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /Call Somo/i }).click();
+    await enterLiveSession(page);
 
-    const input = page.getByRole('textbox', { name: /Message to Kelly/i });
+    const input = page.getByRole('textbox', { name: /Message to Somo/i });
     await input.fill('I have a mild rash on my arm for two days');
     await page.getByRole('button', { name: /Send message/i }).click();
 
-    await expect(page.locator('.hv-chat-area')).toContainText(/rash|Kelly|tell me|when|symptom/i, {
+    await expect(page.locator('.hv-chat-area')).toContainText(/rash|Somo|tell me|when|symptom/i, {
       timeout: 45000
     });
 
@@ -281,6 +263,58 @@ test.describe('health video demo', () => {
     await expect(page.getByRole('heading', { name: /Your health chat summary/i })).toBeVisible({
       timeout: 60000
     });
+
+    await expect(page.getByText(/What you told Somo/i)).toBeVisible();
+    await expect(page.getByText(/What Somo noticed|could not build a full summary/i)).toBeVisible();
+  });
+
+  test('API journey: copay route and mock pay', async ({ request }) => {
+    const startRes = await request.post('/api/health-session/start', {
+      data: { terms_accepted: true, locale: 'en', reply_language: 'en' }
+    });
+    const start = await startRes.json();
+    if (!start.success) test.skip();
+
+    const sessionId = start.session.id;
+    const token = start.session_token;
+    const headers = { 'x-health-session-token': token };
+
+    const eligRes = await request.post(`/api/health-session/${sessionId}/eligibility`, {
+      headers,
+      data: { urgency: 'routine_visit', pathway_summary: 'Routine dermatology visit' }
+    });
+    if (eligRes.status() === 503 || eligRes.status() === 404) {
+      test.skip(true, 'finance rails not enabled on server');
+    }
+    expect(eligRes.ok()).toBeTruthy();
+
+    const routeRes = await request.post(`/api/health-session/${sessionId}/route`, { headers, data: {} });
+    if (!routeRes.ok()) test.skip(true, 'route not available');
+    const routeBody = await routeRes.json();
+    expect(routeBody.routing?.copay_cents).toBeGreaterThan(0);
+
+    const payRes = await request.post(`/api/health-session/${sessionId}/pay/mock`, { headers });
+    expect(payRes.ok()).toBeTruthy();
+    const paid = await payRes.json();
+    expect(paid.routing?.payment_status).toBe('paid');
+  });
+
+  test('UI journey live: skin turn shows chat reply without diagnosis language', async ({ page }) => {
+    test.skip(!process.env.GROQ_API_KEY, 'requires GROQ_API_KEY');
+    test.skip(process.env.DERM_EDUCATION_PIPELINE_ENABLED !== 'true', 'requires derm pipeline');
+
+    await page.goto('/health-video/');
+    await page.getByRole('button', { name: /Call Somo/i }).click();
+    await enterLiveSession(page);
+
+    const input = page.getByRole('textbox', { name: /Message to Somo/i });
+    await input.fill('I have a red itchy rash on my neck for 3 days, no fever');
+    await page.getByRole('button', { name: /Send message/i }).click();
+
+    await expect(page.locator('.hv-chat-area')).toContainText(/rash|neck|itch|skin|tell me/i, {
+      timeout: 45000
+    });
+    await expect(page.locator('.hv-chat-area')).not.toContainText(/you have eczema|this is a diagnosis/i);
   });
 
   test('LOCAL_DEV_ROOT=health redirects root to health-video SPA', async ({ request }) => {

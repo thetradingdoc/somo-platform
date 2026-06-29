@@ -44,6 +44,11 @@ function mergeQueryForSingleBackend(baseQuery, hybrid) {
   return [baseQuery, dense, terms].filter(Boolean).join('\n').slice(0, 8000);
 }
 
+function previewQuery(q, max = 60) {
+  const t = String(q || '').replace(/\s+/g, ' ').trim();
+  return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
 /**
  * @param {object} params
  * @param {string} params.query
@@ -75,6 +80,7 @@ async function retrievePatientEducationPassages(params = {}) {
   payload.query = mergeQueryForSingleBackend(payload.query, payload.hybrid);
 
   if (!payload.query) {
+    console.log('[derm-rag] retrieved 0 passages', { reason: 'empty_query' });
     return { passages: [], metadata: { source: 'empty_query' } };
   }
 
@@ -108,6 +114,10 @@ async function retrievePatientEducationPassages(params = {}) {
 
     const passages = Array.isArray(response.data?.passages) ? response.data.passages : [];
     const metadata = response.data?.metadata && typeof response.data.metadata === 'object' ? response.data.metadata : {};
+    console.log('[derm-rag] retrieved', passages.length, 'passages', {
+      query: previewQuery(payload.query),
+      specialty: payload.specialty
+    });
     return { passages, metadata };
   }
 

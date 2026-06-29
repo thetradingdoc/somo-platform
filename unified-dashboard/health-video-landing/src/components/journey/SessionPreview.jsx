@@ -69,7 +69,7 @@ export default function SessionPreview({
 
       <h2 className="hv-step-title">{greeting}</h2>
       <p className="hv-step-sub">
-        Check your camera and lighting. Kelly isn&apos;t watching yet — you can start with camera off.
+        Check your camera and lighting. Somo isn&apos;t listening yet — you can start with camera off.
       </p>
 
       <div className="hv-preview-video-wrap">
@@ -96,7 +96,7 @@ export default function SessionPreview({
 
       <div className="hv-preview-actions">
         <BtnPrimary onClick={() => handleContinue(previewCam)}>
-          Continue to chat →
+          Continue to Somo →
         </BtnPrimary>
         {!previewCam && (
           <button

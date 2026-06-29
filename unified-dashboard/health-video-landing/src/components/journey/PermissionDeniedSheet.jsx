@@ -20,7 +20,7 @@ export default function PermissionDeniedSheet({ open, onTextOnly, onRetryMic }) 
         <div className="hv-sheet-handle" />
         <h3 id="perm-denied-title" className="hv-sheet-title">Microphone access needed</h3>
         <p className="hv-sheet-sub">
-          Kelly works best with voice, but you can continue by typing if you prefer.
+          Somo works best with voice, but you can continue by typing if you prefer.
         </p>
         <BtnPrimary onClick={onRetryMic}>
           <MicrophoneIcon className="hv-icon hv-icon--sm" aria-hidden="true" />

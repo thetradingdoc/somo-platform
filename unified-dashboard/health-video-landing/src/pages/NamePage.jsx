@@ -33,9 +33,9 @@ export default function NamePage() {
   return (
     <JourneyShell onBack={() => navigate('/start')}>
       <StepIndicator step={2} />
-      <h2 className="hv-step-title">What should Kelly call you?</h2>
+      <h2 className="hv-step-title">What should Somo call you?</h2>
       <p className="hv-step-sub">
-        This is optional. Kelly is here to help you — not to know who you are.
+        This is optional. Somo is here to help you — not to know who you are.
       </p>
 
       <label className="hv-field-label" htmlFor="displayName">Your first name (optional)</label>
@@ -49,7 +49,7 @@ export default function NamePage() {
         autoComplete="given-name"
       />
 
-      <label className="hv-field-label" htmlFor="ageRange">Age range (helps Kelly give better guidance)</label>
+      <label className="hv-field-label" htmlFor="ageRange">Age range (helps Somo give better guidance)</label>
       <select
         id="ageRange"
         className="hv-field-input"

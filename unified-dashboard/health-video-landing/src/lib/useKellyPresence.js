@@ -35,7 +35,7 @@ export function useKellyPresence({
       status = THINKING_LINES[thinkingIndex];
     } else if (listening && micOn && !textOnly) {
       avatarState = 'listening';
-      status = 'Kelly is listening';
+      status = 'Somo is listening';
     } else if (patientMessageCount === 0) {
       status = 'Ready when you are';
     } else if (patientMessageCount >= 3) {

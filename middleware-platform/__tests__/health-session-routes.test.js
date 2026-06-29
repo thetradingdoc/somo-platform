@@ -3,13 +3,14 @@
 const express = require('express');
 const request = require('supertest');
 
-jest.mock('../services/kelly-pa-video-orchestrator', () => ({
+jest.mock('../services/health/agent/orchestrator', () => ({
   processTurn: jest.fn().mockResolvedValue({
     text: 'Thanks for sharing.',
     toolEvents: [],
     safety: { emergency: false, flags: [] },
     meta: {}
-  })
+  }),
+  runHealthTurn: jest.fn()
 }));
 
 const healthSessionService = require('../services/health-session-service');

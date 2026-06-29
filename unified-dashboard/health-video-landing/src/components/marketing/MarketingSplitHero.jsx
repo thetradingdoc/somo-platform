@@ -1,11 +1,11 @@
 import BtnPrimary from '../brand/BtnPrimary.jsx';
 
-const HERO_SRC = '/assets/images/health-video-hero.jpg';
+const HERO_SRC = '/assets/images/health-video-hero.png';
 
 const TRUST_CHIPS = [
-  'Encrypted',
-  'You control the camera',
-  'Not a diagnosis'
+  { label: 'Encrypted', variant: 'encrypted' },
+  { label: 'You control the camera', variant: 'camera' },
+  { label: 'Not a diagnosis', variant: 'disclaimer' }
 ];
 
 export default function MarketingSplitHero({ onStart }) {
@@ -18,27 +18,32 @@ export default function MarketingSplitHero({ onStart }) {
 
         <div className="hv-marketing-copy">
           <div className="hv-marketing-copy-main">
-            <span className="hv-marketing-pill">Private AI health guide</span>
+            <span className="hv-marketing-pill">Somo Health</span>
 
             <h1 className="hv-marketing-title">
-              Talk to Kelly about
+              <span className="hv-marketing-title-lead">Have a health problem?</span>
               <br />
-              what&apos;s bothering you
+              Ask Somo
             </h1>
 
             <p className="hv-marketing-sub">
-              Free, in your language. Type, speak, or show your camera — only when you want to.
+              It&apos;s a free and safe AI health chat.
             </p>
 
-            <BtnPrimary className="hv-marketing-cta hv-marketing-cta--main" onClick={onStart}>
-              Start health chat →
-            </BtnPrimary>
-
             <div className="hv-marketing-trust-chips" aria-label="Trust and safety">
-              {TRUST_CHIPS.map((label) => (
-                <span key={label} className="hv-marketing-trust-chip">{label}</span>
+              {TRUST_CHIPS.map(({ label, variant }) => (
+                <span
+                  key={label}
+                  className={`hv-marketing-trust-chip hv-marketing-trust-chip--${variant}`}
+                >
+                  {label}
+                </span>
               ))}
             </div>
+
+            <BtnPrimary className="hv-marketing-cta hv-marketing-cta--main" onClick={onStart}>
+              Call Somo →
+            </BtnPrimary>
 
             <p className="hv-marketing-legal">
               By continuing you agree to our{' '}
@@ -51,7 +56,7 @@ export default function MarketingSplitHero({ onStart }) {
 
       <div className="hv-marketing-sticky-cta">
         <BtnPrimary className="hv-marketing-cta" onClick={onStart}>
-          Start health chat →
+          Call Somo →
         </BtnPrimary>
       </div>
     </>

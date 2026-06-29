@@ -64,7 +64,7 @@ export default function PrivacyPage() {
       <StepIndicator step={3} />
       <h2 className="hv-step-title">Before we start</h2>
       <p className="hv-step-sub" style={{ marginBottom: 16 }}>
-        Kelly is a safe space. Here is how we protect you.
+        Somo is a safe space. Here is how we protect you.
       </p>
 
       <div className="hv-privacy-card">
@@ -84,7 +84,7 @@ export default function PrivacyPage() {
         <div className="hv-privacy-text">
           <h3>You can say anything</h3>
           <p>
-            Kelly can help with sensitive topics — skin concerns, reproductive health, pain in private areas.
+            Somo can help with sensitive topics — skin concerns, reproductive health, pain in private areas.
             Speak openly.
           </p>
         </div>
@@ -95,7 +95,7 @@ export default function PrivacyPage() {
           <ShieldCheckIcon className="hv-icon hv-icon--md" />
         </div>
         <div className="hv-sensitive-text">
-          <strong>For sensitive body concerns:</strong> Kelly will never ask you to show a private area on
+          <strong>For sensitive body concerns:</strong> Somo will never ask you to show a private area on
           camera without your explicit consent. You can always just describe it in words.
         </div>
       </div>
@@ -103,7 +103,7 @@ export default function PrivacyPage() {
       <div className="hv-journey-spacer" />
 
       <BtnPrimary onClick={handleContinue} disabled={loading}>
-        {loading ? 'Starting…' : 'I understand — start chat →'}
+        {loading ? 'Starting…' : 'I understand — call Somo →'}
       </BtnPrimary>
       {error && <p className="hv-error">{error}</p>}
       <p className="hv-emergency-line" style={{ marginTop: 12 }}>

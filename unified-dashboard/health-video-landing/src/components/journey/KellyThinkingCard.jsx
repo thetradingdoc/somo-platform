@@ -7,7 +7,7 @@ const CHECKLIST = [
 export default function KellyThinkingCard() {
   return (
     <div className="hv-thinking-card" aria-live="polite">
-      <div className="hv-thinking-card-title">Kelly is reviewing</div>
+      <div className="hv-thinking-card-title">Somo is reviewing</div>
       <ul className="hv-thinking-checklist">
         {CHECKLIST.map((item) => (
           <li key={item}>

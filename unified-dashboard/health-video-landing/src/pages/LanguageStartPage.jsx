@@ -26,21 +26,19 @@ export default function LanguageStartPage() {
       <StepIndicator step={1} />
       <h2 className="hv-step-title">Choose your language</h2>
       <p className="hv-step-sub">
-        Kelly will speak with you in the language you pick.
+        Somo will speak with you in the language you pick.
       </p>
 
       <LanguageGrid value={langId} onChange={setLangId} />
 
-      <p className="hv-consent-line">
+      <p className="hv-consent-line hv-consent-line--single">
         By continuing you agree to our{' '}
         <a href="/health-terms.html">terms</a> and{' '}
         <a href="/health-privacy.html">privacy policy</a>.
-        <br />
-        Your conversation is private and not shared.
       </p>
 
       <BtnPrimary onClick={handleStart} disabled={!langId}>
-        Start talking to Kelly →
+        Continue →
       </BtnPrimary>
     </JourneyShell>
   );

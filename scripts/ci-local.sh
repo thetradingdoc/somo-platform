@@ -35,9 +35,16 @@ RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs
 node scripts/verify-agentic-checkout.cjs
 node scripts/verify-repo-layout.cjs
 
+step "Health import firewall"
+node "$MP/scripts/check-health-imports.cjs"
+
 step "Health session unit tests"
 cd "$MP"
-npm test -- --runInBand --testPathPattern=health-
+npm test -- --runInBand --testPathPattern='health-(session|turn|video|token|rag|safety|diagnosis|opqrst|vision|derm|care-pathway)'
+
+step "Health acceptance (offline)"
+cd "$MP"
+npm run health:acceptance -- --offline
 
 step "Kelly Rails env + gates"
 cd "$MP"

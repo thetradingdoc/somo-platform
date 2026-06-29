@@ -53,7 +53,7 @@ const {
 } = require('../services/vision-storage-policy');
 const Metrics = require('../services/metrics');
 const healthSessionService = require('../services/health-session-service');
-const healthVideoKelly = require('../services/health-video-kelly-service');
+const healthTurnService = require('../services/health-turn-service');
 const healthSessionReport = require('../services/health-session-report-service');
 const healthVisionCaption = require('../services/health-vision-caption-bridge');
 const { visionFlags } = require('../services/vision-feature-flags');
@@ -441,11 +441,12 @@ router.post('/agent-events', async (req, res) => {
         }
         if (
           healthSessionService.isHealthRoom(room) &&
+          healthTurnService.agentEventTurnIngressEnabled() &&
           (transcriptPayload.speaker === 'patient' || transcriptPayload.speaker === 'user')
         ) {
           const isFinal = payload?.is_final !== false;
           setImmediate(() => {
-            healthVideoKelly.maybeReplyToPatientTranscript(room, text, {
+            healthTurnService.processPatientTurn(room, text, {
               speaker: transcriptPayload.speaker,
               is_final: isFinal,
               text_original: text,
@@ -1115,6 +1116,7 @@ router.get('/sse/:roomId', (req, res) => {
     if (!healthSessionService.verifySseToken(roomId, token)) {
       return res.status(401).json({ error: 'Invalid or expired SSE token' });
     }
+    res.setHeader('X-Somo-Deprecated', 'use /api/health-session/sse');
   }
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1360,12 +1362,15 @@ router.post('/rooms/:roomId/client-transcript', express.json(), async (req, res)
     videoConsultSse.broadcastAssistantUpdate(roomId, buildAssistantUpdatePayload({ transcript_delta: [deltaItem], status: 'listening' }));
     if (!healthSessionService.isHealthRoom(roomId)) {
       scheduleRealtimeCodeFetch(roomId, transcriptArr?.length || 0);
-    } else if (payload.speaker === 'patient' || payload.speaker === 'user') {
+    } else if (
+      healthTurnService.agentEventTurnIngressEnabled() &&
+      (payload.speaker === 'patient' || payload.speaker === 'user')
+    ) {
       setImmediate(() => {
-        healthVideoKelly.maybeReplyToPatientTranscript(roomId, text, {
+        healthTurnService.processPatientTurn(roomId, text, {
           speaker: payload.speaker,
           is_final: true,
-          source: 'browser_stt'
+          source: 'stt'
         }).catch(() => {});
       });
     }

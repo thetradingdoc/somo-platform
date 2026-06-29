@@ -4,9 +4,9 @@
 
 ## Product lines
 
-| Line | Audience | Entry | Kelly persona |
-|------|----------|-------|---------------|
-| **Somo Health** | Consumer (anonymous) | `/health-video/` | **Kelly PA** — physician assistant, education-only, no diagnosis |
+| Line | Audience | Entry | Spoken persona |
+|------|----------|-------|----------------|
+| **Somo Health** | Consumer (anonymous) | `/health-video/` | **Somo** — AI health assistant, education-only, no diagnosis |
 | **Somo front desk** | B2B practices | `/business/trial-activation.html` | **Kelly front desk** — AI receptionist, booking, demo |
 | **Somo pay** | Providers / RCM | `business/*.html` | Billing, eligibility, claims (no Kelly chat in UI) |
 
@@ -19,7 +19,7 @@
 | Voice / receptionist (B2B) | **Somo front desk** |
 | RCM / billing | **Somo pay** |
 | B2B tagline | **Somo — never answer business calls again.** (front desk only — not consumer health) |
-| Consumer Kelly (spoken) | "Hi, I'm Kelly" — physician assistant for health chat |
+| Consumer Somo (spoken) | "Hi, I'm Somo" — AI health assistant for health chat |
 | B2B Kelly (spoken) | "Hi, I'm Kelly, Somo's front desk receptionist" |
 | Legal / invoices | **Somo** in product UI; registered entity name may differ on contracts |
 
@@ -72,7 +72,7 @@ Used by [`business/trial-activation portal/`](../../business/trial-activation po
 
 ## Surface scope
 
-- **Consumer health:** `unified-dashboard/health-video-landing/` — Safe VideoGPT, Kelly PA, Somo green tokens.
+- **Consumer health:** `unified-dashboard/health-video-landing/` — Safe VideoGPT, Somo health assistant, Somo green tokens.
 - **Marketing (B2B):** `business/trial-activation.html` — trial demo, Kelly front desk.
 - **Provider:** `business/*.html` + `provider-portal.css` — canonical green `#16a637`.
 - **Admin ops:** `unified-dashboard/admin/*.html` — MSU + lizard palette.

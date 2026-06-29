@@ -9,7 +9,7 @@ export default function KellyHeader({ status, avatarState = 'idle' }) {
         <img src={ICON_SRC} alt="" aria-hidden="true" className="hv-kelly-header-icon" />
       </div>
       <div className="hv-kelly-header-text">
-        <span className="hv-kelly-header-name">Kelly · AI health assistant</span>
+        <span className="hv-kelly-header-name">Somo · AI health assistant</span>
         <span className="hv-kelly-header-status">{status}</span>
       </div>
     </div>

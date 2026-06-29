@@ -6,7 +6,7 @@ export default function CaptureConfirmCard({ visible }) {
   return (
     <div className="hv-capture-confirm" role="status" aria-live="polite">
       <CheckCircleIcon className="hv-icon hv-icon--sm" aria-hidden="true" />
-      <span>Kelly reviewed that</span>
+      <span>Somo reviewed that</span>
     </div>
   );
 }

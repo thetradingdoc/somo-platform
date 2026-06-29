@@ -31,8 +31,8 @@ function IconReport() {
 }
 
 const STEPS = [
-  { icon: IconMic, title: 'Talk naturally', desc: 'Describe symptoms in your own words — Kelly listens and asks follow-ups.' },
-  { icon: IconCamera, title: 'Show on camera when asked', desc: 'Kelly may ask you to position the camera for skin or body concerns.' },
+  { icon: IconMic, title: 'Talk naturally', desc: 'Describe symptoms in your own words — Somo listens and asks follow-ups.' },
+  { icon: IconCamera, title: 'Show on camera when asked', desc: 'Somo may ask you to position the camera for skin or body concerns.' },
   { icon: IconReport, title: 'Get a plain-language summary', desc: 'End your session and receive an educational summary to share or save.' }
 ];
 

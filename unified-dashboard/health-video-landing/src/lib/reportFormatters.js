@@ -39,13 +39,13 @@ export function formatPlainReport(report) {
   const toldParts = [report.chief_complaint, ...opqrstParts].filter(Boolean);
   const toldKelly = toldParts.length
     ? toldParts.join('. ')
-    : (report.transcript_excerpt || 'What you shared during your chat with Kelly.');
+    : (report.transcript_excerpt || 'What you shared during your chat with Somo.');
 
   const kellyNoticed = report.summary
     || (report.vision_artifacts?.length
       ? report.vision_artifacts.map((v) => (typeof v === 'string' ? v : v.caption)).filter(Boolean).join(' ')
       : '')
-    || 'Kelly reviewed what you described during the session.';
+    || 'Somo reviewed what you described during the session.';
 
   let nextSteps = 'If symptoms worsen or you feel unsafe, contact a clinician or emergency services.';
   if (report.safety_flags?.length) {
@@ -62,10 +62,10 @@ export function buildShareText(report) {
   return [
     'Somo health chat summary',
     '',
-    'What I told Kelly:',
+    'What I told Somo:',
     toldKelly,
     '',
-    'What Kelly noticed:',
+    'What Somo noticed:',
     kellyNoticed,
     '',
     'What to do next:',

@@ -5,11 +5,12 @@ const healthSessionService = require('../services/health-session-service');
 const healthVideoOpqrst = require('../services/health-video-opqrst');
 const { recommendPathway } = require('../services/health-care-pathway');
 
-jest.mock('../services/kelly-pa-video-orchestrator', () => ({
-  processTurn: jest.fn()
+jest.mock('../services/health/agent/orchestrator', () => ({
+  processTurn: jest.fn(),
+  runHealthTurn: jest.fn()
 }));
 
-const orchestrator = require('../services/kelly-pa-video-orchestrator');
+const orchestrator = require('../services/health/agent/orchestrator');
 
 describe('health-turn-service', () => {
   beforeEach(() => {
@@ -62,6 +63,59 @@ describe('health-turn-service', () => {
     const history = healthTurnService.buildHistoryFromDb(session.id);
     expect(history.length).toBeGreaterThanOrEqual(3);
     expect(history.some((h) => h.content.includes('rash'))).toBe(true);
+  });
+
+  test('three sequential patient turns persist in strict timestamp order', async () => {
+    const session = healthSessionService.createSession({ termsAccepted: true });
+    const texts = ['rash on my neck', 'started three days ago', 'no fever'];
+
+    for (const text of texts) {
+      await healthTurnService.processPatientTurn(session.room_id, text, {
+        speaker: 'patient',
+        is_final: true,
+        source: 'test'
+      });
+    }
+
+    const lines = healthSessionService.listTranscripts(session.id);
+    const patientLines = lines.filter((l) => l.speaker === 'patient');
+    expect(patientLines).toHaveLength(3);
+    expect(patientLines.map((l) => l.text)).toEqual(texts);
+
+    for (let i = 1; i < lines.length; i++) {
+      expect(new Date(lines[i].ts).getTime()).toBeGreaterThanOrEqual(new Date(lines[i - 1].ts).getTime());
+    }
+
+    const speakers = lines.map((l) => l.speaker);
+    expect(speakers.filter((s) => s === 'patient')).toHaveLength(3);
+    expect(speakers.filter((s) => s === 'assistant')).toHaveLength(3);
+  });
+
+  test('turn 3 orchestrator receives history from turn 1', async () => {
+    const session = healthSessionService.createSession({ termsAccepted: true });
+    orchestrator.processTurn.mockResolvedValue({
+      text: 'Tell me more.',
+      toolEvents: [],
+      safety: { emergency: false, flags: [] },
+      meta: {}
+    });
+
+    await healthTurnService.processPatientTurn(session.room_id, 'rash on my neck for 3 days', {
+      speaker: 'patient',
+      is_final: true
+    });
+    await healthTurnService.processPatientTurn(session.room_id, 'no fever', {
+      speaker: 'patient',
+      is_final: true
+    });
+    await healthTurnService.processPatientTurn(session.room_id, 'mild itch', {
+      speaker: 'patient',
+      is_final: true
+    });
+
+    const lastCall = orchestrator.processTurn.mock.calls[orchestrator.processTurn.mock.calls.length - 1][0];
+    const historyText = (lastCall.history || []).map((h) => h.content).join(' ');
+    expect(historyText).toMatch(/rash on my neck/i);
   });
 });
 

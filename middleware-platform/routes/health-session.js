@@ -8,7 +8,6 @@ const healthSessionService = require('../services/health-session-service');
 const healthSessionReport = require('../services/health-session-report-service');
 const tokenBudget = require('../utils/token-budget');
 const healthTurnService = require('../services/health-turn-service');
-const videoConsultService = require('../services/video-consult-service');
 const healthRoutingService = require('../services/health-session-routing-service');
 const healthEligibilityService = require('../services/health-session-eligibility-service');
 
@@ -89,10 +88,6 @@ router.post('/start', express.json(), async (req, res) => {
       displayName: req.body.display_name || null,
       metadata: req.body.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {}
     });
-    videoConsultService.createSession(session.room_id, {
-      encounter_id: session.id,
-      session_type: 'health_video'
-    });
     const identity = `patient-${uuidv4().slice(0, 8)}`;
     const livekit = await mintLiveKitToken(session.room_id, identity, req.body.display_name || 'Patient');
     res.json({
@@ -101,7 +96,7 @@ router.post('/start', express.json(), async (req, res) => {
       session_token: session.session_token,
       sse_token: session.sse_token,
       livekit: { ...livekit, identity },
-      sse_url: `/api/video-consult/sse/${encodeURIComponent(session.room_id)}?token=${encodeURIComponent(session.sse_token)}`,
+      sse_url: `/api/health-session/sse/${encodeURIComponent(session.room_id)}?token=${encodeURIComponent(session.sse_token)}`,
       terms_version: session.terms_version
     });
   } catch (e) {
@@ -128,7 +123,7 @@ router.post('/:id/token', express.json(), async (req, res) => {
       success: true,
       livekit: { ...livekit, identity },
       sse_token: refreshed.sse_token,
-      sse_url: `/api/video-consult/sse/${encodeURIComponent(session.room_id)}?token=${encodeURIComponent(refreshed.sse_token)}`
+      sse_url: `/api/health-session/sse/${encodeURIComponent(session.room_id)}?token=${encodeURIComponent(refreshed.sse_token)}`
     });
   } catch (e) {
     res.status(e.statusCode || 500).json({ success: false, error: e.message });
@@ -162,7 +157,8 @@ router.post('/:id/turn', express.json(), async (req, res) => {
     const result = await healthTurnService.processPatientTurn(session.room_id, text, {
       speaker: 'patient',
       is_final: true,
-      source: req.body?.source || 'turn'
+      source: req.body?.source || 'ui_turn',
+      traceId: req.headers['x-health-trace-id'] || req.body?.trace_id || null
     });
     if (!result?.success) {
       const status = result?.code === 'QUEUE_FULL' ? 429 : 502;

@@ -38,7 +38,7 @@ export default function SessionInputBar({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          aria-label="Message to Kelly"
+          aria-label="Message to Somo"
         />
         {hasText ? (
           <button

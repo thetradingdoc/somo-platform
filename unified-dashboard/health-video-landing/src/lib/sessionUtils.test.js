@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildTopicChips,
-  kellyGreeting,
+  somoGreeting,
   isGreetingLike,
   mergeAssistantMessage,
   createLocalGreeting,
@@ -21,22 +21,23 @@ describe('sessionUtils', () => {
   });
 
   it('includes camera hint in greeting', () => {
-    const g = kellyGreeting('Amina');
+    const g = somoGreeting('Amina');
     expect(g).toContain('Amina');
     expect(g.toLowerCase()).toContain('camera');
+    expect(g).toContain("I'm Somo");
   });
 
   it('detects greeting-like SSE text', () => {
-    expect(isGreetingLike("Hi, I'm Kelly")).toBe(true);
+    expect(isGreetingLike("Hi, I'm Somo")).toBe(true);
     expect(isGreetingLike('The pain is severe')).toBe(false);
   });
 
   it('replaces local greeting when SSE greeting arrives', () => {
     const local = [createLocalGreeting('Sam')];
-    const merged = mergeAssistantMessage(local, "Hi Sam, I'm Kelly. Tell me what's bothering you.");
+    const merged = mergeAssistantMessage(local, "Hi Sam, I'm Somo. Tell me what's bothering you.");
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe('greeting-local');
-    expect(merged[0].text).toContain("I'm Kelly");
+    expect(merged[0].text).toContain("I'm Somo");
   });
 
   it('appends assistant message after greeting when not similar', () => {
@@ -47,7 +48,7 @@ describe('sessionUtils', () => {
 
   it('normalizes physician assistant to AI health assistant in greetings', () => {
     const local = [createLocalGreeting('Sam')];
-    const merged = mergeAssistantMessage(local, "Hello, I'm Kelly, a physician assistant. How can I help?");
+    const merged = mergeAssistantMessage(local, "Hello, I'm Somo, a physician assistant. How can I help?");
     expect(merged).toHaveLength(1);
     expect(merged[0].text).toContain('AI health assistant');
     expect(merged[0].text.toLowerCase()).not.toContain('physician assistant');

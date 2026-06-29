@@ -251,6 +251,18 @@
   color: var(--somo-primary, #1C35EA);
 }
 
+.hv-consent-line--single {
+  white-space: nowrap;
+  font-size: 0.7rem;
+}
+
+@media (max-width: 380px) {
+  .hv-consent-line--single {
+    white-space: normal;
+    font-size: 0.68rem;
+  }
+}
+
 .hv-emergency-line {
   font-size: 0.7rem;
   color: #bbb;

@@ -19,7 +19,7 @@ export default function IntakeSummarySheet({ open, chips, notes, onConfirm, onCa
         <div className="hv-sheet-handle" />
         <h3 id="intake-summary-title" className="hv-sheet-title">Ready for your summary?</h3>
         <p className="hv-sheet-sub">
-          Kelly will prepare a plain-language report from what you shared.
+          Somo will prepare a plain-language report from what you shared.
         </p>
         {chips?.length > 0 && (
           <div className="hv-summary-chips" aria-label="Topics discussed">
@@ -38,7 +38,7 @@ export default function IntakeSummarySheet({ open, chips, notes, onConfirm, onCa
           </ul>
         )}
         <BtnPrimary onClick={onConfirm}>Get my summary →</BtnPrimary>
-        <BtnSecondary onClick={onCancel}>Keep talking to Kelly</BtnSecondary>
+        <BtnSecondary onClick={onCancel}>Keep talking to Somo</BtnSecondary>
       </div>
     </div>
   );

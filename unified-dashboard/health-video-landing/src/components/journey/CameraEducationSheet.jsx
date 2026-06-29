@@ -4,7 +4,7 @@ import BtnSecondary from '../brand/BtnSecondary.jsx';
 
 const BULLETS = [
   'Only you decide when the camera turns on',
-  'Kelly reviews frames to help — not for storage',
+  'Somo reviews frames to help — not for storage',
   'You can turn the camera off anytime',
   'Nothing is shared without your consent'
 ];

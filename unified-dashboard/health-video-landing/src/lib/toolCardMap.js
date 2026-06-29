@@ -5,7 +5,7 @@ export const TOOL_CARD_MAP = {
     iconClass: 'hv-tool-icon-blue'
   },
   vision_caption: {
-    title: 'What Kelly noticed',
+    title: 'What Somo noticed',
     icon: 'EyeIcon',
     iconClass: 'hv-tool-icon-gray'
   },

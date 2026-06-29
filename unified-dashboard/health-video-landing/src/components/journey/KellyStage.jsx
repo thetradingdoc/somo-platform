@@ -31,7 +31,7 @@ export default function KellyStage({
         <div className={`hv-kelly-stage-compact hv-kelly-stage-compact--${avatarState}`}>
           <KellyAvatar size="sm" />
           <div className="hv-kelly-stage-compact-text">
-            <span className="hv-kelly-stage-compact-name">Kelly · AI health assistant</span>
+            <span className="hv-kelly-stage-compact-name">Somo · AI health assistant</span>
             <span className="hv-kelly-stage-compact-status">{status}</span>
           </div>
         </div>

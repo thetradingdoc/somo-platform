@@ -45,11 +45,11 @@ export default function KellyPresencePanel({
         <div className={`hv-kelly-presence-compact hv-kelly-presence-inner--${avatarState}`}>
           <KellyAvatar size="md" />
           <div className="hv-kelly-presence-compact-text">
-            <span className="hv-kelly-name-tag">Kelly · AI health assistant</span>
+            <span className="hv-kelly-name-tag">Somo · AI health assistant</span>
             {showSpeaking ? (
               <span className="hv-kelly-speaking-label hv-kelly-speaking-label--compact">
                 <SoundBars />
-                Kelly is listening
+                Somo is listening
               </span>
             ) : (
               <span className="hv-kelly-presence-status">{status}</span>

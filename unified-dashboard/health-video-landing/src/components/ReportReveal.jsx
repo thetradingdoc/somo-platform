@@ -37,7 +37,7 @@ export default function ReportReveal({
 
         {thin ? (
           <>
-            <div className="hv-report-section-label">What you told Kelly</div>
+            <div className="hv-report-section-label">What you told Somo</div>
             <p className="hv-report-section-text">
               {report.transcript_excerpt || 'We could not build a full summary from this session.'}
             </p>
@@ -55,7 +55,7 @@ export default function ReportReveal({
               </>
             )}
 
-            <div className="hv-report-section-label">What you told Kelly</div>
+            <div className="hv-report-section-label">What you told Somo</div>
             <p className="hv-report-section-text">{rich.toldKelly}</p>
 
             {rich.timeline?.length > 0 && (
@@ -72,7 +72,7 @@ export default function ReportReveal({
               </>
             )}
 
-            <div className="hv-report-section-label">What Kelly noticed</div>
+            <div className="hv-report-section-label">What Somo noticed</div>
             <p className="hv-report-section-text">{rich.kellyNoticed}</p>
 
             {rich.citations?.length > 0 && (
