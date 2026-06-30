@@ -63,7 +63,7 @@ node scripts/fix-operator-voice-openers.cjs --apply-db
 
 ## Redis provisioning (Interpretation C)
 
-**Infra:** `REDIS_URL` is wired in `generate-cloudrun-env-yaml.cjs` (Secret Manager: `somo-staging-redis-url`). Provision Memorystore first, then deploy. Until healthy, run **single Cloud Run instance** only.
+**Infra:** `REDIS_URL` is wired in `generate-cloudrun-env-yaml.cjs` (Secret Manager: `somo-staging-redis-url`). **Next ops step (2026-06-30):** enable `redis.googleapis.com` on project `somo-callsomo`, create Memorystore in `us-central1`, store URL in Secret Manager, redeploy. Until healthy, run **single Cloud Run instance** only.
 
 ### Staging / prod checklist
 
@@ -160,10 +160,12 @@ STAGING_DB_PATH=./backups/middleware-staging.db \
 
 | Check | Pass? | Date | Owner |
 |-------|-------|------|-------|
-| Outbound opener mentions Somo | ☐ | | |
-| Retell API not 403 | ☐ | | |
-| Twilio checks green | ☐ | | |
-| No duplicate operator DIDs | ☐ | | |
+| Outbound opener mentions Somo | ☑ | 2026-06-30 | eng (local DB + live health) |
+| Retell API not 403 | ☑ | 2026-06-30 | live `/health/voice-operator` ready |
+| Twilio checks green | ☐ | | re-run after GCS DB sync |
+| No duplicate operator DIDs | ☐ | | fingerprint mismatch — refresh staging DB from GCS |
+
+**Note (2026-06-30):** `preflight:operator-voice --live-api` passed live `/health/voice-operator` but failed local↔live customer fingerprint (stale `backups/middleware-staging.db`). Re-pull from GCS, re-run greeting fix, upload via `cloudrun-db-sync.cjs upload`, then re-run preflight.
 
 ### Two-phone test (P8-6)
 
@@ -196,7 +198,7 @@ STAGING_DB_PATH=./backups/middleware-staging.db \
 | 4 | Redis shared limits in prod | Health + deploy | ☐ **Capped** — provision Redis, then verify |
 | 5 | `test:voice:load` green | CI | ☑ |
 | 6 | Staging two-phone + soak signed off | Manual | ☐ Ops |
-| 7 | Live preflight green | Manual | ☐ Ops |
+| 7 | Live preflight green | Manual | ☐ **Partial** — live `/health/voice-operator` OK; full preflight blocked on DB fingerprint (refresh GCS DB) |
 | 8 | Interpretation C ready or capped | This doc | ☑ **Capped** (single instance until Redis) |
 
 ---
