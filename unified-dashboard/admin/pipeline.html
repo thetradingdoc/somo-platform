@@ -20,16 +20,32 @@
           <span class="admin-crm-pill" data-specialty="medical">Medical</span>
         </div>
         <div class="admin-crm-header-actions">
-          <button class="admin-crm-btn-outline" id="btnEnrich">Enrich contacts</button>
-          <button class="btn btn-primary" onclick="location.href='/admin/'">Scrape leads</button>
+          <button class="admin-crm-btn-outline" id="btnEnrich" data-require-capability="platform.leads">Enrich contacts</button>
+          <button class="btn btn-primary" id="btnScrape" data-require-capability="platform.leads">Scrape leads</button>
         </div>
       </div>
+    </div>
+
+    <div class="admin-crm-status-banner" id="capWarn" style="display:none;background:#faeeda;border-color:#633806;margin-bottom:12px;">
+      <span style="font-size:13px;color:#633806;" id="capWarnText"></span>
+    </div>
+
+    <div class="admin-crm-card" id="needs-phone">
+      <div class="admin-crm-card-title admin-crm-card-title--split">
+        <span>Needs phone <span id="needsPhoneCount" class="admin-crm-badge admin-crm-badge-muted">—</span></span>
+        <div style="display:flex;gap:8px;">
+          <button class="admin-crm-btn-outline btn-sm" id="btnBulkDelete" data-require-capability="platform.leads">Delete selected</button>
+          <button class="admin-crm-btn-outline btn-sm" id="btnEnrichNeeds" data-require-capability="platform.leads">Enrich all</button>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Leads saved from scrape without a callable phone — enrich or delete manually.</p>
+      <div id="needsPhoneList"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
     </div>
 
     <div class="admin-crm-card">
       <div class="admin-crm-card-title admin-crm-card-title--split">
         <span>Call-ready queue <span id="queueCount" class="admin-crm-badge admin-crm-badge-muted">—</span></span>
-        <button class="btn btn-primary btn-sm" id="btnCall10">Call next 10</button>
+        <button class="btn btn-primary btn-sm" id="btnCall10" data-require-capability="platform.leads">Call next 10</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:16px;">
         <input class="admin-crm-search" type="text" id="queueSearch" placeholder="Search leads...">
@@ -39,7 +55,7 @@
     </div>
 
     <div class="admin-crm-card admin-crm-kanban-scroll">
-      <div class="admin-crm-card-title">Pipeline stages</div>
+      <div class="admin-crm-card-title">Pipeline stages <span style="font-weight:400;font-size:11px;color:var(--muted);">callable leads only</span></div>
       <div class="admin-crm-kanban" id="kanbanBoard">
         <div class="admin-crm-skeleton" style="height:300px;grid-column:1/-1;"></div>
       </div>
@@ -47,11 +63,14 @@
   </main>
 
   <script src="/admin/assets/js/admin-shell.js"></script>
+  <script src="/admin/assets/js/admin-job-modal.js"></script>
   <script>
-    const { apiFetch, esc, init } = AdminShell;
+    const { apiFetch, esc, init, showToast, callLead: shellCallLead, confirmAction } = AdminShell;
     let currentSpecialty = '';
     let currentPage = 0;
     let searchTimer;
+    let callsRemaining = 250;
+    const selectedNeedsPhone = new Set();
 
     function isCallableLead(l) {
       if (l.callable === true) return true;
@@ -63,13 +82,14 @@
     init('pipeline');
 
     document.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach(p => {
+      document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach((p) => {
         p.onclick = () => {
-          document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach(x => x.classList.remove('active'));
+          document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach((x) => x.classList.remove('active'));
           p.classList.add('active');
           currentSpecialty = p.dataset.specialty;
           currentPage = 0;
           loadQueue();
+          loadNeedsPhone();
           loadKanban();
         };
       });
@@ -78,10 +98,106 @@
         searchTimer = setTimeout(() => { currentPage = 0; loadQueue(); }, 300);
       };
       document.getElementById('btnCall10').onclick = callNext10;
-      document.getElementById('btnEnrich').onclick = () => { location.href = '/admin/'; };
-      loadQueue();
-      loadKanban();
+      document.getElementById('btnEnrich').onclick = () => {
+        AdminJobModal.open({ title: 'Enriching contacts...', url: '/api/admin/enrich/batch', method: 'POST', onComplete: refreshAll });
+      };
+      document.getElementById('btnEnrichNeeds').onclick = () => {
+        AdminJobModal.open({ title: 'Enriching contacts...', url: '/api/admin/enrich/batch', method: 'POST', onComplete: refreshAll });
+      };
+      document.getElementById('btnScrape').onclick = () => {
+        AdminJobModal.open({ title: 'Scraping leads...', url: '/api/admin/scrape/run', method: 'POST', body: {}, onComplete: refreshAll });
+      };
+      document.getElementById('btnBulkDelete').onclick = bulkDeleteSelected;
+      loadCapStatus();
+      refreshAll();
+      if (location.hash === '#needs-phone') {
+        document.getElementById('needs-phone')?.scrollIntoView({ behavior: 'smooth' });
+      }
     });
+
+    async function loadCapStatus() {
+      try {
+        const r = await apiFetch('/api/admin/scrape/status');
+        callsRemaining = r.calls_remaining ?? 250;
+        const capWarn = document.getElementById('capWarn');
+        if (callsRemaining < 10) {
+          capWarn.style.display = 'flex';
+          document.getElementById('capWarnText').textContent = `Only ${callsRemaining} outbound calls remaining this month.`;
+        }
+      } catch { /* ignore */ }
+    }
+
+    function refreshAll() {
+      loadQueue();
+      loadNeedsPhone();
+      loadKanban();
+      loadCapStatus();
+    }
+
+    async function loadNeedsPhone() {
+      const params = new URLSearchParams({ contact_status: 'needs_phone', limit: 50, offset: 0 });
+      if (currentSpecialty) params.set('specialty', currentSpecialty);
+      try {
+        const r = await apiFetch(`/api/admin/scrape/leads?${params}`);
+        const leads = r.leads || [];
+        document.getElementById('needsPhoneCount').textContent = r.total ?? leads.length;
+        const container = document.getElementById('needsPhoneList');
+        if (!leads.length) {
+          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:16px;font-size:13px;">No leads waiting for phone enrichment</p>';
+          return;
+        }
+        container.innerHTML = leads.map((l) => `
+          <div class="admin-crm-row">
+            <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;" onclick="event.stopPropagation()">
+              <input type="checkbox" data-lead-id="${l.id}" ${selectedNeedsPhone.has(String(l.id)) ? 'checked' : ''} onchange="toggleNeedsPhoneSelect('${l.id}', this.checked)">
+              <div>
+                <div class="admin-crm-row-name" style="font-weight:600;">${esc(l.clinic_name)}</div>
+                <div style="font-size:12px;color:var(--muted);">${esc(l.location || '')} · ${esc(l.clinic_email || 'no email')}</div>
+              </div>
+            </label>
+            <div class="admin-crm-row-actions">
+              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="enrichOne('${l.id}')">Enrich</button>
+              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="location.href='/admin/lead.html?id=${l.id}'">Open</button>
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        document.getElementById('needsPhoneList').innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
+      }
+    }
+
+    window.toggleNeedsPhoneSelect = (id, checked) => {
+      if (checked) selectedNeedsPhone.add(String(id));
+      else selectedNeedsPhone.delete(String(id));
+    };
+
+    async function enrichOne(id) {
+      try {
+        await apiFetch(`/api/admin/leads/${id}/enrich`, { method: 'POST' });
+        showToast('Enrichment complete', 'success');
+        refreshAll();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+    window.enrichOne = enrichOne;
+
+    async function bulkDeleteSelected() {
+      if (!selectedNeedsPhone.size) {
+        showToast('Select leads to delete', 'warning');
+        return;
+      }
+      if (!confirmAction(`Delete ${selectedNeedsPhone.size} lead(s)? This cannot be undone.`)) return;
+      let deleted = 0;
+      for (const id of selectedNeedsPhone) {
+        try {
+          await apiFetch(`/api/admin/leads/${id}`, { method: 'DELETE' });
+          deleted++;
+          selectedNeedsPhone.delete(id);
+        } catch (e) {
+          showToast(`Failed to delete ${id}: ${e.message}`, 'error');
+        }
+      }
+      showToast(`Deleted ${deleted} lead(s)`, deleted ? 'success' : 'warning');
+      refreshAll();
+    }
 
     async function loadQueue(page = 0) {
       currentPage = page;
@@ -93,23 +209,23 @@
       try {
         const r = await apiFetch(`/api/admin/scrape/leads?${params}`);
         const verified = (r.leads || []).filter(isCallableLead);
-        document.getElementById('queueCount').textContent = verified.length ? (r.total || verified.length) : 0;
+        document.getElementById('queueCount').textContent = r.total ?? verified.length;
         const container = document.getElementById('queueList');
         if (!verified.length) {
-          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No call-ready leads with verified phone numbers. Run scrape from control board.</p>';
+          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;font-size:13px;">No call-ready leads. Check the needs-phone queue or run scrape.</p>';
           document.getElementById('queuePagination').innerHTML = '';
           return;
         }
         container.innerHTML = verified.map((l) => renderRow(l)).join('');
         const pages = Math.ceil((r.total || 0) / 15);
-        const pag = document.getElementById('queuePagination');
-        pag.innerHTML = pages <= 1 ? '' : Array.from({ length: Math.min(pages, 7) }, (_, i) =>
+        document.getElementById('queuePagination').innerHTML = pages <= 1 ? '' : Array.from({ length: Math.min(pages, 7) }, (_, i) =>
           `<button class="admin-crm-btn-outline" style="padding:5px 10px;${i === page ? 'background:var(--admin-cta);' : ''}" onclick="loadQueue(${i})">${i + 1}</button>`
         ).join('');
       } catch (e) {
         document.getElementById('queueList').innerHTML = `<p style="color:var(--muted);">Failed: ${esc(e.message)}</p>`;
       }
     }
+    window.loadQueue = loadQueue;
 
     function renderRow(l) {
       const scoreCls = l.lead_score >= 70 ? ' high' : '';
@@ -123,11 +239,16 @@
           <div class="admin-crm-row-actions">
             <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
             ${canCall
-              ? `<button class="btn btn-primary btn-sm admin-crm-btn-sm" onclick="event.stopPropagation();callLead(${l.id},'${esc(l.clinic_name)}')">Call</button>`
-              : `<span class="admin-crm-badge admin-crm-badge-muted" title="No verified phone">No phone</span>`}
+              ? `<button class="btn btn-primary btn-sm admin-crm-btn-sm" onclick="event.stopPropagation();doCall(${l.id},'${esc(l.clinic_name)}', this)">Call</button>`
+              : `<span class="admin-crm-badge admin-crm-badge-muted">No phone</span>`}
           </div>
         </div>`;
     }
+
+    async function doCall(id, name, btn) {
+      await shellCallLead(id, name, { buttonEl: btn, onSuccess: () => setTimeout(refreshAll, 2000) });
+    }
+    window.doCall = doCall;
 
     async function loadKanban() {
       const params = currentSpecialty ? `?specialty=${currentSpecialty}` : '';
@@ -140,14 +261,14 @@
           { key: 'won', label: 'Won' },
           { key: 'lost', label: 'Lost' },
         ];
-        document.getElementById('kanbanBoard').innerHTML = stages.map(s => {
+        document.getElementById('kanbanBoard').innerHTML = stages.map((s) => {
           const cards = ((r.cards || {})[s.key] || []).filter(isCallableLead);
           return `
             <div class="admin-crm-kanban-col">
               <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;">
-                ${s.label}<span class="admin-crm-badge admin-crm-badge-muted">${(r.counts || {})[s.key] || 0}</span>
+                ${s.label}<span class="admin-crm-badge admin-crm-badge-muted">${cards.length}</span>
               </div>
-              ${cards.map(l => `
+              ${cards.map((l) => `
                 <div class="admin-crm-kanban-card" onclick="location.href='/admin/lead.html?id=${l.id}'">
                   <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(l.clinic_name)}</div>
                   <div style="font-size:11px;color:var(--muted);">${esc(l.location || '')}</div>
@@ -161,28 +282,32 @@
       }
     }
 
-    async function callLead(id, name) {
-      if (!confirm(`Call ${name}?`)) return;
-      try {
-        const r = await apiFetch(`/api/admin/leads/${id}/call`, { method: 'POST' });
-        alert(r.message || 'Call initiated');
-        loadKanban();
-      } catch (e) { alert(e.message); }
-    }
-
     async function callNext10() {
-      if (!confirm('Call top 10 call-ready leads?')) return;
+      if (callsRemaining < 1) {
+        showToast('Monthly call cap reached', 'error');
+        return;
+      }
+      const batchSize = Math.min(10, callsRemaining);
+      if (!confirmAction(`Call top ${batchSize} call-ready leads? (${callsRemaining} calls remaining)`)) return;
       try {
-        const r = await apiFetch('/api/admin/scrape/leads/call-ready?limit=10');
+        const r = await apiFetch(`/api/admin/scrape/leads/call-ready?limit=${batchSize}`);
         const callable = (r.leads || []).filter(isCallableLead);
-        for (const l of callable) {
-          await apiFetch(`/api/admin/leads/${l.id}/call`, { method: 'POST' });
-          await new Promise(res => setTimeout(res, 500));
+        if (!callable.length) {
+          showToast('No call-ready leads in queue', 'warning');
+          return;
         }
-        alert(`Initiated ${callable.length} calls`);
-        loadQueue();
-        loadKanban();
-      } catch (e) { alert(e.message); }
+        let initiated = 0;
+        for (const l of callable) {
+          if (callsRemaining - initiated < 1) break;
+          try {
+            await shellCallLead(l.id, l.clinic_name, { skipConfirm: true });
+            initiated++;
+            await new Promise((res) => setTimeout(res, 500));
+          } catch { /* toast shown */ }
+        }
+        showToast(`Initiated ${initiated} call(s)`, 'success');
+        refreshAll();
+      } catch (e) { showToast(e.message, 'error'); }
     }
   </script>
 </body>

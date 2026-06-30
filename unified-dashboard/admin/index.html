@@ -12,46 +12,53 @@
   <aside id="admin-sidebar"></aside>
   <main class="admin-crm-main">
     <div class="admin-crm-header">
-        <div>
+      <div>
         <div class="admin-crm-title">Control board</div>
         <div class="admin-crm-subtitle" id="dateline">Loading...</div>
-        </div>
-      <div class="admin-crm-header-actions">
-        <button class="admin-crm-btn-outline" id="btnEnrich">Enrich contacts</button>
-        <button class="btn btn-primary" id="btnScrape">Scrape new leads</button>
-        </div>
       </div>
+      <div class="admin-crm-header-actions">
+        <a href="/api/admin/scrape/leads/export?format=csv" class="admin-crm-btn-outline" data-require-capability="platform.leads" id="btnExport">Export CSV</a>
+        <button class="admin-crm-btn-outline" id="btnEnrich" data-require-capability="platform.leads">Enrich contacts</button>
+        <button class="btn btn-primary" id="btnScrape" data-require-capability="platform.leads">Scrape new leads</button>
+      </div>
+    </div>
 
     <div class="admin-crm-status-banner" id="scrapeConfigWarn" style="display:none;background:#faeeda;border-color:#633806;margin-bottom:12px;">
       <span style="font-size:13px;color:#633806;" id="scrapeConfigText">Job search API not configured on server.</span>
-      </div>
+    </div>
+
+    <div class="admin-crm-status-banner" id="capWarn" style="display:none;background:#faeeda;border-color:#633806;margin-bottom:12px;">
+      <span style="font-size:13px;color:#633806;" id="capWarnText"></span>
+    </div>
+
+    <div class="admin-crm-diagnostics" id="diagnosticsStrip" style="display:none;"></div>
 
     <div class="admin-crm-status-banner" id="scrapeStatus">
       <div class="admin-crm-status-banner__primary">
         <span class="admin-crm-status-dot" id="statusDot"></span>
         <span id="statusText">Loading job status...</span>
-        </div>
+      </div>
       <span id="lastRunText" style="color:var(--muted);font-size:12px;"></span>
-          </div>
+    </div>
 
     <div class="admin-crm-metrics" id="metricsGrid">
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Call-ready leads</div><div class="admin-crm-metric-value" id="mCallReady">—</div><div class="admin-crm-metric-sub">phone verified</div></div>
-      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Needs phone</div><div class="admin-crm-metric-value" id="mNeedsPhone">—</div><div class="admin-crm-metric-sub">enrichment pending</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Needs phone</div><div class="admin-crm-metric-value" id="mNeedsPhone">—</div><div class="admin-crm-metric-sub"><a href="/admin/pipeline.html#needs-phone" style="color:var(--accent-green);">View queue →</a></div></div>
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Calls this month</div><div class="admin-crm-metric-value" id="mCalls">—</div><div class="admin-crm-metric-sub" id="mCallsCap">of 250 cap</div></div>
-      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Tenant alerts</div><div class="admin-crm-metric-value admin-crm-metric-danger" id="mAlerts">—</div><div class="admin-crm-metric-sub">need attention</div></div>
-            </div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Tenant alerts</div><div class="admin-crm-metric-value admin-crm-metric-danger" id="mAlerts">—</div><div class="admin-crm-metric-sub">clinics need attention</div></div>
+    </div>
 
     <div class="admin-crm-two-col">
       <div class="admin-crm-card">
         <div class="admin-crm-card-title">Tenant alerts</div>
         <div id="tenantAlerts"><div class="admin-crm-skeleton" style="height:80px;"></div></div>
         <a href="/admin/tenants.html" style="display:block;text-align:center;margin-top:12px;font-size:12px;color:var(--accent-green);">View all tenants →</a>
-                      </div>
+      </div>
       <div class="admin-crm-card">
         <div class="admin-crm-card-title">Sales funnel</div>
         <div id="funnelView"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
-                  </div>
-                </div>
+      </div>
+    </div>
 
     <div class="admin-crm-card">
       <div class="admin-crm-card-title admin-crm-card-title--split">
@@ -60,31 +67,42 @@
       </div>
       <div id="callReadyList"><div class="admin-crm-skeleton" style="height:160px;"></div></div>
     </div>
-    </main>
-
-  <div class="admin-crm-modal-overlay" id="scrapeModal">
-    <div class="admin-crm-modal">
-      <div class="admin-crm-title" id="modalTitle" style="margin-bottom:16px;font-size:16px;">Scraping new leads...</div>
-      <div class="admin-crm-progress-log" id="progressLog"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div id="modalResult" style="font-size:13px;color:var(--muted);"></div>
-        <button class="admin-crm-btn-outline" id="modalClose" disabled>Close</button>
-      </div>
-    </div>
-  </div>
+  </main>
 
   <script src="/admin/assets/js/admin-shell.js"></script>
+  <script src="/admin/assets/js/admin-job-modal.js"></script>
   <script>
-    const { apiFetch, esc, init } = AdminShell;
-    const API = () => window.API_BASE || '';
+    const { apiFetch, esc, init, showToast, callLead: shellCallLead, hasCapability } = AdminShell;
+    let statusData = null;
 
     init('board');
 
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('dateline').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-      document.getElementById('btnScrape').onclick = openScrapeModal;
+      document.getElementById('btnScrape').onclick = () => {
+        AdminJobModal.open({
+          title: 'Scraping new leads...',
+          url: '/api/admin/scrape/run',
+          method: 'POST',
+          body: {},
+          onComplete: loadAll,
+          onEvent: (evt, ui) => {
+            if (evt.type === 'start' && evt.job_search_provider) {
+              ui.addLine(`Engine: ${evt.job_search_provider}`);
+            }
+            if (evt.type === 'progress' && evt.source) {
+              ui.addLine(`Query [${evt.source}]: ${evt.msg || ''}`);
+            }
+          },
+        });
+      };
       document.getElementById('btnEnrich').onclick = triggerEnrich;
-      document.getElementById('modalClose').onclick = closeScrapeModal;
+      document.getElementById('btnExport').onclick = (e) => {
+        if (!hasCapability('platform.leads')) { e.preventDefault(); return; }
+        const API = window.API_BASE || '';
+        window.open(`${API}/api/admin/scrape/leads/export?format=csv`, '_blank');
+        e.preventDefault();
+      };
       loadAll();
     });
 
@@ -92,42 +110,86 @@
       await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline()]);
     }
 
+    function renderDiagnostics(r) {
+      const strip = document.getElementById('diagnosticsStrip');
+      if (!r.scrape_configured) { strip.style.display = 'none'; return; }
+      const last = r.scheduler?.scrape_last_result || {};
+      const provider = r.job_search_provider || 'unknown';
+      const summary = r.pipeline_summary || {};
+      strip.style.display = 'flex';
+      strip.innerHTML = `
+        <span><strong>Engine:</strong> ${esc(provider)}</span>
+        <span><strong>DB total:</strong> ${r.db_total ?? '—'}</span>
+        <span><strong>Last scrape:</strong> ${last.saved_callable ?? last.saved ?? 0} callable · ${last.saved_needs_phone ?? 0} need phone</span>
+        <span><strong>Pipeline:</strong> ${summary.verified ?? r.leads?.verified ?? 0} verified / ${summary.needs_phone ?? r.leads?.needs_phone ?? 0} need phone</span>`;
+    }
+
+    function renderLastRunBanner(r) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      const lastRun = document.getElementById('lastRunText');
+      const configWarn = document.getElementById('scrapeConfigWarn');
+
+      if (!r.scrape_configured) {
+        configWarn.style.display = 'flex';
+        document.getElementById('scrapeConfigText').textContent =
+          r.setup_hint || 'Set JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY on the API server.';
+        dot.className = 'admin-crm-status-dot';
+        text.textContent = 'Scrape disabled — job search API not configured';
+        lastRun.textContent = '';
+        return;
+      }
+      configWarn.style.display = 'none';
+
+      if (r.scheduler?.is_running) {
+        dot.className = 'admin-crm-status-dot running';
+        text.textContent = 'Scrape job running...';
+      } else {
+        dot.className = 'admin-crm-status-dot';
+        const cron = r.scrape_cron_enabled ? 'nightly scrape at 2 AM ET' : 'manual scrape only (SCRAPE_CRON_ENABLED=0)';
+        text.textContent = `Ready — ${cron}`;
+      }
+
+      const parts = [];
+      if (r.scheduler?.last_run_at) {
+        const d = new Date(r.scheduler.last_run_at);
+        parts.push(`Last run: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      }
+      const lr = r.scheduler?.scrape_last_result;
+      if (lr) {
+        const saved = (lr.saved_callable ?? lr.saved ?? 0) + (lr.saved_needs_phone ?? 0);
+        if (saved || lr.duplicates) {
+          parts.push(`${lr.saved_callable ?? lr.saved ?? 0} callable, ${lr.saved_needs_phone ?? 0} need phone`);
+        }
+      }
+      lastRun.textContent = parts.join(' · ');
+    }
+
     async function loadStatus() {
       try {
         const r = await apiFetch('/api/admin/scrape/status');
-        const dot = document.getElementById('statusDot');
-        const text = document.getElementById('statusText');
-        const lastRun = document.getElementById('lastRunText');
-        const configWarn = document.getElementById('scrapeConfigWarn');
-        if (!r.scrape_configured) {
-          configWarn.style.display = 'flex';
-          document.getElementById('scrapeConfigText').textContent =
-            r.setup_hint || 'Set JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY on the API server to enable scraping.';
-          dot.className = 'admin-crm-status-dot';
-          text.textContent = 'Scrape disabled — job search API not configured';
-        } else {
-          configWarn.style.display = 'none';
-          if (r.scheduler.is_running) {
-            dot.className = 'admin-crm-status-dot running';
-            text.textContent = 'Scrape job running...';
-          } else {
-            dot.className = 'admin-crm-status-dot';
-            text.textContent = 'Ready — nightly scrape runs at 2 AM ET';
-          }
-        }
-        if (r.scheduler.last_run_at) {
-          const d = new Date(r.scheduler.last_run_at);
-          lastRun.textContent = `Last run: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-        }
+        statusData = r;
+        renderDiagnostics(r);
+        renderLastRunBanner(r);
+
         const l = r.leads || {};
         document.getElementById('mCallReady').textContent = l.verified || 0;
         document.getElementById('mNeedsPhone').textContent = l.needs_phone || 0;
         document.getElementById('mCalls').textContent = r.calls_this_month || 0;
-        document.getElementById('mCallsCap').textContent = `of ${r.calls_cap || 250} cap`;
+        document.getElementById('mCallsCap').textContent = `${r.calls_remaining ?? 250} remaining of ${r.calls_cap || 250}`;
+
+        const capWarn = document.getElementById('capWarn');
+        if ((r.calls_remaining ?? 250) < 10) {
+          capWarn.style.display = 'flex';
+          document.getElementById('capWarnText').textContent =
+            `Only ${r.calls_remaining} outbound calls remaining this month.`;
+        } else {
+          capWarn.style.display = 'none';
+        }
       } catch (e) {
         console.error(e);
         const text = document.getElementById('statusText');
-        if (text && text.textContent === 'Loading job status...') {
+        if (text?.textContent === 'Loading job status...') {
           text.textContent = e.message?.includes('Authentication')
             ? 'Sign in required to load job status'
             : 'Could not load job status';
@@ -135,25 +197,33 @@
       }
     }
 
+    function renderGroupedAlerts(grouped) {
+      if (!grouped?.length) {
+        return '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">All tenants healthy</p>';
+      }
+      return grouped.slice(0, 4).map((g) => {
+        const sev = g.severity || 'warning';
+        const reasons = (g.reasons || []).slice(0, 2).map((r) => esc(r)).join('; ');
+        return `
+          <div class="admin-crm-row" onclick="location.href='/admin/tenants.html?id=${esc(g.clinic_id)}'">
+            <div>
+              <div class="admin-crm-row-name" style="font-weight:600;">${esc(g.company_name)}</div>
+              <div style="font-size:12px;color:var(--muted);">${reasons || esc(g.reason || '')}</div>
+            </div>
+            <span class="admin-crm-badge admin-crm-badge-${sev === 'critical' ? 'danger' : sev === 'info' ? 'info' : 'warning'}">${esc(sev)}</span>
+          </div>`;
+      }).join('');
+    }
+
     async function loadAlerts() {
       try {
         const r = await apiFetch('/api/admin/tenants/alerts');
-        const container = document.getElementById('tenantAlerts');
-        const alerts = r.alerts || [];
-        document.getElementById('mAlerts').textContent = alerts.length;
-        if (!alerts.length) {
-          container.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">All tenants healthy</p>';
-          return;
-        }
-        container.innerHTML = alerts.slice(0, 4).map(a => `
-          <div class="admin-crm-row" onclick="location.href='/admin/tenants.html'">
-            <div>
-              <div class="admin-crm-row-name" style="font-weight:600;">${esc(a.company_name)}</div>
-              <div style="font-size:12px;color:var(--muted);">${esc(a.reason || a.minutes_remaining + ' min remaining')}</div>
-          </div>
-            <span class="admin-crm-badge admin-crm-badge-${a.severity === 'critical' ? 'danger' : a.severity === 'info' ? 'info' : 'warning'}">${esc(a.severity)}</span>
-          </div>
-        `).join('');
+        const grouped = r.grouped_alerts || [];
+        const flat = r.alerts || [];
+        document.getElementById('mAlerts').textContent = r.clinic_count ?? grouped.length ?? flat.length;
+        document.getElementById('tenantAlerts').innerHTML = grouped.length
+          ? renderGroupedAlerts(grouped)
+          : renderGroupedAlerts(flat.map((a) => ({ ...a, reasons: [a.reason] })));
       } catch (e) {
         document.getElementById('tenantAlerts').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load alerts</p>';
       }
@@ -165,10 +235,20 @@
         const container = document.getElementById('callReadyList');
         const leads = r.leads || [];
         if (!leads.length) {
-          container.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">No call-ready leads yet</p>';
-        return;
-      }
-        container.innerHTML = leads.map(l => rowLead(l, true)).join('');
+          const summary = statusData?.pipeline_summary || {};
+          const needsPhone = statusData?.leads?.needs_phone || 0;
+          let hint;
+          if (summary.never_scraped) {
+            hint = 'No leads in database yet — run <strong>Scrape new leads</strong> to discover clinics.';
+          } else if (needsPhone > 0) {
+            hint = `${needsPhone} leads saved but need phone enrichment — <a href="/admin/pipeline.html#needs-phone" style="color:var(--accent-green);">open queue</a>`;
+          } else {
+            hint = 'No call-ready leads yet — run scrape or enrich contacts.';
+          }
+          container.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0;">${hint}</p>`;
+          return;
+        }
+        container.innerHTML = leads.map((l) => rowLead(l, true)).join('');
       } catch (e) {
         document.getElementById('callReadyList').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load leads</p>';
       }
@@ -178,7 +258,6 @@
       try {
         const r = await apiFetch('/api/admin/scrape/leads/pipeline');
         const counts = r.counts || {};
-        const cards = r.cards || {};
         const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
         const stages = [
           { key: 'new', label: 'New', color: '#888780' },
@@ -186,18 +265,18 @@
           { key: 'demo', label: 'Demo', color: '#238108' },
           { key: 'won', label: 'Won', color: '#639922' },
         ];
-        document.getElementById('funnelView').innerHTML = stages.map(s => {
+        document.getElementById('funnelView').innerHTML = stages.map((s) => {
           const n = counts[s.key] || 0;
           const pct = Math.round((n / total) * 100);
           return `
             <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;">
               <span>${s.label}</span><span style="font-weight:600;color:var(--text);">${n}</span>
-              </div>
+            </div>
             <div style="height:6px;border-radius:3px;background:var(--border);margin-bottom:12px;overflow:hidden;">
               <div style="height:100%;width:${pct}%;background:${s.color};border-radius:3px;"></div>
             </div>`;
         }).join('');
-            } catch (e) {
+      } catch (e) {
         document.getElementById('funnelView').innerHTML = '<p style="color:var(--muted);font-size:12px;">Could not load pipeline</p>';
       }
     }
@@ -207,7 +286,9 @@
       const langTag = (l.language_labels && l.language_labels.length)
         ? `<span class="admin-crm-badge admin-crm-badge-info" style="font-size:10px;">${esc(l.language_labels[0])}</span>`
         : '';
-      const callBtn = withCall ? `<button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();callLead('${esc(l.id)}','${esc(l.clinic_name)}')">Call</button>` : '';
+      const callBtn = withCall
+        ? `<button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();doCall('${esc(l.id)}','${esc(l.clinic_name)}', this)">Call</button>`
+        : '';
       return `
         <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${esc(l.id)}'">
           <div>
@@ -221,104 +302,19 @@
         </div>`;
     }
 
-    function openScrapeModal() {
-      document.getElementById('scrapeModal').classList.add('open');
-      document.getElementById('progressLog').innerHTML = '';
-      document.getElementById('modalTitle').textContent = 'Scraping new leads...';
-      document.getElementById('modalResult').textContent = '';
-      document.getElementById('modalClose').disabled = true;
-      runScrapeJob();
+    async function doCall(id, name, btn) {
+      await shellCallLead(id, name, { buttonEl: btn, onSuccess: () => setTimeout(loadCallReady, 2000) });
     }
+    window.doCall = doCall;
 
-    function closeScrapeModal() {
-      document.getElementById('scrapeModal').classList.remove('open');
-      loadAll();
-    }
-
-    async function runScrapeJob() {
-      const log = document.getElementById('progressLog');
-      const addLine = (text, cls = '') => {
-        const d = document.createElement('div');
-        d.className = cls;
-        d.textContent = text;
-        log.appendChild(d);
-        log.scrollTop = log.scrollHeight;
-      };
-      try {
-        const resp = await fetch(`${API()}/api/admin/scrape/run`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sources: ['google_jobs', 'craigslist', 'jsearch'] }),
-        });
-        await consumeSse(resp, addLine, (evt) => {
-          if (evt.type === 'done') {
-            document.getElementById('modalTitle').textContent = 'Scrape complete';
-            document.getElementById('modalResult').textContent = [
-              `${evt.result.saved} saved with phone`,
-              evt.result.skipped_no_phone ? `${evt.result.skipped_no_phone} skipped (no phone)` : '',
-            ].filter(Boolean).join(' · ');
-            document.getElementById('modalClose').disabled = false;
-          }
-          if (evt.type === 'error') document.getElementById('modalClose').disabled = false;
-        });
-            } catch (e) {
-        addLine('Network error: ' + e.message);
-        document.getElementById('modalClose').disabled = false;
-      }
-    }
-
-    async function triggerEnrich() {
-      if (!confirm('Run contact enrichment on all unprocessed leads?')) return;
-      openScrapeModal();
-      document.getElementById('modalTitle').textContent = 'Enriching contacts...';
-      const log = document.getElementById('progressLog');
-      try {
-        const resp = await fetch(`${API()}/api/admin/enrich/batch`, { method: 'POST', credentials: 'include' });
-        await consumeSse(resp, (text) => {
-          const d = document.createElement('div');
-          d.textContent = text;
-          log.appendChild(d);
-          log.scrollTop = log.scrollHeight;
-        }, (evt) => {
-          if (evt.type === 'done' || evt.type === 'error') document.getElementById('modalClose').disabled = false;
-        });
-      } catch (e) {
-        document.getElementById('modalClose').disabled = false;
-      }
-    }
-
-    async function consumeSse(resp, addLine, onEvt) {
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const evt = JSON.parse(line.slice(6));
-            if (evt.type === 'start') addLine('Job started');
-            else if (evt.type === 'done') addLine(`Done — saved ${evt.result?.saved ?? evt.enriched ?? 0}`);
-            else if (evt.type === 'error') addLine('Error: ' + evt.error);
-            else if (evt.msg) addLine(evt.msg);
-            else if (evt.type === 'progress') addLine(`Lead ${evt.id}: ${evt.status}`);
-            onEvt?.(evt);
-          } catch { /* skip */ }
-        }
-      }
-    }
-
-    async function callLead(id, name) {
-      if (!confirm(`Place outbound sales call to ${name}?`)) return;
-      try {
-        const r = await apiFetch(`/api/admin/leads/${id}/call`, { method: 'POST' });
-        alert(r.message || 'Call initiated');
-      } catch (e) { alert('Call failed: ' + e.message); }
+    function triggerEnrich() {
+      if (!AdminShell.confirmAction('Run contact enrichment on all unprocessed leads?')) return;
+      AdminJobModal.open({
+        title: 'Enriching contacts...',
+        url: '/api/admin/enrich/batch',
+        method: 'POST',
+        onComplete: loadAll,
+      });
     }
   </script>
 </body>

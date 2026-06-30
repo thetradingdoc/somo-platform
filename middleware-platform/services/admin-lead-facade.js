@@ -102,6 +102,7 @@ function formatLeadForApi(lead, enrichingIds = new Set()) {
     language_labels,
     preferred_language: lead.preferred_language || (language_labels.length ? null : 'en'),
     pipeline_stage: normalizeStage(lead.pipeline_stage),
+    suggested_stage: lead.suggested_stage ? normalizeStage(lead.suggested_stage) : null,
     contact_status: getContactStatus(lead, enrichingIds),
     callable: hasValidPhone(lead.clinic_phone),
     lead_source: lead.source || lead.lead_source || null,

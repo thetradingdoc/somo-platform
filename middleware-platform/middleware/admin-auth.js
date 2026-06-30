@@ -305,9 +305,11 @@ function adminSessionStatus(req, res) {
   if (!session) {
     return res.status(401).json({ success: false, authenticated: false });
   }
+  const { OPERATOR_CAPABILITIES } = require('../services/customer-capabilities');
   res.json({
     success: true,
     authenticated: true,
+    capabilities: OPERATOR_CAPABILITIES.slice(),
     session: {
       issued_at: session.issued_at,
       expires_at: session.expires_at

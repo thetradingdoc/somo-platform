@@ -167,6 +167,91 @@ Return your response as JSON with this structure:
     }
 
     /**
+     * Admin CRM portal — structured command understanding
+     */
+    async understandAdminCommand(userMessage, context = {}) {
+        if (!this.isAvailable()) {
+            return null;
+        }
+
+        const { conversationHistory = [] } = context;
+        const systemPrompt = `You are an AI assistant for the Somo admin sales CRM (outbound clinic leads).
+
+Available actions (return exact action string):
+1. **show_leads** — list/filter sales leads
+   Examples: "show me 10 high-value leads", "list leads that need phone", "show call-ready leads in NY"
+2. **show_stats** — pipeline and call statistics
+   Examples: "what's our conversion rate?", "how many calls left this month?", "show stats"
+3. **suggest_call_list** — top leads to call today
+   Examples: "which leads should I call?", "suggest call list", "who should I call today?"
+4. **run_scrape** — report last scrape status (does NOT start a scrape)
+   Examples: "when was the last scrape?", "scrape status", "how did the last scrape go?"
+5. **call_lead** — initiate outbound call (requires user confirmation in UI)
+   Examples: "call Smile Dental", "call lead id abc-123"
+   Set target to lead UUID if known, otherwise clinic name substring.
+6. **help** — explain capabilities
+
+Return JSON:
+{
+  "action": "show_leads" | "show_stats" | "suggest_call_list" | "run_scrape" | "call_lead" | "help" | "clarify",
+  "target": "lead id, clinic name, or empty string",
+  "confidence": 0.0-1.0,
+  "response": "brief friendly reply under 25 words"
+}`;
+
+        try {
+            const model = 'llama-3.1-8b-instant';
+            let response;
+            if (this._useLangChain()) {
+                const msgs = [
+                    new SystemMessage(systemPrompt),
+                    ...conversationHistory.slice(-5).map((m) => {
+                        if (!m || !m.content) return null;
+                        return m.role === 'assistant' && AIMessage
+                            ? new AIMessage(m.content)
+                            : new HumanMessage(m.content);
+                    }).filter(Boolean),
+                    new HumanMessage(userMessage),
+                ].filter(Boolean);
+                const chatModel = new ChatGroq({
+                    apiKey: process.env.GROQ_API_KEY,
+                    model,
+                    temperature: 0.3,
+                    maxTokens: 200,
+                    response_format: { type: 'json_object' },
+                });
+                const res = await chatModel.invoke(msgs);
+                response = typeof res?.content === 'string' ? res.content : (res?.content ? JSON.stringify(res.content) : '');
+            } else {
+                const completion = await this.groq.chat.completions.create({
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...conversationHistory.slice(-5),
+                        { role: 'user', content: userMessage },
+                    ],
+                    model,
+                    temperature: 0.3,
+                    max_tokens: 200,
+                    response_format: { type: 'json_object' },
+                });
+                response = completion.choices[0]?.message?.content;
+            }
+            if (!response) return null;
+            const parsed = JSON.parse(response);
+            return {
+                action: parsed.action || 'help',
+                target: parsed.target || '',
+                confidence: parsed.confidence || 0.5,
+                response: parsed.response || '',
+                llm: true,
+            };
+        } catch (error) {
+            console.error('Admin LLM command error:', error.message);
+            return null;
+        }
+    }
+
+    /**
      * Get helpful response for errors or clarifications
      */
     async getHelpfulResponse(userMessage, context = {}) {

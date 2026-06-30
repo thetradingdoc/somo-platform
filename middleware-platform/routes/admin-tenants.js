@@ -18,8 +18,13 @@ const resolveTenantCustomerId = tenantHealth.resolveTenantCustomerId;
  */
 router.get('/alerts', requireTenantsAccess, async (req, res) => {
   try {
-    const alerts = tenantHealth.getAllTenantAlerts();
-    res.json({ alerts, total: alerts.length });
+    const { flat, grouped } = tenantHealth.getAllTenantAlerts();
+    res.json({
+      alerts: flat,
+      grouped_alerts: grouped,
+      total: flat.length,
+      clinic_count: grouped.length,
+    });
   } catch (error) {
     console.error('tenant alerts error:', error);
     res.status(500).json({ success: false, error: error.message });

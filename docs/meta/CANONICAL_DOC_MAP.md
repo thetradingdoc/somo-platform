@@ -34,7 +34,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
 | **Middleware depth** | [`architecture/MIDDLEWARE_PLATFORM.md`](../architecture/MIDDLEWARE_PLATFORM.md) | [`middleware-platform/README.md`](../middleware-platform/README.md) |
 | **Somo health agent** | [`architecture/SOMO_HEALTH_AGENT.md`](../architecture/SOMO_HEALTH_AGENT.md) | [`HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) |
-| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
+| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md), [`admin-portal/BACKLOG.md`](../admin-portal/BACKLOG.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
 | **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
 | **Active work** | [`todos/PENDING.md`](../../todos/PENDING.md) | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) (CR/FE detail) |
 | **Customer-ready gates** | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) | [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md) |

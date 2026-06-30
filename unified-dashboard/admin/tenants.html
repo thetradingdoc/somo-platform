@@ -22,12 +22,12 @@
     <div class="admin-crm-metrics admin-crm-metrics--3">
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Total tenants</div><div class="admin-crm-metric-value" id="mTotal">—</div></div>
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Critical alerts</div><div class="admin-crm-metric-value admin-crm-metric-danger" id="mCritical">—</div></div>
-      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Warnings</div><div class="admin-crm-metric-value" id="mWarning">—</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Clinics with alerts</div><div class="admin-crm-metric-value" id="mWarning">—</div></div>
     </div>
 
     <div class="admin-crm-two-col">
       <div class="admin-crm-card">
-        <div class="admin-crm-card-title">Alerts</div>
+        <div class="admin-crm-card-title">Alerts <span style="font-weight:400;font-size:11px;color:var(--muted);">one row per clinic</span></div>
         <div id="alertsList"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
       </div>
       <div class="admin-crm-card" id="detailPanel">
@@ -44,7 +44,7 @@
 
   <script src="/admin/assets/js/admin-shell.js"></script>
   <script>
-    const { apiFetch, esc, init } = AdminShell;
+    const { apiFetch, esc, init, showToast, confirmAction } = AdminShell;
     let allTenants = [];
 
     init('tenants');
@@ -58,29 +58,51 @@
       await Promise.all([loadAlerts(), loadTenants()]);
     }
 
+    function renderGroupedAlertRow(g, expanded) {
+      const sev = g.severity || 'warning';
+      const reasons = g.reasons || (g.reason ? [g.reason] : []);
+      const id = `alert-${g.clinic_id}`;
+      return `
+        <div class="admin-crm-row" style="flex-direction:column;align-items:stretch;cursor:pointer;" onclick="toggleAlertDetail('${id}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;width:100%;" onclick="event.stopPropagation();showDetail('${g.clinic_id}')">
+            <div>
+              <div style="font-weight:600;">${esc(g.company_name)}</div>
+              <div style="font-size:12px;color:var(--muted);">${reasons.length} issue${reasons.length === 1 ? '' : 's'}</div>
+            </div>
+            <span class="admin-crm-badge admin-crm-badge-${sev === 'critical' ? 'danger' : sev === 'info' ? 'info' : 'warning'}">${esc(sev)}</span>
+          </div>
+          <div id="${id}" class="${expanded ? '' : 'hidden'}" style="margin-top:8px;padding-left:8px;font-size:12px;color:var(--muted);">
+            ${reasons.map((r) => `<div style="margin-bottom:4px;">• ${esc(r)}</div>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    window.toggleAlertDetail = (id) => {
+      document.getElementById(id)?.classList.toggle('hidden');
+    };
+
     async function loadAlerts() {
       try {
         const r = await apiFetch('/api/admin/tenants/alerts');
-        const alerts = r.alerts || [];
-        const critical = alerts.filter(a => a.severity === 'critical').length;
-        const warning = alerts.filter(a => a.severity === 'warning').length;
+        const grouped = r.grouped_alerts || [];
+        const flat = r.alerts || [];
+        const rows = grouped.length ? grouped : flat.map((a) => ({
+          clinic_id: a.clinic_id,
+          company_name: a.company_name,
+          severity: a.severity,
+          reasons: [a.reason || a.minutes_remaining + ' min remaining'],
+        }));
+
+        const critical = rows.filter((a) => a.severity === 'critical').length;
         document.getElementById('mCritical').textContent = critical;
-        document.getElementById('mWarning').textContent = warning;
+        document.getElementById('mWarning').textContent = r.clinic_count ?? rows.length;
 
         const el = document.getElementById('alertsList');
-        if (!alerts.length) {
+        if (!rows.length) {
           el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">All tenants healthy</p>';
           return;
         }
-        el.innerHTML = alerts.map(a => `
-          <div class="admin-crm-row" onclick="showDetail('${a.clinic_id}')">
-            <div>
-              <div style="font-weight:600;">${esc(a.company_name)}</div>
-              <div style="font-size:12px;color:var(--muted);">${esc(a.reason)}</div>
-            </div>
-            <span class="admin-crm-badge admin-crm-badge-${a.severity === 'critical' ? 'danger' : a.severity === 'info' ? 'info' : 'warning'}">${esc(a.severity)}</span>
-          </div>
-        `).join('');
+        el.innerHTML = rows.map((g) => renderGroupedAlertRow(g, false)).join('');
       } catch (e) {
         document.getElementById('alertsList').innerHTML = '<p style="color:var(--muted);">Could not load alerts</p>';
       }
@@ -102,7 +124,7 @@
 
     function renderTable() {
       const q = document.getElementById('tenantSearch').value.trim().toLowerCase();
-      const filtered = allTenants.filter(t => !q || (t.name || '').toLowerCase().includes(q));
+      const filtered = allTenants.filter((t) => !q || (t.name || '').toLowerCase().includes(q));
       const el = document.getElementById('tenantTable');
       if (!filtered.length) {
         el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No tenants found</p>';
@@ -120,7 +142,7 @@
             </tr>
           </thead>
           <tbody>
-            ${filtered.map(t => `
+            ${filtered.map((t) => `
               <tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="showDetail('${t.clinic_id}')">
                 <td style="padding:10px 0;font-weight:600;">${esc(t.name)}</td>
                 <td>${t.minutes_remaining ?? t.credits?.balance_minutes ?? '—'}</td>
@@ -160,20 +182,22 @@
         panel.innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
       }
     }
+    window.showDetail = showDetail;
 
     async function allocateCredits(clinicId) {
       const credits = parseInt(document.getElementById('creditAmount').value, 10);
-      if (!credits || credits < 1) return alert('Enter valid minutes');
+      if (!credits || credits < 1) return showToast('Enter valid minutes', 'warning');
       try {
         await apiFetch(`/api/admin/tenants/${clinicId}/credits`, {
           method: 'POST',
           body: JSON.stringify({ credits, type: 'free' }),
         });
-        alert('Credits allocated');
+        showToast('Credits allocated', 'success');
         loadAll();
         showDetail(clinicId);
-      } catch (e) { alert(e.message); }
+      } catch (e) { showToast(e.message, 'error'); }
     }
+    window.allocateCredits = allocateCredits;
   </script>
 </body>
 </html>

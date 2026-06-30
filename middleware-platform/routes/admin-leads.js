@@ -15,11 +15,13 @@ const express = require('express');
 const { searchJobs } = require('../services/job-scraper');
 const { extractContactInfo } = require('../services/contact-extractor');
 const leadIngestion = require('../services/lead-ingestion');
+const scrapeIngestion = require('../services/admin-scrape-ingestion');
 const { buildLanguageInstruction, parseRequiredLanguages, extractLanguagesFromJob } = require('../services/lead-language-extractor');
 const { requireAdminOrCapability } = require('../middleware/admin-auth');
 const { adminLimiter } = require('../middleware/rate-limiter');
 const RetellService = require('../services/retell-service');
 const db = require('../database');
+const facade = require('../services/admin-lead-facade');
 
 const router = express.Router();
 const retellService = new RetellService();
@@ -102,55 +104,28 @@ router.post('/save', requireAdminOrCapability('platform.leads'), adminLimiter, a
       clinic_name: leadData.clinic_name,
       location: leadData.location,
     };
-    const enriched = await leadIngestion.enrichJobCandidate(jobLike);
-
-    if (!leadIngestion.isCallableLead(enriched)) {
-      return res.status(422).json({
-        success: false,
-        error: 'Lead has no callable phone number after enrichment',
-      });
+    const outcome = await scrapeIngestion.enrichAndPersist(jobLike, { source: leadData.source || 'admin_save' });
+    if (outcome.status === 'duplicate') {
+      const existing = db.getLeadByExternalId(leadData.external_id);
+      return res.json({ success: true, message: 'Lead already exists', lead: existing });
+    }
+    if (outcome.status === 'error') {
+      return res.status(500).json({ success: false, error: outcome.error });
     }
 
-    leadData.clinic_phone = enriched.clinic_phone;
-    leadData.clinic_email = enriched.clinic_email || leadData.clinic_email;
-    leadData.opening_hours = enriched.opening_hours || leadData.opening_hours;
-    leadData.source_url = enriched.source_url;
-    leadData.notes = leadIngestion.buildNotesWithJobPosting(enriched.job_posting_url, leadData.notes);
-    const lang = extractLanguagesFromJob({
-      title: leadData.title,
-      description: leadData.description,
-    });
-    leadData.required_languages = lang.required_languages.length
-      ? JSON.stringify(lang.required_languages)
-      : null;
-    leadData.preferred_language = lang.preferred_language;
+    const lead = outcome.lead;
+    const enriched = outcome.enriched || {};
     const extractedContacts = {
       phone: enriched.clinic_phone,
       email: enriched.clinic_email,
       openingHours: enriched.opening_hours,
     };
 
-    const result = db.createLead(leadData);
-    const lead = db.getLead(result.lastInsertRowid || leadData.id);
-
-    // Auto-score the new lead
-    try {
-      const LeadIntelligenceService = require('../services/lead-intelligence-service');
-      LeadIntelligenceService.updateLeadScore(lead.id);
-      // Refresh lead to get updated score
-      const updatedLead = db.getLead(lead.id);
-      if (updatedLead) {
-        Object.assign(lead, updatedLead);
-      }
-    } catch (scoreError) {
-      console.warn('⚠️  Auto-scoring failed for new lead:', scoreError.message);
-      // Continue anyway - scoring is not critical
-    }
-
     res.json({
       success: true,
-      message: 'Lead saved successfully',
+      message: outcome.callable ? 'Lead saved successfully' : 'Lead saved (needs phone enrichment)',
       lead,
+      callable: outcome.callable,
       extracted_contacts: extractedContacts.phone || extractedContacts.email ? extractedContacts : null
     });
   } catch (error) {
@@ -289,6 +264,14 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
       });
     }
 
+    if (schedule_type === 'weekly' || schedule_type === 'monthly') {
+      return res.status(400).json({
+        success: false,
+        error: 'Scheduled outbound calls are not yet supported. Use instant calls only.',
+        code: 'SCHEDULE_NOT_SUPPORTED',
+      });
+    }
+
     // Secondary guard: monthly_call_usage 250/mo cap (primary billing is usage_events via retell-websocket)
     const now = new Date();
     const billingMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -334,49 +317,6 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
       pipeline_stage: lead.pipeline_stage === 'new' ? 'contacted' : lead.pipeline_stage
     });
 
-    // Handle scheduling
-    if (schedule_type === 'weekly' || schedule_type === 'monthly') {
-      // TODO: Implement background job scheduler for weekly/monthly calls
-      // For now, create a scheduled activity record
-      const scheduleDate = new Date();
-      if (schedule_type === 'weekly') {
-        scheduleDate.setDate(scheduleDate.getDate() + 7);
-      } else if (schedule_type === 'monthly') {
-        scheduleDate.setMonth(scheduleDate.getMonth() + 1);
-      }
-
-      db.createLeadActivity({
-        lead_id: id,
-        activity_type: 'call',
-        activity_subject: `Call Scheduled (${schedule_type})`,
-        activity_description: `Scheduled ${schedule_type} call to ${lead.clinic_name} for ${scheduleDate.toISOString().split('T')[0]}`,
-        created_by: req.user?.id || 'system',
-        metadata: JSON.stringify({
-          schedule_type: schedule_type,
-          scheduled_date: scheduleDate.toISOString(),
-          status: 'scheduled'
-        })
-      });
-
-      db.updateLead(id, {
-        follow_up_date: scheduleDate.toISOString(),
-        next_action: `Scheduled ${schedule_type} call`
-      });
-
-      const callStats = db.getCallUsageStats();
-      return res.json({
-        success: true,
-        message: `Call scheduled for ${schedule_type} cadence`,
-        schedule: scheduleDate.toISOString().split('T')[0],
-        call_usage: {
-          calls_used: callStats.calls_used,
-          calls_remaining: callStats.calls_remaining,
-          limit: 250
-        },
-        note: 'Scheduled calls will be processed by background job (coming soon)'
-      });
-    }
-
     // Actually initiate the call via Retell's outbound API (RECOMMENDED)
     // This avoids SIP authentication issues and is more reliable
     let retellCallId = null;
@@ -411,6 +351,12 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
       console.log(`   Lead: ${lead.clinic_name}`);
 
       // Prepare dynamic variables for the sales agent (accessible in prompt as {{clinic_name}}, etc.)
+      const lastCall = db.db.prepare(`
+        SELECT outcome, call_status, notes FROM lead_calls
+        WHERE lead_id = ? ORDER BY created_at DESC LIMIT 1
+      `).get(id);
+      const jobSnippet = (lead.description || lead.notes || '').slice(0, 200);
+
       const dynamicVariables = {
         clinic_name: lead.clinic_name || 'the clinic',
         lead_id: id,
@@ -421,6 +367,9 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
         preferred_language: lead.preferred_language || 'en',
         required_languages: parseRequiredLanguages(lead.required_languages).join(', ') || 'English only',
         language_instruction: buildLanguageInstruction(lead),
+        pipeline_stage: facade.normalizeStage(lead.pipeline_stage),
+        last_call_outcome: lastCall?.outcome || lastCall?.call_status || 'none',
+        job_snippet: jobSnippet,
       };
 
       // Create outbound call via Retell API
@@ -759,7 +708,6 @@ router.post('/webhooks/retell-call-event', async (req, res) => {
         call_cost: cost
       });
 
-      // Create activity
       db.createLeadActivity({
         lead_id: leadCall.lead_id,
         activity_type: 'call',
@@ -772,6 +720,13 @@ router.post('/webhooks/retell-call-event', async (req, res) => {
           cost: cost
         })
       });
+
+      try {
+        const callOutcome = require('../services/admin-call-outcome-service');
+        await callOutcome.processCallEnded(leadCall, call_id, call_data || {});
+      } catch (e) {
+        console.warn('Post-call outcome processing failed:', e.message);
+      }
     }
 
     res.json({ success: true, message: 'Event processed' });
@@ -1126,6 +1081,19 @@ router.get('/qualified', requireAdminOrCapability('platform.leads'), adminLimite
       message: error.message
     });
   }
+});
+
+/**
+ * GET /api/admin/leads/sales-agent/info
+ */
+router.get('/sales-agent/info', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
+  const agentId = process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID || null;
+  res.json({
+    success: true,
+    configured: !!agentId,
+    agent_id: agentId,
+    agent_name: 'Somo Sales Agent - Alex',
+  });
 });
 
 /**
@@ -1510,38 +1478,26 @@ router.get('/insights/medical-receptionist', requireAdminOrCapability('platform.
     // Auto-save all leads if requested
     const savedLeads = [];
     if (autoSave) {
-      console.log(`💾 Auto-saving ${leads.length} leads...`);
+      console.log(`💾 Auto-saving ${leads.length} leads via shared ingestion...`);
       for (const leadData of leads) {
         try {
-          // Check if lead already exists by external_id (most reliable)
-          let existing = null;
-          if (leadData.external_id) {
-            existing = db.getLeadByExternalId(leadData.external_id);
-          }
-
-          // Fallback: check by clinic name + location if no external_id
-          if (!existing && leadData.clinic_name) {
-            const allLeads = db.getAllLeads({ clinic_name: leadData.clinic_name, limit: 100 });
-            existing = allLeads.find(l =>
-              l.clinic_name === leadData.clinic_name &&
-              l.location === leadData.location
-            );
-          }
-
-          if (!existing) {
-            const saved = db.createLead(leadData);
-            savedLeads.push(saved);
-            console.log(`✅ Saved: ${leadData.clinic_name}`);
-          } else {
+          const jobLike = {
+            ...leadData,
+            source_url: leadData.source_url,
+            clinic_name: leadData.clinic_name,
+            location: leadData.location,
+            description: leadData.description,
+            title: leadData.title,
+          };
+          const outcome = await scrapeIngestion.enrichAndPersist(jobLike, { source: 'medical_receptionist_insights' });
+          if (outcome.status === 'saved') {
+            savedLeads.push(outcome.lead);
+            console.log(`✅ Saved: ${leadData.clinic_name}${outcome.callable ? '' : ' (needs phone)'}`);
+          } else if (outcome.status === 'duplicate') {
             console.log(`⏭️  Skipped duplicate: ${leadData.clinic_name}`);
           }
         } catch (saveError) {
-          // If it's a UNIQUE constraint error, it's a duplicate - skip it
-          if (saveError.message && saveError.message.includes('UNIQUE constraint')) {
-            console.log(`⏭️  Skipped duplicate (external_id): ${leadData.clinic_name}`);
-          } else {
-            console.error(`❌ Failed to save ${leadData.clinic_name}:`, saveError.message);
-          }
+          console.error(`❌ Failed to save ${leadData.clinic_name}:`, saveError.message);
         }
       }
       console.log(`✅ Auto-saved ${savedLeads.length} new leads`);
@@ -1804,7 +1760,17 @@ router.post('/configure-sales-agent', requireAdminOrCapability('platform.leads')
 router.put('/:id', requireAdminOrCapability('platform.leads'), adminLimiter, async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
+
+    if (updates.source_url) {
+      const { isJobBoardUrl } = require('../services/contact-extractor');
+      if (isJobBoardUrl(updates.source_url)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Job-board URLs cannot be saved as clinic website. Enter the clinic site directly.',
+        });
+      }
+    }
 
     db.updateLead(id, updates);
     const updatedLead = db.getLead(id);
@@ -1840,12 +1806,35 @@ router.delete('/:id', requireAdminOrCapability('platform.leads'), adminLimiter, 
       });
     }
 
+    const { v4: uuidv4 } = require('uuid');
+    const snapshot = {
+      clinic_name: lead.clinic_name,
+      clinic_phone: lead.clinic_phone,
+      pipeline_stage: lead.pipeline_stage,
+      external_id: lead.external_id,
+    };
+    try {
+      db.db.prepare(`
+        INSERT INTO admin_lead_deletions (id, lead_id, clinic_name, deleted_by, snapshot_json)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        uuidv4(),
+        id,
+        lead.clinic_name,
+        req.adminSession ? 'admin_session' : 'admin',
+        JSON.stringify(snapshot)
+      );
+    } catch (auditErr) {
+      console.warn('admin_lead_deletions audit insert failed:', auditErr.message);
+    }
+
     db.deleteLead(id);
 
     res.json({
       success: true,
       message: 'Lead deleted successfully',
-      deleted_lead_id: id
+      deleted_lead_id: id,
+      clinic_name: lead.clinic_name,
     });
   } catch (error) {
     console.error('❌ Delete lead error:', error);

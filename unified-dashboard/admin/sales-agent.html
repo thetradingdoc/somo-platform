@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Sales agent</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/admin-portal.css">
+  <script src="/assets/js/config.js"></script>
+</head>
+<body>
+  <aside id="admin-sidebar"></aside>
+  <main class="admin-crm-main admin-crm-main--narrow">
+    <div class="admin-crm-header">
+      <div>
+        <div class="admin-crm-title">Sales agent config</div>
+        <div class="admin-crm-subtitle">Retell outbound agent — Alex</div>
+      </div>
+    </div>
+
+    <div class="admin-crm-card">
+      <div class="admin-crm-card-title">Agent status</div>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 16px;">
+        Pushes the latest sales prompt and function definitions to Retell.
+      </p>
+      <div id="agentStatus" style="font-size:13px;margin-bottom:16px;">Loading...</div>
+      <button class="btn btn-primary" id="btnConfigure" data-require-capability="platform.leads">Sync agent to Retell</button>
+    </div>
+
+    <div class="admin-crm-card">
+      <div class="admin-crm-card-title">Dynamic variables sent on calls</div>
+      <ul style="font-size:13px;color:var(--muted);padding-left:20px;line-height:1.8;">
+        <li>clinic_name, location, specialty, pipeline_stage</li>
+        <li>languages / preferred_language, job_snippet</li>
+        <li>last_call_outcome from prior calls</li>
+      </ul>
+    </div>
+  </main>
+
+  <script src="/admin/assets/js/admin-shell.js"></script>
+  <script>
+    const { apiFetch, esc, init, showToast } = AdminShell;
+    init('sales-agent');
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('btnConfigure').onclick = configureAgent;
+      loadStatus();
+    });
+
+    async function loadStatus() {
+      const el = document.getElementById('agentStatus');
+      try {
+        const [agent, scrape] = await Promise.all([
+          apiFetch('/api/admin/leads/sales-agent/info'),
+          apiFetch('/api/admin/scrape/status'),
+        ]);
+        el.innerHTML = `
+          <div>Retell agent ID: <code>${agent.configured ? esc(agent.agent_id) : 'not configured'}</code></div>
+          <div>Agent name: <strong>${esc(agent.agent_name || '—')}</strong></div>
+          <div style="margin-top:8px;">Call cap: <strong>${scrape.calls_remaining ?? 250}</strong> remaining · Call-ready: <strong>${scrape.leads?.verified ?? 0}</strong></div>`;
+        if (!agent.configured) {
+          el.innerHTML += `<p style="color:#633806;margin-top:8px;">Set RETELL_SALES_AGENT_ID on the API server.</p>`;
+        }
+      } catch (e) {
+        el.textContent = 'Could not load status: ' + e.message;
+      }
+    }
+
+    async function configureAgent() {
+      const btn = document.getElementById('btnConfigure');
+      btn.disabled = true;
+      btn.textContent = 'Syncing...';
+      try {
+        const r = await apiFetch('/api/admin/leads/configure-sales-agent', { method: 'POST' });
+        showToast(r.message || 'Agent configured', 'success');
+        loadStatus();
+      } catch (e) {
+        showToast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sync agent to Retell';
+      }
+    }
+  </script>
+</body>
+</html>
