@@ -5,6 +5,7 @@ const { getTier } = require('./plan-catalog');
 const OPERATOR_CAPABILITIES = [
   'platform.leads',
   'platform.tenants',
+  'platform.tenants.delete',
   'platform.feature_flags',
   'voice.outbound_unlimited',
   'voice.inbound',

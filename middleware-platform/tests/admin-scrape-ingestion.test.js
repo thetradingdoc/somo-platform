@@ -70,6 +70,34 @@ test('formatLeadForApi normalizes suggested_stage to UI label', () => {
   assert.strictEqual(formatted.pipeline_stage, 'demo');
 });
 
+test('matchesLocation filters by substring', () => {
+  const facade = require('../services/admin-lead-facade');
+  assert.strictEqual(facade.matchesLocation({ location: 'Boston, MA' }, 'Boston'), true);
+  assert.strictEqual(facade.matchesLocation({ location: 'Boston, MA' }, ''), true);
+  assert.strictEqual(facade.matchesLocation({ location: 'Boston, MA' }, 'Texas'), false);
+});
+
+test('persistScrapedJob saves phoneless leads (source contract)', () => {
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, '../services/admin-scrape-ingestion.js'),
+    'utf8'
+  );
+  assert.ok(src.includes('Saves all non-duplicates regardless of phone'), 'ingestion saves phoneless leads');
+  assert.ok(src.includes('db.createLead(leadData)'), 'ingestion calls createLead');
+  assert.ok(!/if\s*\(\s*!.*isCallableLead.*\)\s*\{[\s\S]*createLead/.test(src), 'no callable gate before createLead');
+});
+
+test('gcs-db-persist no-ops without GCS_DB_BUCKET', async () => {
+  const prev = process.env.GCS_DB_BUCKET;
+  delete process.env.GCS_DB_BUCKET;
+  delete require.cache[require.resolve('../utils/gcs-db-persist')];
+  const { persistSqliteToGcs } = require('../utils/gcs-db-persist');
+  const r = await persistSqliteToGcs('test');
+  assert.strictEqual(r.skipped, true);
+  if (prev) process.env.GCS_DB_BUCKET = prev;
+  delete require.cache[require.resolve('../utils/gcs-db-persist')];
+});
+
 if (process.exitCode) {
   console.error('\nSome tests failed');
 } else {

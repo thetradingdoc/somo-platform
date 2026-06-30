@@ -13,27 +13,34 @@
   <main class="admin-crm-main admin-crm-main--narrow">
     <div class="admin-crm-header">
       <div>
-        <div class="admin-crm-title">Sales agent config</div>
-        <div class="admin-crm-subtitle">Retell outbound agent — Alex</div>
+        <h1 class="admin-crm-title">Sales agent</h1>
+        <p class="admin-crm-subtitle">Configure the Retell voice agent used for outbound sales calls</p>
       </div>
     </div>
 
     <div class="admin-crm-card">
-      <div class="admin-crm-card-title">Agent status</div>
-      <p style="font-size:13px;color:var(--muted);margin:0 0 16px;">
-        Pushes the latest sales prompt and function definitions to Retell.
-      </p>
-      <div id="agentStatus" style="font-size:13px;margin-bottom:16px;">Loading...</div>
-      <button class="btn btn-primary" id="btnConfigure" data-require-capability="platform.leads">Sync agent to Retell</button>
+      <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Agent status</h3></div>
+      <div style="padding:0 18px 18px;">
+        <p style="font-size:13px;color:var(--ink-soft);margin:0 0 10px;">This agent calls every lead in the call-ready queue. Changes here apply to new calls only.</p>
+        <div id="agentStatus">Loading...</div>
+        <button class="btn btn-primary" id="btnConfigure" data-require-capability="platform.leads" style="margin-top:14px;">Sync agent to Retell</button>
+      </div>
     </div>
 
     <div class="admin-crm-card">
-      <div class="admin-crm-card-title">Dynamic variables sent on calls</div>
-      <ul style="font-size:13px;color:var(--muted);padding-left:20px;line-height:1.8;">
-        <li>clinic_name, location, specialty, pipeline_stage</li>
-        <li>languages / preferred_language, job_snippet</li>
-        <li>last_call_outcome from prior calls</li>
-      </ul>
+      <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Dynamic variables</h3></div>
+      <div style="padding:0 18px 18px;">
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 4px;">Sent to the agent at call time, personalized per lead.</p>
+        <ul class="admin-crm-var-list">
+          <li><code>clinic_name</code> Clinic or practice name</li>
+          <li><code>job_title</code> Open role being hired for</li>
+          <li><code>location</code> City and state</li>
+          <li><code>specialty</code> Dental or medical</li>
+          <li><code>required_languages</code> Languages requested in the posting</li>
+          <li><code>last_call_outcome</code> Result of the most recent call, if any</li>
+          <li><code>pipeline_stage</code> Current stage in the funnel</li>
+        </ul>
+      </div>
     </div>
   </main>
 
@@ -55,11 +62,14 @@
           apiFetch('/api/admin/scrape/status'),
         ]);
         el.innerHTML = `
-          <div>Retell agent ID: <code>${agent.configured ? esc(agent.agent_id) : 'not configured'}</code></div>
-          <div>Agent name: <strong>${esc(agent.agent_name || '—')}</strong></div>
-          <div style="margin-top:8px;">Call cap: <strong>${scrape.calls_remaining ?? 250}</strong> remaining · Call-ready: <strong>${scrape.leads?.verified ?? 0}</strong></div>`;
+          <div class="admin-crm-agent-status-box">
+            <div class="admin-crm-agent-status-row"><span>Agent ID</span><code class="admin-crm-code-tag">${agent.configured ? esc(agent.agent_id) : 'not configured'}</code></div>
+            <div class="admin-crm-agent-status-row"><span>Agent name</span><span>${esc(agent.agent_name || '—')}</span></div>
+            <div class="admin-crm-agent-status-row"><span>Monthly cap</span><span>${scrape.calls_cap || 250} calls</span></div>
+            <div class="admin-crm-agent-status-row"><span>Call-ready now</span><span>${scrape.leads?.verified ?? 0} leads</span></div>
+          </div>`;
         if (!agent.configured) {
-          el.innerHTML += `<p style="color:#633806;margin-top:8px;">Set RETELL_SALES_AGENT_ID on the API server.</p>`;
+          el.innerHTML += `<p style="color:var(--amber-text);margin-top:8px;font-size:12.5px;">Set RETELL_SALES_AGENT_ID on the API server.</p>`;
         }
       } catch (e) {
         el.textContent = 'Could not load status: ' + e.message;

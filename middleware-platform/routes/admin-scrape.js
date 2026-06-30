@@ -12,6 +12,7 @@ const { adminLimiter } = require('../middleware/rate-limiter');
 const db = require('../database');
 const facade = require('../services/admin-lead-facade');
 const jobTracker = require('../services/admin-job-tracker');
+const { persistSqliteToGcs } = require('../utils/gcs-db-persist');
 
 const router = express.Router();
 const requireLeads = requireAdminOrCapability('platform.leads');
@@ -112,6 +113,8 @@ router.get('/leads/export', requireLeads, adminLimiter, async (req, res) => {
     const { leads } = facade.querySalesLeads({
       contact_status: req.query.contact_status || undefined,
       specialty: req.query.specialty || undefined,
+      location: req.query.location || undefined,
+      location_mode: req.query.location_mode || undefined,
       search: req.query.search || undefined,
       callable_only: req.query.callable_only === '1',
       limit: 5000,
@@ -138,6 +141,9 @@ router.get('/leads/call-ready', requireLeads, adminLimiter, async (req, res) => 
     const limit = parseInt(req.query.limit, 10) || 10;
     const { leads } = facade.querySalesLeads({
       contact_status: 'verified',
+      specialty: req.query.specialty || undefined,
+      location: req.query.location || undefined,
+      location_mode: req.query.location_mode || undefined,
       callable_only: true,
       limit: 500,
     });
@@ -158,7 +164,9 @@ router.get('/leads/call-ready', requireLeads, adminLimiter, async (req, res) => 
 router.get('/leads/pipeline', requireLeads, adminLimiter, async (req, res) => {
   try {
     const specialty = req.query.specialty || '';
-    const view = facade.getPipelineView(specialty);
+    const location = req.query.location || '';
+    const locationMode = req.query.location_mode || '';
+    const view = facade.getPipelineView(specialty, location, locationMode);
     res.json(view);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -175,12 +183,29 @@ router.get('/leads', requireLeads, adminLimiter, async (req, res) => {
     const { leads, total } = facade.querySalesLeads({
       contact_status: req.query.contact_status || undefined,
       specialty: req.query.specialty || undefined,
+      location: req.query.location || undefined,
+      location_mode: req.query.location_mode || undefined,
       search: req.query.search || undefined,
       callable_only: req.query.contact_status === 'verified' || req.query.callable_only === '1',
       limit,
       offset,
     });
     res.json({ leads, total });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/scrape/leads/locations
+ */
+router.get('/leads/locations', requireLeads, adminLimiter, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const group = req.query.group || 'raw';
+    const state = req.query.state || '';
+    const locations = facade.getDistinctLeadLocations({ group, state, limit });
+    res.json({ locations, group });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -313,6 +338,20 @@ router.post('/leads/:id/note', requireLeads, adminLimiter, async (req, res) => {
   }
 });
 
+function resolveScrapeLocations(req) {
+  const fromBody = req?.body?.locations;
+  if (Array.isArray(fromBody) && fromBody.length) {
+    return fromBody.map(String).filter(Boolean);
+  }
+  const envList = process.env.MEDICAL_RECEPTIONIST_LOCATIONS;
+  if (envList && envList.includes('|')) {
+    return envList.split('|').map((s) => s.trim()).filter(Boolean);
+  }
+  const single = process.env.MEDICAL_RECEPTIONIST_LOCATION;
+  if (single && String(single).trim()) return [String(single).trim()];
+  return ['New York, NY', 'New York', 'US'];
+}
+
 function resolveScrapeEngines() {
   const fromEnv = (process.env.JOB_SEARCH_ENGINE || '').trim();
   if (fromEnv) return [fromEnv];
@@ -352,58 +391,70 @@ router.post('/run', requireLeads, adminLimiter, async (req, res) => {
       'Healthcare front desk receptionist',
     ];
     const maxSave = parseInt(process.env.MEDICAL_RECEPTIONIST_MAX_LEADS || '50', 10);
+    const scrapeLocations = resolveScrapeLocations(req);
 
-    jobTracker.sseWrite(res, { msg: `Engines: ${engines.join(', ')} (${detectJobSearchProvider()})` });
+    jobTracker.sseWrite(res, {
+      msg: `Regions: ${scrapeLocations.join(' → ')} (stop at ${maxSave} saves)`,
+    });
 
-    for (const engine of engines) {
-      for (const query of queries) {
-        if (saved >= maxSave) break;
-        jobTracker.sseWrite(res, { type: 'progress', source: engine, msg: `Query: ${query.slice(0, 40)}…` });
-        const searchResults = await searchJobs({
-          query,
-          location: process.env.MEDICAL_RECEPTIONIST_LOCATION || 'US',
-          postedSinceDays: parseInt(process.env.MEDICAL_RECEPTIONIST_DAYS || '3', 10),
-          engine,
-        });
-        rawFound += searchResults?.length || 0;
+    locationLoop: for (const scrapeLocation of scrapeLocations) {
+      if (saved >= maxSave) break;
+      jobTracker.sseWrite(res, { msg: `Searching ${scrapeLocation}…` });
 
-        for (const job of searchResults || []) {
-          if (saved >= maxSave) break;
-          enrichAttempts++;
-          const outcome = await scrapeIngestion.enrichAndPersist(job, { source: engine });
-          if (outcome.enriched?.clinic_phone || outcome.enriched?.clinic_email) enrichHits++;
+      for (const engine of engines) {
+        for (const query of queries) {
+          if (saved >= maxSave) break locationLoop;
+          jobTracker.sseWrite(res, {
+            type: 'progress',
+            source: engine,
+            msg: `[${scrapeLocation}] ${query.slice(0, 40)}…`,
+          });
+          const searchResults = await searchJobs({
+            query,
+            location: scrapeLocation,
+            postedSinceDays: parseInt(process.env.MEDICAL_RECEPTIONIST_DAYS || '3', 10),
+            engine,
+          });
+          rawFound += searchResults?.length || 0;
 
-          if (outcome.status === 'duplicate') {
-            skippedDupes++;
-            continue;
-          }
-          if (outcome.status === 'error') {
-            jobTracker.sseWrite(res, { msg: `Skip: ${outcome.error}` });
-            continue;
-          }
+          for (const job of searchResults || []) {
+            if (saved >= maxSave) break locationLoop;
+            enrichAttempts++;
+            const outcome = await scrapeIngestion.enrichAndPersist(job, { source: engine });
+            if (outcome.enriched?.clinic_phone || outcome.enriched?.clinic_email) enrichHits++;
 
-          const ext = outcome.external_id;
-          if (ext && seenExternal.has(ext)) {
-            skippedDupes++;
-            continue;
-          }
-          if (ext) seenExternal.add(ext);
+            if (outcome.status === 'duplicate') {
+              skippedDupes++;
+              continue;
+            }
+            if (outcome.status === 'error') {
+              jobTracker.sseWrite(res, { msg: `Skip: ${outcome.error}` });
+              continue;
+            }
 
-          saved++;
-          if (outcome.callable) {
-            savedCallable++;
-            jobTracker.sseWrite(res, {
-              msg: `Saved (callable): ${job.clinic_name || job.title || 'Unknown'}`,
-            });
-          } else {
-            savedNeedsPhone++;
-            jobTracker.sseWrite(res, {
-              msg: `Saved (needs phone): ${job.clinic_name || job.title || 'Unknown'}`,
-            });
-          }
+            const ext = outcome.external_id;
+            if (ext && seenExternal.has(ext)) {
+              skippedDupes++;
+              continue;
+            }
+            if (ext) seenExternal.add(ext);
 
-          if (saved % 5 === 0) {
-            jobTracker.sseWrite(res, { msg: `Saved ${saved} leads so far...` });
+            saved++;
+            if (outcome.callable) {
+              savedCallable++;
+              jobTracker.sseWrite(res, {
+                msg: `Saved (callable): ${job.clinic_name || job.title || 'Unknown'}`,
+              });
+            } else {
+              savedNeedsPhone++;
+              jobTracker.sseWrite(res, {
+                msg: `Saved (needs phone): ${job.clinic_name || job.title || 'Unknown'}`,
+              });
+            }
+
+            if (saved % 5 === 0) {
+              jobTracker.sseWrite(res, { msg: `Saved ${saved} leads so far...` });
+            }
           }
         }
       }
@@ -422,9 +473,14 @@ router.post('/run', requireLeads, adminLimiter, async (req, res) => {
       enrich_attempts: enrichAttempts,
       enrich_hits: enrichHits,
       engine: 'jsearch',
+      scrape_locations: scrapeLocations,
     };
     jobTracker.finishJob('scrape', result);
-    jobTracker.sseWrite(res, { type: 'done', result });
+    const gcsPersist = await persistSqliteToGcs('scrape');
+    jobTracker.sseWrite(res, {
+      type: 'done',
+      result: { ...result, gcs_persisted: gcsPersist.ok === true },
+    });
   } catch (error) {
     console.error('scrape/run error:', error);
     jobTracker.finishJob('scrape', null, error);
@@ -435,3 +491,4 @@ router.post('/run', requireLeads, adminLimiter, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.resolveScrapeLocations = resolveScrapeLocations;

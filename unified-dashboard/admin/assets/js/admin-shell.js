@@ -3,12 +3,14 @@
  */
 (function () {
   const NAV = [
-    { id: 'board', href: '/admin/', label: 'Control board', icon: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
-    { id: 'pipeline', href: '/admin/pipeline.html', label: 'Sales pipeline', icon: '<path d="M3 6h18M3 12h14M3 18h9"/>' },
-    { id: 'tenants', href: '/admin/tenants.html', label: 'Tenants', icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
-    { id: 'sales-agent', href: '/admin/sales-agent.html', label: 'Sales agent', icon: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>' },
-    { id: 'provider', href: '/business/today.html', label: 'Provider portal', icon: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>', bottom: true },
+    { id: 'board', href: '/admin/', label: 'Control board', group: 'workspace', icon: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>' },
+    { id: 'pipeline', href: '/admin/pipeline.html', label: 'Sales pipeline', group: 'workspace', badgeKey: 'pipeline', icon: '<path d="M4 6h16M4 12h16M4 18h10"/>' },
+    { id: 'tenants', href: '/admin/tenants.html', label: 'Tenants', group: 'workspace', badgeKey: 'tenants', icon: '<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17" cy="8" r="2.6"/><path d="M16 14.2c2.8.6 5 2.7 5 5.8"/>' },
+    { id: 'sales-agent', href: '/admin/sales-agent.html', label: 'Sales agent', group: 'workspace', icon: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M9 22h6"/>' },
+    { id: 'provider', href: '/business/today.html', label: 'Provider portal ↗', group: 'shortcuts', external: true, icon: '<path d="M14 3h7v7M21 3l-9 9M5 5h6v0H5v14h14v-6"/>' },
   ];
+
+  let navBadges = {};
 
   let capabilities = [];
   let sessionLoaded = false;
@@ -53,8 +55,8 @@
     if (!banner) {
       banner = document.createElement('div');
       banner.id = 'adminAuthBanner';
-      banner.className = 'admin-crm-status-banner';
-      banner.style.cssText = 'background:#faeeda;border-color:#633806;margin-bottom:12px;';
+      banner.className = 'admin-crm-status-banner admin-crm-status-banner--warning';
+      banner.style.marginBottom = '12px';
       const main = document.querySelector('.admin-crm-main');
       if (main) {
         main.insertBefore(banner, main.firstChild?.nextSibling || main.firstChild);
@@ -62,9 +64,10 @@
     }
     const loginHref = adminLoginUrl();
     banner.innerHTML = `
-      <span style="font-size:13px;color:#633806;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9L2.6 17.5A1.9 1.9 0 0 0 4.3 20.5h15.4a1.9 1.9 0 0 0 1.7-3L13.7 3.9a1.9 1.9 0 0 0-3.4 0z"/></svg>
+      <span style="font-size:13px;flex:1;">
         Session expired or not signed in.
-        <a href="${loginHref}" style="color:#238108;font-weight:600;margin-left:6px;">Sign in again</a>
+        <a href="${loginHref}" class="admin-crm-banner-link">Sign in again</a>
       </span>`;
     banner.style.display = 'flex';
   }
@@ -82,22 +85,87 @@
     }
   }
 
-  function renderEnvBadge() {
+  function apiHostLabel() {
+    const base = window.API_BASE || '';
+    if (!base) return 'local';
+    try {
+      const u = new URL(base);
+      return u.hostname.replace(/^www\./, '');
+    } catch {
+      return base.slice(0, 28);
+    }
+  }
+
+  function envLabel() {
     const override = localStorage.getItem('api_base');
     const label = apiBaseLabel();
-    let el = document.getElementById('adminEnvBadge');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'adminEnvBadge';
-      el.className = 'admin-crm-env-badge';
-      document.body.appendChild(el);
-    }
-    const warn = override ? ' · override' : '';
-    el.textContent = `API: ${label}${warn}`;
-    el.title = override
-      ? `Using localStorage.api_base override: ${override}`
+    const host = apiHostLabel();
+    const envName = label === 'prod' ? 'Production' : label === 'staging' ? 'Staging' : label === 'local' ? 'Local' : label;
+    return { envName, host, warn: !!override };
+  }
+
+  function renderEnvBadge() {
+    const { envName, host, warn } = envLabel();
+    const el = document.getElementById('adminEnvPill');
+    if (!el) return;
+    el.innerHTML = `<span class="admin-crm-env-dot"></span> ${esc(envName)} · ${esc(host)}`;
+    el.classList.toggle('warn', warn);
+    el.title = warn
+      ? `Using localStorage.api_base override: ${localStorage.getItem('api_base')}`
       : (window.API_BASE || 'same-origin');
-    if (override) el.classList.add('warn');
+  }
+
+  async function loadNavBadges() {
+    if (!hasCapability('platform.leads') && !hasCapability('platform.tenants')) return;
+    try {
+      const tasks = [];
+      if (hasCapability('platform.leads')) {
+        tasks.push(
+          apiFetch('/api/admin/scrape/status').then((r) => {
+            navBadges.pipeline = (r.leads?.needs_phone || 0) + (r.leads?.verified || 0);
+          }).catch(() => {})
+        );
+      }
+      if (hasCapability('platform.tenants')) {
+        tasks.push(
+          apiFetch('/api/admin/tenants/alerts').then((r) => {
+            navBadges.tenants = r.clinic_count ?? (r.grouped_alerts || r.alerts || []).length;
+          }).catch(() => {})
+        );
+      }
+      await Promise.all(tasks);
+      document.querySelectorAll('[data-nav-badge]').forEach((badge) => {
+        const key = badge.dataset.navBadge;
+        const n = navBadges[key];
+        if (n > 0) {
+          badge.textContent = n > 99 ? '99+' : String(n);
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+      });
+    } catch { /* optional */ }
+  }
+
+  let rateLimitToastShown = false;
+
+  function rateLimitMessage(resp) {
+    const retryAfter = resp.headers.get('Retry-After');
+    if (retryAfter) {
+      const secs = parseInt(retryAfter, 10);
+      if (Number.isFinite(secs) && secs > 0) {
+        return `Rate limited — wait ${secs} seconds and retry`;
+      }
+    }
+    const reset = resp.headers.get('RateLimit-Reset');
+    if (reset) {
+      const resetMs = parseInt(reset, 10) * 1000;
+      if (Number.isFinite(resetMs)) {
+        const waitSecs = Math.max(1, Math.ceil((resetMs - Date.now()) / 1000));
+        return `Rate limited — wait ${waitSecs} seconds and retry`;
+      }
+    }
+    return 'Rate limited — wait a moment and retry';
   }
 
   async function apiFetch(path, opts = {}) {
@@ -123,6 +191,15 @@
         showAuthRequired();
       }
       throw new Error('Authentication required — log in as operator');
+    }
+    if (resp.status === 429) {
+      const msg = rateLimitMessage(resp);
+      if (!rateLimitToastShown) {
+        rateLimitToastShown = true;
+        showToast(msg, 'warning', 8000);
+        setTimeout(() => { rateLimitToastShown = false; }, 15000);
+      }
+      throw new Error(msg);
     }
     if (!resp.ok) {
       let msg = `${resp.status} ${resp.statusText}`;
@@ -170,24 +247,51 @@
     const el = document.getElementById('admin-sidebar');
     if (!el) return;
 
-    const top = NAV.filter((n) => !n.bottom);
-    const bottom = NAV.filter((n) => n.bottom);
-
     const link = (item) => {
       const active = item.id === activeId ? ' active' : '';
-      return `<a href="${item.href}" class="admin-crm-nav${active}" title="${esc(item.label)}">
-        <span class="tooltip">${esc(item.label)}</span>
+      const badge = item.badgeKey
+        ? `<span class="admin-crm-nav-badge" data-nav-badge="${item.badgeKey}" style="display:none;"></span>`
+        : '';
+      const target = item.external ? ' target="_blank" rel="noopener"' : '';
+      return `<a href="${item.href}" class="admin-crm-nav${active}"${target}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${item.icon}</svg>
+        <span>${esc(item.label)}</span>
+        ${badge}
       </a>`;
     };
 
+    const workspace = NAV.filter((n) => n.group === 'workspace');
+    const shortcuts = NAV.filter((n) => n.group === 'shortcuts');
+
     el.className = 'admin-crm-sidebar';
     el.innerHTML = `
-      <div class="admin-crm-logo">S</div>
-      ${top.map(link).join('')}
+      <a href="/" class="admin-crm-brand" title="callsomo.com">
+        <img src="/assets/brand/somo-icon.png" alt="Somo" class="admin-crm-brand-mark" width="32" height="32">
+        <div>
+          <div class="admin-crm-brand-name">Somo</div>
+          <div class="admin-crm-brand-sub">Admin</div>
+        </div>
+      </a>
+      <div class="admin-crm-nav-group">
+        <div class="admin-crm-nav-label">Workspace</div>
+        ${workspace.map(link).join('')}
+      </div>
+      <div class="admin-crm-nav-group">
+        <div class="admin-crm-nav-label">Shortcuts</div>
+        ${shortcuts.map(link).join('')}
+      </div>
       <div class="admin-crm-sidebar-spacer"></div>
-      ${bottom.map(link).join('')}
-    `;
+      <div class="admin-crm-sidebar-foot">
+        <div class="admin-crm-env-pill" id="adminEnvPill"></div>
+        <div class="admin-crm-op-row">
+          <div class="admin-crm-op-avatar" id="adminOpAvatar">O</div>
+          <div>
+            <div class="admin-crm-op-name" id="adminOpName">Operator</div>
+            <div class="admin-crm-op-role">Admin</div>
+          </div>
+        </div>
+      </div>`;
+    renderEnvBadge();
   }
 
   async function consumeSse(resp, addLine, onEvt) {
@@ -273,33 +377,70 @@
     document.body.appendChild(script);
   }
 
+  const INFO_ICON = '<svg class="admin-crm-suggestion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>';
+
+  function getDismissedSuggestions() {
+    try {
+      return JSON.parse(sessionStorage.getItem('admin_dismissed_suggestions') || '[]');
+    } catch {
+      return [];
+    }
+  }
+
+  function dismissSuggestion(id) {
+    const dismissed = getDismissedSuggestions();
+    if (!dismissed.includes(id)) dismissed.push(id);
+    sessionStorage.setItem('admin_dismissed_suggestions', JSON.stringify(dismissed));
+    document.getElementById('adminSuggestionsStrip')?.remove();
+    loadSuggestions();
+  }
+
   async function loadSuggestions() {
     if (!hasCapability('platform.leads')) return;
     try {
       const r = await apiFetch('/api/admin/ai/suggestions');
-      const suggestions = r.suggestions || [];
-      if (!suggestions.length) return;
+      const dismissed = new Set(getDismissedSuggestions());
+      const suggestions = (r.suggestions || []).filter((s, i) => {
+        const id = `${s.type || 'tip'}-${i}-${(s.message || '').slice(0, 32)}`;
+        s._sid = id;
+        return !dismissed.has(id);
+      });
+      if (!suggestions.length) {
+        document.getElementById('adminSuggestionsStrip')?.remove();
+        return;
+      }
 
       let strip = document.getElementById('adminSuggestionsStrip');
       if (!strip) {
         strip = document.createElement('div');
         strip.id = 'adminSuggestionsStrip';
-        strip.className = 'admin-crm-suggestion-banner';
-        strip.style.marginBottom = '12px';
+        strip.className = 'admin-crm-suggestions-card';
         const main = document.querySelector('.admin-crm-main');
         if (main) main.insertBefore(strip, main.firstChild);
       }
 
       strip.innerHTML = suggestions.map((s) => {
+        const id = s._sid;
+        let body = esc(s.message || '');
+        let action = '';
         if (s.type === 'enrich') {
-          return `<div><strong>Suggestion:</strong> ${esc(s.message)} — <a href="/admin/pipeline.html#needs-phone" style="color:var(--accent-green);">Open queue</a></div>`;
-        }
-        if (s.type === 'call' && s.leads?.length) {
+          action = `<a href="/admin/pipeline.html#needs-phone" class="admin-crm-suggestion-link">Open queue</a>`;
+        } else if (s.type === 'call' && s.leads?.length) {
           const names = s.leads.map((l) => esc(l.clinic_name)).join(', ');
-          return `<div><strong>Suggestion:</strong> ${esc(s.message)} (${names}) — <a href="/admin/pipeline.html" style="color:var(--accent-green);">Call queue</a></div>`;
+          body = `${body} (${names})`;
+          action = `<a href="/admin/pipeline.html" class="admin-crm-suggestion-link">Call queue</a>`;
         }
-        return `<div>${esc(s.message || '')}</div>`;
+        return `
+          <div class="admin-crm-suggestion-row">
+            ${INFO_ICON}
+            <div class="admin-crm-suggestion-body"><strong>Suggestion:</strong> ${body} ${action}</div>
+            <button type="button" class="admin-crm-suggestion-dismiss" aria-label="Dismiss" data-id="${id}">×</button>
+          </div>`;
       }).join('');
+
+      strip.querySelectorAll('.admin-crm-suggestion-dismiss').forEach((btn) => {
+        btn.onclick = () => dismissSuggestion(btn.dataset.id);
+      });
     } catch {
       /* optional */
     }
@@ -315,6 +456,9 @@
     loadSession().then(() => {
       if (hasCapability('platform.leads')) {
         loadSuggestions();
+        loadNavBadges();
+      } else if (hasCapability('platform.tenants')) {
+        loadNavBadges();
       }
       if (opts.enableAi !== false && hasCapability('platform.leads')) {
         loadAiAssistant();
@@ -334,7 +478,10 @@
     callLead,
     confirmAction,
     hasCapability,
+    applyCapabilityGating,
     loadSession,
+    dismissSuggestion,
+    rateLimitMessage,
     get capabilities() { return capabilities.slice(); },
     isCallInFlight: (id) => callsInFlight.has(String(id)),
   };

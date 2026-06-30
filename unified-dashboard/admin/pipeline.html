@@ -11,53 +11,92 @@
 <body>
   <aside id="admin-sidebar"></aside>
   <main class="admin-crm-main">
-    <div class="admin-crm-header admin-crm-header--with-filters">
-      <div class="admin-crm-title">Sales pipeline</div>
-      <div class="admin-crm-header-toolbar">
-        <div class="admin-crm-pills" id="specialtyPills">
-          <span class="admin-crm-pill active" data-specialty="">All</span>
-          <span class="admin-crm-pill" data-specialty="dental">Dental</span>
-          <span class="admin-crm-pill" data-specialty="medical">Medical</span>
+    <div class="admin-crm-header admin-crm-header--pipeline">
+      <h1 class="admin-crm-title">Sales pipeline</h1>
+      <div class="admin-crm-header-actions">
+        <button class="admin-crm-btn-outline" id="btnEnrich" data-require-capability="platform.leads" title="Re-attempt phone and email lookup on leads missing contact info">Enrich contacts</button>
+        <button class="btn btn-primary" id="btnScrape" data-require-capability="platform.leads">Scrape leads</button>
+      </div>
+      <div class="admin-crm-filter-panel">
+        <div class="admin-crm-filter-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input type="text" id="locationSearchInput" placeholder="Filter cities in dropdown…" aria-label="Filter cities">
         </div>
-        <div class="admin-crm-header-actions">
-          <button class="admin-crm-btn-outline" id="btnEnrich" data-require-capability="platform.leads">Enrich contacts</button>
-          <button class="btn btn-primary" id="btnScrape" data-require-capability="platform.leads">Scrape leads</button>
+        <div class="admin-crm-filter-controls">
+          <select class="admin-crm-select-filter admin-crm-filter-select" id="locationStateSelect" aria-label="Filter by state">
+            <option value="">Any state</option>
+          </select>
+          <select class="admin-crm-select-filter admin-crm-filter-select admin-crm-filter-select--city" id="locationCitySelect" aria-label="Filter by city" hidden>
+            <option value="">Any city</option>
+          </select>
+          <div class="admin-crm-filter-specialty">
+            <span class="admin-crm-filter-label">Specialty</span>
+            <div class="admin-crm-pills admin-crm-pills--segmented" id="specialtyPills">
+              <span class="admin-crm-pill active" data-specialty="">All</span>
+              <span class="admin-crm-pill" data-specialty="dental">Dental</span>
+              <span class="admin-crm-pill" data-specialty="medical">Medical</span>
+            </div>
+          </div>
         </div>
+      </div>
+      <div class="admin-crm-active-filters" id="activeFiltersRow" hidden>
+        <span class="admin-crm-active-filters-label">Showing</span>
+        <span class="admin-crm-active-filters-value" id="activeFiltersLabel"></span>
+        <button type="button" class="admin-crm-active-filters-clear" id="clearAllFilters">Clear filters</button>
       </div>
     </div>
 
-    <div class="admin-crm-status-banner" id="capWarn" style="display:none;background:#faeeda;border-color:#633806;margin-bottom:12px;">
-      <span style="font-size:13px;color:#633806;" id="capWarnText"></span>
+    <div class="admin-crm-status-banner admin-crm-status-banner--warning" id="capWarn" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9L2.6 17.5A1.9 1.9 0 0 0 4.3 20.5h15.4a1.9 1.9 0 0 0 1.7-3L13.7 3.9a1.9 1.9 0 0 0-3.4 0z"/></svg>
+      <span id="capWarnText"></span>
+      <button type="button" class="admin-crm-banner-close" onclick="this.parentElement.style.display='none'" aria-label="Dismiss">✕</button>
     </div>
 
     <div class="admin-crm-card" id="needs-phone">
       <div class="admin-crm-card-title admin-crm-card-title--split">
-        <span>Needs phone <span id="needsPhoneCount" class="admin-crm-badge admin-crm-badge-muted">—</span></span>
-        <div style="display:flex;gap:8px;">
-          <button class="admin-crm-btn-outline btn-sm" id="btnBulkDelete" data-require-capability="platform.leads">Delete selected</button>
-          <button class="admin-crm-btn-outline btn-sm" id="btnEnrichNeeds" data-require-capability="platform.leads">Enrich all</button>
+        <div class="admin-crm-card-title-wrap">
+          <h3 class="admin-crm-card-title">Needs phone</h3>
+          <span class="admin-crm-badge-count" id="needsPhoneCount">—</span>
+        </div>
+        <div class="admin-crm-lead-actions">
+          <button class="admin-crm-btn-outline admin-crm-btn-sm" id="btnBulkDelete" data-require-capability="platform.leads" disabled>Delete selected</button>
+          <button class="admin-crm-btn-outline admin-crm-btn-sm" id="btnEnrichNeeds" data-require-capability="platform.leads" title="Re-attempt phone and email lookup on leads missing contact info">Enrich all</button>
         </div>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Leads saved from scrape without a callable phone — enrich or delete manually.</p>
-      <div id="needsPhoneList"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
+      <p class="admin-crm-helper-text">Saved from scrape but missing a callable phone number. <strong>Enrich</strong> retries automatic contact lookup; <strong>Open</strong> lets you paste a website or phone manually. Nothing here is deleted automatically.</p>
+      <div id="needsPhoneList"><div class="admin-crm-skeleton" style="height:120px;margin:0 18px 18px;"></div></div>
+      <div class="admin-crm-card-footer" id="needsPhoneFooter" style="display:none;justify-content:center;">
+        <a href="#" class="admin-crm-card-footer-link" id="needsPhoneShowMore">Show more →</a>
+      </div>
+    </div>
+
+    <div class="admin-crm-card" id="call-ready">
+      <div class="admin-crm-card-title admin-crm-card-title--split">
+        <div class="admin-crm-card-title-wrap">
+          <h3 class="admin-crm-card-title">Call-ready queue</h3>
+          <span class="admin-crm-badge-count" id="queueCount">—</span>
+        </div>
+        <button class="btn btn-primary admin-crm-btn-sm" id="btnCall10" data-require-capability="platform.leads">Call next 10</button>
+      </div>
+      <div class="admin-crm-search-box" style="margin:0 18px 14px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="queueSearch" placeholder="Search by clinic name, city, or specialty…">
+      </div>
+      <div id="queueList"><div class="admin-crm-skeleton" style="height:200px;margin:0 18px 18px;"></div></div>
+      <div class="admin-crm-pagination" id="queuePagination"></div>
     </div>
 
     <div class="admin-crm-card">
-      <div class="admin-crm-card-title admin-crm-card-title--split">
-        <span>Call-ready queue <span id="queueCount" class="admin-crm-badge admin-crm-badge-muted">—</span></span>
-        <button class="btn btn-primary btn-sm" id="btnCall10" data-require-capability="platform.leads">Call next 10</button>
+      <div class="admin-crm-card-head">
+        <div class="admin-crm-card-title-wrap">
+          <h3 class="admin-crm-card-title">Pipeline stages</h3>
+          <span class="admin-crm-card-hint">callable leads only</span>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
-        <input class="admin-crm-search" type="text" id="queueSearch" placeholder="Search leads...">
-      </div>
-      <div id="queueList"><div class="admin-crm-skeleton" style="height:200px;"></div></div>
-      <div id="queuePagination" style="display:flex;gap:6px;justify-content:center;margin-top:12px;"></div>
-    </div>
-
-    <div class="admin-crm-card admin-crm-kanban-scroll">
-      <div class="admin-crm-card-title">Pipeline stages <span style="font-weight:400;font-size:11px;color:var(--muted);">callable leads only</span></div>
-      <div class="admin-crm-kanban" id="kanbanBoard">
-        <div class="admin-crm-skeleton" style="height:300px;grid-column:1/-1;"></div>
+      <div class="admin-crm-kanban-scroll">
+        <div class="admin-crm-kanban" id="kanbanBoard">
+          <div class="admin-crm-skeleton" style="height:300px;width:100%;margin:0 18px 18px;"></div>
+        </div>
       </div>
     </div>
   </main>
@@ -67,8 +106,16 @@
   <script>
     const { apiFetch, esc, init, showToast, callLead: shellCallLead, confirmAction } = AdminShell;
     let currentSpecialty = '';
+    let currentLocation = '';
+    let currentLocationMode = '';
     let currentPage = 0;
+    let needsPhoneOffset = 0;
+    let needsPhoneTotal = 0;
+    let needsPhoneShown = 0;
+    const NEEDS_PHONE_PAGE = 50;
     let searchTimer;
+    let locationSearchTimer;
+    let cityOptionsCache = [];
     let callsRemaining = 250;
     const selectedNeedsPhone = new Set();
 
@@ -82,12 +129,15 @@
     init('pipeline');
 
     document.addEventListener('DOMContentLoaded', () => {
+      window.addEventListener('admin:job-complete', () => refreshAll());
       document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach((p) => {
         p.onclick = () => {
           document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach((x) => x.classList.remove('active'));
           p.classList.add('active');
           currentSpecialty = p.dataset.specialty;
           currentPage = 0;
+          needsPhoneOffset = 0;
+          updateActiveFilters();
           loadQueue();
           loadNeedsPhone();
           loadKanban();
@@ -108,12 +158,185 @@
         AdminJobModal.open({ title: 'Scraping leads...', url: '/api/admin/scrape/run', method: 'POST', body: {}, onComplete: refreshAll });
       };
       document.getElementById('btnBulkDelete').onclick = bulkDeleteSelected;
+      document.getElementById('locationStateSelect').onchange = onStateChange;
+      document.getElementById('locationCitySelect').onchange = onCityChange;
+      document.getElementById('clearAllFilters').onclick = clearAllFilters;
+      document.getElementById('locationSearchInput').oninput = () => {
+        clearTimeout(locationSearchTimer);
+        locationSearchTimer = setTimeout(filterCityOptions, 200);
+      };
+      document.getElementById('needsPhoneShowMore').onclick = (e) => {
+        e.preventDefault();
+        needsPhoneOffset += NEEDS_PHONE_PAGE;
+        loadNeedsPhone(true);
+      };
+      loadLocationFilter();
       loadCapStatus();
       refreshAll();
       if (location.hash === '#needs-phone') {
         document.getElementById('needs-phone')?.scrollIntoView({ behavior: 'smooth' });
       }
     });
+
+    function locationQueryParams() {
+      const params = {};
+      if (currentLocation) {
+        params.location = currentLocation;
+        if (currentLocationMode) params.location_mode = currentLocationMode;
+      }
+      return params;
+    }
+
+    function applyLocationFilter(location, mode) {
+      currentLocation = location || '';
+      currentLocationMode = mode || '';
+      sessionStorage.setItem('admin_pipeline_location', currentLocation);
+      sessionStorage.setItem('admin_pipeline_location_mode', currentLocationMode);
+      currentPage = 0;
+      needsPhoneOffset = 0;
+      updateActiveFilters();
+      refreshAll();
+    }
+
+    function clearAllFilters() {
+      document.getElementById('locationStateSelect').value = '';
+      const citySelect = document.getElementById('locationCitySelect');
+      citySelect.hidden = true;
+      citySelect.innerHTML = '<option value="">Any city</option>';
+      document.getElementById('locationSearchInput').value = '';
+      currentSpecialty = '';
+      document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach((x) => {
+        x.classList.toggle('active', !x.dataset.specialty);
+      });
+      applyLocationFilter('', '');
+    }
+
+    function locationFilterLabel() {
+      if (!currentLocation) return '';
+      if (currentLocationMode === 'state') return currentLocation;
+      if (currentLocationMode === 'city') {
+        const parsed = currentLocation.split(',')[0];
+        return parsed || currentLocation;
+      }
+      return currentLocation;
+    }
+
+    function specialtyFilterLabel() {
+      if (currentSpecialty === 'dental') return 'Dental';
+      if (currentSpecialty === 'medical') return 'Medical';
+      return '';
+    }
+
+    function updateActiveFilters() {
+      const row = document.getElementById('activeFiltersRow');
+      const label = document.getElementById('activeFiltersLabel');
+      const parts = [locationFilterLabel(), specialtyFilterLabel()].filter(Boolean);
+      if (!parts.length) {
+        row.hidden = true;
+        return;
+      }
+      label.textContent = parts.join(' · ');
+      row.hidden = false;
+    }
+
+    async function loadLocationFilter() {
+      const stateSelect = document.getElementById('locationStateSelect');
+      const prevState = stateSelect.value || (currentLocationMode === 'state' ? currentLocation : '');
+      const prevCity = currentLocationMode === 'city' ? currentLocation : document.getElementById('locationCitySelect').value;
+      try {
+        const r = await apiFetch('/api/admin/scrape/leads/locations?group=state&limit=60');
+        const states = r.locations || [];
+        if (!currentLocation && !sessionStorage.getItem('admin_pipeline_location')) {
+          currentLocation = '';
+          currentLocationMode = '';
+        } else if (!currentLocation) {
+          currentLocation = sessionStorage.getItem('admin_pipeline_location') || '';
+          currentLocationMode = sessionStorage.getItem('admin_pipeline_location_mode') || '';
+        }
+
+        stateSelect.innerHTML = '<option value="">Any state</option>'
+          + states.map((s) => `<option value="${esc(s.state)}">${esc(s.state)} (${s.count})</option>`).join('');
+
+        if (prevState) {
+          stateSelect.value = prevState;
+          await loadCityOptions(prevState, prevCity);
+        } else if (currentLocationMode === 'state' && currentLocation) {
+          stateSelect.value = currentLocation;
+          await loadCityOptions(currentLocation, '');
+        } else if (currentLocationMode === 'city' && currentLocation) {
+          const parsed = currentLocation.split(',');
+          const statePart = parsed.length >= 2 ? parsed[parsed.length - 2].trim() : '';
+          if (statePart) {
+            stateSelect.value = statePart;
+            await loadCityOptions(statePart, currentLocation);
+          }
+        }
+        updateActiveFilters();
+      } catch {
+        /* optional */
+      }
+    }
+
+    async function loadCityOptions(state, selectedCity) {
+      const citySelect = document.getElementById('locationCitySelect');
+      if (!state) {
+        citySelect.hidden = true;
+        cityOptionsCache = [];
+        return;
+      }
+      try {
+        const r = await apiFetch(`/api/admin/scrape/leads/locations?group=city&state=${encodeURIComponent(state)}&limit=80`);
+        cityOptionsCache = r.locations || [];
+        citySelect.innerHTML = `<option value="">Any city in ${esc(state)}</option>`
+          + cityOptionsCache.map((c) => {
+            const label = c.city || c.location;
+            return `<option value="${esc(c.location)}" data-label="${esc(label)}">${esc(label)} (${c.count})</option>`;
+          }).join('');
+        citySelect.hidden = false;
+        if (selectedCity) citySelect.value = selectedCity;
+        filterCityOptions();
+      } catch {
+        citySelect.hidden = true;
+      }
+    }
+
+    function filterCityOptions() {
+      const citySelect = document.getElementById('locationCitySelect');
+      if (citySelect.hidden) return;
+      const q = document.getElementById('locationSearchInput').value.trim().toLowerCase();
+      Array.from(citySelect.options).forEach((opt, i) => {
+        if (i === 0) {
+          opt.hidden = false;
+          return;
+        }
+        const label = (opt.dataset.label || opt.textContent || '').toLowerCase();
+        opt.hidden = q ? !label.includes(q) : false;
+      });
+    }
+
+    function onStateChange() {
+      const state = document.getElementById('locationStateSelect').value;
+      document.getElementById('locationSearchInput').value = '';
+      if (!state) {
+        applyLocationFilter('', '');
+        document.getElementById('locationCitySelect').hidden = true;
+        return;
+      }
+      loadCityOptions(state).then(() => {
+        applyLocationFilter(state, 'state');
+      });
+    }
+
+    function onCityChange() {
+      const state = document.getElementById('locationStateSelect').value;
+      const city = document.getElementById('locationCitySelect').value;
+      if (!state) return;
+      if (!city) {
+        applyLocationFilter(state, 'state');
+        return;
+      }
+      applyLocationFilter(city, 'city');
+    }
 
     async function loadCapStatus() {
       try {
@@ -122,7 +345,8 @@
         const capWarn = document.getElementById('capWarn');
         if (callsRemaining < 10) {
           capWarn.style.display = 'flex';
-          document.getElementById('capWarnText').textContent = `Only ${callsRemaining} outbound calls remaining this month.`;
+          document.getElementById('capWarnText').innerHTML =
+            `<strong>Outbound calling is near capacity.</strong> ${callsRemaining} calls remain this month.`;
         }
       } catch { /* ignore */ }
     }
@@ -132,42 +356,64 @@
       loadNeedsPhone();
       loadKanban();
       loadCapStatus();
+      loadLocationFilter();
     }
 
-    async function loadNeedsPhone() {
-      const params = new URLSearchParams({ contact_status: 'needs_phone', limit: 50, offset: 0 });
+    async function loadNeedsPhone(append = false) {
+      if (!append) needsPhoneOffset = 0;
+      const params = new URLSearchParams({
+        contact_status: 'needs_phone',
+        limit: String(NEEDS_PHONE_PAGE),
+        offset: String(needsPhoneOffset),
+      });
       if (currentSpecialty) params.set('specialty', currentSpecialty);
+      Object.entries(locationQueryParams()).forEach(([k, v]) => params.set(k, v));
       try {
         const r = await apiFetch(`/api/admin/scrape/leads?${params}`);
         const leads = r.leads || [];
-        document.getElementById('needsPhoneCount').textContent = r.total ?? leads.length;
+        needsPhoneTotal = r.total ?? leads.length;
+        needsPhoneShown = append ? needsPhoneShown + leads.length : leads.length;
+        document.getElementById('needsPhoneCount').textContent = needsPhoneTotal;
         const container = document.getElementById('needsPhoneList');
-        if (!leads.length) {
-          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:16px;font-size:13px;">No leads waiting for phone enrichment</p>';
+        const footer = document.getElementById('needsPhoneFooter');
+        if (!leads.length && !append) {
+          container.innerHTML = '<div class="admin-crm-empty"><div class="admin-crm-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><p>No leads waiting for phone enrichment</p></div>';
+          footer.style.display = 'none';
+          updateBulkDeleteState();
           return;
         }
-        container.innerHTML = leads.map((l) => `
-          <div class="admin-crm-row">
-            <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;" onclick="event.stopPropagation()">
-              <input type="checkbox" data-lead-id="${l.id}" ${selectedNeedsPhone.has(String(l.id)) ? 'checked' : ''} onchange="toggleNeedsPhoneSelect('${l.id}', this.checked)">
-              <div>
-                <div class="admin-crm-row-name" style="font-weight:600;">${esc(l.clinic_name)}</div>
-                <div style="font-size:12px;color:var(--muted);">${esc(l.location || '')} · ${esc(l.clinic_email || 'no email')}</div>
+        const html = leads.map((l) => `
+          <div class="admin-crm-lead-row">
+            <label style="display:flex;align-items:center;gap:12px;flex:1;cursor:pointer;min-width:0;" onclick="event.stopPropagation()">
+              <input type="checkbox" class="admin-crm-lead-check" data-lead-id="${l.id}" ${selectedNeedsPhone.has(String(l.id)) ? 'checked' : ''} onchange="toggleNeedsPhoneSelect('${l.id}', this.checked)">
+              <div class="admin-crm-lead-info" style="min-width:0;" onclick="location.href='/admin/lead.html?id=${l.id}'">
+                <div class="admin-crm-lead-name">${esc(l.clinic_name)}</div>
+                <div class="admin-crm-lead-meta">${esc(l.location || '')} · ${esc(l.clinic_email || 'no email on file')}</div>
               </div>
             </label>
-            <div class="admin-crm-row-actions">
-              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="enrichOne('${l.id}')">Enrich</button>
-              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="location.href='/admin/lead.html?id=${l.id}'">Open</button>
+            <div class="admin-crm-lead-actions">
+              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();enrichOne('${l.id}')">Enrich</button>
+              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();location.href='/admin/lead.html?id=${l.id}'">Open</button>
             </div>
           </div>`).join('');
+        if (append) container.insertAdjacentHTML('beforeend', html);
+        else container.innerHTML = html;
+        footer.style.display = needsPhoneShown < needsPhoneTotal ? 'flex' : 'none';
+        updateBulkDeleteState();
       } catch (e) {
         document.getElementById('needsPhoneList').innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
       }
     }
 
+    function updateBulkDeleteState() {
+      const btn = document.getElementById('btnBulkDelete');
+      if (btn) btn.disabled = selectedNeedsPhone.size === 0;
+    }
+
     window.toggleNeedsPhoneSelect = (id, checked) => {
       if (checked) selectedNeedsPhone.add(String(id));
       else selectedNeedsPhone.delete(String(id));
+      updateBulkDeleteState();
     };
 
     async function enrichOne(id) {
@@ -204,6 +450,7 @@
       const search = document.getElementById('queueSearch').value.trim();
       const params = new URLSearchParams({ contact_status: 'verified', callable_only: '1', limit: 15, offset: page * 15 });
       if (currentSpecialty) params.set('specialty', currentSpecialty);
+      Object.entries(locationQueryParams()).forEach(([k, v]) => params.set(k, v));
       if (search) params.set('search', search);
 
       try {
@@ -212,14 +459,14 @@
         document.getElementById('queueCount').textContent = r.total ?? verified.length;
         const container = document.getElementById('queueList');
         if (!verified.length) {
-          container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;font-size:13px;">No call-ready leads. Check the needs-phone queue or run scrape.</p>';
+          container.innerHTML = '<div class="admin-crm-empty"><div class="admin-crm-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><p>No call-ready leads. Check the needs-phone queue or run scrape.</p></div>';
           document.getElementById('queuePagination').innerHTML = '';
           return;
         }
         container.innerHTML = verified.map((l) => renderRow(l)).join('');
         const pages = Math.ceil((r.total || 0) / 15);
         document.getElementById('queuePagination').innerHTML = pages <= 1 ? '' : Array.from({ length: Math.min(pages, 7) }, (_, i) =>
-          `<button class="admin-crm-btn-outline" style="padding:5px 10px;${i === page ? 'background:var(--admin-cta);' : ''}" onclick="loadQueue(${i})">${i + 1}</button>`
+          `<button class="admin-crm-page-btn${i === page ? ' active' : ''}" onclick="loadQueue(${i})">${i + 1}</button>`
         ).join('');
       } catch (e) {
         document.getElementById('queueList').innerHTML = `<p style="color:var(--muted);">Failed: ${esc(e.message)}</p>`;
@@ -231,15 +478,15 @@
       const scoreCls = l.lead_score >= 70 ? ' high' : '';
       const canCall = isCallableLead(l);
       return `
-        <div class="admin-crm-row" onclick="location.href='/admin/lead.html?id=${l.id}'">
-          <div style="flex:1;min-width:0;">
-            <div class="admin-crm-row-name" style="font-weight:600;">${esc(l.clinic_name)}</div>
-            <div style="font-size:12px;color:var(--muted);">${esc(l.location)} · ${esc(l.specialty || '')}${(l.language_labels && l.language_labels.length) ? ` · ${esc(l.language_labels.join(', '))}` : ''}</div>
+        <div class="admin-crm-lead-row" onclick="location.href='/admin/lead.html?id=${l.id}'">
+          <div class="admin-crm-lead-info" style="flex:1;min-width:0;">
+            <div class="admin-crm-lead-name">${esc(l.clinic_name)}</div>
+            <div class="admin-crm-lead-meta">${esc(l.location)} · ${esc(l.specialty || '')}${(l.language_labels && l.language_labels.length) ? ` · ${esc(l.language_labels.join(', '))}` : ''}</div>
           </div>
-          <div class="admin-crm-row-actions">
+          <div class="admin-crm-lead-actions">
             <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
             ${canCall
-              ? `<button class="btn btn-primary btn-sm admin-crm-btn-sm" onclick="event.stopPropagation();doCall(${l.id},'${esc(l.clinic_name)}', this)">Call</button>`
+              ? `<button class="btn btn-primary admin-crm-btn-sm" onclick="event.stopPropagation();doCall(${l.id},'${esc(l.clinic_name)}', this)">Call</button>`
               : `<span class="admin-crm-badge admin-crm-badge-muted">No phone</span>`}
           </div>
         </div>`;
@@ -251,9 +498,12 @@
     window.doCall = doCall;
 
     async function loadKanban() {
-      const params = currentSpecialty ? `?specialty=${currentSpecialty}` : '';
+      const params = new URLSearchParams();
+      if (currentSpecialty) params.set('specialty', currentSpecialty);
+      Object.entries(locationQueryParams()).forEach(([k, v]) => params.set(k, v));
+      const qs = params.toString() ? `?${params}` : '';
       try {
-        const r = await apiFetch(`/api/admin/scrape/leads/pipeline${params}`);
+        const r = await apiFetch(`/api/admin/scrape/leads/pipeline${qs}`);
         const stages = [
           { key: 'new', label: 'New' },
           { key: 'contacted', label: 'Contacted' },
@@ -265,16 +515,14 @@
           const cards = ((r.cards || {})[s.key] || []).filter(isCallableLead);
           return `
             <div class="admin-crm-kanban-col">
-              <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;">
-                ${s.label}<span class="admin-crm-badge admin-crm-badge-muted">${cards.length}</span>
-              </div>
+              <div class="admin-crm-kanban-col-head">${s.label} <span class="admin-crm-badge-count">${cards.length}</span></div>
               ${cards.map((l) => `
                 <div class="admin-crm-kanban-card" onclick="location.href='/admin/lead.html?id=${l.id}'">
-                  <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(l.clinic_name)}</div>
-                  <div style="font-size:11px;color:var(--muted);">${esc(l.location || '')}</div>
+                  <div class="admin-crm-kanban-card-name">${esc(l.clinic_name)}</div>
+                  <div class="admin-crm-kanban-card-loc">${esc(l.location || '')}</div>
                 </div>
               `).join('')}
-              ${!cards.length ? '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px;border:1px dashed var(--border);border-radius:8px;">empty</div>' : ''}
+              ${!cards.length ? '<div class="admin-crm-kanban-empty">empty</div>' : ''}
             </div>`;
         }).join('');
       } catch (e) {

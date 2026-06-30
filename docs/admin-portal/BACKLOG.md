@@ -67,11 +67,16 @@ Master IDs from the full implementation plan. Status reflects the 2026-06-30 imp
 | S2 | AI suggestions endpoint wired | Done |
 | S3 | Test bulk delete documented as script-only | Done |
 | S4 | `coding-reviews.html` AdminShell migration | Done |
-| S5 | Soft delete (`archived_at`) | **Deferred** — optional future |
+| S5 | Tenant soft delete (`clinics.archived_at` + audit) | Done (migration 091) |
+| S6 | Diagnostics strip readability + slim metrics | Done |
+| S7 | Job modal auto-refresh on SSE complete | Done |
+| S8 | Pipeline location filter + `/leads/locations` | Done |
+| S9 | Enrich button tooltips + pipeline hint | Done |
+| S10 | Suggestion card UI + dismiss | Done |
 
 ## Deferred / optional (not blocking)
 
-- **Soft delete:** recoverable `archived_at` on leads instead of hard delete.
+- **Lead soft delete:** recoverable `archived_at` on leads instead of hard delete.
 - **Full scheduled-call scheduler:** weekly/monthly recurrence via reminder-scheduler (stub returns 400).
 - **Backend call idempotency:** frontend-only in-flight guard today.
 - **Seed script slug upsert:** migration 089 enforces uniqueness; run `merge-duplicate-clinics.js` before index on dirty DBs.

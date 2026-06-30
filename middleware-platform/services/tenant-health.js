@@ -116,8 +116,17 @@ function groupAlerts(flatAlerts) {
   );
 }
 
+const ACTIVE_CLINIC_WHERE = `(archived_at IS NULL OR archived_at = '')`;
+
+function getActiveClinics(includeArchived = false) {
+  const sql = includeArchived
+    ? 'SELECT * FROM clinics ORDER BY created_at DESC'
+    : `SELECT * FROM clinics WHERE ${ACTIVE_CLINIC_WHERE} ORDER BY created_at DESC`;
+  return db.db.prepare(sql).all();
+}
+
 function getAllTenantAlerts() {
-  const clinics = db.db.prepare('SELECT * FROM clinics ORDER BY created_at DESC').all();
+  const clinics = getActiveClinics(false);
   const allAlerts = [];
 
   for (const clinic of clinics) {
@@ -151,6 +160,8 @@ function enrichTenantRow(clinic) {
 
 module.exports = {
   getAllTenantAlerts,
+  getActiveClinics,
+  ACTIVE_CLINIC_WHERE,
   enrichTenantRow,
   resolveTenantCustomerId,
   getCustomerBilling,

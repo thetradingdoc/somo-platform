@@ -11,78 +11,88 @@
 <body>
   <aside id="admin-sidebar"></aside>
   <main class="admin-crm-main admin-crm-main--narrow">
-    <a href="/admin/pipeline.html" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:16px;">← Back to pipeline</a>
+    <a href="/admin/pipeline.html" class="admin-crm-back-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      Back to pipeline
+    </a>
 
     <div id="loading" style="padding:40px;text-align:center;color:var(--muted);">Loading lead...</div>
     <div id="leadDetail" class="hidden">
       <div id="suggestionBanner" class="admin-crm-suggestion-banner hidden">
-        <div><strong>Post-call suggestion:</strong> <span id="suggestionText"></span></div>
-        <div class="actions">
-          <button class="btn btn-primary btn-sm" id="btnAcceptSuggestion">Accept stage</button>
-          <button class="admin-crm-btn-outline btn-sm" id="btnDismissSuggestion">Dismiss</button>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 8v5m0 4h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        <div style="flex:1;">
+          <div><span id="suggestionText"></span></div>
+          <div class="actions">
+            <button class="btn btn-primary admin-crm-btn-sm" id="btnAcceptSuggestion">Accept stage</button>
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" id="btnDismissSuggestion">Dismiss</button>
+          </div>
         </div>
       </div>
 
-      <div class="admin-crm-header">
-        <div style="flex:1;">
-          <div class="admin-crm-title" id="leadName">—</div>
-          <div id="leadMeta" style="font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+      <div class="admin-crm-detail-head">
+        <div>
+          <h1 class="admin-crm-detail-name" id="leadName">—</h1>
+          <div class="admin-crm-chip-row" id="leadMeta"></div>
         </div>
-        <div class="admin-crm-header-actions">
+        <div class="admin-crm-lead-actions">
           <div class="admin-crm-lead-score" id="leadScore">—</div>
-          <button class="admin-crm-btn-outline" id="deleteBtn" data-require-capability="platform.leads" style="color:#c0392b;border-color:#c0392b;">Delete</button>
+          <button class="admin-crm-btn-outline admin-crm-btn-danger" id="deleteBtn" data-require-capability="platform.leads">Delete lead</button>
           <button class="btn btn-primary" id="callBtn" data-require-capability="platform.leads">Call now</button>
         </div>
       </div>
 
       <div class="admin-crm-two-col">
         <div class="admin-crm-card">
-          <div class="admin-crm-card-title">Contact</div>
-          <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);width:38%;">Phone</td><td id="iPhone">—</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Email</td><td id="iEmail">—</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Location</td><td id="iLocation">—</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Specialty</td><td id="iSpecialty">—</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Job title</td><td id="iTitle">—</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Languages</td><td id="iLanguages">—</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;color:var(--muted);">Website</td><td id="iWebsite">—</td></tr>
-            <tr><td style="padding:6px 0;color:var(--muted);">Contact status</td><td id="iContactStatus">—</td></tr>
-          </table>
-          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <input type="url" id="websiteOverride" placeholder="https://clinic-website.com" style="flex:1;min-width:180px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;">
-            <button class="admin-crm-btn-outline" style="font-size:12px;" id="btnSaveWebsite">Save website</button>
-            <button class="admin-crm-btn-outline" style="font-size:12px;" id="btnReEnrich">Re-enrich contact</button>
+          <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Contact</h3></div>
+          <dl class="admin-crm-kv">
+            <div class="admin-crm-kv-row"><dt>Phone</dt><dd id="iPhone">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Email</dt><dd id="iEmail">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Location</dt><dd id="iLocation">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Specialty</dt><dd id="iSpecialty">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Job title</dt><dd id="iTitle">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Languages</dt><dd id="iLanguages">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Website</dt><dd id="iWebsite">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Contact status</dt><dd id="iContactStatus">—</dd></div>
+          </dl>
+          <div class="admin-crm-input-row" style="padding:0 18px 18px;">
+            <input type="url" class="admin-crm-text-input" id="websiteOverride" placeholder="Paste a website URL to re-enrich…">
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" id="btnSaveWebsite">Save</button>
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" id="btnReEnrich">Re-enrich</button>
           </div>
         </div>
         <div class="admin-crm-card">
-          <div class="admin-crm-card-title">Pipeline stage</div>
-          <select id="stageSelect" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;margin-bottom:8px;">
-            <option value="new">New</option>
-            <option value="contacted">Contacted</option>
-            <option value="demo">Demo scheduled</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
-          </select>
-          <div id="stageMeta" style="font-size:12px;color:var(--muted);"></div>
+          <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Pipeline stage</h3></div>
+          <div style="padding:0 18px 18px;">
+            <select id="stageSelect" class="admin-crm-text-input">
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="demo">Demo</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+            <p id="stageMeta" style="font-size:11.5px;color:var(--muted);margin:10px 0 0;"></p>
+          </div>
         </div>
       </div>
 
       <div class="admin-crm-card">
-        <div class="admin-crm-card-title">Add a note</div>
-        <textarea id="noteText" style="width:100%;min-height:80px;padding:10px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;" placeholder="Notes, next steps..."></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-primary btn-sm" id="btnSaveNote">Save note</button>
-          <button class="admin-crm-btn-outline btn-sm" id="btnEmail">Send email</button>
+        <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Add a note</h3></div>
+        <div style="padding:0 18px 18px;">
+          <textarea id="noteText" class="admin-crm-text-input" placeholder="Log a note about this lead…"></textarea>
+          <div class="admin-crm-input-row" style="margin-top:10px;">
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" id="btnSaveNote">Save note</button>
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" id="btnEmail">Send email</button>
+          </div>
         </div>
       </div>
 
       <div class="admin-crm-card">
-        <div class="admin-crm-card-title">Call history</div>
+        <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Call history</h3></div>
         <div id="callHistory"></div>
       </div>
 
       <div class="admin-crm-card">
-        <div class="admin-crm-card-title">Activity log</div>
+        <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Activity log</h3></div>
         <div id="activityLog"></div>
       </div>
     </div>
@@ -147,14 +157,14 @@
       document.getElementById('leadName').textContent = lead.clinic_name || 'Unknown';
       document.getElementById('leadScore').textContent = lead.lead_score || '—';
       document.getElementById('leadMeta').innerHTML = [
-        lead.location && `<span>${esc(lead.location)}</span>`,
-        lead.specialty && `<span>${esc(lead.specialty)}</span>`,
-        lead.lead_source && `<span>via ${esc(String(lead.lead_source).split(':')[0])}</span>`,
+        lead.location && `<span class="admin-crm-chip">${esc(lead.location)}</span>`,
+        lead.specialty && `<span class="admin-crm-chip">${esc(lead.specialty)}</span>`,
+        lead.lead_source && `<span class="admin-crm-chip">Source: ${esc(String(lead.lead_source).split(':')[0])}</span>`,
       ].filter(Boolean).join('');
 
       document.getElementById('iPhone').textContent = lead.clinic_phone || '—';
       document.getElementById('iEmail').innerHTML = lead.clinic_email
-        ? `<a href="mailto:${esc(lead.clinic_email)}">${esc(lead.clinic_email)}</a>` : '—';
+        ? `<a href="mailto:${esc(lead.clinic_email)}" style="color:var(--forest);font-weight:600;">${esc(lead.clinic_email)}</a>` : '—';
       document.getElementById('iLocation').textContent = lead.location || '—';
       document.getElementById('iSpecialty').textContent = lead.specialty || '—';
       document.getElementById('iTitle').textContent = lead.title || '—';
@@ -162,9 +172,13 @@
         ? `${lead.language_labels.join(', ')}${lead.preferred_language ? ` (agent: ${lead.preferred_language})` : ''}`
         : 'English';
       document.getElementById('iWebsite').innerHTML = lead.website_url
-        ? `<a href="${esc(lead.website_url)}" target="_blank" rel="noopener">clinic website ↗</a>`
+        ? `<a href="${esc(lead.website_url)}" target="_blank" rel="noopener" style="color:var(--forest);font-weight:600;">${esc(lead.website_url.replace(/^https?:\/\//, '').replace(/\/$/, ''))} ↗</a>`
         : '—';
-      document.getElementById('iContactStatus').textContent = lead.contact_status || '—';
+      const statusEl = document.getElementById('iContactStatus');
+      const status = lead.contact_status || '—';
+      statusEl.innerHTML = status === 'verified'
+        ? '<span class="admin-crm-pill admin-crm-pill-success">Verified</span>'
+        : esc(status);
 
       document.getElementById('stageSelect').value = lead.pipeline_stage || 'new';
       document.getElementById('stageMeta').textContent = [
@@ -180,8 +194,8 @@
       const banner = document.getElementById('suggestionBanner');
       if (lead.suggested_stage) {
         banner.classList.remove('hidden');
-        document.getElementById('suggestionText').textContent =
-          `Move to "${lead.suggested_stage}"${lead.suggested_stage_note ? ` — ${lead.suggested_stage_note}` : ''}`;
+        document.getElementById('suggestionText').innerHTML =
+          `Call ended recently. Outcome suggests moving this lead to <strong>${esc(lead.suggested_stage)}</strong>${lead.suggested_stage_note ? ` — ${esc(lead.suggested_stage_note)}` : ''}.`;
       } else {
         banner.classList.add('hidden');
       }
@@ -193,18 +207,18 @@
     function renderCalls(calls) {
       const el = document.getElementById('callHistory');
       if (!calls.length) {
-        el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">No calls yet</p>';
+        el.innerHTML = '<div class="admin-crm-empty"><div class="admin-crm-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><p>No calls yet</p></div>';
         return;
       }
       el.innerHTML = calls.map((c) => `
-        <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-            <span style="font-weight:600;">${formatDate(c.created_at, true)}</span>
-            <span class="admin-crm-badge admin-crm-badge-muted">${esc(c.outcome || c.status)}</span>
+        <div class="admin-crm-call-card">
+          <div class="admin-crm-call-top">
+            <strong>${formatDate(c.created_at, true)}</strong>
+            <span class="admin-crm-pill admin-crm-pill-success">${esc(c.outcome || c.status)}</span>
           </div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Duration ${c.duration_seconds ? Math.floor(c.duration_seconds / 60) + 'm' : '—'}</div>
-          <button class="admin-crm-btn-outline" style="font-size:12px;padding:4px 8px;" onclick="toggleTranscript('${c.id}')">View transcript</button>
-          <div id="transcript-${c.id}" class="hidden" style="margin-top:10px;background:var(--bg);border-radius:8px;padding:12px;font-size:12px;font-family:monospace;max-height:240px;overflow-y:auto;"></div>
+          <div class="admin-crm-call-meta">${c.duration_seconds ? `${Math.floor(c.duration_seconds / 60)}m ${c.duration_seconds % 60}s` : '—'} · Retell sales agent</div>
+          <button class="admin-crm-btn-outline admin-crm-btn-sm" style="margin-top:4px;" onclick="toggleTranscript('${c.id}')">View transcript</button>
+          <div id="transcript-${c.id}" class="admin-crm-transcript hidden"></div>
         </div>
       `).join('');
     }
@@ -232,9 +246,9 @@
         return;
       }
       el.innerHTML = activities.map((a) => `
-        <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
-          <div>${esc(a.content || a.activity_description || a.activity_subject)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${formatDate(a.created_at, true)}</div>
+        <div class="admin-crm-activity-item">
+          <span class="admin-crm-activity-time">${formatDate(a.created_at, true)}</span>
+          <span>${esc(a.content || a.activity_description || a.activity_subject)}</span>
         </div>
       `).join('');
     }

@@ -37,6 +37,12 @@ function isSignupApiPath(req) {
   return /\/api\/signup(\/|$)/.test(path) || path === '/signup' || path.startsWith('/signup/');
 }
 
+/** Admin CRM routes use adminLimiter (300/min) — skip the global 100/15min bucket. */
+function isAdminApiPath(req) {
+  const path = (req.originalUrl || req.url || req.path || '').split('?')[0];
+  return /\/api\/admin(\/|$)/.test(path);
+}
+
 // Custom key generator that handles IP addresses with ports and trust proxy
 const keyGenerator = (req) => {
   // Extract IP from req.ip, removing port if present
@@ -78,7 +84,8 @@ const apiLimiter = rateLimit({
     shouldSkipInternalJob(req) ||
     isPublicCatalogRead(req) ||
     isPublicCommercePath(req) ||
-    isSignupApiPath(req)
+    isSignupApiPath(req) ||
+    isAdminApiPath(req)
 });
 
 const publicCatalogReadMax = parseInt(
@@ -319,6 +326,7 @@ module.exports = {
   isPublicCatalogRead,
   isPublicCommercePath,
   isSignupApiPath,
+  isAdminApiPath,
   strictLimiter,
   authLimiter,
   signupFlowLimiter,

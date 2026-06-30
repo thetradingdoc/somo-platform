@@ -1654,7 +1654,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
-    FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id)
   );
 
   CREATE TABLE IF NOT EXISTS stripe_cards (
@@ -1675,7 +1675,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
-    FOREIGN KEY (clinic_id) REFERENCES clinics(id),
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id),
     FOREIGN KEY (cardholder_id) REFERENCES stripe_cardholders(id)
   );
 
@@ -1695,7 +1695,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (card_id) REFERENCES stripe_cards(id),
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
-    FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_stripe_cardholders_patient ON stripe_cardholders(patient_id);
