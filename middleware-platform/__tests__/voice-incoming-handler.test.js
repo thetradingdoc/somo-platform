@@ -38,8 +38,7 @@ describe('voice-incoming-handler', () => {
 
     const handler = createVoiceIncomingHandler({
       db: mockDb,
-      normalizePhoneNumber: (p) => String(p || '').replace(/\D/g, ''),
-      clinicRateLimitCheck: async () => ({ allowed: true })
+      normalizePhoneNumber: (p) => String(p || '').replace(/\D/g, '')
     });
 
     const req = {

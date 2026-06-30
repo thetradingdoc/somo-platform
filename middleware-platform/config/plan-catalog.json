@@ -15,6 +15,7 @@
       "included_minutes_per_cycle": 300,
       "max_phone_numbers": 1,
       "max_requests_per_minute": 30,
+      "max_concurrent_calls": 2,
       "feature_flags": {
         "inbound_only": true,
         "hipaa": false,
@@ -32,6 +33,7 @@
       "included_minutes_per_cycle": 900,
       "max_phone_numbers": 1,
       "max_requests_per_minute": 75,
+      "max_concurrent_calls": 5,
       "feature_flags": {
         "inbound_only": false,
         "hipaa": true,
@@ -49,6 +51,7 @@
       "included_minutes_per_cycle": 2000,
       "max_phone_numbers": 2,
       "max_requests_per_minute": 150,
+      "max_concurrent_calls": 10,
       "feature_flags": {
         "inbound_only": false,
         "hipaa": true,

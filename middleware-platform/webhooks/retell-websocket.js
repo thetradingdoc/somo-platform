@@ -8,7 +8,8 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 const { fetchCallCosts } = require('../utils/cost-tracker');
-const { check: clinicRateLimitCheck } = require('../utils/clinic-rate-limiter');
+const { checkTurnRateLimit, clearTurnRateLimit } = require('../services/voice-limit-service');
+const voiceActiveCalls = require('../services/voice-active-calls-service');
 const tokenBudget = require('../utils/token-budget');
 const SMSService = require('../services/sms-service');
 const { processTurn: processCodingStateTurn } = require('../services/coding-state-service');
@@ -334,6 +335,25 @@ class RetellWebSocketHandler {
                 CallSessionService.endSession(callId, {
                     ended_at: new Date().toISOString()
                 });
+            } catch (_) { /* ignore */ }
+
+            try {
+                clearTurnRateLimit(callId);
+                const customerId = connection.customer_id ||
+                    connection.callMetadata?.metadata?.customer_id ||
+                    connection.callMetadata?.retell_llm_dynamic_variables?.customer_id;
+                if (customerId) {
+                    voiceActiveCalls.releaseSlot(String(customerId), callId);
+                    voiceActiveCalls.endAdmissionAudit(this.db, String(customerId), callId);
+                }
+            } catch (releaseErr) {
+                console.warn('⚠️  voice active call release:', releaseErr.message);
+            }
+
+            try {
+                if (global.activeCalls && global.activeCalls[callId]) {
+                    delete global.activeCalls[callId];
+                }
             } catch (_) { /* ignore */ }
 
             this.activeConnections.delete(callId);
@@ -751,20 +771,33 @@ class RetellWebSocketHandler {
             }
         }
 
-        // Per-clinic rate limit (Section 17)
-        const tenantKey = connection.clinic_id || callMeta?.agent_id || 'unknown';
-        const rateLimit = clinicRateLimitCheck(tenantKey);
-        if (!rateLimit.allowed) {
-            console.warn(`⚠️  Clinic rate limit exceeded for ${tenantKey} (${rateLimit.limit}/min)`);
-            if (interactionType === 'function_call') {
-                const functionCall = message.function_call || message;
-                this.sendToRetell(connection.ws, {
-                    type: 'function_call_response',
-                    function_call_id: functionCall.id || functionCall.function_call_id,
-                    result: { success: false, error: 'Rate limit exceeded. Please try again shortly.' }
-                });
+        // Turn abuse guard only — admission rate limit applies on POST /voice/incoming
+        const turnTracked = new Set([
+            'update_only',
+            'response_required',
+            'function_call',
+            'reminder_required'
+        ]);
+        if (turnTracked.has(interactionType)) {
+            const turnLimit = checkTurnRateLimit({ callId });
+            if (!turnLimit.allowed) {
+                console.warn(JSON.stringify({
+                    component: 'voice_ws',
+                    event: 'turn_rate_rejected',
+                    call_id: callId,
+                    limit_type: 'turn_rate_limit',
+                    limit: turnLimit.limit
+                }));
+                if (interactionType === 'function_call') {
+                    const functionCall = message.function_call || message;
+                    this.sendToRetell(connection.ws, {
+                        type: 'function_call_response',
+                        function_call_id: functionCall.id || functionCall.function_call_id,
+                        result: { success: false, error: 'Rate limit exceeded. Please try again shortly.' }
+                    });
+                }
+                return;
             }
-            return;
         }
 
         console.log(`\n📨 Message from ${callId}:`, interactionType);

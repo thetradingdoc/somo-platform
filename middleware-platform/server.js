@@ -8120,6 +8120,20 @@ app.post('/webhook/retell/end-of-call', async (req, res) => {
 
     const callId = req.body.call_id;
 
+    try {
+      const voiceActiveCalls = require('./services/voice-active-calls-service');
+      const callLog = db.db?.prepare?.('SELECT customer_id FROM voice_call_log WHERE call_id = ? LIMIT 1')?.get(callId);
+      const customerId = callLog?.customer_id ||
+        req.body?.metadata?.customer_id ||
+        req.body?.call?.metadata?.customer_id;
+      if (customerId && callId) {
+        voiceActiveCalls.releaseSlot(String(customerId), callId);
+        voiceActiveCalls.endAdmissionAudit(db, String(customerId), callId);
+      }
+    } catch (releaseErr) {
+      console.warn('[Voice] end-of-call active release:', releaseErr.message);
+    }
+
     // ========== FHIR COMPLETION ==========
     // Complete FHIR Encounter and store transcript
     if (callId && global.activeCalls && global.activeCalls[callId]) {

@@ -6,6 +6,8 @@ const {
   getPastDueGraceDays,
   getNumberRetentionDays,
   getMaxRequestsPerMinute,
+  getMaxConcurrentCalls,
+  getMaxPhoneNumbers,
   getTier
 } = require('./plan-catalog');
 const { getTotalAvailableMinutes } = require('./apply-usage');
@@ -145,7 +147,9 @@ function canInitiateOutboundCall(db, customerId) {
 function canProvisionNumber(db, customerId) {
   const customer = db.getCustomer(customerId);
   if (!customer) return { allowed: false, reason: 'customer_not_found' };
-  if (customer.twilio_phone_number) return { allowed: false, reason: 'already_provisioned' };
+
+  const slotCheck = canAddPhoneNumber(db, customerId);
+  if (!slotCheck.allowed) return slotCheck;
 
   const status = customer.subscription_status || '';
   if (status === 'active') return { allowed: true, reason: 'active_subscription' };
@@ -182,6 +186,25 @@ function getRateLimitForCustomer(customer) {
   return getMaxRequestsPerMinute(customer?.plan_tier || 'starter');
 }
 
+function getConcurrentCallsForCustomer(customer) {
+  return getMaxConcurrentCalls(customer?.plan_tier || 'starter');
+}
+
+function canAddPhoneNumber(db, customerId) {
+  const customer = db.getCustomer(customerId);
+  if (!customer) return { allowed: false, reason: 'customer_not_found' };
+  const max = getMaxPhoneNumbers(customer.plan_tier || 'starter');
+  const count = db.countCustomerPhoneNumbers
+    ? db.countCustomerPhoneNumbers(customerId)
+    : customer.twilio_phone_number
+      ? 1
+      : 0;
+  if (count >= max) {
+    return { allowed: false, reason: 'max_phone_numbers', max, current: count };
+  }
+  return { allowed: true, max, current: count };
+}
+
 module.exports = {
   canAcceptInboundCall,
   canInitiateOutboundCall,
@@ -190,6 +213,8 @@ module.exports = {
   isPastDueGraceExpired,
   buildBlockedTwiml,
   getRateLimitForCustomer,
+  getConcurrentCallsForCustomer,
+  canAddPhoneNumber,
   getNumberRetentionDays,
   TRIAL_PAUSED_MESSAGE
 };

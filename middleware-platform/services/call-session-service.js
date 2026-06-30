@@ -8,9 +8,8 @@
  * - Provide a simple in-memory cache with optional DB hooks
  * - Cleanup on call end
  *
- * NOTE: v1 keeps sessions in-process. For a single middleware instance this is
- * sufficient and keeps latency low. If you later add horizontal scaling, this
- * can be swapped for a shared store (Redis, Postgres, etc.) behind the same API.
+ * NOTE: Per-call session state stays in-process (Retell WS is sticky to one instance).
+ * Voice rate limits and concurrent call caps use Redis — never this Map.
  */
 
 const logger = require('./logger');

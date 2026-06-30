@@ -68,6 +68,14 @@ function getMaxRequestsPerMinute(tierId) {
   return getTier(tierId).max_requests_per_minute ?? 150;
 }
 
+function getMaxConcurrentCalls(tierId) {
+  return getTier(tierId).max_concurrent_calls ?? 2;
+}
+
+function getMaxPhoneNumbers(tierId) {
+  return getTier(tierId).max_phone_numbers ?? 1;
+}
+
 function hasOutboundFeature(tierId) {
   return getTier(tierId).feature_flags?.outbound === true;
 }
@@ -85,6 +93,8 @@ module.exports = {
   getTrialDurationDays,
   getTrialInactivityReleaseDays,
   getMaxRequestsPerMinute,
+  getMaxConcurrentCalls,
+  getMaxPhoneNumbers,
   hasOutboundFeature,
   catalogPath
 };

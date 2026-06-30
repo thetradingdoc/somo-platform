@@ -76,10 +76,18 @@ async function provisionCustomerPhone(customerId) {
     areaCode,
     webhookUrl
   });
-  db.updateCustomer(customerId, {
-    twilio_phone_number: provisioned.phoneNumber,
-    twilio_phone_sid: provisioned.sid
-  });
+  const isFirstNumber = !customer.twilio_phone_number;
+  if (typeof db.addCustomerPhoneNumber === 'function') {
+    db.addCustomerPhoneNumber(customerId, provisioned.phoneNumber, {
+      twilioPhoneSid: provisioned.sid,
+      isPrimary: isFirstNumber
+    });
+  } else {
+    db.updateCustomer(customerId, {
+      twilio_phone_number: provisioned.phoneNumber,
+      twilio_phone_sid: provisioned.sid
+    });
+  }
   console.log(`[VoiceBilling] Provisioned ${provisioned.phoneNumber} for ${customerId}`);
   return provisioned;
 }
