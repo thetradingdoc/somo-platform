@@ -4,11 +4,13 @@
 
 const express = require('express');
 const leadIngestion = require('../services/lead-ingestion');
+const scrapeIngestion = require('../services/admin-scrape-ingestion');
 const { requireAdminOrCapability } = require('../middleware/admin-auth');
 const { adminLimiter } = require('../middleware/rate-limiter');
 const db = require('../database');
 const facade = require('../services/admin-lead-facade');
 const jobTracker = require('../services/admin-job-tracker');
+const { persistSqliteToGcs } = require('../utils/gcs-db-persist');
 
 const router = express.Router();
 const requireLeads = requireAdminOrCapability('platform.leads');
@@ -79,11 +81,15 @@ router.post('/batch', requireLeads, adminLimiter, async (req, res) => {
             phone: merged.clinic_phone || null,
           });
         } else {
-          db.db.prepare('DELETE FROM leads WHERE id = ?').run(leadId);
+          const noteLine = 'enrich_failed: no callable phone after batch enrich';
+          db.updateLead(leadId, {
+            notes: scrapeIngestion.appendNote(lead.notes, noteLine),
+            updated_at: new Date().toISOString(),
+          });
           jobTracker.sseWrite(res, {
             type: 'progress',
             id: leadId,
-            status: 'removed_no_phone',
+            status: 'still_needs_phone',
           });
         }
       } catch (err) {
@@ -102,7 +108,12 @@ router.post('/batch', requireLeads, adminLimiter, async (req, res) => {
     jobTracker.clearEnrichingLeadIds();
     const result = { enriched: enrichedCount, processed: ids.length };
     jobTracker.finishJob('enrich', result);
-    jobTracker.sseWrite(res, { type: 'done', enriched: enrichedCount, result });
+    const gcsPersist = await persistSqliteToGcs('enrich');
+    jobTracker.sseWrite(res, {
+      type: 'done',
+      enriched: enrichedCount,
+      result: { ...result, gcs_persisted: gcsPersist.ok === true },
+    });
   } catch (error) {
     jobTracker.clearEnrichingLeadIds();
     jobTracker.finishJob('enrich', null, error);

@@ -249,6 +249,23 @@ async function handlePaymentSucceeded(paymentIntent) {
     console.warn('[StripeWebhook] financial integrity ingest (non-fatal):', e.message);
   }
 
+  const healthSessionId = metadata?.health_session_id;
+  if (healthSessionId) {
+    try {
+      const healthRouting = require('../services/health-session-routing-service');
+      const routed = healthRouting.markPaidFromStripe(healthSessionId, stripePaymentIntentId, amount);
+      console.log('[StripeWebhook] Health session copay paid:', {
+        health_session_id: healthSessionId,
+        stripePaymentIntentId,
+        amount,
+        routing_status: routed?.routing_status || null
+      });
+    } catch (e) {
+      console.warn('[StripeWebhook] Health session copay settle (non-fatal):', e.message);
+    }
+    return;
+  }
+
   const appointmentId = metadata?.appointment_id;
   const patientEmail = metadata?.patient_email;
   const patientName = metadata?.patient_name;

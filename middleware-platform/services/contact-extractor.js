@@ -236,12 +236,14 @@ async function findClinicWebsite(clinicName, location) {
   if (!clinicName) return null;
 
   try {
-    // Use SerpAPI to search for clinic website
-    const apiUrl = process.env.JOB_SEARCH_API_URL;
-    const apiKey = process.env.JOB_SEARCH_API_KEY;
+    const serpKey = process.env.SERPAPI_KEY || process.env.SERPAPI_API_KEY;
+    let apiUrl = process.env.JOB_SEARCH_API_URL;
+    let apiKey = process.env.JOB_SEARCH_API_KEY;
 
-    if (!apiUrl || !apiKey || !apiUrl.includes('serpapi.com')) {
-      // If not using SerpAPI, skip website search
+    if (serpKey) {
+      apiUrl = 'https://serpapi.com/search.json';
+      apiKey = serpKey;
+    } else if (!apiUrl || !apiKey || !apiUrl.includes('serpapi.com')) {
       return null;
     }
 

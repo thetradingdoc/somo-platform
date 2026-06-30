@@ -2,6 +2,8 @@
   "name": "somo",
   "type": "module",
   "scripts": {
+    "health:ui:dev": "npm run dev --prefix unified-dashboard/health-video-landing",
+    "health:ui:build": "npm run build --prefix unified-dashboard/health-video-landing",
     "check:brand": "node scripts/check-brand-strings.cjs",
     "brand:favicons": "node scripts/generate-brand-favicons.cjs",
     "brand:trim-logo": "node scripts/trim-somo-logo.cjs",

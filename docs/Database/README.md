@@ -39,7 +39,7 @@
 
 ## Repositories (Phase 1+)
 
-New domain SQL lives under [`middleware-platform/database/repositories/`](../../middleware-platform/database/repositories/) and is re-exported from `database.js`.
+New domain SQL lives under [`middleware-platform/database/repos/`](../../middleware-platform/database/repos/) (health-session, payment). **Do not add CREATE TABLE to `database.js`** — use numbered migrations in [`middleware-platform/migrations/`](../../middleware-platform/migrations/).
 
 ## Postgres
 

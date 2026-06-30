@@ -6,6 +6,11 @@ const db = require('../database');
 const { getDisplayWebsiteUrl } = require('./lead-ingestion');
 const { isJobBoardUrl } = require('./contact-extractor');
 const { parseRequiredLanguages } = require('./lead-language-extractor');
+const {
+  parseLeadLocation,
+  matchesLocationFilter,
+  sortStatesWithPin,
+} = require('./lead-location-utils');
 
 const STAGE_TO_UI = {
   qualified: 'contacted',
@@ -102,6 +107,7 @@ function formatLeadForApi(lead, enrichingIds = new Set()) {
     language_labels,
     preferred_language: lead.preferred_language || (language_labels.length ? null : 'en'),
     pipeline_stage: normalizeStage(lead.pipeline_stage),
+    suggested_stage: lead.suggested_stage ? normalizeStage(lead.suggested_stage) : null,
     contact_status: getContactStatus(lead, enrichingIds),
     callable: hasValidPhone(lead.clinic_phone),
     lead_source: lead.source || lead.lead_source || null,
@@ -135,10 +141,16 @@ function matchesSearch(lead, search) {
   return hay.includes(q);
 }
 
+function matchesLocation(lead, location, locationMode) {
+  return matchesLocationFilter(lead, location, locationMode);
+}
+
 function querySalesLeads(filters = {}) {
   const {
     contact_status,
     specialty,
+    location,
+    location_mode,
     search,
     limit = 50,
     offset = 0,
@@ -181,6 +193,7 @@ function querySalesLeads(filters = {}) {
   let filtered = rows
     .map((l) => formatLeadForApi(l, enrichingIds))
     .filter((l) => matchesSpecialty(l, specialty))
+    .filter((l) => matchesLocation(l, location, location_mode))
     .filter((l) => matchesSearch(l, search));
 
   if (contact_status) {
@@ -224,7 +237,7 @@ function getLeadCountsByContactStatus() {
   return counts;
 }
 
-function getPipelineView(specialty) {
+function getPipelineView(specialty, location, locationMode) {
   const rows = db.db.prepare(`
     SELECT * FROM leads
     WHERE (is_test IS NULL OR is_test = 0)
@@ -241,6 +254,7 @@ function getPipelineView(specialty) {
     if (!hasValidPhone(row.clinic_phone)) continue;
     const lead = formatLeadForApi(row, enrichingIds);
     if (!matchesSpecialty(lead, specialty)) continue;
+    if (!matchesLocation(lead, location, locationMode)) continue;
     const stage = normalizeStage(row.pipeline_stage);
     const key = UI_STAGES.includes(stage) ? stage : 'new';
     counts[key]++;
@@ -248,6 +262,59 @@ function getPipelineView(specialty) {
   }
 
   return { counts, cards };
+}
+
+function getDistinctLeadLocations(opts = {}) {
+  const limit = Math.min(parseInt(opts.limit, 10) || 50, 100);
+  const group = (opts.group || 'raw').toLowerCase();
+  const filterState = opts.state ? String(opts.state).trim() : '';
+
+  const rows = db.db.prepare(`
+    SELECT location, COUNT(*) as n FROM leads
+    WHERE (is_test IS NULL OR is_test = 0)
+      AND (lead_type IS NULL OR lead_type = 'sales')
+      AND location IS NOT NULL AND TRIM(location) != ''
+    GROUP BY location
+    ORDER BY n DESC, location ASC
+  `).all();
+
+  if (group === 'state') {
+    const byState = new Map();
+    for (const row of rows) {
+      const parsed = parseLeadLocation(row.location);
+      const state = parsed.state || row.location;
+      if (!state) continue;
+      const prev = byState.get(state) || { state, count: 0 };
+      prev.count += row.n;
+      byState.set(state, prev);
+    }
+    return sortStatesWithPin(Array.from(byState.values())).slice(0, limit);
+  }
+
+  if (group === 'city') {
+    const cities = [];
+    for (const row of rows) {
+      const parsed = parseLeadLocation(row.location);
+      if (filterState && parsed.state
+        && parsed.state.toLowerCase() !== filterState.toLowerCase()) {
+        continue;
+      }
+      if (filterState && !parsed.state
+        && !row.location.toLowerCase().includes(filterState.toLowerCase())) {
+        continue;
+      }
+      cities.push({
+        location: row.location,
+        city: parsed.city || row.location,
+        state: parsed.state || null,
+        count: row.n,
+      });
+    }
+    cities.sort((a, b) => (b.count || 0) - (a.count || 0) || String(a.location).localeCompare(String(b.location)));
+    return cities.slice(0, limit);
+  }
+
+  return rows.slice(0, limit).map((r) => ({ location: r.location, count: r.n }));
 }
 
 function formatActivities(activities) {
@@ -290,4 +357,6 @@ module.exports = {
   formatCalls,
   matchesSpecialty,
   matchesSearch,
+  matchesLocation,
+  getDistinctLeadLocations,
 };

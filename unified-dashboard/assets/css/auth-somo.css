@@ -139,6 +139,59 @@
   color: var(--signup-text);
 }
 
+/* Login page vertical rhythm — eyebrow, title, sub, status pill, fields */
+.login-main .signup-eyebrow {
+  margin-bottom: 12px;
+}
+
+.login-main .signup-title {
+  margin-bottom: 12px;
+}
+
+.login-main .signup-sub {
+  margin-bottom: 28px;
+}
+
+.login-main .signup-sub:has(+ .signup-toast:not(.hidden)) {
+  margin-bottom: 20px;
+}
+
+.login-main .signup-toast {
+  margin: 0 0 28px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.login-main .signup-toast.hidden {
+  margin: 0;
+}
+
+.login-main .signup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.login-main .signup-field > span {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.login-main #adminCodeField:not(.hidden) {
+  margin-top: 4px;
+  padding-top: 20px;
+  border-top: 1px solid var(--signup-border);
+}
+
+.login-main #loginForm .signup-btn-primary {
+  margin-top: 12px;
+}
+
 /* Prevent iOS zoom on focus; match signup field sizing */
 .login-main .signup-field input {
   font-size: 16px;

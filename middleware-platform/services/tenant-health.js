@@ -88,8 +88,45 @@ function buildTenantAlert(clinic, customer, minutesRemaining, errorCount) {
   return alerts;
 }
 
+const severityOrder = { critical: 0, warning: 1, info: 2 };
+
+function groupAlerts(flatAlerts) {
+  const byClinic = new Map();
+  for (const a of flatAlerts) {
+    const key = a.clinic_id;
+    if (!byClinic.has(key)) {
+      byClinic.set(key, {
+        clinic_id: a.clinic_id,
+        company_name: a.company_name,
+        minutes_remaining: a.minutes_remaining,
+        subscription_status: a.subscription_status,
+        trial_status: a.trial_status,
+        severity: a.severity,
+        reasons: [],
+      });
+    }
+    const g = byClinic.get(key);
+    g.reasons.push(a.reason);
+    if ((severityOrder[a.severity] ?? 9) < (severityOrder[g.severity] ?? 9)) {
+      g.severity = a.severity;
+    }
+  }
+  return Array.from(byClinic.values()).sort(
+    (a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9)
+  );
+}
+
+const ACTIVE_CLINIC_WHERE = `(archived_at IS NULL OR archived_at = '')`;
+
+function getActiveClinics(includeArchived = false) {
+  const sql = includeArchived
+    ? 'SELECT * FROM clinics ORDER BY created_at DESC'
+    : `SELECT * FROM clinics WHERE ${ACTIVE_CLINIC_WHERE} ORDER BY created_at DESC`;
+  return db.db.prepare(sql).all();
+}
+
 function getAllTenantAlerts() {
-  const clinics = db.db.prepare('SELECT * FROM clinics ORDER BY created_at DESC').all();
+  const clinics = getActiveClinics(false);
   const allAlerts = [];
 
   for (const clinic of clinics) {
@@ -100,10 +137,10 @@ function getAllTenantAlerts() {
     allAlerts.push(...buildTenantAlert(clinic, customer, minutesRemaining, errorCount));
   }
 
-  const severityOrder = { critical: 0, warning: 1, info: 2 };
   allAlerts.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));
 
-  return allAlerts;
+  const grouped = groupAlerts(allAlerts);
+  return { flat: allAlerts, grouped };
 }
 
 function enrichTenantRow(clinic) {
@@ -123,8 +160,11 @@ function enrichTenantRow(clinic) {
 
 module.exports = {
   getAllTenantAlerts,
+  getActiveClinics,
+  ACTIVE_CLINIC_WHERE,
   enrichTenantRow,
   resolveTenantCustomerId,
   getCustomerBilling,
   getMinutesRemaining,
+  groupAlerts,
 };

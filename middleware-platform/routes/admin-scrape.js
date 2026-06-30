@@ -6,11 +6,13 @@
 const express = require('express');
 const { searchJobs } = require('../services/job-scraper');
 const leadIngestion = require('../services/lead-ingestion');
+const scrapeIngestion = require('../services/admin-scrape-ingestion');
 const { requireAdminOrCapability } = require('../middleware/admin-auth');
 const { adminLimiter } = require('../middleware/rate-limiter');
 const db = require('../database');
 const facade = require('../services/admin-lead-facade');
 const jobTracker = require('../services/admin-job-tracker');
+const { persistSqliteToGcs } = require('../utils/gcs-db-persist');
 
 const router = express.Router();
 const requireLeads = requireAdminOrCapability('platform.leads');
@@ -19,11 +21,46 @@ function isScrapeConfigured() {
   return !!(process.env.JOB_SEARCH_API_URL && process.env.JOB_SEARCH_API_KEY);
 }
 
+function detectJobSearchProvider() {
+  const url = (process.env.JOB_SEARCH_API_URL || '').toLowerCase();
+  if (url.includes('serpapi.com')) return 'serpapi';
+  if (url.includes('rapidapi') || url.includes('jsearch')) return 'jsearch';
+  if (process.env.SERPAPI_KEY || process.env.SERPAPI_API_KEY) return 'serpapi';
+  return url ? 'custom' : 'unset';
+}
+
+function parseJobResultJson(row) {
+  if (!row?.last_result_json) return null;
+  try {
+    return JSON.parse(row.last_result_json);
+  } catch {
+    return null;
+  }
+}
+
+function buildPipelineSummary(dbTotal, leads, scrapeRow) {
+  const lastScrape = parseJobResultJson(scrapeRow);
+  const hasScrapeRun = !!(scrapeRow?.last_run_at || lastScrape);
+  return {
+    db_total: dbTotal,
+    verified: leads.verified || 0,
+    needs_phone: leads.needs_phone || 0,
+    never_scraped: dbTotal === 0 && !hasScrapeRun,
+    scraped_zero_callable: hasScrapeRun && (leads.verified || 0) === 0 && dbTotal > 0,
+  };
+}
+
 function setupSse(res) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
+}
+
+function escapeCsv(val) {
+  const s = val == null ? '' : String(val);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
 }
 
 /**
@@ -36,17 +73,24 @@ router.get('/status', requireLeads, adminLimiter, async (req, res) => {
     const usage = db.getCallUsageStats();
     const dbTotal = db.db.prepare(`SELECT COUNT(*) as n FROM leads WHERE (lead_type IS NULL OR lead_type = 'sales')`).get().n;
     const scrapeConfigured = isScrapeConfigured();
+    const scrapeResult = parseJobResultJson(scheduler.scrape);
+    const enrichResult = parseJobResultJson(scheduler.enrich);
 
     res.json({
       scrape_configured: scrapeConfigured,
       setup_hint: scrapeConfigured ? null : 'Set JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY in server .env (see .env.example)',
       db_total: dbTotal,
+      job_search_provider: detectJobSearchProvider(),
+      scrape_cron_enabled: process.env.SCRAPE_CRON_ENABLED === '1',
       scheduler: {
         is_running: scheduler.is_running,
         last_run_at: scheduler.last_run_at,
         scrape_status: scheduler.scrape?.status,
         enrich_status: scheduler.enrich?.status,
+        scrape_last_result: scrapeResult,
+        enrich_last_result: enrichResult,
       },
+      pipeline_summary: buildPipelineSummary(dbTotal, leads, scheduler.scrape),
       leads,
       calls_this_month: usage.calls_used || 0,
       calls_cap: 250,
@@ -59,6 +103,37 @@ router.get('/status', requireLeads, adminLimiter, async (req, res) => {
 });
 
 /**
+ * GET /api/admin/scrape/leads/export?format=csv
+ */
+router.get('/leads/export', requireLeads, adminLimiter, async (req, res) => {
+  try {
+    if (req.query.format !== 'csv') {
+      return res.status(400).json({ error: 'Only format=csv is supported' });
+    }
+    const { leads } = facade.querySalesLeads({
+      contact_status: req.query.contact_status || undefined,
+      specialty: req.query.specialty || undefined,
+      location: req.query.location || undefined,
+      location_mode: req.query.location_mode || undefined,
+      search: req.query.search || undefined,
+      callable_only: req.query.callable_only === '1',
+      limit: 5000,
+      offset: 0,
+    });
+    const header = ['id', 'clinic_name', 'clinic_phone', 'clinic_email', 'location', 'specialty', 'pipeline_stage', 'contact_status', 'lead_score', 'created_at'];
+    const lines = [header.join(',')];
+    for (const l of leads) {
+      lines.push(header.map((k) => escapeCsv(l[k])).join(','));
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="sales-leads.csv"');
+    res.send(lines.join('\n'));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/admin/scrape/leads/call-ready
  */
 router.get('/leads/call-ready', requireLeads, adminLimiter, async (req, res) => {
@@ -66,6 +141,9 @@ router.get('/leads/call-ready', requireLeads, adminLimiter, async (req, res) => 
     const limit = parseInt(req.query.limit, 10) || 10;
     const { leads } = facade.querySalesLeads({
       contact_status: 'verified',
+      specialty: req.query.specialty || undefined,
+      location: req.query.location || undefined,
+      location_mode: req.query.location_mode || undefined,
       callable_only: true,
       limit: 500,
     });
@@ -86,7 +164,9 @@ router.get('/leads/call-ready', requireLeads, adminLimiter, async (req, res) => 
 router.get('/leads/pipeline', requireLeads, adminLimiter, async (req, res) => {
   try {
     const specialty = req.query.specialty || '';
-    const view = facade.getPipelineView(specialty);
+    const location = req.query.location || '';
+    const locationMode = req.query.location_mode || '';
+    const view = facade.getPipelineView(specialty, location, locationMode);
     res.json(view);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -103,12 +183,29 @@ router.get('/leads', requireLeads, adminLimiter, async (req, res) => {
     const { leads, total } = facade.querySalesLeads({
       contact_status: req.query.contact_status || undefined,
       specialty: req.query.specialty || undefined,
+      location: req.query.location || undefined,
+      location_mode: req.query.location_mode || undefined,
       search: req.query.search || undefined,
       callable_only: req.query.contact_status === 'verified' || req.query.callable_only === '1',
       limit,
       offset,
     });
     res.json({ leads, total });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/scrape/leads/locations
+ */
+router.get('/leads/locations', requireLeads, adminLimiter, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const group = req.query.group || 'raw';
+    const state = req.query.state || '';
+    const locations = facade.getDistinctLeadLocations({ group, state, limit });
+    res.json({ locations, group });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -171,6 +268,52 @@ router.put('/leads/:id/stage', requireLeads, adminLimiter, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/scrape/leads/:id/suggested-stage/accept
+ */
+router.post('/leads/:id/suggested-stage/accept', requireLeads, adminLimiter, async (req, res) => {
+  try {
+    const lead = db.getLead(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    if (!lead.suggested_stage) {
+      return res.status(400).json({ error: 'No suggested stage pending' });
+    }
+    const dbStage = facade.denormalizeStage(lead.suggested_stage);
+    const oldStage = lead.pipeline_stage;
+    db.updateLead(req.params.id, {
+      pipeline_stage: dbStage,
+      suggested_stage: null,
+      suggested_stage_note: null,
+    });
+    if (dbStage !== oldStage) {
+      db.createLeadActivity({
+        lead_id: req.params.id,
+        activity_type: 'stage_change',
+        activity_subject: 'Accepted AI stage suggestion',
+        activity_description: lead.suggested_stage_note || `Moved to ${lead.suggested_stage}`,
+        created_by: 'admin',
+      });
+    }
+    res.json({ success: true, stage: lead.suggested_stage });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/scrape/leads/:id/suggested-stage/dismiss
+ */
+router.post('/leads/:id/suggested-stage/dismiss', requireLeads, adminLimiter, async (req, res) => {
+  try {
+    const lead = db.getLead(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    db.updateLead(req.params.id, { suggested_stage: null, suggested_stage_note: null });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/admin/scrape/leads/:id/note
  */
 router.post('/leads/:id/note', requireLeads, adminLimiter, async (req, res) => {
@@ -195,14 +338,36 @@ router.post('/leads/:id/note', requireLeads, adminLimiter, async (req, res) => {
   }
 });
 
+function resolveScrapeLocations(req) {
+  const fromBody = req?.body?.locations;
+  if (Array.isArray(fromBody) && fromBody.length) {
+    return fromBody.map(String).filter(Boolean);
+  }
+  const envList = process.env.MEDICAL_RECEPTIONIST_LOCATIONS;
+  if (envList && envList.includes('|')) {
+    return envList.split('|').map((s) => s.trim()).filter(Boolean);
+  }
+  const single = process.env.MEDICAL_RECEPTIONIST_LOCATION;
+  if (single && String(single).trim()) return [String(single).trim()];
+  return ['New York, NY', 'New York', 'US'];
+}
+
+function resolveScrapeEngines() {
+  const fromEnv = (process.env.JOB_SEARCH_ENGINE || '').trim();
+  if (fromEnv) return [fromEnv];
+  const provider = detectJobSearchProvider();
+  if (provider === 'serpapi') return ['google_jobs'];
+  return ['jsearch'];
+}
+
 /**
  * POST /api/admin/scrape/run — SSE scrape job
  */
 router.post('/run', requireLeads, adminLimiter, async (req, res) => {
   setupSse(res);
-  const sources = req.body?.sources || ['jsearch'];
   jobTracker.startJob('scrape');
-  jobTracker.sseWrite(res, { type: 'start' });
+  const engines = resolveScrapeEngines();
+  jobTracker.sseWrite(res, { type: 'start', job_search_provider: detectJobSearchProvider(), engines });
 
   if (!isScrapeConfigured()) {
     const msg = 'JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY are not configured in server .env';
@@ -213,86 +378,109 @@ router.post('/run', requireLeads, adminLimiter, async (req, res) => {
 
   let rawFound = 0;
   let saved = 0;
+  let savedCallable = 0;
+  let savedNeedsPhone = 0;
   let skippedDupes = 0;
-  let skippedNoPhone = 0;
   let enrichAttempts = 0;
   let enrichHits = 0;
+  const seenExternal = new Set();
 
   try {
     const queries = [
       'Medical receptionist OR dental receptionist',
       'Healthcare front desk receptionist',
     ];
+    const maxSave = parseInt(process.env.MEDICAL_RECEPTIONIST_MAX_LEADS || '50', 10);
+    const scrapeLocations = resolveScrapeLocations(req);
 
-    for (const source of sources) {
-      jobTracker.sseWrite(res, { msg: `Searching ${source}...` });
-    }
-
-    const searchResults = await searchJobs({
-      query: queries[0],
-      location: process.env.MEDICAL_RECEPTIONIST_LOCATION || 'US',
-      postedSinceDays: parseInt(process.env.MEDICAL_RECEPTIONIST_DAYS || '3', 10),
-      engine: 'jsearch',
+    jobTracker.sseWrite(res, {
+      msg: `Regions: ${scrapeLocations.join(' → ')} (stop at ${maxSave} saves)`,
     });
 
-    rawFound = searchResults?.length || 0;
-    jobTracker.sseWrite(res, { msg: `Found ${rawFound} raw postings` });
+    locationLoop: for (const scrapeLocation of scrapeLocations) {
+      if (saved >= maxSave) break;
+      jobTracker.sseWrite(res, { msg: `Searching ${scrapeLocation}…` });
 
-    const maxSave = parseInt(process.env.MEDICAL_RECEPTIONIST_MAX_LEADS || '50', 10);
-    const candidates = (searchResults || []).slice(0, maxSave);
-
-    for (const job of candidates) {
-      try {
-        const externalId = job.external_id || job.job_id || `${job.clinic_name}-${job.source_url}`;
-        if (externalId && db.getLeadByExternalId(externalId)) {
-          skippedDupes++;
-          continue;
-        }
-
-        enrichAttempts++;
-        const enriched = await leadIngestion.enrichJobCandidate(job);
-        if (enriched.clinic_phone || enriched.clinic_email) enrichHits++;
-
-        if (!leadIngestion.isCallableLead(enriched)) {
-          skippedNoPhone++;
+      for (const engine of engines) {
+        for (const query of queries) {
+          if (saved >= maxSave) break locationLoop;
           jobTracker.sseWrite(res, {
-            msg: `Skip (no phone): ${job.clinic_name || job.title || 'Unknown'}`,
+            type: 'progress',
+            source: engine,
+            msg: `[${scrapeLocation}] ${query.slice(0, 40)}…`,
           });
-          continue;
+          const searchResults = await searchJobs({
+            query,
+            location: scrapeLocation,
+            postedSinceDays: parseInt(process.env.MEDICAL_RECEPTIONIST_DAYS || '3', 10),
+            engine,
+          });
+          rawFound += searchResults?.length || 0;
+
+          for (const job of searchResults || []) {
+            if (saved >= maxSave) break locationLoop;
+            enrichAttempts++;
+            const outcome = await scrapeIngestion.enrichAndPersist(job, { source: engine });
+            if (outcome.enriched?.clinic_phone || outcome.enriched?.clinic_email) enrichHits++;
+
+            if (outcome.status === 'duplicate') {
+              skippedDupes++;
+              continue;
+            }
+            if (outcome.status === 'error') {
+              jobTracker.sseWrite(res, { msg: `Skip: ${outcome.error}` });
+              continue;
+            }
+
+            const ext = outcome.external_id;
+            if (ext && seenExternal.has(ext)) {
+              skippedDupes++;
+              continue;
+            }
+            if (ext) seenExternal.add(ext);
+
+            saved++;
+            if (outcome.callable) {
+              savedCallable++;
+              jobTracker.sseWrite(res, {
+                msg: `Saved (callable): ${job.clinic_name || job.title || 'Unknown'}`,
+              });
+            } else {
+              savedNeedsPhone++;
+              jobTracker.sseWrite(res, {
+                msg: `Saved (needs phone): ${job.clinic_name || job.title || 'Unknown'}`,
+              });
+            }
+
+            if (saved % 5 === 0) {
+              jobTracker.sseWrite(res, { msg: `Saved ${saved} leads so far...` });
+            }
+          }
         }
-
-        const leadData = leadIngestion.buildLeadPayload(job, enriched, { source: 'jsearch' });
-
-        db.createLead(leadData);
-        saved++;
-
-        try {
-          const LeadIntelligenceService = require('../services/lead-intelligence-service');
-          const created = db.getLeadByExternalId(externalId);
-          if (created) LeadIntelligenceService.updateLeadScore(created.id);
-        } catch {
-          // non-critical
-        }
-
-        if (saved % 5 === 0) {
-          jobTracker.sseWrite(res, { msg: `Saved ${saved} leads so far...` });
-        }
-      } catch (err) {
-        jobTracker.sseWrite(res, { msg: `Skip: ${err.message}` });
       }
     }
+
+    jobTracker.sseWrite(res, { msg: `Found ${rawFound} raw postings across queries` });
 
     const result = {
       raw_found: rawFound,
       saved,
+      saved_callable: savedCallable,
+      saved_needs_phone: savedNeedsPhone,
       enriched: enrichHits,
       skipped_dupes: skippedDupes,
-      skipped_no_phone: skippedNoPhone,
+      skipped_no_phone: 0,
       enrich_attempts: enrichAttempts,
       enrich_hits: enrichHits,
+      engine: 'jsearch',
+      scrape_locations: scrapeLocations,
     };
     jobTracker.finishJob('scrape', result);
-    jobTracker.sseWrite(res, { type: 'done', result });
+    const gcsPersist = await persistSqliteToGcs('scrape');
+    jobTracker.sseWrite(res, {
+      type: 'done',
+      result: { ...result, gcs_persisted: gcsPersist.ok === true },
+    });
   } catch (error) {
     console.error('scrape/run error:', error);
     jobTracker.finishJob('scrape', null, error);
@@ -303,3 +491,4 @@ router.post('/run', requireLeads, adminLimiter, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.resolveScrapeLocations = resolveScrapeLocations;

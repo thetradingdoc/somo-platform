@@ -1,6 +1,12 @@
 # LIVE
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-06-25
+
+<a id="route-ownership-pre-phase-3"></a>
+
+## Route ownership (Pre-Phase 3)
+
+See [`ROUTE_OWNERSHIP.md`](./ROUTE_OWNERSHIP.md) — KEEP / FREEZE / DELETE table for health finance agent vs legacy commerce.
 
 ## 2026-06-24 changelog
 

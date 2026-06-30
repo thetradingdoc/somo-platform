@@ -1,67 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Coding Reviews — Somo Admin</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
-    button { margin-right: 0.5rem; }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Coding reviews</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/admin-portal.css">
+  <script src="/assets/js/config.js"></script>
 </head>
 <body>
-  <h1>Coding review queue</h1>
-  <p>Pending HITL coding decisions — approve to resume insurance collection on active sessions.</p>
-  <table>
-    <thead>
-      <tr>
-        <th>Session</th>
-        <th>ICD-10</th>
-        <th>CPT</th>
-        <th>Confidence</th>
-        <th>SLA</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <aside id="admin-sidebar"></aside>
+  <main class="admin-crm-main">
+    <div class="admin-crm-header">
+      <div>
+        <div class="admin-crm-title">Coding review queue</div>
+        <div class="admin-crm-subtitle">Pending HITL coding decisions</div>
+      </div>
+    </div>
+
+    <div class="admin-crm-card">
+      <div id="reviewTable"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
+    </div>
+  </main>
+
+  <script src="/admin/assets/js/admin-shell.js"></script>
   <script>
-    const API = window.location.origin.replace(/:\d+$/, ':4000');
+    const { apiFetch, esc, init, showToast } = AdminShell;
+    init('board');
+
+    document.addEventListener('DOMContentLoaded', load);
+
     async function load() {
-      const res = await fetch(`${API}/api/admin/coding-reviews?status=pending`);
-      const data = await res.json();
-      const tbody = document.getElementById('rows');
-      tbody.innerHTML = '';
-      for (const r of data.reviews || []) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${r.call_id || ''}</td>
-          <td>${r.proposed_icd10 || ''}</td>
-          <td>${r.proposed_cpt || ''}</td>
-          <td>${r.confidence_score ?? ''}</td>
-          <td>${r.sla_deadline || ''}</td>
-          <td>
-            <button data-id="${r.id}" data-action="approve">Approve</button>
-            <button data-id="${r.id}" data-action="reject">Reject</button>
-          </td>`;
-        tbody.appendChild(tr);
+      const el = document.getElementById('reviewTable');
+      try {
+        const data = await apiFetch('/api/admin/coding-reviews?status=pending');
+        const reviews = data.reviews || [];
+        if (!reviews.length) {
+          el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No pending reviews</p>';
+          return;
+        }
+        el.innerHTML = `
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;">
+                <th style="padding:8px 0;">Session</th>
+                <th>ICD-10</th>
+                <th>CPT</th>
+                <th>Confidence</th>
+                <th>SLA</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${reviews.map((r) => `
+                <tr style="border-top:1px solid var(--border);">
+                  <td style="padding:10px 0;">${esc(r.call_id || r.id)}</td>
+                  <td>${esc(r.proposed_icd10 || '')}</td>
+                  <td>${esc(r.proposed_cpt || '')}</td>
+                  <td>${esc(String(r.confidence_score ?? ''))}</td>
+                  <td>${esc(r.sla_deadline || '')}</td>
+                  <td>
+                    <button class="admin-crm-btn-outline btn-sm" data-id="${r.id}" data-action="approve">Approve</button>
+                    <button class="admin-crm-btn-outline btn-sm" data-id="${r.id}" data-action="reject">Reject</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`;
+        el.querySelectorAll('button[data-action]').forEach((btn) => {
+          btn.onclick = () => resolveReview(btn.dataset.id, btn.dataset.action);
+        });
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
       }
     }
-    document.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button');
-      if (!btn) return;
-      const id = btn.dataset.id;
-      const action = btn.dataset.action;
-      const url = `${API}/api/admin/coding-reviews/${id}/${action}`;
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolved_by: 'admin_ui', rejection_reason: 'clinical_reject' })
-      });
-      load();
-    });
-    load();
+
+    async function resolveReview(id, action) {
+      try {
+        await apiFetch(`/api/admin/coding-reviews/${id}/${action}`, {
+          method: 'POST',
+          body: JSON.stringify({ resolved_by: 'admin_ui', rejection_reason: 'clinical_reject' }),
+        });
+        showToast(`Review ${action}d`, 'success');
+        load();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
   </script>
 </body>
 </html>

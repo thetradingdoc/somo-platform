@@ -47,12 +47,8 @@ router.post('/chat', requireAdminAuth, adminLimiter, express.json(), async (req,
  */
 router.get('/suggestions', requireAdminAuth, adminLimiter, async (req, res) => {
   try {
-    // TODO: Implement action queue suggestions
-    // For now, return empty suggestions
-    res.json({
-      success: true,
-      suggestions: []
-    });
+    const suggestions = AdminAIAssistantService.getSuggestions();
+    res.json({ success: true, suggestions });
   } catch (error) {
     console.error('Admin AI suggestions error:', error);
     res.status(500).json({

@@ -1,22 +1,36 @@
 /**
- * Somo provider sign-in — POST /api/customers/login, forgot password, safe redirect.
+ * Somo sign-in — provider (/api/customers/login) and operator admin (/api/admin/session).
  */
 (function () {
   const API_BASE = (typeof resolveApiBase === 'function' ? resolveApiBase() : (window.API_BASE || window.location.origin).replace(/\/$/, ''));
   const DEFAULT_HOME = '/business/today.html';
+  const ADMIN_HOME = '/admin/';
+  const params = new URLSearchParams(window.location.search);
+  const isAdminLogin = params.get('admin') === '1';
 
   if (window.location.hash === '#signup' || window.location.search.includes('signup=true')) {
     window.location.replace('/signup');
     return;
   }
 
+  function isAllowedRedirectUrl(url) {
+    const host = url.hostname.toLowerCase();
+    if (url.origin === window.location.origin) return true;
+    if (isAdminLogin && url.pathname.startsWith('/admin')) {
+      if (host === 'callsomo.com' || host === 'www.callsomo.com') return true;
+      if (host === 'localhost' || host === '127.0.0.1') return true;
+    }
+    return false;
+  }
+
   function getSafeRedirect() {
-    const raw = new URLSearchParams(window.location.search).get('redirect');
+    const raw = params.get('redirect');
     if (!raw || !raw.trim()) return null;
     const trimmed = raw.trim();
     try {
       const u = new URL(trimmed, window.location.origin);
-      if (u.origin !== window.location.origin) return null;
+      if (!isAllowedRedirectUrl(u)) return null;
+      if (u.origin !== window.location.origin) return u.href;
       return u.pathname + u.search + u.hash;
     } catch (_) {
       if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
@@ -123,6 +137,91 @@
     }
   }
 
+  let adminCodeStep = false;
+
+  function ensureAdminCodeField() {
+    let field = document.getElementById('adminCodeField');
+    if (field) return field;
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('loginSubmit');
+    if (!form || !submitBtn) return null;
+    field = document.createElement('label');
+    field.className = 'signup-field hidden';
+    field.id = 'adminCodeField';
+    field.innerHTML = `
+      <span>Verification code</span>
+      <input type="text" id="adminCode" placeholder="6-digit code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" />
+    `;
+    form.insertBefore(field, submitBtn);
+    return field;
+  }
+
+  function configureAdminLoginUi() {
+    sessionStorage.removeItem('admin_auth_redirect');
+    document.title = 'Somo — Operator sign in';
+    const eyebrow = document.querySelector('#loginPanel .signup-eyebrow');
+    const title = document.querySelector('#loginPanel .signup-title');
+    const sub = document.querySelector('#loginPanel .signup-sub');
+    if (eyebrow) eyebrow.textContent = 'Operator access';
+    if (title) title.textContent = 'Sign in to admin portal';
+    if (sub) sub.textContent = 'Use your operator account. A verification code will be emailed for security.';
+    document.getElementById('loginRemember')?.closest('.login-options')?.classList.add('hidden');
+    document.querySelector('.login-footer-link')?.classList.add('hidden');
+    const btn = document.getElementById('loginSubmit');
+    if (btn) btn.textContent = 'Continue';
+    ensureAdminCodeField();
+  }
+
+  async function adminLogin(email, password, code) {
+    const btn = document.getElementById('loginSubmit');
+    hideToast();
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = adminCodeStep ? 'Verifying…' : 'Sending code…';
+    }
+
+    const body = { email, password };
+    if (adminCodeStep) body.code = code;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      let data = {};
+      try { data = await response.json(); } catch (_) {}
+
+      if (!response.ok || data.success === false) {
+        throw new Error(data.error || data.message || 'Admin sign in failed');
+      }
+
+      if (data.step === 'verify_code' && !adminCodeStep) {
+        adminCodeStep = true;
+        const codeField = ensureAdminCodeField();
+        codeField?.classList.remove('hidden');
+        document.getElementById('adminCode')?.focus();
+        showToast(data.message || 'Verification code sent to your email', 'success');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Verify & continue';
+        }
+        return;
+      }
+
+      sessionStorage.removeItem('admin_auth_redirect');
+      const redirect = getSafeRedirect();
+      window.location.href = redirect || ADMIN_HOME;
+    } catch (err) {
+      showToast(err.message || 'Admin sign in failed', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = adminCodeStep ? 'Verify & continue' : 'Continue';
+      }
+    }
+  }
+
   async function forgotPassword(email) {
     const btn = document.getElementById('forgotSubmit');
     hideToast();
@@ -163,11 +262,19 @@
   }
 
   function bind() {
+    if (isAdminLogin) configureAdminLoginUi();
+
     document.getElementById('loginForm')?.addEventListener('submit', (e) => {
       e.preventDefault();
       const email = document.getElementById('loginEmail')?.value?.trim();
       const password = document.getElementById('loginPassword')?.value;
-      if (email && password) login(email, password);
+      if (!email || !password) return;
+      if (isAdminLogin) {
+        const code = document.getElementById('adminCode')?.value?.trim();
+        adminLogin(email, password, code);
+      } else {
+        login(email, password);
+      }
     });
 
     document.getElementById('forgotForm')?.addEventListener('submit', (e) => {

@@ -1,11 +1,12 @@
 # Canonical documentation map
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-25
 
 Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); see [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
 
 | Topic | Read first | Companion / depth |
 |-------|------------|-------------------|
+| **Healthcare financial agent (SSOT)** | Master plan `~/.cursor/plans/somo_health_session_architecture_723cc4d3.plan.md` | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) |
 | **Repo overview** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
 | **Deploy / CI / GCP (live)** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#callsomo-gcp-cutover) | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md), [`deployment/README.md`](../deployment/README.md) (historical) |
 | **Retell agent inventory** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#retell-agent-inventory) + [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) | `npm run verify:agent-config` |
@@ -17,6 +18,7 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Provider calendar** | [`design/PROVIDER_CALENDAR.md`](../design/PROVIDER_CALENDAR.md) | Board + FullCalendar views in `business/calendar.html` |
 | **Provider Today UI** | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) | [`todos/PENDING.md`](../../todos/PENDING.md) (UI polish section) |
 | **Staging profile** | [`meta/README.md`](./README.md#staging-profile) | [`testing/README.md`](../testing/README.md) |
+| **Consumer video health** | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) | [`product/VIDEO_HEALTH.md`](../product/VIDEO_HEALTH.md), [`product/HEALTH_VIDEO_UX.md`](../product/HEALTH_VIDEO_UX.md) |
 | **Consumer navigation** (platform DID) | [`runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md) | [`voice/PLATFORM_NUMBER_INBOUND_SPEC.md`](../voice/PLATFORM_NUMBER_INBOUND_SPEC.md) |
 | **Kelly agentic orchestration** | [`architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md) | [`ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md), [`TURN_COMPLETION_CONTRACT.md`](../architecture/TURN_COMPLETION_CONTRACT.md) |
 | **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`kelly-rails/`](../../middleware-platform/services/kelly-rails/) in code |
@@ -30,11 +32,19 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Patient timeline APIs** | [`architecture/LIVE.md`](../architecture/LIVE.md#patient-timeline-routine-and-billing) | Legacy consumer app code in `patient-app/` (coexisting; not front-desk SSOT) |
 | **Medical coding** | [`Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) | [`Medical Coding/README.md`](../Medical%20Coding/README.md) |
 | **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
-| **Middleware depth** | [`middleware-platform/README.md`](../middleware-platform/README.md) | TOC anchors — do not duplicate |
-| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
+| **Middleware depth** | [`architecture/MIDDLEWARE_PLATFORM.md`](../architecture/MIDDLEWARE_PLATFORM.md) | [`middleware-platform/README.md`](../middleware-platform/README.md) |
+| **Somo health agent** | [`architecture/SOMO_HEALTH_AGENT.md`](../architecture/SOMO_HEALTH_AGENT.md) | [`HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) |
+| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md), [`admin-portal/BACKLOG.md`](../admin-portal/BACKLOG.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
 | **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
 | **Active work** | [`todos/PENDING.md`](../../todos/PENDING.md) | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) (CR/FE detail) |
 | **Customer-ready gates** | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) | [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md) |
+| **Brand prune / legacy DELETE** | [`todos/PENDING.md`](../../todos/PENDING.md#brand-prune-2026) | [`architecture/LIVE.md`](../architecture/LIVE.md#route-ownership-pre-phase-3) — DocLittle, LittleLab, commerce PSTN docs are archive only |
+
+## Archived narratives (not active SSOT)
+
+- DocLittle / doctorlittle — legacy RAG export filenames only
+- LittleLab / Skin & Care / myskinandcare — `_archive/littlelab-landing/`, gated commerce
+- Commerce PSTN replay — `docs/qa/commerce-pstn-*` — DELETE LATER per master plan
 
 ## Middleware consolidated README
 

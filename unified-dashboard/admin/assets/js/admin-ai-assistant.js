@@ -125,6 +125,14 @@ class AdminAIAssistant {
             if (data.result.leads.length > 5) {
               responseText += `\n... and ${data.result.leads.length - 5} more`;
             }
+          } else if (data.action === 'suggest_call_list' && data.result.leads) {
+            responseText = `Top ${data.result.count} call-ready leads:\n\n`;
+            data.result.leads.forEach((lead) => {
+              responseText += `• ${lead.clinic_name} (id: ${lead.id})\n`;
+            });
+          } else if (data.action === 'run_scrape') {
+            const lr = data.result.last_scrape || {};
+            responseText = `Last scrape: ${lr.saved_callable ?? lr.saved ?? 0} callable, ${lr.saved_needs_phone ?? 0} need phone. Needs phone queue: ${data.result.leads?.needs_phone ?? 0}.`;
           } else if (data.action === 'show_stats') {
             const stats = data.result;
             responseText = `Statistics:\n`;
@@ -141,6 +149,10 @@ class AdminAIAssistant {
         }
 
         this.addMessage('assistant', responseText);
+
+        if (data.action === 'call_lead' && data.requires_confirm && data.lead_id) {
+          this.addConfirmCallButton(data.lead_id, data.lead_name || data.message);
+        }
 
         // Update conversation history
         this.conversationHistory.push(
@@ -180,6 +192,29 @@ class AdminAIAssistant {
   removeMessage(messageId) {
     const message = document.getElementById(messageId);
     if (message) message.remove();
+  }
+
+  addConfirmCallButton(leadId, label) {
+    const wrap = document.createElement('div');
+    wrap.className = 'admin-ai-message admin-ai-message-assistant';
+    wrap.style.marginTop = '4px';
+    const btn = document.createElement('button');
+    btn.className = 'admin-crm-btn-outline btn-sm';
+    btn.textContent = 'Confirm call';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        if (window.AdminShell?.callLead) {
+          await AdminShell.callLead(leadId, label || 'lead', { skipConfirm: true });
+        }
+        btn.textContent = 'Call initiated';
+      } catch (e) {
+        btn.textContent = 'Failed';
+      }
+    };
+    wrap.appendChild(btn);
+    this.messagesContainer.appendChild(wrap);
+    this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
   }
 }
 

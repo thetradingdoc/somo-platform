@@ -27,12 +27,24 @@ node scripts/check-legacy-hosts.cjs
 node scripts/check-docs-stale-strings.cjs
 node scripts/check-brand-strings.cjs
 node scripts/check-brand-consumer-strings.cjs --no-legacy-api-default-env
+node scripts/check-monolith-growth.cjs
 node scripts/check-performance-budgets.cjs
 node scripts/check-auth-ui-guardrails.cjs
 node scripts/check-landing-route-canonicalization.cjs
 RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs
 node scripts/verify-agentic-checkout.cjs
 node scripts/verify-repo-layout.cjs
+
+step "Health import firewall"
+node "$MP/scripts/check-health-imports.cjs"
+
+step "Health session unit tests"
+cd "$MP"
+npm test -- --runInBand --testPathPattern='health-(session|turn|video|token|rag|safety|diagnosis|opqrst|vision|derm|care-pathway)'
+
+step "Health acceptance (offline)"
+cd "$MP"
+npm run health:acceptance -- --offline
 
 step "Kelly Rails env + gates"
 cd "$MP"
@@ -122,6 +134,21 @@ if [[ "$TIER" == "full" ]]; then
   step "Docs route/service parity"
   cd "$ROOT"
   node scripts/check-docs-route-service-parity.cjs
+
+  step "Health video UI build"
+  cd "$ROOT"
+  npm run health:ui:build
+
+  step "Health video E2E (requires API on :4000)"
+  cd "$MP"
+  if curl -sf "${PW_API_BASE_URL:-http://127.0.0.1:4000}/api/health-session/start" -X POST \
+    -H 'Content-Type: application/json' \
+    -d '{"terms_accepted":false}' >/dev/null 2>&1 || \
+    curl -sf "${PW_API_BASE_URL:-http://127.0.0.1:4000}/health-video/" >/dev/null 2>&1; then
+    npm run test:e2e:health-video || echo "⚠️  Health video E2E failed — ensure npm run health:dev is running with GROQ_API_KEY for full journey"
+  else
+    echo "⚠️  Skipping health video E2E — start middleware with npm run health:dev on :4000"
+  fi
 fi
 
 echo ""

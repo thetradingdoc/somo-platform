@@ -7,9 +7,11 @@ const express = require('express');
 const db = require('../database');
 const { requireAdminOrCapability } = require('../middleware/admin-auth');
 const tenantHealth = require('../services/tenant-health');
+const tenantDelete = require('../services/admin-tenant-delete-service');
 
 const router = express.Router();
 const requireTenantsAccess = requireAdminOrCapability('platform.tenants');
+const requireTenantDelete = requireAdminOrCapability('platform.tenants.delete');
 
 const resolveTenantCustomerId = tenantHealth.resolveTenantCustomerId;
 
@@ -18,8 +20,13 @@ const resolveTenantCustomerId = tenantHealth.resolveTenantCustomerId;
  */
 router.get('/alerts', requireTenantsAccess, async (req, res) => {
   try {
-    const alerts = tenantHealth.getAllTenantAlerts();
-    res.json({ alerts, total: alerts.length });
+    const { flat, grouped } = tenantHealth.getAllTenantAlerts();
+    res.json({
+      alerts: flat,
+      grouped_alerts: grouped,
+      total: flat.length,
+      clinic_count: grouped.length,
+    });
   } catch (error) {
     console.error('tenant alerts error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -38,8 +45,8 @@ router.get('/alerts', requireTenantsAccess, async (req, res) => {
  */
 router.get('/', requireTenantsAccess, async (req, res) => {
     try {
-        // Get all clinics
-        const clinics = db.db.prepare('SELECT * FROM clinics ORDER BY created_at DESC').all();
+        const includeArchived = req.query.include_archived === '1';
+        const clinics = tenantHealth.getActiveClinics(includeArchived);
 
         // Get all tenants with usage and credits
         const tenants = await Promise.all(clinics.map(async (clinic) => {
@@ -107,6 +114,7 @@ router.get('/', requireTenantsAccess, async (req, res) => {
                 retell_agent_id: clinic.retell_agent_id,
                 retell_agent_status: clinic.retell_agent_status,
                 is_active: clinic.is_active === 1,
+                archived_at: clinic.archived_at || null,
                 created_at: clinic.created_at,
                 updated_at: clinic.updated_at,
                 subscription_status: billing.subscription_status,
@@ -264,9 +272,11 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
         const phoneNumbers = db.getClinicPhoneNumbers(clinicId) || [];
 
         const billing = tenantHealth.enrichTenantRow(clinic);
+        const deleteOptions = tenantDelete.getDeleteOptions(clinic);
 
         res.json({
             success: true,
+            delete_options: deleteOptions,
             tenant: {
                 clinic_id: clinic.clinic_id,
                 name: clinic.name,
@@ -287,6 +297,7 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
                 retell_agent_id: clinic.retell_agent_id,
                 retell_agent_status: clinic.retell_agent_status,
                 is_active: clinic.is_active === 1,
+                archived_at: clinic.archived_at || null,
                 created_at: clinic.created_at,
                 updated_at: clinic.updated_at
             },
@@ -370,6 +381,57 @@ router.post('/:clinicId/credits', requireTenantsAccess, async (req, res) => {
         });
     } catch (error) {
         console.error('❌ Error allocating credits:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * DELETE /api/admin/tenants/:clinicId
+ * Body: { mode?: 'soft'|'hard', confirm_slug: string, force?: boolean }
+ */
+router.delete('/:clinicId', requireTenantDelete, express.json(), async (req, res) => {
+    try {
+        const clinicId = req.params.clinicId;
+        const clinic = await db.getClinicById(clinicId);
+        if (!clinic) {
+            return res.status(404).json({ success: false, error: 'Tenant not found' });
+        }
+
+        const confirmSlug = (req.body?.confirm_slug || req.query.confirm_slug || '').trim();
+        if (!confirmSlug || confirmSlug !== clinic.slug) {
+            return res.status(400).json({
+                success: false,
+                error: 'confirm_slug must match tenant slug',
+            });
+        }
+
+        const mode = (req.body?.mode || req.query.mode || 'soft').toLowerCase();
+        const deletedBy = req.adminSession ? 'admin_session' : 'admin';
+        const force = req.body?.force === true || req.query.force === '1';
+
+        let result;
+        if (mode === 'hard') {
+            result = tenantDelete.hardDelete(clinicId, deletedBy, { force });
+        } else if (mode === 'soft') {
+            result = tenantDelete.softDelete(clinicId, deletedBy);
+        } else {
+            return res.status(400).json({ success: false, error: 'mode must be soft or hard' });
+        }
+
+        res.json({
+            success: true,
+            ...result,
+            message: result.mode === 'hard'
+                ? `Tenant "${result.clinic_name}" permanently removed`
+                : result.already_archived
+                    ? `Tenant "${clinic.name}" was already archived`
+                    : `Tenant "${result.clinic_name}" archived (data retained for audit)`,
+        });
+    } catch (error) {
+        if (error.code === 'HARD_DELETE_BLOCKED') {
+            return res.status(409).json({ success: false, error: error.message });
+        }
+        console.error('❌ Error deleting tenant:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

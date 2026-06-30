@@ -38,6 +38,18 @@ const BANNED = [
   { re: /\bskin\s*&\s*care\b/i, label: 'skin & care' },
 ];
 
+const HEALTH_STRICT_ROOTS = [
+  path.join(ROOT, 'unified-dashboard', 'health-video-landing'),
+  path.join(ROOT, 'middleware-platform', 'routes', 'health-session.js'),
+  path.join(ROOT, 'middleware-platform', 'services'),
+];
+
+const HEALTH_STRICT_BANNED = [
+  ...BANNED,
+  { re: /\blittlelab\b/i, label: 'littlelab' },
+  { re: /\blittle\s*lab\b/i, label: 'little lab' },
+];
+
 const ALLOW_PATH = [
   /middleware-platform\/services\/dodgecall-/i,
   /\/api\/public\/dodgecall\//i,
@@ -134,6 +146,37 @@ if (violations.length) {
     console.error(`  ${v.file}:${v.line} [${v.label}] ${v.snippet}`);
   }
   if (violations.length > 50) console.error(`  ... and ${violations.length - 50} more`);
+  process.exit(1);
+}
+
+// Stricter scan: health consumer paths must not contain legacy brand names
+const healthViolations = [];
+for (const base of HEALTH_STRICT_ROOTS) {
+  if (!fs.existsSync(base)) continue;
+  const files = fs.statSync(base).isFile() ? [base] : walk(base);
+  for (const file of files) {
+    const rel = path.relative(ROOT, file);
+    if (rel.includes('health-video') === false && !/^middleware-platform[\\/]services[\\/]health-/.test(rel) && !rel.includes('health-session.js')) {
+      if (base.endsWith('services') && !/services[\\/]health-/.test(rel)) continue;
+    }
+    let raw;
+    try { raw = fs.readFileSync(file, 'utf8'); } catch (_) { continue; }
+    raw.split('\n').forEach((line, i) => {
+      if (isAllowedLine(line)) return;
+      for (const { re, label } of HEALTH_STRICT_BANNED) {
+        if (re.test(line)) {
+          healthViolations.push({ file: rel, line: i + 1, label, snippet: line.trim().slice(0, 120) });
+        }
+      }
+    });
+  }
+}
+
+if (healthViolations.length) {
+  console.error(`check-brand-strings (health strict): ${healthViolations.length} violation(s)\n`);
+  for (const v of healthViolations.slice(0, 30)) {
+    console.error(`  ${v.file}:${v.line} [${v.label}] ${v.snippet}`);
+  }
   process.exit(1);
 }
 

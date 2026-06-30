@@ -90,6 +90,14 @@ function broadcastSessionEnded(roomId, metadata) {
   broadcast(roomId, EVENT_TYPES.SESSION_ENDED, metadata || {});
 }
 
+function broadcastAssistantMessage(roomId, payload) {
+  broadcast(roomId, EVENT_TYPES.ASSISTANT_MESSAGE, payload);
+}
+
+function broadcastToolEvent(roomId, payload) {
+  broadcast(roomId, EVENT_TYPES.TOOL_EVENT, payload);
+}
+
 module.exports = {
   register,
   unregister,
@@ -98,5 +106,7 @@ module.exports = {
   broadcastTranscriptDelta,
   broadcastRiskAlert,
   broadcastCodesUpdated,
-  broadcastSessionEnded
+  broadcastSessionEnded,
+  broadcastAssistantMessage,
+  broadcastToolEvent
 };

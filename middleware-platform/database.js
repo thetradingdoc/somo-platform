@@ -1,3 +1,9 @@
+/**
+ * DATABASE FACADE — POLICY (2026-06-25):
+ * - No new CREATE TABLE here — use middleware-platform/migrations/NNN_*.js
+ * - New domain SQL → database/repos/*.js
+ * - This file remains the stable import path; shrink over time via repos
+ */
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
@@ -1648,7 +1654,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
-    FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id)
   );
 
   CREATE TABLE IF NOT EXISTS stripe_cards (
@@ -1669,7 +1675,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
-    FOREIGN KEY (clinic_id) REFERENCES clinics(id),
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id),
     FOREIGN KEY (cardholder_id) REFERENCES stripe_cardholders(id)
   );
 
@@ -1689,7 +1695,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (card_id) REFERENCES stripe_cards(id),
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
-    FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_stripe_cardholders_patient ON stripe_cardholders(patient_id);

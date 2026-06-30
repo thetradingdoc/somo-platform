@@ -13,38 +13,49 @@
   <main class="admin-crm-main">
     <div class="admin-crm-header">
       <div>
-        <div class="admin-crm-title">Tenants</div>
-        <div class="admin-crm-subtitle">Clinic health, billing, and credits</div>
+        <h1 class="admin-crm-title">Tenants</h1>
+        <p class="admin-crm-subtitle">Clinic health, billing, and credits</p>
       </div>
-      <input class="admin-crm-search" type="text" id="tenantSearch" placeholder="Search tenants...">
+      <div class="admin-crm-search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="tenantSearch" placeholder="Search tenants…">
+      </div>
     </div>
 
     <div class="admin-crm-metrics admin-crm-metrics--3">
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Total tenants</div><div class="admin-crm-metric-value" id="mTotal">—</div></div>
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Critical alerts</div><div class="admin-crm-metric-value admin-crm-metric-danger" id="mCritical">—</div></div>
-      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Warnings</div><div class="admin-crm-metric-value" id="mWarning">—</div></div>
+      <div class="admin-crm-metric"><div class="admin-crm-metric-label">Clinics with alerts</div><div class="admin-crm-metric-value" id="mWarning">—</div></div>
     </div>
 
     <div class="admin-crm-two-col">
       <div class="admin-crm-card">
-        <div class="admin-crm-card-title">Alerts</div>
-        <div id="alertsList"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
+        <div class="admin-crm-card-head">
+          <div class="admin-crm-card-title-wrap">
+            <h3 class="admin-crm-card-title">Alerts</h3>
+            <span class="admin-crm-card-hint">one row per clinic</span>
+          </div>
+        </div>
+        <div id="alertsList"><div class="admin-crm-skeleton" style="height:120px;margin:0 18px 18px;"></div></div>
       </div>
       <div class="admin-crm-card" id="detailPanel">
-        <div class="admin-crm-card-title">Tenant detail</div>
-        <p style="color:var(--muted);font-size:13px;">Select a tenant from the table to view usage and allocate credits.</p>
+        <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Tenant detail</h3></div>
+        <div class="admin-crm-empty" id="detailEmpty">
+          <div class="admin-crm-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg></div>
+          <p>Select a tenant from the alerts or table to view usage, allocate credits, or remove a clinic.</p>
+        </div>
       </div>
     </div>
 
     <div class="admin-crm-card">
-      <div class="admin-crm-card-title">All tenants</div>
-      <div id="tenantTable"><div class="admin-crm-skeleton" style="height:240px;"></div></div>
+      <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">All tenants</h3></div>
+      <div id="tenantTable"><div class="admin-crm-skeleton" style="height:240px;margin:0 18px 18px;"></div></div>
     </div>
   </main>
 
   <script src="/admin/assets/js/admin-shell.js"></script>
   <script>
-    const { apiFetch, esc, init } = AdminShell;
+    const { apiFetch, esc, init, showToast, confirmAction } = AdminShell;
     let allTenants = [];
 
     init('tenants');
@@ -58,29 +69,41 @@
       await Promise.all([loadAlerts(), loadTenants()]);
     }
 
+    function renderGroupedAlertRow(g) {
+      const sev = g.severity || 'warning';
+      const reasons = g.reasons || (g.reason ? [g.reason] : []);
+      return `
+        <div class="admin-crm-alert-row" onclick="showDetail('${g.clinic_id}')">
+          <div>
+            <div class="admin-crm-alert-name">${esc(g.company_name)}</div>
+            <div class="admin-crm-alert-reason">${reasons.length} issue${reasons.length === 1 ? '' : 's'}</div>
+          </div>
+          <span class="admin-crm-pill admin-crm-pill-${sev === 'critical' ? 'critical' : sev === 'info' ? 'info' : 'warning'}">${esc(sev === 'critical' ? 'Critical' : 'Warning')}</span>
+        </div>`;
+    }
+
     async function loadAlerts() {
       try {
         const r = await apiFetch('/api/admin/tenants/alerts');
-        const alerts = r.alerts || [];
-        const critical = alerts.filter(a => a.severity === 'critical').length;
-        const warning = alerts.filter(a => a.severity === 'warning').length;
+        const grouped = r.grouped_alerts || [];
+        const flat = r.alerts || [];
+        const rows = grouped.length ? grouped : flat.map((a) => ({
+          clinic_id: a.clinic_id,
+          company_name: a.company_name,
+          severity: a.severity,
+          reasons: [a.reason || a.minutes_remaining + ' min remaining'],
+        }));
+
+        const critical = rows.filter((a) => a.severity === 'critical').length;
         document.getElementById('mCritical').textContent = critical;
-        document.getElementById('mWarning').textContent = warning;
+        document.getElementById('mWarning').textContent = r.clinic_count ?? rows.length;
 
         const el = document.getElementById('alertsList');
-        if (!alerts.length) {
-          el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">All tenants healthy</p>';
+        if (!rows.length) {
+          el.innerHTML = '<div class="admin-crm-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><p>All tenants healthy</p></div>';
           return;
         }
-        el.innerHTML = alerts.map(a => `
-          <div class="admin-crm-row" onclick="showDetail('${a.clinic_id}')">
-            <div>
-              <div style="font-weight:600;">${esc(a.company_name)}</div>
-              <div style="font-size:12px;color:var(--muted);">${esc(a.reason)}</div>
-            </div>
-            <span class="admin-crm-badge admin-crm-badge-${a.severity === 'critical' ? 'danger' : a.severity === 'info' ? 'info' : 'warning'}">${esc(a.severity)}</span>
-          </div>
-        `).join('');
+        el.innerHTML = rows.map((g) => renderGroupedAlertRow(g)).join('');
       } catch (e) {
         document.getElementById('alertsList').innerHTML = '<p style="color:var(--muted);">Could not load alerts</p>';
       }
@@ -102,31 +125,25 @@
 
     function renderTable() {
       const q = document.getElementById('tenantSearch').value.trim().toLowerCase();
-      const filtered = allTenants.filter(t => !q || (t.name || '').toLowerCase().includes(q));
+      const filtered = allTenants.filter((t) => !q || (t.name || '').toLowerCase().includes(q));
       const el = document.getElementById('tenantTable');
       if (!filtered.length) {
         el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No tenants found</p>';
         return;
       }
       el.innerHTML = `
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <table class="admin-crm-data-table">
           <thead>
-            <tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;">
-              <th style="padding:8px 0;">Name</th>
-              <th>Minutes</th>
-              <th>Subscription</th>
-              <th>Trial</th>
-              <th>Agent</th>
-            </tr>
+            <tr><th>Name</th><th>Minutes</th><th>Subscription</th><th>Trial</th><th>Agent</th></tr>
           </thead>
           <tbody>
-            ${filtered.map(t => `
-              <tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="showDetail('${t.clinic_id}')">
-                <td style="padding:10px 0;font-weight:600;">${esc(t.name)}</td>
+            ${filtered.map((t) => `
+              <tr class="clickable" onclick="showDetail('${t.clinic_id}')">
+                <td style="font-weight:600;">${esc(t.name)}</td>
                 <td>${t.minutes_remaining ?? t.credits?.balance_minutes ?? '—'}</td>
                 <td>${esc(t.subscription_status || '—')}</td>
                 <td>${esc(t.trial_status || '—')}</td>
-                <td>${t.agent?.has_agent ? '<span class="admin-crm-badge admin-crm-badge-success">yes</span>' : '<span class="admin-crm-badge admin-crm-badge-muted">no</span>'}</td>
+                <td>${t.agent?.has_agent ? '<span class="admin-crm-yn-badge admin-crm-yn-yes">Yes</span>' : '<span class="admin-crm-yn-badge admin-crm-yn-no">No</span>'}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -141,39 +158,84 @@
         const t = r.tenant;
         const credits = r.credits || {};
         panel.innerHTML = `
-          <div class="admin-crm-card-title">${esc(t.name)}</div>
-          <div style="font-size:13px;margin-bottom:12px;color:var(--muted);">
-            ${esc(t.email || '')} · ${t.minutes_remaining ?? credits.balance_minutes ?? 0} min remaining
+          <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">${esc(t.name)}${t.archived_at ? ' <span class="admin-crm-badge admin-crm-badge-muted">archived</span>' : ''}</h3></div>
+          <dl class="admin-crm-kv">
+            <div class="admin-crm-kv-row"><dt>Name</dt><dd>${esc(t.name)}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Minutes</dt><dd>${t.minutes_remaining ?? credits.balance_minutes ?? 0} remaining</dd></div>
+            <div class="admin-crm-kv-row"><dt>Subscription</dt><dd>${esc(t.subscription_status || '—')}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Voice agent</dt><dd>${t.agent?.has_agent ? '<span class="admin-crm-yn-badge admin-crm-yn-yes">Configured</span>' : '<span class="admin-crm-yn-badge admin-crm-yn-no">Not configured</span>'}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Calls (30d)</dt><dd>${r.usage?.by_period?.last_30d?.calls ?? '—'}</dd></div>
+          </dl>
+          <div class="admin-crm-input-row">
+            <input type="number" class="admin-crm-text-input" id="creditAmount" min="1" value="60" style="max-width:90px;">
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="allocateCredits('${clinicId}')">Allocate free minutes</button>
           </div>
-          <div style="font-size:13px;margin-bottom:16px;">
-            <div>Subscription: <strong>${esc(t.subscription_status || '—')}</strong></div>
-            <div>Trial: <strong>${esc(t.trial_status || '—')}</strong></div>
-            <div>Calls (30d): <strong>${r.usage?.by_period?.last_30d?.calls ?? '—'}</strong></div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-            <input type="number" id="creditAmount" min="1" value="60" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:8px;">
-            <button class="btn btn-primary btn-sm" onclick="allocateCredits('${clinicId}')">Allocate free minutes</button>
-          </div>
-          <a href="/business/today.html" style="font-size:12px;color:var(--accent-green);">Open provider portal →</a>
-        `;
+          <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 18px 18px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap;gap:8px;">
+            <a href="/business/today.html" style="font-size:12px;font-weight:600;color:var(--forest);">Open provider portal →</a>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="tenantDeleteActions">
+              <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm admin-crm-btn-danger btn-archive-tenant" data-require-capability="platform.tenants.delete" data-clinic-id="${esc(clinicId)}" data-slug="${esc(t.slug)}" data-name="${esc(t.name)}" data-mode="soft">Archive tenant</button>
+              ${(r.delete_options?.can_hard_delete || r.delete_options?.is_archived) ? `<button type="button" class="admin-crm-btn-outline admin-crm-btn-sm admin-crm-btn-danger btn-hard-delete-tenant" data-require-capability="platform.tenants.delete" data-clinic-id="${esc(clinicId)}" data-slug="${esc(t.slug)}" data-name="${esc(t.name)}" data-mode="hard">Permanently delete</button>` : ''}
+            </div>
+          </div>`;
+        AdminShell.applyCapabilityGating?.();
+        panel.querySelectorAll('.btn-archive-tenant, .btn-hard-delete-tenant').forEach((btn) => {
+          btn.onclick = () => deleteTenant(
+            btn.dataset.clinicId,
+            btn.dataset.slug,
+            btn.dataset.mode,
+            btn.dataset.name
+          );
+        });
       } catch (e) {
         panel.innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
       }
     }
+    window.showDetail = showDetail;
 
     async function allocateCredits(clinicId) {
       const credits = parseInt(document.getElementById('creditAmount').value, 10);
-      if (!credits || credits < 1) return alert('Enter valid minutes');
+      if (!credits || credits < 1) return showToast('Enter valid minutes', 'warning');
       try {
         await apiFetch(`/api/admin/tenants/${clinicId}/credits`, {
           method: 'POST',
           body: JSON.stringify({ credits, type: 'free' }),
         });
-        alert('Credits allocated');
+        showToast('Credits allocated', 'success');
         loadAll();
         showDetail(clinicId);
-      } catch (e) { alert(e.message); }
+      } catch (e) { showToast(e.message, 'error'); }
     }
+    window.allocateCredits = allocateCredits;
+
+    async function deleteTenant(clinicId, slug, mode, name) {
+      const isHard = mode === 'hard';
+      const impact = isHard
+        ? 'This permanently removes the clinic record, phone mappings, and agent config. Call history and billing logs are retained in audit tables only.'
+        : 'This archives the tenant: agent config is deactivated, the clinic is hidden from lists, and credit balance is frozen. Call history is retained.';
+      if (!confirmAction(`${isHard ? 'Permanently delete' : 'Archive'} "${name}"?\n\n${impact}`)) return;
+      const typed = prompt(`Type the tenant slug to confirm: ${slug}`);
+      if (typed !== slug) {
+        showToast('Slug did not match — delete cancelled', 'warning');
+        return;
+      }
+      try {
+        await apiFetch(`/api/admin/tenants/${clinicId}`, {
+          method: 'DELETE',
+          body: JSON.stringify({ mode, confirm_slug: slug }),
+        });
+        showToast(isHard ? 'Tenant permanently deleted' : 'Tenant archived', 'success');
+        document.getElementById('detailPanel').innerHTML = `
+          <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Tenant detail</h3></div>
+          <div class="admin-crm-empty">
+            <div class="admin-crm-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg></div>
+            <p>Select a tenant from the alerts or table to view usage and allocate credits.</p>
+          </div>`;
+        loadAll();
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
+    }
+    window.deleteTenant = deleteTenant;
   </script>
 </body>
 </html>

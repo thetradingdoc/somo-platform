@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const UD = path.join(ROOT, 'unified-dashboard');
@@ -78,6 +79,13 @@ function main() {
   rmrf(OUT);
   mkdirp(OUT);
 
+  console.log('  health-video SPA build');
+  const healthUiDir = path.join(UD, 'health-video-landing');
+  if (fs.existsSync(path.join(healthUiDir, 'package.json'))) {
+    execSync('npm ci', { cwd: healthUiDir, stdio: 'inherit' });
+    execSync('npm run health:ui:build', { cwd: ROOT, stdio: 'inherit' });
+  }
+
   writeRootRedirectIndex();
 
   console.log('  portal assets → /assets + /unified-dashboard/assets');
@@ -86,6 +94,12 @@ function main() {
 
   console.log('  business portal HTML');
   copyDir(path.join(UD, 'business'), path.join(OUT, 'business'));
+
+  const healthVideoDist = path.join(UD, 'health-video-landing', 'dist');
+  if (fs.existsSync(path.join(healthVideoDist, 'index.html'))) {
+    console.log('  health-video SPA → /health-video');
+    copyDir(healthVideoDist, path.join(OUT, 'health-video'));
+  }
 
   console.log('  admin portal HTML');
   copyDir(path.join(UD, 'admin'), path.join(OUT, 'admin'));

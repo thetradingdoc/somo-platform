@@ -1,18 +1,11 @@
 #!/usr/bin/env node
 /**
- * Daily Medical Receptionist Lead Fetcher
- *
- * Logs into the admin API using ADMIN_PORTAL_SECRET, pulls the latest
- * “Medical Receptionist” lead for the configured location, saves it to the
- * CRM, and optionally extracts contact info when missing.
- *
- * Designed to be invoked locally (`npm run search:medical`) or by an Azure job.
+ * Daily Medical Receptionist Lead Fetcher — triggers unified scrape/run SSE endpoint.
  */
 
 const path = require('path');
 const fs = require('fs');
 
-// Load environment variables from the middleware .env if running locally
 const envPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envPath)) {
   require('dotenv').config({ path: envPath });
@@ -25,158 +18,77 @@ const fetchFn = global.fetch
   : (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const ADMIN_SECRET = process.env.ADMIN_PORTAL_SECRET;
-const BASE_URL =
-  (process.env.ADMIN_PORTAL_BASE_URL ||
-    process.env.API_BASE_URL ||
-    process.env.DOC_LITTLE_BASE_URL ||
-    'http://localhost:4000').replace(/\/$/, '');
-// Search both NY and NJ - the API endpoint handles multiple locations
-const SEARCH_LOCATION = process.env.MEDICAL_RECEPTIONIST_LOCATION || 'US,NY';
-const SEARCH_DAYS = process.env.MEDICAL_RECEPTIONIST_DAYS || '1';
-const INTERNAL_JOB_TOKEN = process.env.INTERNAL_JOB_TOKEN;
+const BASE_URL = (
+  process.env.ADMIN_PORTAL_BASE_URL ||
+  process.env.API_BASE_URL ||
+  process.env.DOC_LITTLE_BASE_URL ||
+  'http://localhost:4000'
+).replace(/\/$/, '');
 
 const LOG_PREFIX = '[medical-receptionist-daily]';
 
-function log(message, data) {
-  const ts = new Date().toISOString();
-  if (data) {
-    console.log(`${LOG_PREFIX} ${ts} ${message}`, data);
-  } else {
-    console.log(`${LOG_PREFIX} ${ts} ${message}`);
-  }
-}
-
-if (!ADMIN_SECRET) {
-  console.error(`${LOG_PREFIX} ADMIN_PORTAL_SECRET is required to run this script.`);
-  process.exit(1);
-}
-
-async function adminFetch(pathname, { method = 'GET', headers = {}, body, cookie } = {}) {
-  const res = await fetchFn(`${BASE_URL}${pathname}`, {
-    method,
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(cookie ? { Cookie: cookie } : {}),
-      ...(INTERNAL_JOB_TOKEN ? { 'x-internal-job-token': INTERNAL_JOB_TOKEN } : {}),
-      ...headers
-    },
-    body
-  });
-
-  const text = await res.text();
-  let json;
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch (err) {
-    throw new Error(`Failed to parse response from ${pathname}: ${text}`);
-  }
-
-  if (!res.ok) {
-    const errMsg = json?.message || json?.error || res.statusText;
-    throw new Error(`Request to ${pathname} failed (${res.status}): ${errMsg}`);
-  }
-
-  return { json, headers: res.headers };
-}
-
 async function login() {
-  log(`Logging into admin portal at ${BASE_URL}...`);
-  const { headers } = await adminFetch('/api/admin/session', {
+  const { headers } = await fetchFn(`${BASE_URL}/api/admin/session`, {
     method: 'POST',
-    body: JSON.stringify({ secret: ADMIN_SECRET })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret: ADMIN_SECRET }),
+  }).then(async (res) => {
+    const text = await res.text();
+    if (!res.ok) throw new Error(`Login failed: ${text}`);
+    return { headers: res.headers, json: text ? JSON.parse(text) : {} };
   });
 
   const setCookie = headers.get('set-cookie');
-  if (!setCookie) {
-    throw new Error('Admin login succeeded but no session cookie was returned.');
-  }
-
-  const cookie = setCookie.split(',')[0].split(';')[0];
-  log('Admin session established.');
-  return cookie;
+  if (!setCookie) throw new Error('No session cookie');
+  return setCookie.split(',')[0].split(';')[0];
 }
 
-async function fetchLeads(cookie) {
-  log(`Searching for Medical Receptionist leads (location=${SEARCH_LOCATION}, days=${SEARCH_DAYS})...`);
-  const { json } = await adminFetch(
-    `/api/admin/leads/insights/medical-receptionist?location=${encodeURIComponent(
-      SEARCH_LOCATION
-    )}&days=${encodeURIComponent(SEARCH_DAYS)}`,
-    { cookie }
-  );
-
-  if (!json?.success || !json?.leads || !json.leads.length) {
-    const single = json?.lead;
-    if (single) {
-      log('Single Medical Receptionist lead returned from insights.', single);
-      return [single];
-    }
-    log('No Medical Receptionist leads found for this window.');
-    return [];
-  }
-
-  log(`Leads found from insights provider (count=${json.leads.length}).`);
-  return json.leads;
-}
-
-async function saveLead(cookie, lead) {
-  log('Saving lead to CRM...');
-  const { json } = await adminFetch('/api/admin/leads/save', {
+async function runScrape(cookie) {
+  const res = await fetchFn(`${BASE_URL}/api/admin/scrape/run`, {
     method: 'POST',
-    body: JSON.stringify(lead),
-    cookie
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: cookie,
+    },
+    body: JSON.stringify({}),
   });
-
-  if (!json?.success) {
-    throw new Error(json?.message || 'Failed to save lead');
+  if (!res.ok) throw new Error(`Scrape failed: ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let result = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    for (const line of buf.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const evt = JSON.parse(line.slice(6));
+        if (evt.type === 'done') result = evt.result;
+      } catch {
+        /* skip */
+      }
+    }
   }
-
-  log('Lead saved.', json.lead || json);
-  return json.lead;
-}
-
-async function extractContactsIfNeeded(cookie, leadRecord, insightsLead) {
-  if (!leadRecord?.id) return;
-  const needsPhone = !leadRecord.clinic_phone && !insightsLead?.clinic_phone;
-  const needsEmail = !leadRecord.clinic_email && !insightsLead?.clinic_email;
-  const hasSource = insightsLead?.source_url || leadRecord?.source_url;
-
-  if (!hasSource || (!needsPhone && !needsEmail)) {
-    return;
-  }
-
-  log('Attempting contact extraction for saved lead...');
-  try {
-    const { json } = await adminFetch(`/api/admin/leads/${leadRecord.id}/extract-contact`, {
-      method: 'POST',
-      cookie
-    });
-    log('Contact extraction result:', json);
-  } catch (error) {
-    log(`Contact extraction failed: ${error.message}`);
-  }
+  return result;
 }
 
 async function run() {
+  if (!ADMIN_SECRET) {
+    console.error(`${LOG_PREFIX} ADMIN_PORTAL_SECRET required`);
+    process.exitCode = 1;
+    return;
+  }
   try {
     const cookie = await login();
-    const leads = await fetchLeads(cookie);
-    if (!leads || leads.length === 0) {
-      log('No leads returned, exiting.');
-      return;
-    }
-
-    for (const lead of leads) {
-      const savedLead = await saveLead(cookie, lead);
-      await extractContactsIfNeeded(cookie, savedLead, lead);
-    }
-
-    log('Daily Medical Receptionist job completed successfully.');
-  } catch (error) {
-    console.error(`${LOG_PREFIX} ERROR:`, error.message);
+    const result = await runScrape(cookie);
+    console.log(`${LOG_PREFIX} scrape complete`, result);
+  } catch (e) {
+    console.error(`${LOG_PREFIX} ERROR:`, e.message);
     process.exitCode = 1;
   }
 }
 
 run();
-

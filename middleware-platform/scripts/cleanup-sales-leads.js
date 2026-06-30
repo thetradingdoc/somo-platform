@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Remove sales leads without a callable phone; strip job-board URLs from source_url.
+ * Sanitize sales leads: strip job-board URLs, backfill languages.
+ * Does NOT delete phoneless leads — use admin UI DELETE /api/admin/leads/:id instead.
+ *
  * Usage: node scripts/cleanup-sales-leads.js [--dry-run]
  */
 
@@ -21,15 +23,14 @@ const rows = db.db.prepare(`
     AND (lead_type IS NULL OR lead_type = 'sales')
 `).all();
 
-let deleted = 0;
+let phoneless = 0;
 let sanitized = 0;
 let languagesBackfilled = 0;
 
 for (const row of rows) {
   if (!hasValidPhone(row.clinic_phone)) {
-    console.log(`${dryRun ? '[dry-run] delete' : 'delete'}: ${row.clinic_name} (no phone)`);
-    if (!dryRun) db.db.prepare('DELETE FROM leads WHERE id = ?').run(row.id);
-    deleted++;
+    phoneless++;
+    console.log(`${dryRun ? '[dry-run] phoneless' : 'phoneless'}: ${row.clinic_name} (kept — delete via admin UI if junk)`);
     continue;
   }
 
@@ -64,4 +65,4 @@ for (const row of db.db.prepare(`
   languagesBackfilled++;
 }
 
-console.log(`\nDone. deleted=${deleted} sanitized=${sanitized} languages_backfilled=${languagesBackfilled}${dryRun ? ' (dry run)' : ''}`);
+console.log(`\nDone. phoneless_kept=${phoneless} sanitized=${sanitized} languages_backfilled=${languagesBackfilled}${dryRun ? ' (dry run)' : ''}`);

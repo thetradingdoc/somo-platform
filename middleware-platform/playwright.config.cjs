@@ -102,6 +102,30 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'health-video',
+      testDir: './e2e',
+      testMatch: '**/health-video-demo.spec.cjs',
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+    {
+      name: 'health-video-mobile',
+      testDir: './e2e',
+      testMatch: '**/health-video-demo.spec.cjs',
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
       name: 'provider-journey',
       testDir: './e2e/provider',
       testMatch: ['**/*.spec.cjs'],
