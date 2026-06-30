@@ -92,24 +92,22 @@ function main() {
 
 
 
-  if (!currentGreeting || isLegacyGenericGreeting(currentGreeting) || /somo owner/i.test(currentGreeting)) {
-
+  if (
+    !currentGreeting ||
+    isLegacyGenericGreeting(currentGreeting) ||
+    /somo owner/i.test(currentGreeting) ||
+    /our office/i.test(currentGreeting)
+  ) {
     patch.greeting = inboundDefault;
-
   }
 
   if (
-
     !currentOutbound ||
-
     !String(currentOutbound).trim() ||
-
+    !/somo/i.test(currentOutbound) ||
     /our office/i.test(currentOutbound)
-
   ) {
-
     patch.outbound_opener = outboundDefault;
-
   }
 
   patch.outbound_enabled = 1;

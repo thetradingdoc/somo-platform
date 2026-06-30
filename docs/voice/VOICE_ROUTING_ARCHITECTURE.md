@@ -377,7 +377,29 @@ Fail-closed and handoff paths:
 
 ---
 
-## 14. Related docs
+---
+
+## 14. Scale limits (admission, concurrent, multi-replica)
+
+Phone handling uses **three separate limit types**:
+
+| Limit | Enforced on | Shared across replicas? |
+|-------|-------------|-------------------------|
+| **max_concurrent_calls** | Before call_admission + Retell register | Yes — Redis (`VOICE_RATE_LIMIT_BACKEND=redis`) |
+| **call_admission** | After concurrent pass, on `POST /voice/incoming` | Yes — Redis |
+| **turn_rate_limit** | Retell WS turn events (`update_only`, `response_required`, `function_call`) | Per-process abuse guard (high ceiling) |
+
+Tier defaults (plan catalog): Starter 30 req/min + 2 concurrent; Practice 75 + 5; Clinic Pro 150 + 10.
+
+**Production:** `REDIS_URL` required. `/health?detailed=true` includes `voice_redis` probe.
+
+**Cloud Run:** Do not scale `min-instances > 1` until Redis voice limits are healthy.
+
+Full ops checklist: [`docs/runbooks/VOICE_SCALE_READINESS.md`](../runbooks/VOICE_SCALE_READINESS.md).
+
+---
+
+## 15. Related docs
 
 - [PLATFORM_NUMBER_INBOUND_SPEC.md](./PLATFORM_NUMBER_INBOUND_SPEC.md) — product spec
 - [VOICE_RETELL_AGENT_CONTRACT.md](./VOICE_RETELL_AGENT_CONTRACT.md) — shared agent branching

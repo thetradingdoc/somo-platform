@@ -1,6 +1,7 @@
 'use strict';
 
 const axios = require('axios');
+const Metrics = require('./metrics');
 const {
   isOutboundRequest,
   normalizeCallType,
@@ -12,7 +13,7 @@ const {
 } = require('./voice-account-resolution');
 
 function createVoiceIncomingHandler(deps) {
-  const { db, normalizePhoneNumber, clinicRateLimitCheck } = deps;
+  const { db, normalizePhoneNumber } = deps;
   return async function handleVoiceIncoming(req, res) {
   try {
     console.log('\n📞 INCOMING CALL from Twilio');
@@ -193,22 +194,92 @@ function createVoiceIncomingHandler(deps) {
       }
     }
 
-    // Per-clinic rate limit (Section 17) — tier-aware when customer known
-    const tenantKey = clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
-    let tierRateLimit;
-    if (matchedCustomer) {
-      const { getRateLimitForCustomer } = require('./billing-access');
-      tierRateLimit = getRateLimitForCustomer(matchedCustomer);
+    // Twilio retry idempotency — return cached TwiML without re-counting limits
+    const twilioCallSid = req.body.CallSid || null;
+    const voiceLimitService = require('./voice-limit-service');
+    const voiceActiveCalls = require('./voice-active-calls-service');
+    const dedupe = await voiceLimitService.checkCallSidDedupe(twilioCallSid);
+    if (dedupe.duplicate && dedupe.payload?.sipUri) {
+      console.log(JSON.stringify({
+        component: 'voice_inbound',
+        event: 'call_sid_dedupe',
+        call_sid: twilioCallSid,
+        call_id: dedupe.payload.callId || null
+      }));
+      const cachedTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial>
+    <Sip>${dedupe.payload.sipUri}</Sip>
+  </Dial>
+</Response>`;
+      return res.type('text/xml').send(cachedTwiml);
     }
-    const rateLimit = clinicRateLimitCheck(tenantKey, tierRateLimit);
+
+    // Concurrent cap before call_admission — busy callers must not burn req/min budget
+    const tenantKey = customerId || clinicId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
+    let tierRateLimit;
+    let maxConcurrent;
+    if (matchedCustomer) {
+      const billingAccess = require('./billing-access');
+      tierRateLimit = billingAccess.getRateLimitForCustomer(matchedCustomer);
+      maxConcurrent = billingAccess.getConcurrentCallsForCustomer(matchedCustomer);
+    }
+
+    const slotCallKey = twilioCallSid ? `twilio:${twilioCallSid}` : `pending:${Date.now()}`;
+    let reservedSlot = false;
+    if (customerId && maxConcurrent) {
+      const capacity = await voiceActiveCalls.checkConcurrentCapacity(customerId, maxConcurrent);
+      if (!capacity.allowed) {
+        Metrics.increment('voice.admissions.rejected.concurrent', 1);
+        console.warn(JSON.stringify({
+          component: 'voice_inbound',
+          event: 'concurrent_rejected',
+          customer_id: customerId,
+          concurrent_active: capacity.active,
+          max_concurrent_calls: capacity.max,
+          limit_type: 'max_concurrent_calls'
+        }));
+        const busyTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">All of our lines are currently busy. Please try again in a moment.</Say>
+  <Hangup/>
+</Response>`;
+        return res.type('text/xml').send(busyTwiml);
+      }
+    }
+
+    const rateLimit = await voiceLimitService.checkCallAdmission({
+      customerId: customerId || tenantKey,
+      tenantKey,
+      tierLimit: tierRateLimit
+    });
     if (!rateLimit.allowed) {
-      console.warn(`⚠️  Clinic rate limit exceeded for ${tenantKey} (${rateLimit.limit}/min)`);
+      Metrics.increment('voice.admissions.rejected.rate', 1);
+      console.warn(JSON.stringify({
+        component: 'voice_inbound',
+        event: 'admission_rejected',
+        customer_id: customerId || null,
+        rate_limit_outcome: 'rejected',
+        limit_type: 'call_admission',
+        limit: rateLimit.limit
+      }));
       const rateLimitTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">We're experiencing high call volume. Please try again in a moment.</Say>
   <Hangup/>
 </Response>`;
       return res.type('text/xml').send(rateLimitTwiml);
+    }
+
+    if (customerId && maxConcurrent) {
+      await voiceActiveCalls.reserveSlot(customerId, slotCallKey, twilioCallSid);
+      voiceActiveCalls.recordAdmissionAudit(db, {
+        id: `audit-${slotCallKey}`,
+        customer_id: customerId,
+        call_id: slotCallKey,
+        twilio_call_sid: twilioCallSid
+      });
+      reservedSlot = true;
     }
 
     // CRITICAL: Register call with Retell FIRST (before responding)
@@ -686,7 +757,26 @@ function createVoiceIncomingHandler(deps) {
       if (isOutboundSales) {
         console.log('   📋 Outbound sales call - using sales agent prompt');
       }
+
+      if (twilioCallSid && sipUri) {
+        await voiceLimitService.cacheInboundCall(twilioCallSid, { callId, sipUri });
+      }
+      if (reservedSlot && customerId && callId && slotCallKey !== callId) {
+        await voiceActiveCalls.releaseSlot(customerId, slotCallKey);
+        await voiceActiveCalls.reserveSlot(customerId, callId, twilioCallSid);
+        voiceActiveCalls.endAdmissionAudit(db, customerId, slotCallKey);
+        voiceActiveCalls.recordAdmissionAudit(db, {
+          id: `audit-${callId}`,
+          customer_id: customerId,
+          call_id: callId,
+          twilio_call_sid: twilioCallSid
+        });
+      }
     } catch (retellError) {
+      if (reservedSlot && customerId) {
+        await voiceActiveCalls.releaseSlot(customerId, slotCallKey);
+        voiceActiveCalls.endAdmissionAudit(db, customerId, slotCallKey);
+      }
       console.error('❌ Retell registration failed:', retellError.message);
       console.error('   RETELL_API_KEY present:', !!process.env.RETELL_API_KEY);
       if (retellError.response) {

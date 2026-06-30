@@ -16434,7 +16434,47 @@ module.exports = {
       const row = db.prepare('SELECT * FROM customers WHERE twilio_phone_number = ?').get(candidates[i]);
       if (row) return row;
     }
+    try {
+      for (let i = 0; i < candidates.length; i += 1) {
+        const mapped = db.prepare(`
+          SELECT c.* FROM customer_phone_numbers cp
+          JOIN customers c ON c.id = cp.customer_id
+          WHERE cp.e164 = ?
+          LIMIT 1
+        `).get(candidates[i]);
+        if (mapped) return mapped;
+      }
+    } catch (_) {
+      /* table may not exist yet in very old DBs */
+    }
     return null;
+  },
+
+  countCustomerPhoneNumbers(customerId) {
+    if (!customerId) return 0;
+    try {
+      const row = db.prepare(
+        'SELECT COUNT(*) AS n FROM customer_phone_numbers WHERE customer_id = ?'
+      ).get(customerId);
+      if (row && row.n > 0) return row.n;
+    } catch (_) {
+      /* ignore */
+    }
+    const customer = db.prepare('SELECT twilio_phone_number FROM customers WHERE id = ?').get(customerId);
+    return customer?.twilio_phone_number ? 1 : 0;
+  },
+
+  addCustomerPhoneNumber(customerId, e164, { twilioPhoneSid = null, isPrimary = false } = {}) {
+    const id = `cpn-${customerId}-${Date.now()}`;
+    db.prepare(`
+      INSERT INTO customer_phone_numbers (id, customer_id, e164, is_primary, twilio_phone_sid)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, customerId, e164, isPrimary ? 1 : 0, twilioPhoneSid);
+    if (isPrimary) {
+      db.prepare('UPDATE customers SET twilio_phone_number = ?, twilio_phone_sid = ? WHERE id = ?')
+        .run(e164, twilioPhoneSid, customerId);
+    }
+    return id;
   },
 
   updateCustomer(id, updates) {

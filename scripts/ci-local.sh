@@ -55,6 +55,14 @@ step "Kelly golden + language"
 npm run test:kelly:rails:golden
 npm run test:kelly:rails:language
 
+step "Voice scale + billing tests"
+cd "$MP"
+VOICE_RATE_LIMIT_BACKEND=memory npm run test:voice
+
+step "Voice load smoke (mocked)"
+cd "$MP"
+VOICE_RATE_LIMIT_BACKEND=memory npm run test:voice:load
+
 step "Codebook parity (Session 2 gate)"
 cd "$MP"
 if [[ -f var/db/middleware-dev.db ]]; then

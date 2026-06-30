@@ -11,6 +11,7 @@ module.exports = {
     '<rootDir>/__tests__/smoke/'
   ],
   setupFiles: ['<rootDir>/jest.setup.js'],
+  globalTeardown: '<rootDir>/jest.global-teardown.js',
   collectCoverageFrom: [
     'services/**/*.js'
   ]

@@ -202,6 +202,32 @@ async function checkDependencies() {
 }
 
 /**
+ * Check voice Redis (required when VOICE_RATE_LIMIT_BACKEND=redis in production).
+ */
+async function checkVoiceRedis() {
+  try {
+    const voiceRedis = require('../utils/voice-redis-client');
+    const required = voiceRedis.isRedisBackendRequired();
+    if (!required && !voiceRedis.isRedisConfigured()) {
+      return { status: 'skipped', required: false, configured: false };
+    }
+    if (required && !voiceRedis.isRedisConfigured()) {
+      return { status: 'unhealthy', required: true, configured: false, error: 'REDIS_URL missing' };
+    }
+    const ping = await voiceRedis.ping();
+    return {
+      status: ping.ok ? 'healthy' : 'unhealthy',
+      required,
+      configured: ping.configured,
+      latencyMs: ping.latencyMs,
+      error: ping.error || null
+    };
+  } catch (err) {
+    return { status: 'unhealthy', error: err.message };
+  }
+}
+
+/**
  * Comprehensive health check
  */
 async function performHealthCheck() {
@@ -241,9 +267,10 @@ async function healthCheckHandler(req, res) {
   const showDbPath = req.query.show_db_path === '1' || req.query.show_db_path === 'true';
 
   if (detailed) {
-    const [fullHealth, dependencies] = await Promise.all([
+    const [fullHealth, dependencies, voiceRedis] = await Promise.all([
       performHealthCheck(),
-      checkDependencies()
+      checkDependencies(),
+      checkVoiceRedis()
     ]);
     let langsmith = { enabled: false, project: 'unknown', hasKey: false };
     try {
@@ -264,6 +291,11 @@ async function healthCheckHandler(req, res) {
       status = 'degraded';
       langsmith.warning = 'Production should have LangSmith tracing enabled for LLM traceability';
     }
+    if (status === 'healthy' && voiceRedis?.required && voiceRedis.status === 'unhealthy') {
+      status = 'unhealthy';
+    } else if (status === 'healthy' && voiceRedis?.status === 'unhealthy') {
+      status = 'degraded';
+    }
     let colab_export = { loaded: false };
     try {
       const ks = require('../services/knowledge-service');
@@ -274,6 +306,7 @@ async function healthCheckHandler(req, res) {
       ...fullHealth,
       status,
       dependencies,
+      voice_redis: voiceRedis,
       colab_export,
       metrics: healthMetrics,
       langsmith,

@@ -46,7 +46,8 @@ const SECRET_KEYS = [
   'SMTP_PASSWORD',
   'AZURE_COMMUNICATION_CONNECTION_STRING',
   'RETELL_API_KEY',
-  'RETELL_AGENT_ID'
+  'RETELL_AGENT_ID',
+  'REDIS_URL'
 ];
 
 function secretIdForEnv(name) {
@@ -210,6 +211,7 @@ merged.USE_TRIAGE_RAG_V2 = parsed.USE_TRIAGE_RAG_V2 ?? '1';
 merged.CODING_SPINE_ONLY = parsed.CODING_SPINE_ONLY ?? '1';
 merged.CODING_PROD_CI = parsed.CODING_PROD_CI ?? '1';
 merged.RAG_API_URL = parsed.RAG_API_URL || 'disabled';
+merged.VOICE_RATE_LIMIT_BACKEND = parsed.VOICE_RATE_LIMIT_BACKEND || 'redis';
 
 if (isStaging) {
   delete merged.NGROK_URL;
