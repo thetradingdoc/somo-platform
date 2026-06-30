@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /**
- * Minimal static server for a CRA `build/` folder (SPA fallback to index.html).
- * Used by Playwright webServer — avoids `serve` calling os.networkInterfaces() in restricted envs.
+ * Minimal static server for a SPA `dist/` folder (SPA fallback to index.html).
+ * DEPRECATED default: littlelab-landing retired — pass health-video-landing/dist explicitly.
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const root = path.resolve(process.argv[2] || path.join(__dirname, '../../unified-dashboard/littlelab-landing/build'));
+const defaultRoot = path.join(__dirname, '../../unified-dashboard/health-video-landing/dist');
+const legacyRoot = path.join(__dirname, '../../unified-dashboard/_archive/littlelab-landing/build');
+const root = path.resolve(
+  process.argv[2] ||
+    (fs.existsSync(path.join(defaultRoot, 'index.html')) ? defaultRoot : legacyRoot)
+);
 const port = Number(process.argv[3] || process.env.PORT || 5199, 10);
 
 const MIME = {

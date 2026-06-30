@@ -1,0 +1,269 @@
+/**
+ * Live session — desktop layout (light theme, Kelly presence left, chat right)
+ */
+
+.hv-session-outer--live .hv-session-shell--desktop {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  background: var(--hv-session-bg);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.hv-session-desktop-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  min-height: calc(100dvh - 52px);
+  overflow: hidden;
+  border-top: 0.5px solid var(--hv-session-border);
+}
+
+/* Kelly presence panel */
+.hv-kelly-presence-panel {
+  position: relative;
+  background: var(--hv-session-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  overflow: hidden;
+}
+
+.hv-kelly-presence-panel--compact {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 20px 24px;
+  min-height: 160px;
+}
+
+.hv-kelly-presence-compact {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.hv-kelly-presence-compact-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.hv-safe-badge--compact {
+  position: static;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.hv-kelly-speaking-label--compact {
+  margin-top: 0;
+}
+
+.hv-kelly-presence-panel--camera-active {
+  background: #111;
+}
+
+.hv-kelly-presence-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+}
+
+.hv-kelly-avatar-ring {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hv-speaking-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  animation: hvSpeakRing 1.5s ease-in-out infinite;
+}
+
+.hv-speaking-ring-2 {
+  inset: -12px;
+  border-width: 1.5px;
+  border-color: rgba(0, 0, 0, 0.06);
+  animation-delay: 0.3s;
+}
+
+@keyframes hvSpeakRing {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  70% { transform: scale(1.05); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.hv-kelly-name-tag {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--hv-session-text);
+  margin: 4px 0 0;
+}
+
+.hv-kelly-title-tag {
+  font-size: 0.68rem;
+  color: var(--hv-session-muted);
+  margin: -4px 0 0;
+}
+
+.hv-kelly-presence-status {
+  font-size: 0.75rem;
+  color: var(--hv-session-muted);
+  margin: 4px 0 0;
+}
+
+.hv-kelly-speaking-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: var(--hv-session-ink);
+  background: #f0f0f0;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 0.5px solid var(--hv-session-border);
+  margin-top: 4px;
+}
+
+.hv-sound-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.hv-sound-bar {
+  width: 2.5px;
+  background: var(--hv-session-ink);
+  border-radius: 2px;
+  animation: hvBarBounce 0.8s ease infinite;
+}
+
+.hv-sound-bar:nth-child(1) { height: 4px; animation-delay: 0s; }
+.hv-sound-bar:nth-child(2) { height: 10px; animation-delay: 0.1s; }
+.hv-sound-bar:nth-child(3) { height: 7px; animation-delay: 0.2s; }
+.hv-sound-bar:nth-child(4) { height: 12px; animation-delay: 0.15s; }
+.hv-sound-bar:nth-child(5) { height: 5px; animation-delay: 0.05s; }
+
+@keyframes hvBarBounce {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1); }
+}
+
+.hv-safe-badge--presence {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 0.5px solid var(--hv-session-border);
+  border-radius: 20px;
+  padding: 3px 9px;
+  font-size: 0.58rem;
+  color: var(--hv-session-muted);
+}
+
+.hv-kelly-presence-panel--camera-active .hv-safe-badge--presence {
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.hv-kelly-presence-panel--camera-active .hv-kelly-chip {
+  top: 14px;
+  right: 14px;
+}
+
+/* Desktop PiP */
+.hv-self-pip--desktop {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 112px;
+  height: 84px;
+  background: #e8e4dc;
+  border-radius: 10px;
+  border: 0.5px solid var(--hv-session-border);
+  overflow: hidden;
+  z-index: 4;
+}
+
+.hv-self-pip--desktop-full {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: #111;
+  z-index: 1;
+}
+
+.hv-self-pip--desktop.off {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Transcript overlay removed — chat column is single source of truth */
+
+/* Chat panel desktop */
+.hv-session-shell--desktop .hv-chat-panel {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto auto;
+  background: var(--hv-session-bg);
+  border-left: 0.5px solid var(--hv-session-border);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hv-session-shell--desktop .hv-chat-area {
+  overflow-y: auto;
+  padding: 16px 14px;
+  min-height: 0;
+}
+
+.hv-kelly-presence-inner--listening .hv-speaking-ring {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.hv-kelly-presence-inner--concerned .hv-speaking-ring {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.hv-kelly-presence-inner--urgent .hv-speaking-ring {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .hv-session-desktop-grid {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hv-speaking-ring,
+  .hv-sound-bar {
+    animation: none;
+  }
+}

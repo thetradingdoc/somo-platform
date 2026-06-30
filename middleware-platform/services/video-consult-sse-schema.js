@@ -10,6 +10,8 @@
  *   - risk_alert: High-risk symptom detected
  *   - codes_updated: Suggested codes changed
  *   - session_ended: Room session ended
+ *   - assistant_message: Kelly PA reply status (thinking | complete)
+ *   - tool_event: Tool invocation result (vision capture, derm, pathway)
  */
 
 const EVENT_TYPES = {
@@ -19,7 +21,9 @@ const EVENT_TYPES = {
   TRANSCRIPT_DELTA: 'transcript_delta',
   RISK_ALERT: 'risk_alert',
   CODES_UPDATED: 'codes_updated',
-  SESSION_ENDED: 'session_ended'
+  SESSION_ENDED: 'session_ended',
+  ASSISTANT_MESSAGE: 'assistant_message',
+  TOOL_EVENT: 'tool_event'
 };
 
 const STATUS_VALUES = {
@@ -75,11 +79,26 @@ function buildRiskPayload(level, flags, options = {}) {
   };
 }
 
+function buildAssistantMessagePayload({ text = '', status = 'complete' } = {}) {
+  return { text, status, speaker: 'assistant' };
+}
+
+function buildToolEventPayload(toolEvent = {}) {
+  return {
+    name: toolEvent.name,
+    args: toolEvent.args || {},
+    result: toolEvent.result || {},
+    ts: new Date().toISOString()
+  };
+}
+
 module.exports = {
   EVENT_TYPES,
   STATUS_VALUES,
   RISK_LEVELS,
   buildAssistantUpdatePayload,
   buildTranscriptDeltaItem,
-  buildRiskPayload
+  buildRiskPayload,
+  buildAssistantMessagePayload,
+  buildToolEventPayload
 };

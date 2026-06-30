@@ -13,6 +13,33 @@
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function adminLoginUrl() {
+    const origin = window.location.origin || '';
+    const returnTo = encodeURIComponent(window.location.href);
+    return `${origin}/login.html?redirect=${returnTo}&admin=1`;
+  }
+
+  function showAuthRequired() {
+    let banner = document.getElementById('adminAuthBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'adminAuthBanner';
+      banner.className = 'admin-crm-status-banner';
+      banner.style.cssText = 'background:#faeeda;border-color:#633806;margin-bottom:12px;';
+      const main = document.querySelector('.admin-crm-main');
+      if (main) {
+        main.insertBefore(banner, main.firstChild?.nextSibling || main.firstChild);
+      }
+    }
+    const loginHref = adminLoginUrl();
+    banner.innerHTML = `
+      <span style="font-size:13px;color:#633806;">
+        Session expired or not signed in.
+        <a href="${loginHref}" style="color:#238108;font-weight:600;margin-left:6px;">Sign in again</a>
+      </span>`;
+    banner.style.display = 'flex';
+  }
+
   async function apiFetch(path, opts = {}) {
     const API = window.API_BASE || '';
     const resp = await fetch(`${API}${path}`, {
@@ -20,13 +47,20 @@
       headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
       ...opts,
     });
+
     if (resp.status === 401) {
-      const loginUrl = API ? `${API}/login.html` : '/login.html';
       const onAdmin = window.location.pathname.startsWith('/admin');
-      if (onAdmin && !sessionStorage.getItem('admin_auth_redirect')) {
+      const origin = window.location.origin || '';
+      const loginUrl = onAdmin
+        ? `${origin}/login.html`
+        : (API ? `${API}/login.html` : '/login.html');
+      const willRedirect = onAdmin && !sessionStorage.getItem('admin_auth_redirect');
+      if (willRedirect) {
         sessionStorage.setItem('admin_auth_redirect', '1');
         const returnTo = encodeURIComponent(window.location.href);
         window.location.href = `${loginUrl}?redirect=${returnTo}&admin=1`;
+      } else if (onAdmin) {
+        showAuthRequired();
       }
       throw new Error('Authentication required — log in as operator');
     }
@@ -77,5 +111,7 @@
     apiFetch,
     esc,
     NAV,
+    showAuthRequired,
+    adminLoginUrl,
   };
 })();

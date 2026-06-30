@@ -124,7 +124,15 @@
         document.getElementById('mNeedsPhone').textContent = l.needs_phone || 0;
         document.getElementById('mCalls').textContent = r.calls_this_month || 0;
         document.getElementById('mCallsCap').textContent = `of ${r.calls_cap || 250} cap`;
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        const text = document.getElementById('statusText');
+        if (text && text.textContent === 'Loading job status...') {
+          text.textContent = e.message?.includes('Authentication')
+            ? 'Sign in required to load job status'
+            : 'Could not load job status';
+        }
+      }
     }
 
     async function loadAlerts() {

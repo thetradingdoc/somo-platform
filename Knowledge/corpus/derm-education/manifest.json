@@ -2,8 +2,9 @@
   "corpus_id": "derm-patient-education",
   "version": "1.0.0",
   "updated": "2026-04-03",
-  "owner": "clinical-content@doclittle (process owner); engineering: middleware-platform RAG client",
-  "description": "Derm-first patient education chunks (guidelines excerpts, approved briefs). Index build is out-of-band in Colab or a dedicated indexer.",
+  "owner": "clinical-content@somo (process owner); engineering: middleware-platform RAG client",
+  "namespace": "derm-education-v1",
+  "description": "Somo derm patient education chunks (guidelines excerpts, approved briefs). Index build is out-of-band. Legacy export filenames may reference doctorlittle — do not use in user-facing copy.",
   "chunking": {
     "target_tokens": 350,
     "overlap_tokens": 60,

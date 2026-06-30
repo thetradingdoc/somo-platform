@@ -1,0 +1,721 @@
+/**
+ * Live session — mobile layout (light theme, Kelly stage + chat stack)
+ */
+
+:root {
+  --hv-session-bg: #ffffff;
+  --hv-session-surface: #f5f5f4;
+  --hv-session-text: #1a1a1a;
+  --hv-session-muted: #6b6b6b;
+  --hv-session-border: #e8e4dc;
+  --hv-session-ink: #0a0a0a;
+  --hv-session-accent: #0a0a0a;
+}
+
+.hv-session-outer--live {
+  background: var(--hv-session-bg);
+  min-height: 100dvh;
+  color: var(--hv-session-text);
+}
+
+.hv-session-outer--live .hv-session-frame {
+  max-width: none;
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.hv-session-outer--preview {
+  background: var(--hv-page-bg, #fff);
+}
+
+.hv-session-outer--preview .hv-session-frame {
+  padding: 0 var(--hv-page-pad-x) 24px;
+}
+
+.hv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Light session header — matches report / journey */
+.hv-sess-header-live {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  padding: 10px 16px;
+  flex-shrink: 0;
+  gap: 10px;
+  border-bottom: 0.5px solid var(--hv-session-border);
+  background: var(--hv-session-bg);
+}
+
+.hv-sess-header-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hv-sess-status--live {
+  font-size: 0.72rem;
+  color: var(--hv-session-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hv-sess-header-progress {
+  font-size: 0.62rem;
+  color: var(--hv-session-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.hv-sess-private-inline {
+  font-size: 0.6rem;
+  color: var(--hv-session-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.hv-sess-finish-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 0.5px solid var(--hv-session-border);
+  background: var(--hv-session-ink);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.hv-sess-finish-btn:focus-visible {
+  outline: 2px solid var(--hv-session-ink);
+  outline-offset: 2px;
+}
+
+.hv-conn-dot--live {
+  background: #22c55e;
+}
+
+.hv-conn-dot--live.connecting {
+  background: #f59e0b;
+}
+
+/* Mobile shell */
+.hv-session-shell--mobile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--hv-session-bg);
+  overflow: hidden;
+}
+
+.hv-session-shell--mobile.hv-session-shell--camera-active {
+  min-height: 0;
+}
+
+.hv-session-shell--mobile.hv-session-shell--camera-active .hv-kelly-stage {
+  flex: 0 0 min(45vh, 380px);
+  min-height: 200px;
+}
+
+.hv-session-shell--mobile.hv-session-shell--camera-active .hv-chat-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Kelly stage */
+.hv-kelly-stage {
+  position: relative;
+  flex-shrink: 0;
+  background: var(--hv-session-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 0.5px solid var(--hv-session-border);
+  overflow: hidden;
+}
+
+.hv-kelly-stage--compact {
+  flex: 0 0 auto;
+  min-height: 72px;
+  padding: 10px 14px;
+  justify-content: flex-start;
+}
+
+.hv-kelly-stage-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.hv-kelly-stage-compact-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hv-kelly-stage-compact-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--hv-session-text);
+}
+
+.hv-kelly-stage-compact-status {
+  font-size: 0.68rem;
+  color: var(--hv-session-muted);
+}
+
+.hv-kelly-stage--camera-active {
+  background: #111;
+}
+
+.hv-kelly-stage-presence {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  padding: 12px 16px 20px;
+}
+
+.hv-kelly-ring-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hv-k-ring,
+.hv-k-ring2 {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.12);
+  animation: hvKring 2s ease-in-out infinite;
+}
+
+.hv-k-ring { inset: -10px; }
+.hv-k-ring2 {
+  inset: -20px;
+  border-width: 1px;
+  border-color: rgba(0, 0, 0, 0.06);
+  animation-delay: 0.4s;
+}
+
+@keyframes hvKring {
+  0%, 100% { transform: scale(0.95); opacity: 0.7; }
+  60% { transform: scale(1.05); opacity: 0.25; }
+}
+
+/* Kelly avatar letter */
+.hv-kelly-av {
+  border-radius: 50%;
+  background: var(--hv-session-ink);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+}
+
+.hv-kelly-av--sm {
+  width: 36px;
+  height: 36px;
+  font-size: 0.85rem;
+}
+
+.hv-kelly-av--md {
+  width: 80px;
+  height: 80px;
+  font-size: 1.75rem;
+}
+
+.hv-kelly-av--lg {
+  width: 100px;
+  height: 100px;
+  font-size: 2.25rem;
+}
+
+.hv-k-name-tag {
+  font-size: 0.68rem;
+  color: var(--hv-session-muted);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin: 0;
+  border: 0.5px solid var(--hv-session-border);
+}
+
+.hv-kelly-stage-status {
+  font-size: 0.72rem;
+  color: var(--hv-session-muted);
+  margin: 0;
+}
+
+.hv-kelly-stage-presence--listening .hv-k-ring {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.hv-kelly-stage-presence--concerned .hv-k-ring {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.hv-kelly-stage-presence--urgent .hv-k-ring {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+/* Kelly chip — camera active, top-right */
+.hv-kelly-chip {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.hv-kelly-chip-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--hv-session-ink);
+}
+
+.hv-safe-badge--stage {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 3px 9px;
+  font-size: 0.58rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.hv-kelly-stage--camera-active .hv-safe-badge--stage {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* PiP variants */
+.hv-self-pip--stage {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 72px;
+  height: 52px;
+  background: #e8e4dc;
+  border-radius: 8px;
+  border: 0.5px solid var(--hv-session-border);
+  overflow: hidden;
+  z-index: 4;
+}
+
+.hv-self-pip--stage.off {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hv-self-pip--stage-full {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: #111;
+  z-index: 1;
+}
+
+.hv-self-pip-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--hv-session-muted);
+}
+
+.hv-self-pip-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+/* Light-theme chat overrides */
+.hv-session-outer--live .hv-bubble.k {
+  background: #f0f0f0;
+  color: var(--hv-session-text);
+}
+
+.hv-session-outer--live .hv-bubble.u {
+  background: var(--hv-session-ink);
+  color: #fff;
+}
+
+.hv-session-outer--live .hv-msg-av.k {
+  background: #f0f0f0;
+  color: var(--hv-session-ink);
+}
+
+.hv-session-outer--live .hv-msg-av.u {
+  background: #e8e4dc;
+  color: var(--hv-session-muted);
+}
+
+.hv-session-outer--live .hv-bubble-label {
+  color: var(--hv-session-muted);
+}
+
+.hv-session-outer--live .hv-tdot {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.hv-session-outer--live .hv-text-input-box {
+  background: #f5f5f4;
+  border-color: var(--hv-session-border);
+  color: var(--hv-session-text);
+}
+
+.hv-session-outer--live .hv-text-input-box::placeholder {
+  color: #999;
+}
+
+.hv-session-outer--live .hv-fab-sm.mic-on {
+  background: var(--hv-session-ink);
+  color: #fff;
+}
+
+.hv-session-outer--live .hv-fab-sm.send {
+  background: #f0f0f0;
+  color: var(--hv-session-muted);
+  border: 0.5px solid var(--hv-session-border);
+}
+
+.hv-session-outer--live .hv-fab-bar-btn {
+  background: #f5f5f4;
+  border-color: var(--hv-session-border);
+  color: var(--hv-session-text);
+}
+
+.hv-session-outer--live .hv-fab-bar-btn.on {
+  background: #eef0fe;
+  border-color: #c5ccf7;
+  color: var(--hv-session-ink);
+}
+
+.hv-session-outer--live .hv-fab-bar-btn.primary {
+  background: var(--hv-session-ink);
+  border-color: var(--hv-session-ink);
+  color: #fff;
+}
+
+/* AV controls — camera only at bottom */
+.hv-sess-av-bar {
+  padding: 0 14px 8px;
+}
+
+.hv-sess-camera-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 0.5px solid var(--hv-session-border);
+  background: #f5f5f4;
+  color: var(--hv-session-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.hv-sess-camera-btn.on {
+  background: #eef0fe;
+  border-color: #c5ccf7;
+  color: var(--hv-session-ink);
+}
+
+.hv-sess-camera-btn:focus-visible {
+  outline: 2px solid var(--hv-session-ink);
+  outline-offset: 2px;
+}
+
+.hv-session-outer--live .hv-sess-input-bar {
+  border-top: 0.5px solid var(--hv-session-border);
+}
+
+.hv-session-outer--live .hv-sess-end-bar {
+  border-top: 0.5px solid var(--hv-session-border);
+}
+
+.hv-session-outer--live .hv-session-emergency {
+  color: var(--hv-session-muted);
+}
+
+.hv-session-outer--live .hv-session-emergency a {
+  color: var(--hv-session-text);
+}
+
+.hv-session-outer--live .hv-session-error {
+  color: #b91c1c;
+}
+
+.hv-session-outer--live .hv-reconnect-banner {
+  color: #b45309;
+}
+
+/* Chat panel mobile */
+.hv-session-shell--mobile .hv-chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.hv-session-shell--mobile .hv-chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.hv-session-shell--mobile .hv-sess-input-bar {
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+}
+
+.hv-session-shell--mobile .hv-sess-end-bar {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* Camera-compact chat */
+.hv-chat-panel--camera-compact .hv-chat-input-row--compact {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.hv-chat-input-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.hv-chat-fab {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0.5px solid var(--hv-session-border);
+  background: #f5f5f4;
+  color: var(--hv-session-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.hv-chat-fab--unread::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.hv-chat-fab {
+  position: relative;
+}
+
+.hv-chat-compact-preview {
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 0.72rem;
+  color: var(--hv-session-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 0.5px solid var(--hv-session-border);
+}
+
+.hv-chat-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+
+.hv-chat-sheet {
+  width: 100%;
+  max-height: 70vh;
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hv-chat-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 0.5px solid var(--hv-session-border);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.hv-chat-sheet-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--hv-session-muted);
+}
+
+.hv-chat-area--sheet {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  max-height: 50vh;
+}
+
+/* Progress + urgency light */
+.hv-session-step-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 0.5px solid var(--hv-session-border);
+}
+
+.hv-session-step-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hv-session-ink);
+  flex-shrink: 0;
+}
+
+.hv-session-step-chip-label {
+  font-size: 0.7rem;
+  color: var(--hv-session-muted);
+}
+
+.hv-urgency-chip {
+  margin: 0 14px 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  border: 0.5px solid #bbf7d0;
+}
+
+.hv-urgency-chip--follow-up {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.hv-urgency-chip--seek-care {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.hv-urgency-chip-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--hv-session-text);
+}
+
+.hv-urgency-chip-desc {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--hv-session-muted);
+  margin-top: 2px;
+}
+
+.hv-chat-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.hv-session-outer--live .hv-urgency-step.lit.routine.lit {
+  background: #f0fdf4;
+}
+
+.hv-session-outer--live .hv-urgency-step.lit.follow-up.lit {
+  background: #fffbeb;
+}
+
+.hv-session-outer--live .hv-urgency-step.lit.seek-care.lit {
+  background: #fef2f2;
+}
+
+.hv-session-outer--live .hv-urgency-step {
+  opacity: 0.75;
+  background: #f5f5f4;
+}
+
+.hv-session-outer--live .hv-urgency-step-label {
+  color: var(--hv-session-text);
+}
+
+.hv-session-outer--live .hv-urgency-step-desc {
+  color: var(--hv-session-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hv-k-ring,
+  .hv-k-ring2 {
+    animation: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .hv-kelly-stage:not(.hv-kelly-stage--camera-active) {
+    flex: 0 0 200px;
+  }
+}

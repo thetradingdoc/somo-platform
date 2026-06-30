@@ -14,7 +14,19 @@ const stediBreaker = getOrCreate(STEDI, { failureThreshold: 5, windowMs: 60000, 
 class InsuranceService {
   // Stedi API Configuration (translate fallback on core; eligibility/claims on healthcare)
   static STEDI_API_BASE = process.env.STEDI_API_BASE || 'https://core.us.stedi.com';
-  static STEDI_API_KEY = process.env.STEDI_API_KEY || 'test_1rRzTb0.Va9Tn88BB3fgPgttprqbrxQ1';
+
+  static resolveStediApiKey() {
+    const key = String(process.env.STEDI_API_KEY || '').trim();
+    if (key) return key;
+    const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+    const isTest = nodeEnv === 'test' || process.env.JEST_WORKER_ID != null;
+    if (isTest && process.env.STEDI_TEST_MODE !== '0') {
+      return 'test_stedi_key_for_jest';
+    }
+    return '';
+  }
+
+  static STEDI_API_KEY = InsuranceService.resolveStediApiKey();
   static STEDI_ELIGIBILITY_V3_PATH =
     process.env.STEDI_ELIGIBILITY_V3_PATH || '/2024-04-01/change/medicalnetwork/eligibility/v3';
 

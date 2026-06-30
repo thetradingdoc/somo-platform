@@ -430,6 +430,55 @@ Azure sections in legacy checklist are historical; use GCP runbooks: [`docs/depl
 
 ---
 
+## BRAND-PRUNE-2026 — Pre-Phase 3 (healthcare financial agent)
+
+**SSOT:** `~/.cursor/plans/pre-phase_3_repaint_d9512be7.plan.md` · Master plan: `somo_health_session_architecture_723cc4d3.plan.md`
+
+**Stop line:** Do not start P3 finance rails until all items below are green.
+
+### Wave A — Narrative lock (docs)
+- [x] README → healthcare financial agent positioning
+- [x] SOMO_GUIDELINES — Kelly PA vs Kelly front desk split
+- [x] CANONICAL_DOC_MAP — healthcare financial agent row
+- [x] HEALTH_SESSION_ARCHITECTURE — P3 finance preview
+- [x] VIDEO_HEALTH — copay roadmap copy
+- [x] derm-education manifest — Somo branding
+- [x] Cursor rule alignment
+
+### Wave B — Code gates
+- [x] `COMMERCE_LEGACY_ENABLED=false` default; gate commerce mounts in `server.js`
+- [x] Fix `trySendLittleLabOrPublicLanding` undefined; LittleLab dead paths
+- [x] `patient-app/DEPRECATED.md`; legacy health JS confirmed deprecated
+- [x] Brand CI hardening for health paths
+- [x] Route ownership table in `docs/architecture/ROUTE_OWNERSHIP.md` + `LIVE.md`
+
+### Health acceptance gates (H1–H6)
+- [x] Health Jest in `ci-local.sh` gate (21 tests)
+- [x] Multi-turn memory test green
+- [x] Report from DB (health-session-report-service)
+- [x] Auth on `/turn`, `/end`, SSE token
+- [x] Health isolation regression
+- [x] `ci:phase0` green (2026-06-25)
+
+### Wave C — Monolith rules (before P3)
+- [x] `database.js` + `server.js` policy banners
+- [x] `bootstrap/health-ui.js` extract
+- [x] `routes/index.js` mount registry (health first)
+- [x] `database/repos/health-session.js`
+- [x] `database/repos/payment.js` prep
+- [x] `webhooks/retell/health-session-guard.js` + commerce block on health metadata
+- [x] `scripts/check-monolith-growth.cjs`
+
+### Wave D — Phase 3 finance (start after above)
+Eligibility, copay panel, Stripe, webhooks, Circle — see master plan `p3-*` todos.
+
+### Wave E — Hard delete (after P3 stub)
+Commerce routes, PSTN replay fixtures, skincare services — master plan `later-delete-*`.
+
+**Route table:** [`docs/architecture/LIVE.md`](../docs/architecture/LIVE.md#route-ownership-pre-phase-3)
+
+---
+
 ## Summary
 
 | Priority | Workstream | ~Open items |

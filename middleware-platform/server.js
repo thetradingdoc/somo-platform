@@ -1,4 +1,7 @@
 // server.js - FIXED WITH PAYMENT ORCHESTRATOR AND PROPER DATABASE
+//
+// POLICY: No new inline route handlers — add routes/*.js and mount via routes/index.js.
+// POLICY: No new health/commerce logic here — use services/ and bootstrap/.
 // Load environment variables from .env if dotenv is available.
 // In Azure, env vars are provided by App Settings, so dotenv may not be installed.
 try {
@@ -9,6 +12,15 @@ try {
   require('dotenv').config({ path: dotenvPath, override: !isProduction });
 } catch (e) {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
+}
+
+// Local dev default: health MVP at http://localhost:4000/ (set LOCAL_DEV_ROOT=login in .env for provider portal)
+{
+  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+  const isProductionEnv = nodeEnv === 'production' || nodeEnv === 'prod';
+  if (!isProductionEnv && !String(process.env.LOCAL_DEV_ROOT || '').trim()) {
+    process.env.LOCAL_DEV_ROOT = 'health';
+  }
 }
 
 const bootDebug = ['1', 'true', 'yes'].includes(String(process.env.CLOUDRUN_BOOT_DEBUG || '').toLowerCase());
@@ -72,6 +84,9 @@ const {
   isLocalDevRootHost,
 } = require('./lib/static-hosting-paths');
 const { registerEarlySomoLandingStatic } = require('./bootstrap/static-hosting');
+const { registerHealthUi } = require('./bootstrap/health-ui');
+const { mountHealthSpine, mountCommerceLegacy } = require('./routes/index');
+const { isCommerceLegacyEnabled } = require('./lib/commerce-legacy-flag');
 // Node 18+ has global fetch; fallback to axios where needed
 // Initialize Stripe with proper configuration and validation
 const stripeConfig = require('./utils/stripe-config');
@@ -2108,9 +2123,37 @@ function redirectMarketingRoot(res) {
   return res.redirect(302, '/business/trial-activation.html');
 }
 
+function getHealthVideoSpaDir() {
+  const candidates = [
+    path.join(__dirname, '..', 'unified-dashboard', 'health-video-landing', 'dist'),
+    path.join(__dirname, 'unified-dashboard', 'health-video-landing', 'dist')
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
+  }
+  return null;
+}
+
+function redirectHealthVideoEntry(res) {
+  if (getHealthVideoSpaDir()) return res.redirect(302, '/health-video/');
+  return res.redirect(302, '/health-video.html');
+}
+
+/** Legacy /index.html — health dev root or B2B trial (replaces undefined LittleLab handler). */
+function trySendHealthOrB2BLanding(res) {
+  if (process.env.LOCAL_DEV_ROOT === 'health') {
+    redirectHealthVideoEntry(res);
+    return true;
+  }
+  res.redirect(302, '/business/trial-activation.html');
+  return true;
+}
+
 function redirectLegacyLandingPath(req, res) {
-  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  return res.redirect(301, `/${qs}`);
+  if (process.env.LOCAL_DEV_ROOT === 'health') {
+    return redirectHealthVideoEntry(res);
+  }
+  return res.redirect(302, '/business/trial-activation.html');
 }
 
 /** Production API hostnames (split-domain). */
@@ -2167,6 +2210,9 @@ app.get('/', (req, res) => {
         '</body></html>'
       );
     }
+    if (process.env.LOCAL_DEV_ROOT === 'health') {
+      return redirectHealthVideoEntry(res);
+    }
     return redirectMarketingRoot(res);
   }
 
@@ -2216,7 +2262,7 @@ app.get('/', (req, res) => {
   redirectMarketingRoot(res);
 });
 
-// Legacy littlelab marketing paths → unified Somo landing at /
+// Legacy LittleLab marketing paths → health entry or B2B trial
 const LEGACY_LANDING_PATHS = [
   '/how-it-works',
   '/landing',
@@ -2474,9 +2520,12 @@ app.get('/index.html', (req, res) => {
   if (isProductionApiHostname(hostname)) {
     return res.status(404).json({ error: 'Not found on API subdomain' });
   }
-  if (trySendLittleLabOrPublicLanding(res)) return;
+  if (trySendHealthOrB2BLanding(res)) return;
   return res.status(404).type('text/plain').send('Not found');
 });
+
+const healthUiHelpers = registerHealthUi(app, { express, getUnifiedDashboardPath, rootDir: __dirname });
+void healthUiHelpers;
 
 // Serve unified-dashboard subdirectories
 app.use('/business', express.static(getUnifiedDashboardPath('business'), {
@@ -2635,8 +2684,7 @@ const ragSearchRoutes = require('./routes/rag-search');
 app.use('/api/rag', ragProxyRoutes);
 app.use('/api/rag', ragSearchRoutes);
 
-const videoConsultRoutes = require('./routes/video-consult');
-app.use('/api/video-consult', videoConsultRoutes);
+mountHealthSpine(app);
 
 const { registerFaceReadPublicRoute } = require('./routes/public-face-read');
 registerFaceReadPublicRoute(app, { apiLimiter });
@@ -2655,13 +2703,16 @@ registerPublicFunnelSpecialistRoutes(app, { apiLimiter });
 const { registerPatientFunnelBridgeRoutes } = require('./routes/patient-funnel-bridge');
 registerPatientFunnelBridgeRoutes(app, { apiLimiter, requirePatientSession, recordPatientPortalEvent });
 
-// Legacy consumer static paths → littlelab funnel
+// Legacy consumer paths — redirect to health entry or B2B trial (LittleLab funnel retired)
 app.get(/^\/consumer(\/.*)?$/, (req, res) => {
   const sub = String(req.path || '').replace(/^\/consumer\/?/, '');
   if (sub.includes('get-app') || sub.includes('join')) {
     return res.redirect(302, '/patients/patient-login.html?intent=signup');
   }
-  return res.redirect(302, '/start');
+  if (process.env.LOCAL_DEV_ROOT === 'health') {
+    return redirectHealthVideoEntry(res);
+  }
+  return res.redirect(302, '/business/trial-activation.html');
 });
 
 const { registerPatientCareProgramBillingRoutes } = require('./routes/patient-care-program-billing');
@@ -2741,16 +2792,18 @@ const patientRouteDeps = {
   parseProductRef,
 };
 registerPublicProductScanRoutes(app, { apiLimiter });
-registerPatientCheckoutChatRoutes(app, {
-  apiLimiter,
-  express,
-  requirePatientSession,
-  requireCsrfForCookieAuth,
-  validatePatientCheckoutChatBody,
-  rotatePatientSessionIfNeeded,
-  blockChatWhenDisabled,
-  db,
-});
+if (isCommerceLegacyEnabled()) {
+  registerPatientCheckoutChatRoutes(app, {
+    apiLimiter,
+    express,
+    requirePatientSession,
+    requireCsrfForCookieAuth,
+    validatePatientCheckoutChatBody,
+    rotatePatientSessionIfNeeded,
+    blockChatWhenDisabled,
+    db,
+  });
+}
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
 app.use('/api/retell', retellFunctionsRoutes);
@@ -2804,18 +2857,7 @@ app.use('/api/public/providers', publicCatalogReadLimiter, publicProviderSearchR
 const publicCheckoutRoutes = require('./routes/public-checkout');
 app.use('/api/public/checkout', publicCheckoutRoutes);
 
-// Commerce quote + cart — separate rate bucket from global /api limiter so bursts do not starve catalog reads
-const publicCommerceQuoteRoutes = require('./routes/public-commerce-quote');
-const publicCommerceCartRoutes = require('./routes/public-commerce-cart');
-app.use('/api/public/commerce', publicCommerceLimiter);
-app.use('/api/public/commerce', publicCommerceQuoteRoutes);
-app.use('/api/public/commerce', publicCommerceCartRoutes);
-app.use('/public/commerce', publicCommerceLimiter);
-app.use('/public/commerce', publicCommerceQuoteRoutes);
-app.use('/public/commerce', publicCommerceCartRoutes);
-
-const publicCheckoutChatRoutes = require('./routes/public-checkout-chat');
-app.use('/api/public/checkout-chat', publicCheckoutChatRoutes);
+mountCommerceLegacy(app, { publicCommerceLimiter, isCommerceLegacyEnabled });
 
 // ============================================
 // Customer Agent Routes (Prompt Management)
@@ -9690,7 +9732,19 @@ function onServerListening() {
   console.log('🚀 MIDDLEWARE PLATFORM - PRODUCTION READY');
   console.log('='.repeat(60));
   console.log(`\n📍 Server running on: http://${HOST}:${PORT}`);
+  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'prod') {
+    console.log(`🏥 LOCAL_DEV_ROOT=${process.env.LOCAL_DEV_ROOT || '(unset)'} — http://localhost:${PORT}/ → ${
+      process.env.LOCAL_DEV_ROOT === 'health' ? (getHealthVideoSpaDir() ? '/health-video/' : '/health-video.html') :
+      process.env.LOCAL_DEV_ROOT === 'login' ? '/login' :
+      '/business/trial-activation.html'
+    }`);
+  }
   console.log('✅ Ready to accept requests (background startup tasks may still be running)\n');
+  console.log(
+    isCommerceLegacyEnabled()
+      ? '🛒 COMMERCE_LEGACY_ENABLED=true — public commerce + checkout-chat routes mounted'
+      : '🏥 COMMERCE_LEGACY_ENABLED=false — health session is default; commerce routes not mounted'
+  );
 
   if (process.env.DEV_LIGHT_START === '1') {
     console.log('ℹ️  DEV_LIGHT_START=1 — skipping post-listen background workers (local dev only)\n');
@@ -9699,19 +9753,21 @@ function onServerListening() {
 
   // Defer heavy sync work so HTTP handlers are not blocked during long listen-callback work.
   setImmediate(() => {
-  try {
-    const checkoutSvc = require('./services/patient-checkout-chat-service');
-    if (typeof checkoutSvc._runCheckoutPreparedBackfillOnce === 'function') {
-      checkoutSvc._runCheckoutPreparedBackfillOnce().catch(() => {});
-    }
-    if (typeof checkoutSvc._runCheckoutContextBackfillOnce === 'function') {
-      checkoutSvc._runCheckoutContextBackfillOnce().catch(() => {});
-    }
-    if (typeof checkoutSvc._runCheckoutStaleInFlightRecoveryOnce === 'function') {
-      checkoutSvc._runCheckoutStaleInFlightRecoveryOnce();
-      setInterval(() => checkoutSvc._runCheckoutStaleInFlightRecoveryOnce(), 60 * 1000);
-    }
-  } catch (_) {}
+  if (isCommerceLegacyEnabled()) {
+    try {
+      const checkoutSvc = require('./services/patient-checkout-chat-service');
+      if (typeof checkoutSvc._runCheckoutPreparedBackfillOnce === 'function') {
+        checkoutSvc._runCheckoutPreparedBackfillOnce().catch(() => {});
+      }
+      if (typeof checkoutSvc._runCheckoutContextBackfillOnce === 'function') {
+        checkoutSvc._runCheckoutContextBackfillOnce().catch(() => {});
+      }
+      if (typeof checkoutSvc._runCheckoutStaleInFlightRecoveryOnce === 'function') {
+        checkoutSvc._runCheckoutStaleInFlightRecoveryOnce();
+        setInterval(() => checkoutSvc._runCheckoutStaleInFlightRecoveryOnce(), 60 * 1000);
+      }
+    } catch (_) {}
+  }
   try {
     const cacheService = require('./services/cache-service');
     if (typeof cacheService.warm === 'function') cacheService.warm();
@@ -9956,22 +10012,24 @@ function onServerListening() {
     console.warn('⚠️  Fraud review SLA monitor disabled:', e.message);
   }
 
-  // Expired commerce quote sessions (checkout_sessions)
-  try {
-    if (db.purgeExpiredCheckoutSessions) {
-      const purged = db.purgeExpiredCheckoutSessions();
-      if (purged > 0) console.log(`🧹 checkout_sessions purge: removed ${purged} expired row(s)`);
-      setInterval(() => {
-        const n = db.purgeExpiredCheckoutSessions();
-        if (n > 0) console.log(`🧹 checkout_sessions purge: removed ${n} expired row(s)`);
-      }, 6 * 60 * 60 * 1000);
+  // Expired commerce quote sessions (checkout_sessions) — legacy commerce only
+  if (isCommerceLegacyEnabled()) {
+    try {
+      if (db.purgeExpiredCheckoutSessions) {
+        const purged = db.purgeExpiredCheckoutSessions();
+        if (purged > 0) console.log(`🧹 checkout_sessions purge: removed ${purged} expired row(s)`);
+        setInterval(() => {
+          const n = db.purgeExpiredCheckoutSessions();
+          if (n > 0) console.log(`🧹 checkout_sessions purge: removed ${n} expired row(s)`);
+        }, 6 * 60 * 60 * 1000);
+      }
+      if (db.purgeOrphanedCommerceFlowSessions) {
+        const orphaned = db.purgeOrphanedCommerceFlowSessions(30);
+        if (orphaned > 0) console.log(`🧹 commerce_flow purge: removed ${orphaned} stale row(s)`);
+      }
+    } catch (e) {
+      console.warn('⚠️  checkout_sessions purge disabled:', e.message);
     }
-    if (db.purgeOrphanedCommerceFlowSessions) {
-      const orphaned = db.purgeOrphanedCommerceFlowSessions(30);
-      if (orphaned > 0) console.log(`🧹 commerce_flow purge: removed ${orphaned} stale row(s)`);
-    }
-  } catch (e) {
-    console.warn('⚠️  checkout_sessions purge disabled:', e.message);
   }
 
   // Phase 1: Auto-cancel unpaid appointment checkouts (webhook-safe)

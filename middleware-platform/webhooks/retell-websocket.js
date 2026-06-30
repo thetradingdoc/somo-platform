@@ -28,6 +28,7 @@ const {
 } = require('../services/call-opener-resolver');
 const { normalizeSettingsRow } = require('../services/voice-settings-sync');
 const { resolveCustomerIdForBilling } = require('../services/voice-account-resolution');
+const { shouldBlockCommerceTools } = require('./retell/health-session-guard');
 
 function pstnReplayQuiet(connection) {
     return !!(connection?.replayMode && String(process.env.PSTN_REPLAY_QUIET_LOGS || '').trim() === '1');
@@ -1563,6 +1564,14 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
 
                 case 'get_product_quote':
                 case 'prepare_commerce_checkout': {
+                    if (shouldBlockCommerceTools(connection.callMetadata || {})) {
+                        result = {
+                            success: false,
+                            error: 'Commerce tools are not available on health sessions. Use health-video chat instead.',
+                            code: 'HEALTH_SESSION_COMMERCE_BLOCKED'
+                        };
+                        break;
+                    }
                     const KellyToolExecutor = require('../services/kelly-tool-executor');
                     const patientId = connection.patientId || null;
                     const callerPhone =

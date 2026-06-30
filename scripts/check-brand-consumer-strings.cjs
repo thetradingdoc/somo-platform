@@ -39,6 +39,7 @@ const BANNED = [
   { re: /\bdodgecall\b/i, label: 'dodgecall' },
   { re: /\bdoclittle\b/i, label: 'doclittle' },
   { re: /\bmyskinandcare\b/i, label: 'myskinandcare' },
+  { re: /\blittlelab\b/i, label: 'littlelab' },
   { re: /drlittlekids@gmail\.com/i, label: 'drlittlekids@gmail.com (legacy — use richard@callsomo.com)' },
 ];
 
@@ -52,7 +53,7 @@ const ALLOW_PATH = [
   /[/\\]docs[/\\]archive[/\\]/i,
   /somo-demo-env\.js$/i,
   /check-brand-consumer-strings/i,
-  /check-brand-strings/i,
+  /DEPRECATED\.md$/i,
   /check-legacy-hosts/i,
   /rebrand-somo/i,
   /backfill-fhir-callsomo/i,

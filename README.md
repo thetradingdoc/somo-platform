@@ -1,11 +1,14 @@
-# Somo Platform — AI Front Desk + RCM
-> Last reviewed: May 30, 2026
+# Somo — Healthcare Financial Agent
+> Last reviewed: 2026-06-25
 
-**Version**: 3.1.0  
-**Status**: Production ready for defined surfaces — see [`docs/meta/PO_SURFACE_SCORECARD.md`](docs/meta/PO_SURFACE_SCORECARD.md)  
-**Last Updated:** 2026-05-31
+**Version**: 3.2.0  
+**Status**: Consumer health session (P0–P2) + B2B front desk in production — see [`docs/meta/PO_SURFACE_SCORECARD.md`](docs/meta/PO_SURFACE_SCORECARD.md)  
+**Last Updated:** 2026-06-25
 
 > **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
+
+> **Master plan (SSOT):** Somo Health Finance Agent — `~/.cursor/plans/somo_health_session_architecture_723cc4d3.plan.md`  
+> **Architecture:** [`docs/architecture/HEALTH_SESSION_ARCHITECTURE.md`](docs/architecture/HEALTH_SESSION_ARCHITECTURE.md)
 
 > **Trading agent (separate repo):** [richiejeremiah/trading-agent](https://github.com/richiejeremiah/trading-agent) — biotech paper trading; not maintained in this repository.
 
@@ -13,15 +16,40 @@
 
 > **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.
 
-> **Architecture notes:** [Patient timeline & billing](docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md) · [Route ownership](docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) · [`server.js` decomposition](docs/architecture/SERVER_DECOMPOSITION.md) · [Architecture index](docs/architecture/README.md) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
+> **Architecture notes:** [Health session architecture](docs/architecture/HEALTH_SESSION_ARCHITECTURE.md) · [Route ownership](docs/architecture/LIVE.md#route-ownership-pre-phase-3) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
 
 ---
 
-## 📋 Overview
+## Overview
 
-**Somo** is an agentic AI front desk and revenue cycle platform for healthcare and business. Somo front desk handles inbound calls; Somo pay runs eligibility, claims, and patient collections. Production runs on **callsomo.com** — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
+**Somo** is a **healthcare financial agent** platform. The consumer journey starts with **Safe VideoGPT for Healthcare** — educational multilingual video health chat (Kelly, physician assistant) — and extends to finance rails: eligibility, copay quote, payment, and routed care (P3+).
 
-### Key Features
+```bash
+# Local dev — consumer health at http://localhost:4000/health-video/
+./run
+# or: cd middleware-platform && npm run health:dev
+```
+
+| Product line | User | Entry | Kelly persona |
+|--------------|------|-------|---------------|
+| **Somo Health** (consumer) | Anonymous patient | `/health-video/` (`LOCAL_DEV_ROOT=health`) | **Kelly PA** — education only, no diagnosis |
+| **Somo front desk** (B2B) | Practice / trial | `/business/trial-activation.html` | **Kelly front desk** — receptionist, booking |
+| **Somo pay** (RCM) | Provider | `business/*.html` | Billing, eligibility, claims |
+
+### Consumer health — quick features
+
+- Safe VideoGPT for Healthcare: terms → call → chat → structured report
+- Groq tool-loop agent (`kelly-pa-video-orchestrator.js`) — not LangGraph on `health-*`
+- LiveKit video + browser STT; derm education RAG optional
+- Session-scoped auth, DB transcript SSOT, HIPAA audit hooks
+
+---
+
+## B2B / provider platform
+
+**Somo front desk** is the agentic AI receptionist for healthcare practices on **callsomo.com** — inbound PSTN, appointment booking, trial demo. **Somo pay** runs eligibility (Stedi), claims, Stripe, and Circle USDC payouts.
+
+### B2B key features
 
 - ✅ **Voice Agent Integration**: Natural language appointment booking via Retell AI
 - ✅ **Appointment Management**: Scheduling, confirmation, cancellation, rescheduling
@@ -76,7 +104,7 @@ somo/
 └── README.md                # This file
 ```
 
-**Agentic commerce (chat → quote → pay):** see [docs/architecture/README.md#commerce-public-agentic-checkout](docs/architecture/README.md#commerce-public-agentic-checkout) and [todos/PENDING.md](todos/PENDING.md) (deferred checkout section). Legacy consumer code (`patient-app/`, Skin & Care portal) coexists with front-desk product; scheduled for future removal.
+**Agentic commerce (legacy — gated off by default):** see [`docs/architecture/LIVE.md`](docs/architecture/LIVE.md#route-ownership-pre-phase-3). Set `COMMERCE_LEGACY_ENABLED=true` only to revive checkout paths. Legacy `patient-app/` and archived LittleLab are **not** health-finance SSOT.
 
 ---
 
