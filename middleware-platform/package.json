@@ -24,6 +24,7 @@
         "sandbox:funnel-kelly-gap": "node scripts/sandbox-funnel-kelly-gap-compare.cjs",
         "sandbox:routine-photo": "node scripts/sandbox-routine-photo-loop.cjs",
         "test:smtp-receipt": "node scripts/test-smtp-receipt.cjs",
+        "test:admin-portal-auth": "node scripts/test-admin-portal-auth.js",
         "backup": "node scripts/backup-database.js",
         "backup:auto": "node scripts/backup-database.js --auto",
         "export:postgres": "node scripts/export-sqlite-to-postgres.js",
