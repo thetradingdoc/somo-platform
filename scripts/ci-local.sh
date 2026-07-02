@@ -96,7 +96,7 @@ fi
 step "Coding prod gates"
 node scripts/verify-no-hardcoded-coding.cjs || { echo "❌ verify-no-hardcoded-coding failed"; exit 1; }
 node scripts/verify-threshold-ssot.cjs || { echo "❌ verify-threshold-ssot failed"; exit 1; }
-if [[ -f var/db/middleware-dev.db ]]; then
+if [[ -f var/db/middleware-dev.db ]] && [[ "${CI:-}" != "true" ]]; then
   DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-db-path.cjs || { echo "❌ verify-db-path failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-tools.cjs || { echo "❌ verify-kelly-tools failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-http-collect.cjs || { echo "❌ verify-kelly-http-collect failed"; exit 1; }
@@ -119,7 +119,11 @@ if [[ -f var/db/middleware-dev.db ]]; then
     fi
   fi
 else
-  echo "ℹ️  DB-backed coding gates skipped (var/db/middleware-dev.db missing)"
+  if [[ -f var/db/middleware-dev.db ]] && [[ "${CI:-}" == "true" ]]; then
+    echo "ℹ️  DB-backed coding gates skipped in CI (codebook Session 2 not imported on runners)"
+  else
+    echo "ℹ️  DB-backed coding gates skipped (var/db/middleware-dev.db missing)"
+  fi
 fi
 
 step "Jest (middleware-platform)"
