@@ -3,6 +3,7 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const orchestrator = require('./rcm-journey-orchestrator');
+const stripeConfig = require('../utils/stripe-config');
 
 let CircleService;
 try {
@@ -57,9 +58,11 @@ function loadPaymentByToken(token) {
 }
 
 function stripeClient() {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) return null;
-  return require('stripe')(key);
+  try {
+    return stripeConfig.initializeStripe();
+  } catch (_) {
+    return null;
+  }
 }
 
 const CIRCLE_OP_TIMEOUT_MS = Number(process.env.CIRCLE_OP_TIMEOUT_MS || 45000);
@@ -76,7 +79,20 @@ function withCircleTimeout(promise, label) {
 async function getPaymentContext(token) {
   const row = loadPaymentByToken(token);
   if (!row) {
-    return { success: false, error: 'Payment link not found or already paid', status: 404 };
+    return {
+      success: false,
+      error: 'Payment link not found or has expired',
+      code: 'payment_link_expired',
+      status: 404
+    };
+  }
+  if (row.status === 'expired' || row.status === 'cancelled') {
+    return {
+      success: false,
+      error: 'This payment link has expired. Please contact your provider for a new link.',
+      code: 'payment_link_expired',
+      status: 410
+    };
   }
   if (row.status === 'paid') {
     return {
@@ -84,6 +100,16 @@ async function getPaymentContext(token) {
       alreadyPaid: true,
       payment: formatPayment(row),
       rails: { usdc: { available: false }, card: { available: false } },
+    };
+  }
+
+  if (Number(row.amount) <= 0) {
+    return {
+      success: true,
+      zero_balance: true,
+      code: 'zero_balance',
+      payment: formatPayment(row),
+      rails: { usdc: { available: false }, card: { available: false } }
     };
   }
 
@@ -126,7 +152,10 @@ async function getPaymentContext(token) {
     usdc.reason = 'Payment is missing patient_id for USDC settlement';
   }
 
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
+  let publishableKey = '';
+  try {
+    publishableKey = stripeConfig.getStripePublishableKey();
+  } catch (_) {}
 
   return {
     success: true,
@@ -144,12 +173,23 @@ async function getPaymentContext(token) {
 }
 
 function formatPayment(row) {
+  let clinic_name = null;
+  let clinic_phone = null;
+  if (row.clinic_id && db.db) {
+    try {
+      const clinic = db.db.prepare(`SELECT name, phone_number FROM clinics WHERE clinic_id = ? LIMIT 1`).get(row.clinic_id);
+      clinic_name = clinic?.name || null;
+      clinic_phone = clinic?.phone_number || null;
+    } catch (_) {}
+  }
   return {
     id: row.id,
     amount: row.amount,
     currency: row.currency || 'USD',
     status: row.status,
     clinic_id: row.clinic_id,
+    clinic_name,
+    clinic_phone,
     journey_id: row.journey_id,
     patient_id: row.patient_id,
     method: row.method,
@@ -458,7 +498,13 @@ async function createStripeIntent(token) {
     success: true,
     payment_intent_id: paymentIntent.id,
     client_secret: paymentIntent.client_secret,
-    publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || null,
+    publishable_key: (() => {
+      try {
+        return stripeConfig.getStripePublishableKey();
+      } catch (_) {
+        return null;
+      }
+    })(),
   };
 }
 

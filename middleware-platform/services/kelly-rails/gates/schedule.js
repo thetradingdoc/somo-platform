@@ -25,6 +25,14 @@ const {
 
 async function runDeterministicSchedule(state, ctx) {
   const toolsUsed = [];
+  const { frontDeskIntakeComplete, isFrontDeskTenant, promptForField, nextFrontDeskField } = require('../../front-desk-intake');
+  if (isFrontDeskTenant(ctx) && !frontDeskIntakeComplete(ctx.sessionId)) {
+    const field = nextFrontDeskField(ctx.sessionId);
+    return {
+      reply: promptForField(field || 'full_name', state.locale || ctx.locale || 'en'),
+      endCall: false
+    };
+  }
   const row = sessionRow(ctx.sessionId);
   if (!row?.rag_result_id && opqrstComplete(row)) {
     const rag = await KellyToolExecutor.execute('run_triage_rag', {}, ctx);
@@ -224,10 +232,10 @@ async function runDeterministicSchedule(state, ctx) {
       KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_slot_time', bookedTime);
       state.flags.schedule_appointment_success = true;
       if (state.flags.copay_amount == null) {
-        state.flags.copay_amount = 25;
-        try {
-          KellyToolExecutor._setSessionMeta(ctx.sessionId, 'copay_amount', '25');
-        } catch (_) {}
+        const metaCopay = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'copay_amount');
+        if (metaCopay != null && Number.isFinite(Number(metaCopay))) {
+          state.flags.copay_amount = Number(metaCopay);
+        }
       }
       state.flags.appointment_id = apptId;
       state.flags.booking_conflict = false;

@@ -19,6 +19,7 @@ const Subrail = Object.freeze({
   CANCELLATION: 'cancellation',
   OPQRST: 'opqrst',
   COPAY_LINK: 'copay_link',
+  SELF_PAY: 'self_pay',
   RECORDS_QA: 'records_qa',
   HANDOFF: 'handoff'
 });

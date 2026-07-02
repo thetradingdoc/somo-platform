@@ -340,7 +340,22 @@ async function executeTurn(input = {}) {
 
   if (payIntentNow) {
     if (state.flags.copay_amount == null) {
-      state.flags.copay_amount = 25;
+      const metaCopay = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'copay_amount');
+      if (metaCopay != null && Number.isFinite(Number(metaCopay))) {
+        state.flags.copay_amount = Number(metaCopay);
+      } else if (ctx.patientId || ctx.sessionId) {
+        try {
+          const { resolveAmountDue } = require('../resolve-amount-due');
+          const resolved = await resolveAmountDue({
+            patientId: ctx.patientId || null,
+            sessionId: ctx.sessionId
+          });
+          if (resolved.status === 'hard_number') {
+            state.flags.copay_amount = resolved.amount;
+            KellyToolExecutor._setSessionMeta(ctx.sessionId, 'copay_amount', String(resolved.amount));
+          }
+        } catch (_) {}
+      }
     }
     if (!state.flags.appointment_id && ctx.patientId) {
       try {
@@ -457,6 +472,35 @@ async function executeTurn(input = {}) {
     }
   }
 
+  let transferNumber = null;
+  if (
+    state.flags?.request_warm_transfer ||
+    (state.flags?.pending_human_handoff &&
+      state.active_lane === KELLY_LANE.SUPPORT &&
+      state.step === 'handoff')
+  ) {
+    try {
+      const { attemptEscalation } = require('../escalation-service');
+      const esc = attemptEscalation(db, {
+        sessionId: ctx.sessionId,
+        callId: ctx.callId || null,
+        clinicId: state.clinic_id || ctx.clinicId || null,
+        customerId: state.customer_id || ctx.customerId || null,
+        reason: state.flags.billing_dispute
+          ? 'billing_dispute'
+          : state.flags.upset_caller
+            ? 'upset_caller'
+            : 'handoff_requested',
+        locale: state.locale || ctx.locale || 'en',
+        reply
+      });
+      if (esc.transfer_number) {
+        transferNumber = esc.transfer_number;
+        reply = esc.reply || reply;
+      }
+    } catch (_) {}
+  }
+
   return {
     state,
     reply,
@@ -464,7 +508,8 @@ async function executeTurn(input = {}) {
     endCall: !!endCall,
     gate_matched: state.gate_matched || null,
     gate_outcome: state.gate_outcome || null,
-    _opqrst_gate: state.flags?._opqrst_gate || null
+    _opqrst_gate: state.flags?._opqrst_gate || null,
+    transfer_number: transferNumber
   };
 }
 

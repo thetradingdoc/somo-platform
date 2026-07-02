@@ -9,6 +9,26 @@
  * - standardized transition logging
  */
 class PaymentFlowService {
+  static async resolveAmountDue(opts = {}) {
+    const { resolveAmountDue } = require('./resolve-amount-due');
+    return resolveAmountDue(opts);
+  }
+
+  static async resolveCheckoutAmount(opts = {}) {
+    const { resolveCheckoutAmount } = require('./resolve-amount-due');
+    return resolveCheckoutAmount(opts);
+  }
+
+  static async resolvePatientCheckoutAmount(opts = {}) {
+    const { resolvePatientCheckoutAmount } = require('./resolve-amount-due');
+    return resolvePatientCheckoutAmount(opts);
+  }
+
+  static logAmountResolution(entry = {}) {
+    const { logAmountResolution } = require('./resolve-amount-due');
+    return logAmountResolution(entry);
+  }
+
   static resolveProviderWalletId({ clinicId = null, merchantId = null } = {}) {
     // Resolution policy (stable order):
     // 1) Clinic-scoped provider wallet

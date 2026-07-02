@@ -70,6 +70,42 @@ function buildAfterHoursMessage(settings) {
   );
 }
 
+function parseJsonHours(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
+function resolveTransferNumber(db, clinicId, customer) {
+  if (clinicId && db?.getClinicById) {
+    const clinic = db.getClinicById(clinicId);
+    const fromClinic =
+      clinic?.transfer_number || clinic?.fallback_pstn || clinic?.phone_number || null;
+    if (fromClinic) return String(fromClinic).trim();
+  }
+  if (customer?.phone_number) return String(customer.phone_number).trim();
+  return null;
+}
+
+function resolveOverflowNumber(db, clinicId, customer, settings) {
+  if (settings?.overflow_enabled === 0 || settings?.overflow_enabled === false) {
+    return null;
+  }
+  if (clinicId && db?.getClinicById) {
+    const clinic = db.getClinicById(clinicId);
+    if (clinic?.overflow_phone) return String(clinic.overflow_phone).trim();
+  }
+  return resolveTransferNumber(db, clinicId, customer);
+}
+
+function resolveForwardAction(transferNumber) {
+  return transferNumber ? 'forward_pstn' : 'hangup';
+}
+
 function buildDefaultGreeting(companyName) {
   const { buildDefaultInboundGreeting } = require('./call-opener-resolver');
   return buildDefaultInboundGreeting(companyName, 'warm');
@@ -200,13 +236,21 @@ function loadProviderVoiceRuntime(db, ids = {}) {
   if (db.getVoiceAgentSettingsForProvider) {
     settings = db.getVoiceAgentSettingsForProvider({ merchantId, customerId, clinicId });
     if (settings?.business_hours && typeof settings.business_hours === 'string') {
-      try {
-        settings.business_hours = JSON.parse(settings.business_hours);
-      } catch (_) {
-        settings.business_hours = null;
-      }
+      settings.business_hours = parseJsonHours(settings.business_hours);
+    }
+    if (settings?.coverage_hours && typeof settings.coverage_hours === 'string') {
+      settings.coverage_hours = parseJsonHours(settings.coverage_hours);
     }
   }
+
+  const transferNumber = resolveTransferNumber(db, clinicId, customer);
+  const overflowNumber = resolveOverflowNumber(db, clinicId, customer, settings);
+  const coverageMode = String(settings?.coverage_mode || 'full_replacement').toLowerCase();
+  const afterHoursAction = String(settings?.after_hours_action || 'message_only').toLowerCase();
+  const aiDisclosureEnabled =
+    settings?.ai_disclosure_enabled !== 0 && settings?.ai_disclosure_enabled !== false;
+  const voiceReplySuppressEnabled =
+    settings?.voice_reply_suppress_enabled === 1 || settings?.voice_reply_suppress_enabled === true;
 
   const kellyStatus = String(
     customer?.kelly_status || customer?.retell_agent_status || 'active'
@@ -215,9 +259,12 @@ function loadProviderVoiceRuntime(db, ids = {}) {
   const kellyPaused = kellyStatus === 'paused';
   const agentEnabled = !kellyPaused && settingsEnabled;
 
+  const { resolveGreetingWithDisclosure } = require('./call-opener-resolver');
+
   return {
     merchantId,
     customerId,
+    clinicId,
     customer,
     settings,
     customPrompt: customer?.custom_prompt
@@ -225,10 +272,18 @@ function loadProviderVoiceRuntime(db, ids = {}) {
       : null,
     kellyStatus,
     agentEnabled,
-    greeting: resolveGreeting(settings, customer),
+    greeting: resolveGreetingWithDisclosure(settings, customer, { aiDisclosureEnabled }),
     afterHoursMessage: buildAfterHoursMessage(settings),
     unavailableMessage: buildUnavailableMessage(),
-    businessHours: settings?.business_hours || null
+    businessHours: settings?.business_hours || null,
+    coverageMode,
+    coverageHours: settings?.coverage_hours || null,
+    afterHoursAction,
+    transferNumber,
+    overflowNumber,
+    portingStatus: settings?.porting_status || 'not_started',
+    aiDisclosureEnabled,
+    voiceReplySuppressEnabled
   };
 }
 
@@ -286,22 +341,48 @@ function resolveCallEndOutcome({ callLog, connection, callDurationSeconds, db })
 }
 
 function evaluateCallAdmission(runtime, now = new Date()) {
+  const transfer = runtime.transferNumber || null;
+  const defaultForward = resolveForwardAction(transfer);
+
   if (!runtime.agentEnabled) {
     return {
       allowed: false,
+      action: defaultForward,
       reason: 'disabled',
-      message: runtime.unavailableMessage
+      message: runtime.unavailableMessage,
+      transferNumber: defaultForward === 'forward_pstn' ? transfer : null
     };
   }
-  if (!isWithinBusinessHours(runtime.businessHours, now)) {
+
+  if (
+    runtime.coverageMode === 'coverage' &&
+    runtime.coverageHours &&
+    Object.keys(runtime.coverageHours).length > 0 &&
+    !isWithinBusinessHours(runtime.coverageHours, now)
+  ) {
     return {
       allowed: false,
-      reason: 'after_hours',
-      message: runtime.afterHoursMessage
+      action: defaultForward,
+      reason: 'coverage_off',
+      message: runtime.afterHoursMessage,
+      transferNumber: defaultForward === 'forward_pstn' ? transfer : null
     };
   }
+
+  if (!isWithinBusinessHours(runtime.businessHours, now)) {
+    const wantsTransfer = runtime.afterHoursAction === 'transfer' && transfer;
+    return {
+      allowed: false,
+      action: wantsTransfer ? 'forward_pstn' : 'hangup',
+      reason: 'after_hours',
+      message: runtime.afterHoursMessage,
+      transferNumber: wantsTransfer ? transfer : null
+    };
+  }
+
   return {
     allowed: true,
+    action: 'connect',
     reason: 'open',
     greeting: runtime.greeting
   };
@@ -321,5 +402,9 @@ module.exports = {
   resolveCallEndOutcome,
   resolveTenantFromCallMeta,
   loadProviderVoiceRuntime,
-  evaluateCallAdmission
+  evaluateCallAdmission,
+  parseJsonHours,
+  resolveTransferNumber,
+  resolveOverflowNumber,
+  resolveForwardAction
 };

@@ -5,13 +5,18 @@
  * for patients in the Somo platform.
  */
 
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripeConfig = require('../utils/stripe-config');
 const { v4: uuidv4 } = require('uuid');
 
 class StripeIssuingService {
   constructor() {
-    this.stripe = stripe;
-    this.isEnabled = !!process.env.STRIPE_SECRET_KEY;
+    try {
+      this.stripe = stripeConfig.initializeStripe();
+      this.isEnabled = !!this.stripe;
+    } catch (_) {
+      this.stripe = null;
+      this.isEnabled = false;
+    }
     
     if (!this.isEnabled) {
       console.warn('⚠️  Stripe Issuing: STRIPE_SECRET_KEY not configured. Running in mock mode.');

@@ -29,4 +29,16 @@ describe('call opener runtime separation', () => {
     expect(isOutboundCallType('operator_outbound')).toBe(true);
     expect(isOutboundCallType('inbound_tenant')).toBe(false);
   });
+
+  test('warm_confident tone resolves a branded, name-first inbound opener', () => {
+    const inbound = resolveCallOpeners({
+      settings: { tone_preset: 'warm_confident' },
+      practiceName: 'Test Clinic',
+      callType: 'inbound_tenant',
+      direction: 'inbound'
+    });
+    expect(inbound.activeOpener.text).toContain('Test Clinic');
+    expect(inbound.activeOpener.text).toMatch(/your name/i);
+    expect(inbound.activeOpener.text).not.toMatch(/Somo/i);
+  });
 });

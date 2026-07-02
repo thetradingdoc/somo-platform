@@ -6,6 +6,7 @@ const { ensureMerchantOrderFromVoiceCheckout } = require('./ensure-merchant-orde
 const PaymentRequest = require('../models/payment-request');
 const PaymentResponse = require('../models/payment-response');
 const PaymentService = require('./payment-service');
+const stripeConfig = require('../utils/stripe-config');
 const SMSService = require('./sms-service');
 const EmailService = require('./email-service');
 const constants = require('../utils/constants');
@@ -36,6 +37,19 @@ class PaymentOrchestrator {
 
             // Validate request (merchant_id is optional - fallback will handle it)
             const validation = paymentRequest.validate();
+
+            const {
+              buildCopayIdempotencyKey,
+              extractCopayKeysFromRequest
+            } = require('./payment-idempotency');
+            const copayKeys = extractCopayKeysFromRequest(requestData);
+            const copayIdem = buildCopayIdempotencyKey(copayKeys);
+            if (copayIdem && db.getIdempotentResult) {
+              const cached = db.getIdempotentResult(copayIdem, 'copay_checkout');
+              if (cached?.result) {
+                return new PaymentResponse({ ...cached.result, idempotent: true });
+              }
+            }
             if (!validation.valid) {
                 // Filter out merchant_id requirement - we'll handle it with fallback
                 const nonMerchantErrors = validation.errors.filter(e => !e.includes('merchant_id'));
@@ -140,6 +154,15 @@ class PaymentOrchestrator {
             };
 
             await db.createVoiceCheckout(checkout);
+            if (copayIdem && copayKeys.callId) {
+              try {
+                db.db?.prepare('UPDATE voice_checkouts SET call_id = ?, appointment_id = ? WHERE id = ?').run(
+                  copayKeys.callId,
+                  copayKeys.appointmentId || null,
+                  checkoutId
+                );
+              } catch (_) {}
+            }
             if (!quietReplay) console.log('✅ Checkout created:', checkoutId);
 
             // Route to payment method
@@ -149,6 +172,20 @@ class PaymentOrchestrator {
                 merchant,
                 paymentRequest
             );
+
+            if (copayIdem && paymentResult?.success && db.completeIdempotentResult) {
+              try {
+                db.completeIdempotentResult(copayIdem, 'copay_checkout', {
+                  success: paymentResult.success,
+                  transaction_id: paymentResult.transaction_id,
+                  checkout_id: paymentResult.checkout_id,
+                  payment: paymentResult.payment,
+                  payment_link: paymentResult.payment_link,
+                  payment_token: paymentResult.payment_token,
+                  message: paymentResult.message
+                });
+              } catch (_) {}
+            }
 
             if (!quietReplay) console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
@@ -243,9 +280,11 @@ class PaymentOrchestrator {
     static async _handleStripePayment(checkout, merchant, paymentRequest) {
         console.log('💳 Processing Direct Stripe Payment Intent');
 
-        const stripeSecret = process.env.STRIPE_SECRET_KEY;
-        if (!stripeSecret) {
-            console.error('❌ STRIPE_SECRET_KEY not configured');
+        let stripeSecret;
+        try {
+            stripeSecret = stripeConfig.getStripeSecretKey();
+        } catch (_) {
+            console.error('❌ Stripe secret key not configured');
             return new PaymentResponse({
                 success: false,
                 error: 'Stripe is not configured. Please use link payment.',
@@ -623,8 +662,10 @@ class PaymentOrchestrator {
      * Use when caller will collect card and confirm via Stripe.js.
      */
     static async createStripePaymentIntent(checkoutId, amount, merchantId = null) {
-        const stripeSecret = process.env.STRIPE_SECRET_KEY;
-        if (!stripeSecret) {
+        let stripeSecret;
+        try {
+            stripeSecret = stripeConfig.getStripeSecretKey();
+        } catch (_) {
             return { success: false, error: 'Stripe is not configured' };
         }
         const checkout = await db.getVoiceCheckout(checkoutId);

@@ -1,7 +1,10 @@
 'use strict';
 
 const Metrics = require('../services/metrics');
-const { handlePublicLandingAssistantFromRequest } = require('../services/kelly-triage-turn-service');
+const {
+  handlePublicLandingAssistantFromRequest,
+  handlePublicLandingOpenerFromRequest
+} = require('../services/kelly-triage-turn-service');
 
 function registerPublicLandingAssistantRoutes(app, deps) {
   const {
@@ -17,6 +20,15 @@ function registerPublicLandingAssistantRoutes(app, deps) {
 app.post('/api/public/landing-assistant/turn', apiLimiter, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
     const out = await handlePublicLandingAssistantFromRequest(req);
+    return res.status(out.status).json(out.json);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.get('/api/public/landing-assistant/opener', apiLimiter, async (req, res) => {
+  try {
+    const out = await handlePublicLandingOpenerFromRequest(req);
     return res.status(out.status).json(out.json);
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });

@@ -223,11 +223,33 @@ app.get('/api/patient/identity', (req, res, next) => apiLimiter(req, res, next),
 });
 
 app.get('/api/patient/features', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, (req, res) => {
+  let portalMode = 'full';
+  let officeType = null;
+  try {
+    const sessionValidation = req.patientSession;
+    let clinicId = null;
+    if (sessionValidation.patient_id && db.getPatientClinicIds) {
+      const ids = db.getPatientClinicIds(sessionValidation.patient_id);
+      clinicId = (ids && ids[0]) || null;
+    }
+    if (clinicId && db.getClinicById) {
+      const clinic = db.getClinicById(clinicId);
+      officeType = clinic?.office_type || null;
+      if (String(officeType || '').toLowerCase() === 'dental') {
+        portalMode = 'dental_pay_only';
+      }
+    }
+  } catch (_) {}
+
   return res.json({
     success: true,
     features: {
       wallet_enabled: isPatientWalletEnabled(),
-      chat_enabled: isPatientChatEnabled()
+      chat_enabled: isPatientChatEnabled(),
+      portal_mode: portalMode,
+      office_type: officeType,
+      schedule_enabled: portalMode !== 'dental_pay_only',
+      triage_enabled: portalMode !== 'dental_pay_only'
     }
   });
 });

@@ -184,6 +184,150 @@ router.get('/', requireTenantsAccess, async (req, res) => {
 });
 
 /**
+ * GET /api/admin/tenants/amount-resolution/mismatches
+ */
+router.get('/amount-resolution/mismatches', requireTenantsAccess, async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+        if (!db.db) {
+            return res.json({ success: true, mismatches: [], count: 0 });
+        }
+        const mismatches = db.db
+            .prepare(
+                `SELECT id, patient_id, appointment_id, session_id, quoted_amount, charged_amount,
+                        source, status, details_json, created_at
+                 FROM amount_resolution_log
+                 WHERE quoted_amount IS NOT NULL
+                   AND charged_amount IS NOT NULL
+                   AND ABS(quoted_amount - charged_amount) > 0.009
+                 ORDER BY created_at DESC
+                 LIMIT ?`
+            )
+            .all(limit);
+        res.json({ success: true, mismatches, count: mismatches.length });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/admin/tenants/pms-health
+ */
+router.get('/pms-health', requireTenantsAccess, async (req, res) => {
+    try {
+        const { getPmsHealthSummary } = require('../services/pms');
+        const clinics = tenantHealth.getActiveClinics(false);
+        const rows = clinics.map((c) => ({
+            clinic_id: c.clinic_id,
+            name: c.name,
+            ...getPmsHealthSummary(c.clinic_id)
+        }));
+        res.json({ success: true, tenants: rows, count: rows.length });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/admin/tenants/:clinicId/pms
+ */
+router.get('/:clinicId/pms', requireTenantsAccess, async (req, res) => {
+    try {
+        const { getClinicPmsSettings, maskPmsConfigForApi, PmsHub } = require('../services/pms');
+        const clinicId = req.params.clinicId;
+        const settings = getClinicPmsSettings(clinicId);
+        if (!settings) {
+            return res.status(404).json({ success: false, error: 'Tenant not found' });
+        }
+        const hub = PmsHub.tryForClinic(clinicId);
+        const health = hub ? await hub.healthCheck() : null;
+        res.json({
+            success: true,
+            clinic_id: clinicId,
+            pms_type: settings.pms_type,
+            pms_enabled: settings.pms_enabled,
+            pms_connected_at: settings.pms_connected_at,
+            pms_last_sync_at: settings.pms_last_sync_at,
+            pms_last_error: settings.pms_last_error,
+            config: maskPmsConfigForApi(settings.pms_config),
+            health,
+            ...getPmsHealthSummary(clinicId)
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * PUT /api/admin/tenants/:clinicId/pms
+ */
+router.put('/:clinicId/pms', requireTenantsAccess, async (req, res) => {
+    try {
+        const {
+            updateClinicPms,
+            encryptPmsConfig,
+            getClinicPmsSettings,
+            PmsHub
+        } = require('../services/pms');
+        const clinicId = req.params.clinicId;
+        const { pms_type, pms_enabled, config } = req.body || {};
+        const updates = {};
+        if (pms_type !== undefined) updates.pms_type = pms_type;
+        if (pms_enabled !== undefined) updates.pms_enabled = pms_enabled ? 1 : 0;
+        if (config !== undefined) {
+            updates.pms_config = encryptPmsConfig(config);
+            updates.pms_connected_at = new Date().toISOString();
+        }
+        updateClinicPms(clinicId, updates);
+        const settings = getClinicPmsSettings(clinicId);
+        const hub = settings?.pms_enabled ? PmsHub.tryForClinic(clinicId) : null;
+        const health = hub ? await hub.healthCheck() : null;
+        res.json({ success: true, clinic_id: clinicId, settings, health });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/admin/tenants/:clinicId/phi-export — tenant PHI bundle for offboarding
+ */
+router.get('/:clinicId/phi-export', requireTenantsAccess, async (req, res) => {
+    try {
+        const clinicId = req.params.clinicId;
+        const clinic = db.db
+          ? db.db.prepare('SELECT clinic_id, name FROM clinics WHERE clinic_id = ?').get(clinicId)
+          : null;
+        if (!clinic) {
+            return res.status(404).json({ success: false, error: 'Tenant not found' });
+        }
+
+        const { buildTenantPhiExport } = require('../services/tenant-phi-export-service');
+        const bundle = buildTenantPhiExport(clinicId);
+        if (!bundle) {
+            return res.status(404).json({ success: false, error: 'Export failed — tenant not found' });
+        }
+
+        try {
+            if (typeof db.logHipaaAccess === 'function') {
+                db.logHipaaAccess({
+                    user_id: req.adminSession?.email || 'admin',
+                    resource_type: 'TenantPhiExport',
+                    resource_id: clinicId,
+                    action: 'phi_export',
+                    ip_address: req.ip || null
+                });
+            }
+        } catch (_) { /* non-fatal */ }
+
+        res.setHeader('Content-Disposition', `attachment; filename="phi-export-${clinicId}.json"`);
+        res.json({ success: true, ...bundle });
+    } catch (error) {
+        console.error('❌ Error exporting tenant PHI:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * Get detailed tenant usage and credits
  * GET /api/admin/tenants/:clinicId
  */
@@ -273,6 +417,27 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
 
         const billing = tenantHealth.enrichTenantRow(clinic);
         const deleteOptions = tenantDelete.getDeleteOptions(clinic);
+        let eligibilityUsage = { checks_today: 0, checks_month: 0, daily_cap: 50 };
+        let eligibilityAlert = null;
+        let payerPreflight = [];
+        if (customerId) {
+          try {
+            const { getUsageForCustomer } = require('../services/eligibility-usage-service');
+            const { checkEligibilityUsageAlert } = require('../services/eligibility-usage-alerts');
+            eligibilityUsage = getUsageForCustomer(customerId);
+            const tier = billing.plan_tier || 'practice';
+            eligibilityAlert = checkEligibilityUsageAlert(customerId, tier);
+          } catch (_) {}
+        }
+        try {
+          const { assessPayerReadiness } = require('../services/payer-preflight-service');
+          payerPreflight = assessPayerReadiness(db, { clinicId, customerId });
+        } catch (_) {}
+        let tenantFlags = null;
+        try {
+          const { getTenantFlags } = require('../services/tenant-flags-service');
+          tenantFlags = getTenantFlags(clinicId);
+        } catch (_) {}
 
         res.json({
             success: true,
@@ -328,7 +493,11 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
             },
             recent_calls: calls.slice(0, 20),
             recent_function_calls: functionCalls.slice(0, 20),
-            recent_errors: errors.slice(0, 20)
+            recent_errors: errors.slice(0, 20),
+            eligibility_usage: eligibilityUsage,
+            eligibility_alert: eligibilityAlert,
+            payer_preflight: payerPreflight,
+            tenant_flags: tenantFlags
         });
     } catch (error) {
         console.error('❌ Error fetching tenant details:', error);

@@ -1981,9 +1981,21 @@ See also: [`VOICE_CURRENT_ARCHITECTURE.md`](./VOICE_CURRENT_ARCHITECTURE.md).
 - **Command:** `cd middleware-platform && npm run verify:agent-config`
 
 
----
+## Phase 1 voice production gates (Kelly Rails)
 
-<a id="gcp-deploy-rollback"></a>
+Before NYC front-desk pilot go-live, confirm Cloud Run env on `somo-middleware`:
+
+```bash
+cd middleware-platform
+npm run verify:kelly-rails-cloudrun
+```
+
+Required values: `KELLY_RAILS_V2=1`, `KELLY_ALLOW_HYBRID_GRAPH=0`, `KELLY_RAILS_ROLLOUT_PCT=1`, `CONVERSATION_MODE_ROUTING=enforce`, `OPQRST_FIELD_GATE_ENABLED` set per policy.
+
+Record passing revision in deploy notes. Staging may use `CONVERSATION_MODE_ROUTING=shadow` with `voice_reply_suppress_enabled=1` on tenant for soft launch.
+
+Structural Phase 1 checks (no live API): `npm run verify:phase1-front-desk`.
+
 
 ## GCP DEPLOY ROLLBACK
 

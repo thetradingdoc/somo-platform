@@ -1,5 +1,7 @@
 # Scripts layout
 
+> Last reviewed: 2026-07-02
+
 ## Repo root `scripts/`
 
 CI, deploy, doc hygiene, and local dev entrypoints that span multiple packages.
@@ -7,7 +9,7 @@ CI, deploy, doc hygiene, and local dev entrypoints that span multiple packages.
 | Path | Purpose |
 |------|---------|
 | `scripts/dev/run.sh` | **Canonical local dev** — `DB_PATH=./var/db/middleware-dev.db`, light profile |
-| `scripts/verify-repo-layout.cjs` | Layout sanity (`npm run verify:repo-layout`) |
+| `scripts/verify-doc-links.cjs` | Doc hygiene (`npm run verify:doc-hygiene`) |
 | `scripts/phase0-verify.cjs` | Phase 0 checklist harness |
 | `scripts/deploy-*`, `scripts/callsomo-*` | Production deploy and operator sync |
 

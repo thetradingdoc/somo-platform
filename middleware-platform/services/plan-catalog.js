@@ -80,6 +80,14 @@ function hasOutboundFeature(tierId) {
   return getTier(tierId).feature_flags?.outbound === true;
 }
 
+function getIncludedEligibilityChecks(tierId) {
+  return getTier(tierId).included_eligibility_checks_per_cycle ?? 0;
+}
+
+function getEligibilityOverageRate(tierId) {
+  return getTier(tierId).eligibility_overage_rate_usd ?? 0.35;
+}
+
 module.exports = {
   loadPlanCatalog,
   getTier,
@@ -96,5 +104,7 @@ module.exports = {
   getMaxConcurrentCalls,
   getMaxPhoneNumbers,
   hasOutboundFeature,
+  getIncludedEligibilityChecks,
+  getEligibilityOverageRate,
   catalogPath
 };

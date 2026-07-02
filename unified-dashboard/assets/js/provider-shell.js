@@ -67,25 +67,64 @@
   function getPortalNav() {
     const file = (window.location.pathname.split('/').pop() || '').split('?')[0];
     const isAdminPage = ['payor-review.html', 'merge-review.html', 'feature-flags.html', 'leads.html', 'tenants.html'].includes(file);
+    let nav = PORTAL_NAV_BASE;
     if (isAdminPage && (hasCapability('platform.leads') || hasCapability('platform.tenants') || hasCapability('platform.feature_flags'))) {
       const gated = ADMIN_NAV_ITEMS.filter((item) => {
         if (!item.capability) return true;
         return hasCapability(item.capability);
       });
-      return PORTAL_NAV_BASE.concat(gated);
-    }
-    if (hasCapability('platform.leads') || hasCapability('platform.tenants')) {
+      nav = PORTAL_NAV_BASE.concat(gated);
+    } else if (hasCapability('platform.leads') || hasCapability('platform.tenants')) {
       const gated = ADMIN_NAV_ITEMS.filter((item) => !item.capability || hasCapability(item.capability));
-      return PORTAL_NAV_BASE.concat(gated);
+      nav = PORTAL_NAV_BASE.concat(gated);
     }
-    return PORTAL_NAV_BASE;
+    if (window.__SOMO_DENTAL_PORTAL === true || localStorage.getItem('office_type') === 'dental') {
+      nav = nav.filter((item) => item.id !== 'revenue' && item.section !== 'Revenue');
+    }
+    return nav;
   }
+
+  /** BUG-6: authenticated fetch with session cookies */
+  window.ppFetch = function ppFetch(url, options = {}) {
+    return fetch(url, {
+      credentials: 'include',
+      ...options,
+      headers: { ...getAuthHeaders(), ...(options.headers || {}) }
+    }).then(async (res) => {
+      if (res.status === 401) {
+        const err = new Error('Session expired');
+        err.status = 401;
+        throw err;
+      }
+      return res;
+    });
+  };
+
+  async function hydrateOfficeTypeFromClinic() {
+    try {
+      const clinicId = localStorage.getItem('clinic_id');
+      const q = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : '';
+      const res = await fetch(`${API_BASE()}/api/tenant/clinic${q}`, { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const officeType = data.clinic?.office_type;
+      if (officeType) {
+        localStorage.setItem('office_type', officeType);
+        window.__SOMO_DENTAL_PORTAL = officeType === 'dental';
+        const active = document.querySelector('.pp-nav-item.active')?.dataset?.navId || 'today';
+        renderProviderSidebar(active);
+      }
+    } catch (_) {}
+  }
+  window.hydrateOfficeTypeFromClinic = hydrateOfficeTypeFromClinic;
 
   const PORTAL_NAV = PORTAL_NAV_BASE;
 
   window.PORTAL_BADGES = { today: 0, revenue: 0, claims: 0, priorAuth: 0, exceptions: 0, payments: 0 };
   const paymentRefreshHandlers = new Set();
   let paymentPollTimer = null;
+  let escalationPollTimer = null;
+  const escalationRefreshHandlers = [];
   let appointmentPollTimer = null;
 
   function resolveHref(href) {
@@ -344,7 +383,7 @@
     if (agentSub) agentSub.textContent = 'Voice · scheduling · RCM';
   }
 
-  function renderKellyStatus(status) {
+  function renderKellyStatus(status, billing) {
     const agentLbl = document.getElementById('ppKellyLabel');
     const agentSub = document.getElementById('ppKellySub');
     const agentPhone = document.getElementById('ppKellyPhone');
@@ -358,12 +397,19 @@
     const label = agentLabel();
     const active = state === 'active';
 
-    agentLbl.textContent = `${label} ${active ? 'is active' : state === 'paused' ? 'is paused' : 'is provisioning'}`;
-    agentSub.textContent = provisioning === 'ready'
-      ? 'Voice · scheduling · RCM'
+    agentLbl.textContent = `${label} ${active ? 'is live' : state === 'paused' ? 'is paused' : provisioning === 'ready' ? 'is ready' : 'is setting up'}`;
+    const creditParts = [];
+    if (billing?.trial_minutes_remaining != null && billing.trial_status && billing.trial_status !== 'none') {
+      creditParts.push(`${billing.trial_minutes_remaining} trial min`);
+    } else if (billing?.minutes_remaining != null) {
+      creditParts.push(`${billing.minutes_remaining} min remaining`);
+    }
+    const baseSub = provisioning === 'ready'
+      ? (active ? 'Answering calls · scheduling · copay' : 'Ready — turn on to answer calls')
       : provisioning === 'failed'
-        ? 'Provisioning issue detected'
-        : 'Provisioning in progress';
+        ? 'Setup issue — check Voice Agent settings'
+        : 'Provisioning your Kelly line…';
+    agentSub.textContent = creditParts.length ? `${baseSub} · ${creditParts.join(' · ')}` : baseSub;
     if (agentPhone) agentPhone.textContent = status?.phone_number ? status.phone_number : 'Phone assignment pending';
     toggle.textContent = active ? 'Pause' : 'Activate';
     toggle.dataset.enabled = active ? '1' : '0';
@@ -483,17 +529,54 @@
     window.ppRenderProvisioningAlert(status);
   }
 
-  async function fetchKellyStatus() {
+  async function fetchBillingStatus() {
     try {
-      const res = await fetch(`${API_BASE()}/api/kelly/status`, {
+      const res = await fetch(`${API_BASE()}/api/voice-billing/status`, {
         credentials: 'include',
         headers: getAuthHeaders()
       });
       if (!res.ok) return null;
       const json = await res.json();
+      return json.success ? json.billing : null;
+    } catch (e) {
+      console.warn('[provider-shell] billing status:', e.message);
+      return null;
+    }
+  }
+
+  window.ppDentalEmptyState = function (title, body, cta) {
+    const t = ppEscapeHtml(title || 'Nothing here yet');
+    const b = ppEscapeHtml(body || '');
+    const ctaHtml =
+      cta?.href && cta?.label
+        ? `<a class="pp-btn pp-btn-primary pp-btn-sm" href="${ppEscapeHtml(cta.href)}">${ppEscapeHtml(cta.label)}</a>`
+        : '';
+    return `<div class="pp-state pp-state-empty pp-state-dental"><div class="pp-empty-title">${t}</div><p>${b}</p>${ctaHtml}</div>`;
+  };
+
+  async function fetchKellyStatus() {
+    try {
+      const fetchFn = window.ppFetch || fetch;
+      const [statusRes, billing] = await Promise.all([
+        fetchFn(`${API_BASE()}/api/kelly/status`, {
+          credentials: 'include',
+          headers: getAuthHeaders()
+        }),
+        fetchBillingStatus()
+      ]);
+      if (statusRes.status === 401) {
+        window.ppToast?.('Session expired — redirecting to sign in.', 'error');
+        setTimeout(() => {
+          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }, 900);
+        return null;
+      }
+      if (!statusRes.ok) return null;
+      const json = await statusRes.json();
       if (!json.success) return null;
       window.__ppKellyStatus = json;
-      renderKellyStatus(json);
+      window.__ppBillingStatus = billing;
+      renderKellyStatus(json, billing);
       renderProvisioningBanner(json);
       return json;
     } catch (e) {
@@ -508,20 +591,29 @@
     const currentlyEnabled = toggle.dataset.enabled === '1';
     toggle.disabled = true;
     try {
-      const res = await fetch(`${API_BASE()}/api/kelly/toggle`, {
+      const res = await (window.ppFetch || fetch)(`${API_BASE()}/api/kelly/toggle`, {
         method: 'PATCH',
         credentials: 'include',
         headers: getAuthHeaders(),
         body: JSON.stringify({ enabled: !currentlyEnabled })
       });
+      if (res.status === 401) {
+        window.ppToast?.('Session expired — redirecting to sign in.', 'error');
+        setTimeout(() => {
+          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }, 900);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) {
         window.__ppKellyStatus = json;
-        renderKellyStatus(json);
+        const billing = window.__ppBillingStatus || await fetchBillingStatus();
+        renderKellyStatus(json, billing);
         renderProvisioningBanner(json);
       }
     } catch (e) {
+      window.ppToast?.('Could not update Kelly — try again.', 'error');
       console.warn('[provider-shell] kelly toggle:', e.message);
     } finally {
       toggle.disabled = false;
@@ -593,6 +685,56 @@
     paymentPollTimer = null;
   };
 
+  window.ppOnEscalationRefresh = function (fn) {
+    if (typeof fn === 'function') escalationRefreshHandlers.push(fn);
+  };
+
+  window.ppFetchActiveEscalations = async function () {
+    const API_BASE = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+    const clinicId = typeof window.ppGetClinicId === 'function' ? window.ppGetClinicId() : null;
+    const q = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : '';
+    const res = await fetch(`${API_BASE}/api/kelly/escalations/active${q}`, {
+      credentials: 'include',
+      headers: window.ppGetAuthHeaders?.() || {}
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.escalations || [];
+  };
+
+  window.ppStartEscalationPoll = function (intervalMs) {
+    if (escalationPollTimer) return;
+    if (!document.getElementById('ppAlertStrip')) return;
+    const ms = Math.max(8000, Number(intervalMs) || 10000);
+    const tick = async () => {
+      try {
+        const rows = await window.ppFetchActiveEscalations();
+        rows.forEach((row) => {
+          window.ppPushAlert({
+            id: `handoff-${row.session_id || row.id}`,
+            dedupeKey: `handoff-${row.session_id || row.id}`,
+            type: 'risk',
+            icon: 'phone',
+            message: 'Kelly is transferring a call to your line',
+            href: row.session_id ? `calls.html?session=${encodeURIComponent(row.session_id)}` : 'calls.html',
+            ctaLabel: 'View call'
+          });
+        });
+        if (rows.length) window.ppFlushAlertStrip();
+        escalationRefreshHandlers.forEach((fn) => {
+          try { fn(rows); } catch (_) { /* ignore */ }
+        });
+      } catch (_) { /* ignore */ }
+    };
+    tick();
+    escalationPollTimer = setInterval(tick, ms);
+  };
+
+  window.ppStopEscalationPoll = function () {
+    if (escalationPollTimer) clearInterval(escalationPollTimer);
+    escalationPollTimer = null;
+  };
+
   window.ppStartAppointmentPoll = function (intervalMs) {
     const page = document.body?.dataset?.page;
     if (page !== 'today' && page !== 'calendar') return;
@@ -645,6 +787,7 @@
     }
     renderProviderSidebar(activeId);
     fetchPortalBadges().then(() => renderProviderSidebar(activeId));
+    hydrateOfficeTypeFromClinic();
 
     const dateChip = document.getElementById('ppDateChip');
     if (dateChip) dateChip.textContent = formatDateChip();
@@ -732,6 +875,9 @@
     }
     normalizeEmojiUi();
     if (options.paymentPoll !== false) window.ppStartPaymentPoll(options.paymentPollMs || 15000);
+    if (options.escalationPoll !== false && document.getElementById('ppAlertStrip')) {
+      window.ppStartEscalationPoll(options.escalationPollMs || 10000);
+    }
     if (options.appointmentPoll !== false) window.ppStartAppointmentPoll(options.appointmentPollMs || 30000);
   }
 
@@ -1116,18 +1262,49 @@
   }
 
   window.ppFetchRecentCalls = async function (limit = 5) {
-    const url = new URL(`${API_BASE()}/api/rcm/recent-calls`);
-    url.searchParams.set('clinic_id', getClinicId());
-    url.searchParams.set('limit', String(limit));
-    const res = await fetch(url.toString(), {
+    const res = await fetch(`${API_BASE()}/api/customer/dashboard/agent/stats`, {
       credentials: 'include',
       headers: getAuthHeaders()
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Failed to load recent calls');
-    const items = Array.isArray(json.items) ? json.items : [];
-    return items.map((item) => normalizeRailItem(item, 'call'));
+    const calls = (json.recent_calls || []).slice(0, limit);
+    return calls.map((call) => {
+      const sid = call.call_id || call.id;
+      const parts = [];
+      const dispLabel =
+        window.VoiceAgentPage?.dispositionLabel?.(call.disposition) || call.disposition;
+      if (dispLabel && dispLabel !== 'info') parts.push(dispLabel);
+      if (call.eligibility_status) {
+        parts.push(String(call.eligibility_status).replace(/_/g, ' '));
+      }
+      if (call.copay_quote_display) parts.push(`Copay ${call.copay_quote_display}`);
+      const summary =
+        parts.length > 0
+          ? parts.join(' · ')
+          : `${call.direction || 'Inbound'} · ${call.status || 'completed'}`;
+      let badge = null;
+      const disp = String(call.disposition || '').toLowerCase();
+      if (disp === 'booked') badge = { badge: 'Booked', badgeType: 'green' };
+      else if (disp === 'handoff') badge = { badge: 'Handoff', badgeType: 'orange' };
+      else if (disp === 'insurance_verified') badge = { badge: 'Eligibility OK', badgeType: 'blue' };
+      return normalizeRailItem(
+        {
+          id: sid,
+          patient: call.caller_label || 'Caller',
+          timeRaw: call.created_at,
+          summary,
+          status: call.status,
+          ...badge,
+          cta: {
+            label: 'View call',
+            href: sid ? `calls.html?session=${encodeURIComponent(sid)}` : 'calls.html'
+          }
+        },
+        'call'
+      );
+    });
   };
 
   window.ppFetchRecentMessages = async function (limit = 5) {

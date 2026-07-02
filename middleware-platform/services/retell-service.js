@@ -167,6 +167,12 @@ Rules:
       template = template.replace(/{{CLINIC_DESCRIPTION}}/g, clinicData.description || 'a healthcare practice');
       template = template.replace(/{{BUSINESS_HOURS}}/g, clinicData.business_hours || 'Monday-Friday, 9 AM - 5 PM');
       template = template.replace(/{{PHONE_NUMBER}}/g, clinicData.phone_number || '');
+
+      const frontDeskUseCases = new Set(['dental', 'healthcare_clinic', 'medical_office']);
+      if (frontDeskUseCases.has(String(clinicData.use_case || '').toLowerCase())) {
+        template =
+          `<!-- Front-desk tenant: clinical OPQRST deferred to Kelly Rails policy -->\n` + template;
+      }
       template = template.replace(/{{ADDRESS}}/g, clinicData.address || '');
 
       // Hard requirement: medical workflow prompt must be present when creating/updating agents.

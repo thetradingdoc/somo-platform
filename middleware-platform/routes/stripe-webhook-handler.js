@@ -33,11 +33,12 @@ const CIRCLE_BASE = process.env.CIRCLE_SANDBOX !== '0'
   ? 'https://api-sandbox.circle.com'
   : 'https://api.circle.com';
 
+const stripeConfig = require('../utils/stripe-config');
+
 let _stripe = null;
 function getStripe() {
   if (_stripe) return _stripe;
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error('STRIPE_SECRET_KEY not set');
+  const key = stripeConfig.getStripeSecretKey();
   _stripe = new Stripe(key, { apiVersion: '2024-04-10' });
   return _stripe;
 }
@@ -85,9 +86,8 @@ function getProviderWalletId({ practitionerId, clinicId, merchantId }) {
 }
 
 function calculateProviderPayout(totalAmountCents) {
-  const platformFeePct = parseFloat(process.env.PLATFORM_FEE_PCT || '0.20');
-  const fee = Math.round(totalAmountCents * platformFeePct);
-  return totalAmountCents - fee;
+  const { calculateCopayProviderPayoutCents } = require('../services/platform-fee-config');
+  return calculateCopayProviderPayoutCents(totalAmountCents);
 }
 
 router.post(
@@ -95,10 +95,10 @@ router.post(
   express.raw({ type: 'application/json' }),
   async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const webhookSecret = stripeConfig.getStripeWebhookSecret();
 
     if (!webhookSecret) {
-      console.error('[StripeWebhook] STRIPE_WEBHOOK_SECRET not set — rejecting');
+      console.error('[StripeWebhook] Stripe webhook secret not set — rejecting');
       return res.status(500).json({ error: 'Webhook secret not configured' });
     }
 
@@ -221,6 +221,20 @@ async function handleRefundEvent(event) {
 async function handlePaymentSucceeded(paymentIntent) {
   const { id: stripePaymentIntentId, amount, metadata } = paymentIntent;
 
+  try {
+    const { logPaymentReconciliation } = require('../services/payment-reconciliation-audit');
+    logPaymentReconciliation({
+      source: 'stripe',
+      external_id: stripePaymentIntentId,
+      checkout_id: metadata?.checkout_id || null,
+      appointment_id: metadata?.appointment_id || null,
+      call_id: metadata?.call_id || metadata?.kelly_session_id || null,
+      amount_cents: amount,
+      status: 'succeeded',
+      details_json: { event: 'payment_intent.succeeded' }
+    });
+  } catch (_) {}
+
   const rcmPaymentId = metadata?.rcm_payment_id;
   const payToken = metadata?.pay_token;
   if (rcmPaymentId || payToken) {
@@ -234,6 +248,25 @@ async function handlePaymentSucceeded(paymentIntent) {
           pay_token: token.slice(0, 8) + '…',
           success: result?.success,
         });
+        if (result?.success) {
+          try {
+            const { writeCopayNote } = require('../services/pms/pms-write-service');
+            const payRow = db.db?.prepare(
+              'SELECT clinic_id, patient_id, appointment_id, amount FROM rcm_payments WHERE pay_token = ? LIMIT 1'
+            )?.get(token);
+            if (payRow?.clinic_id) {
+              await writeCopayNote(payRow.clinic_id, {
+                appointment_id: payRow.appointment_id,
+                patient_id: payRow.patient_id,
+                amount: payRow.amount,
+                reference: stripePaymentIntentId,
+                session_id: metadata?.session_id || null
+              });
+            }
+          } catch (noteErr) {
+            console.warn('[StripeWebhook] PMS copay note (non-fatal):', noteErr.message);
+          }
+        }
       }
     } catch (e) {
       console.warn('[StripeWebhook] RCM settle (non-fatal):', e.message);
@@ -392,6 +425,18 @@ async function handlePaymentFailed(paymentIntent) {
   } catch (e) {
     console.warn('[StripeWebhook] financial integrity ingest (non-fatal):', e.message);
   }
+  try {
+    const { alertPaymentFailed } = require('../services/payment-failed-alerts');
+    alertPaymentFailed({
+      external_id: paymentIntent.id,
+      checkout_id: paymentIntent.metadata?.checkout_id || null,
+      appointment_id: paymentIntent.metadata?.appointment_id || null,
+      call_id: paymentIntent.metadata?.call_id || null,
+      amount_cents: paymentIntent.amount,
+      reason: paymentIntent.last_payment_error?.message || 'payment_failed',
+      clinic_id: paymentIntent.metadata?.clinic_id || null
+    });
+  } catch (_) {}
   const cartSessionId = paymentIntent.metadata?.cart_session_id;
   const merchantId = paymentIntent.metadata?.merchant_id;
   if (cartSessionId && merchantId && db.clearCommerceCartCheckoutLock) {

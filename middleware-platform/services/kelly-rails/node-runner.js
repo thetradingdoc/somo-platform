@@ -81,8 +81,15 @@ function _loadProviderCtx(ctx) {
   if (!db) return providerCtx;
 
   try {
+    const { resolveTenantVoiceConfig } = require('../tenant-voice-config');
+    const tenantCfg = resolveTenantVoiceConfig(db, { clinicId, customerId });
+    providerCtx.tenantConfig = tenantCfg;
+    providerCtx.supported_languages = tenantCfg.supported_languages;
+    providerCtx.triage_policy = tenantCfg.triage_policy;
+    providerCtx.clinicName = tenantCfg.clinic_name || providerCtx.clinicName;
+
     if (typeof db.getClinicPromptProfile === 'function') {
-      const profile = db.getClinicPromptProfile(clinicId || null, customerId || null);
+      const profile = tenantCfg.prompt_profile || db.getClinicPromptProfile(clinicId || null, customerId || null);
       if (profile) {
         if (profile.system_prompt) providerCtx.profilePrompt = profile.system_prompt;
         if (profile.specialty) providerCtx.specialty = profile.specialty;
@@ -116,6 +123,15 @@ function _loadProviderCtx(ctx) {
     if (providerInstructions && !providerCtx.profilePrompt && !providerCtx.customPrompt) {
       providerCtx.customPrompt = providerInstructions;
     }
+
+    if (ctx.pmsContext) {
+      const { buildPmsContextBlock } = require('./prompts/pms-context-block');
+      const locale = ctx.locale || ctx.preferredLanguage || 'en';
+      providerCtx.pmsContextBlock = buildPmsContextBlock(ctx.pmsContext, locale);
+      if (ctx.pmsContext.patient_name) {
+        providerCtx.pmsPatientName = String(ctx.pmsContext.patient_name).trim();
+      }
+    }
   } catch (err) {
     console.warn('[node-runner] Failed to load provider context:', err.message);
   }
@@ -127,7 +143,7 @@ function _loadProviderCtx(ctx) {
  * Bounded LLM + tool loop for one graph node step.
  */
 async function runNodeStep(state, ctx) {
-  const { sessionId, clinicId, patientId, callerPhone, channel, message } = ctx;
+  const { sessionId, clinicId, customerId, patientId, callerPhone, channel, message } = ctx;
   const lane = state.active_lane;
   const step = state.step;
 
@@ -141,7 +157,11 @@ async function runNodeStep(state, ctx) {
     sessionId,
     step,
     _opqrst_gate: state.flags?._opqrst_gate,
-    allowStoreOpqrst: !!state.flags?._opqrst_gate?.allowStoreOpqrst
+    allowStoreOpqrst: !!state.flags?._opqrst_gate?.allowStoreOpqrst,
+    triage_policy: providerCtx.triage_policy || providerCtx.tenantConfig?.triage_policy,
+    clinicId: clinicId || ctx.clinicId,
+    customerId: customerId || ctx.customerId,
+    db: ctx.db
   };
   allowedNames = allowedNames.filter((n) => isToolAllowedForMode(n, modeCtx));
   if (isOpqrstFieldGateEnabled()) {
@@ -156,7 +176,8 @@ async function runNodeStep(state, ctx) {
 
   appendHistory(sessionId, 'user', message);
   const history = loadHistory(sessionId);
-  const systemContent = laneSystemPrompt(lane, step, { ...state, locale: state.locale || ctx.locale }, providerCtx);
+  const tenantLanguages = providerCtx.supported_languages || providerCtx.tenantConfig?.supported_languages;
+  const systemContent = laneSystemPrompt(lane, step, { ...state, locale: state.locale || ctx.locale }, providerCtx, null, tenantLanguages);
   const maxTok = channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS;
 
   let messages = [{ role: 'system', content: systemContent }, ...history];

@@ -175,7 +175,10 @@ async function provisionDedicatedNumber(db, customerId, options = {}) {
     const purchased = await twilio.provisionPhoneNumberForCustomer({
       customerId,
       phoneE164,
-      webhookUrl
+      webhookUrl,
+      preferNycAreaCodes:
+        customer.billing_vertical === 'healthcare' ||
+        ['dental', 'dental_office', 'healthcare_clinic'].includes(String(customer.use_case || ''))
     });
 
     db.updateCustomer(customerId, {

@@ -134,13 +134,45 @@ async function getAvailablePaymentMethods(args, context) {
   const labels = {
     link: 'payment link (email)',
     stripe: 'card (Stripe)',
+    card_on_file: 'card on file',
     mastercard: 'Mastercard voice pay',
     visa: 'Visa voice pay'
   };
-  const available = (methods || []).map((m) => labels[m] || m);
+  let cardOnFile = null;
+  try {
+    const phone = context?.callerPhone || args?.customer_phone || null;
+    const email = args?.customer_email || args?.email || null;
+    if (phone && db.getCustomerByPhone) {
+      const cust = db.getCustomerByPhone(phone);
+      if (cust?.stripe_payment_method_id && cust.card_verified === 1) {
+        cardOnFile = {
+          brand: cust.card_brand || 'card',
+          last4: cust.card_last4 || '****'
+        };
+      }
+    }
+    if (!cardOnFile && email && db.getCustomerByEmail) {
+      const cust = db.getCustomerByEmail(String(email).trim().toLowerCase());
+      if (cust?.stripe_payment_method_id && cust.card_verified === 1) {
+        cardOnFile = { brand: cust.card_brand || 'card', last4: cust.card_last4 || '****' };
+      }
+    }
+  } catch (_) {}
+
+  const methodList = [...(methods || [])];
+  if (cardOnFile && !methodList.includes('card_on_file')) {
+    methodList.push('card_on_file');
+  }
+  const available = methodList.map((m) => {
+    if (m === 'card_on_file' && cardOnFile) {
+      return `${cardOnFile.brand} ending in ${cardOnFile.last4} on file`;
+    }
+    return labels[m] || m;
+  });
   return {
     success: true,
-    payment_methods: methods,
+    payment_methods: methodList,
+    card_on_file: cardOnFile,
     available_options: available,
     message:
       available.length > 0

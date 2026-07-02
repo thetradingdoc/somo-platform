@@ -46,6 +46,8 @@ function recordHandoffEscalation(db, payload = {}) {
   const row = {
     session_id: payload.sessionId || payload.session_id || null,
     call_id: payload.callId || payload.call_id || null,
+    clinic_id: payload.clinic_id || payload.clinicId || null,
+    customer_id: payload.customer_id || payload.customerId || null,
     reason: payload.reason || 'handoff',
     pstn_target: payload.pstn_target || payload.pstnTarget || null,
     script_played_at: payload.script_played_at || new Date().toISOString(),
@@ -119,12 +121,66 @@ function attemptEscalation(db, opts = {}) {
     metadata: { source }
   });
 
+  notifyProviderHandoff(db, {
+    clinicId: opts.clinicId || opts.clinic_id,
+    customerId: opts.customerId || opts.customer_id,
+    sessionId: opts.sessionId || opts.session_id,
+    reason,
+    locale
+  }).catch((e) => console.warn('[escalation] provider notify failed:', e.message));
+
   return {
     reply: script,
     transfer_number: pstn,
     pstn_target: pstn,
     outcome: 'transfer_requested'
   };
+}
+
+/**
+ * Email/SMS clinic owner when a warm transfer is requested.
+ */
+async function notifyProviderHandoff(db, opts = {}) {
+  const clinicId = opts.clinicId || opts.clinic_id;
+  if (!clinicId || !db) return;
+  const clinic = db.getClinicById?.(clinicId) || db.getClinic?.(clinicId);
+  const email = clinic?.email;
+  if (!email) return;
+
+  try {
+    const EmailService = require('./email-service');
+    if (typeof EmailService.sendHandoffAlert === 'function') {
+      await EmailService.sendHandoffAlert({
+        to: email,
+        clinic_name: clinic?.name || 'Your practice',
+        session_id: opts.sessionId || opts.session_id,
+        reason: opts.reason || 'handoff',
+        locale: opts.locale || 'en'
+      });
+    }
+  } catch (e) {
+    console.warn('[escalation] handoff email failed:', e.message);
+  }
+
+  const phone = clinic?.phone_number || clinic?.transfer_number;
+  if (phone && process.env.TWILIO_ACCOUNT_SID) {
+    try {
+      const twilio = require('twilio')(
+        process.env.TWILIO_ACCOUNT_SID,
+        process.env.TWILIO_AUTH_TOKEN
+      );
+      const from = process.env.TWILIO_PHONE_NUMBER;
+      if (from) {
+        await twilio.messages.create({
+          to: phone,
+          from,
+          body: `Somo: A caller requested live assistance (${opts.reason || 'handoff'}). Check your dashboard for details.`
+        });
+      }
+    } catch (smsErr) {
+      console.warn('[escalation] handoff SMS failed:', smsErr.message);
+    }
+  }
 }
 
 /**
@@ -151,5 +207,6 @@ module.exports = {
   recordHandoffEscalation,
   attemptEscalation,
   updateHandoffOutcome,
+  notifyProviderHandoff,
   normalizeE164
 };

@@ -29,15 +29,24 @@ const retellLlmWsUrl =
   process.env.RETELL_LLM_WEBSOCKET_URL ||
   `${String(baseUrl).replace(/\/+$/, '').replace(/^https:/, 'wss:').replace(/^http:/, 'ws:')}/webhook/retell/llm`;
 
+const STAGING_STRIPE_SECRET_KEYS = [
+  'STRIPE_WEBHOOK_SECRET',
+  'STRIPE_SECRET_KEY',
+  'STRIPE_PUBLISHABLE_KEY'
+];
+
+const PRODUCTION_STRIPE_SECRET_KEYS = [
+  'STRIPE_LIVE_WEBHOOK_SECRET',
+  'STRIPE_LIVE_SECRET_KEY',
+  'STRIPE_LIVE_PUBLISHABLE_KEY'
+];
+
 const SECRET_KEYS = [
   'JWT_SECRET',
   'ADMIN_PORTAL_SECRET',
   'API_KEY_ENCRYPTION_KEY',
   'RETELL_WEBHOOK_SECRET',
   'RETELL_WEBHOOK_TOKEN',
-  'STRIPE_WEBHOOK_SECRET',
-  'STRIPE_SECRET_KEY',
-  'STRIPE_PUBLISHABLE_KEY',
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
   'TWILIO_VERIFY_SERVICE_SID',
@@ -50,12 +59,27 @@ const SECRET_KEYS = [
   'REDIS_URL'
 ];
 
+function secretPrefix() {
+  return profile === 'production' ? 'somo-production' : 'somo-staging';
+}
+
+function stripeSecretEnvKeys() {
+  return profile === 'production' ? PRODUCTION_STRIPE_SECRET_KEYS : STAGING_STRIPE_SECRET_KEYS;
+}
+
 function secretIdForEnv(name) {
   const overrides = {
     SMTP_PASSWORD: process.env.SECRET_SMTP_PASSWORD || 'somo-smtp-password'
   };
   if (overrides[name]) return overrides[name];
-  return process.env[`SECRET_${name}`] || `somo-staging-${name.toLowerCase().replace(/_/g, '-')}`;
+  if (STAGING_STRIPE_SECRET_KEYS.includes(name) || PRODUCTION_STRIPE_SECRET_KEYS.includes(name)) {
+    const stripeName = name
+      .replace(/^STRIPE_LIVE_/, 'STRIPE_')
+      .toLowerCase()
+      .replace(/_/g, '-');
+    return process.env[`SECRET_${name}`] || `${secretPrefix()}-stripe-${stripeName}`;
+  }
+  return process.env[`SECRET_${name}`] || `${secretPrefix()}-${name.toLowerCase().replace(/_/g, '-')}`;
 }
 
 function secretExists(secretId) {
@@ -73,7 +97,8 @@ function secretExists(secretId) {
 function buildSecretBindings() {
   if (!useGcpSecrets) return [];
   const bindings = [];
-  for (const name of SECRET_KEYS) {
+  const keys = [...SECRET_KEYS, ...stripeSecretEnvKeys()];
+  for (const name of keys) {
     const secretId = secretIdForEnv(name);
     if (secretExists(secretId)) {
       bindings.push(`${name}=${secretId}:latest`);
@@ -111,6 +136,8 @@ function secretOrRandom(key, bytes, minLen = 0) {
 const merged = {
   ...parsed,
   NODE_ENV: 'production',
+  CLOUDRUN_PROFILE: profile,
+  BAA_ACKNOWLEDGED: parsed.BAA_ACKNOWLEDGED || (profile === 'production' ? '1' : ''),
   REQUIRE_JWT_FOR_FHIR: parsed.REQUIRE_JWT_FOR_FHIR || '1',
   REQUIRE_TRIAGE_FOR_VOICE: parsed.REQUIRE_TRIAGE_FOR_VOICE || '1',
   BASE_URL: baseUrl,
@@ -161,6 +188,7 @@ const merged = {
     parsed.CONVERSATION_MODE_ENFORCE_DEMO_QUAL || '0',
   STAGING: isStaging ? '1' : '0',
   ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0',
+  STRIPE_BILLING_MODE: isStaging ? 'test' : (parsed.STRIPE_BILLING_MODE || 'live'),
 };
 
 if (isStaging || profile === 'production') {
@@ -187,11 +215,9 @@ if (!useGcpSecrets) {
     parsed.RETELL_WEBHOOK_SECRET ||
     parsed.RETELL_WEBHOOK_TOKEN ||
     secretOrRandom('RETELL_WEBHOOK_SECRET', 24);
-  merged.STRIPE_WEBHOOK_SECRET =
-    parsed.STRIPE_WEBHOOK_SECRET ||
-    parsed.STRIPEWebhook ||
-    parsed.STRIPE_WEBHOOK ||
-    secretOrRandom('STRIPE_WEBHOOK_SECRET', 24);
+  merged.STRIPE_WEBHOOK_SECRET = parsed.STRIPE_WEBHOOK_SECRET || secretOrRandom('STRIPE_WEBHOOK_SECRET', 24);
+  merged.STRIPE_LIVE_WEBHOOK_SECRET =
+    parsed.STRIPE_LIVE_WEBHOOK_SECRET || secretOrRandom('STRIPE_LIVE_WEBHOOK_SECRET', 24);
 }
 
 // Kelly Rails + gate flags apply to api.callsomo.com even when CLOUDRUN_PROFILE=staging
@@ -220,7 +246,7 @@ if (isStaging) {
   delete merged.AZURE_EMAIL_SENDER;
 }
 
-for (const key of SECRET_KEYS) {
+for (const key of [...SECRET_KEYS, ...stripeSecretEnvKeys()]) {
   delete merged[key];
 }
 

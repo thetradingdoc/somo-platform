@@ -86,11 +86,21 @@
       if (settings?.greeting) document.getElementById('setupGreeting').value = settings.greeting;
       if (settings?.outbound_opener) {
         document.getElementById('setupOutboundOpener').value = settings.outbound_opener;
+      } else if (window.VoiceAgentPage?.applyOutboundOpenerDefault) {
+        window.VoiceAgentPage.applyOutboundOpenerDefault(
+          settings || {},
+          'setupOutboundOpener',
+          customer?.company_name
+        );
       }
       if (settings?.outbound_enabled) {
         document.getElementById('setupOutboundEnabled').checked = true;
       }
       if (settings?.tone_preset) document.getElementById('setupTone').value = settings.tone_preset;
+      if (settings?.language_mode) document.getElementById('setupLanguageMode').value = settings.language_mode;
+      if (settings?.transfer_number) document.getElementById('setupTransferNumber').value = settings.transfer_number;
+      if (settings?.clinic_email) document.getElementById('setupClinicEmail').value = settings.clinic_email;
+      else if (customer?.email) document.getElementById('setupClinicEmail').value = customer.email;
     } catch (_) {}
     return true;
   }
@@ -105,7 +115,10 @@
         partial.outbound_opener ?? document.getElementById('setupOutboundOpener').value.trim(),
       outbound_enabled:
         partial.outbound_enabled ?? document.getElementById('setupOutboundEnabled').checked,
-      tone_preset: partial.tone_preset ?? document.getElementById('setupTone').value
+      tone_preset: partial.tone_preset ?? document.getElementById('setupTone').value,
+      language_mode: partial.language_mode ?? document.getElementById('setupLanguageMode').value,
+      transfer_number: partial.transfer_number ?? document.getElementById('setupTransferNumber').value.trim() || null,
+      clinic_email: partial.clinic_email ?? document.getElementById('setupClinicEmail')?.value?.trim() || null
     };
   }
 
@@ -143,12 +156,22 @@
   }
 
   async function markComplete(markLive) {
-    await fetch(`${API_BASE}/api/voice-agent/setup-complete`, {
+    const statusRes = await fetch(`${API_BASE}/api/voice-agent/config-status`, { credentials: 'include' });
+    const statusJson = await statusRes.json().catch(() => ({}));
+    if (!statusJson?.config_status?.ready) {
+      const missing = (statusJson.config_status?.missing || []).join(', ');
+      throw new Error(`Complete required setup first: ${missing || 'missing configuration'}`);
+    }
+    const res = await fetch(`${API_BASE}/api/voice-agent/setup-complete`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mark_live: !!markLive })
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Setup could not be completed');
+    }
     try {
       if (customer) {
         customer.voice_setup_completed_at = new Date().toISOString();
@@ -172,8 +195,15 @@
       try {
         const name = document.getElementById('setupPracticeName').value.trim();
         if (!name) return showError('Enter your practice name.');
+        const transfer = document.getElementById('setupTransferNumber').value.trim();
+        if (!transfer) return showError('Enter a warm transfer number for live handoffs.');
         document.getElementById('setupGreeting').value = VoiceHoursPicker.defaultGreeting(name);
-        await saveSettings({ tone_preset: document.getElementById('setupTone').value });
+        await saveSettings({
+          tone_preset: document.getElementById('setupTone').value,
+          language_mode: document.getElementById('setupLanguageMode').value,
+          transfer_number: transfer,
+          clinic_email: document.getElementById('setupClinicEmail')?.value?.trim() || null
+        });
         showStep(2);
       } catch (e) {
         showError(e.message);
@@ -229,7 +259,10 @@
     async function finish(dest) {
       try {
         await markComplete(dest.includes('agent'));
-      } catch (_) {}
+      } catch (e) {
+        showError(e.message || 'Could not complete setup');
+        return;
+      }
       window.location.href = dest;
     }
 

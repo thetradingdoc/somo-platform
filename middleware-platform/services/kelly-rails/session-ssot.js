@@ -185,7 +185,16 @@ function persistRailsSessionState(sessionId, state = {}) {
     gate_matched: state.gate_matched || flags.gate_matched || null,
     gate_outcome: state.gate_outcome || flags.gate_outcome || null,
     opqrst_from_triage: flags.opqrst_from_triage || null,
-    opqrst_resume_field: flags.opqrst_resume_field || null
+    opqrst_resume_field: flags.opqrst_resume_field || null,
+    fd_full_name: flags.fd_full_name || null,
+    fd_dob: flags.fd_dob || null,
+    fd_phone: flags.fd_phone || null,
+    fd_patient_status: flags.fd_patient_status || null,
+    fd_reason_for_visit: flags.fd_reason_for_visit || null,
+    fd_subscriber_id: flags.fd_subscriber_id || null,
+    fd_group_number: flags.fd_group_number || null,
+    fd_family_caller: flags.fd_family_caller || null,
+    patient_match_ambiguous: !!flags.patient_match_ambiguous
   };
   try {
     const write = () => {
@@ -254,6 +263,48 @@ function persistRailsSessionState(sessionId, state = {}) {
 }
 
 /** Strip L4-owned slot fields from L2 dispatch updates; persist in one transaction. */
+function persistFrontDeskProjection(sessionId, frontDeskState = {}) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) return;
+  const projection = getRailsSessionProjection(sid);
+  let existing = {};
+  if (projection?.flags_json) {
+    try {
+      existing = JSON.parse(projection.flags_json);
+    } catch (_) {}
+  }
+  const flags = {
+    ...existing,
+    fd_full_name: frontDeskState.full_name || existing.fd_full_name || null,
+    fd_dob: frontDeskState.date_of_birth || existing.fd_dob || null,
+    fd_phone: frontDeskState.phone || existing.fd_phone || null,
+    fd_patient_status: frontDeskState.patient_status || existing.fd_patient_status || null,
+    fd_reason_for_visit: frontDeskState.reason_for_visit || existing.fd_reason_for_visit || null,
+    fd_subscriber_id: frontDeskState.subscriber_id || existing.fd_subscriber_id || null,
+    fd_group_number: frontDeskState.group_number || existing.fd_group_number || null,
+    fd_family_caller: frontDeskState.family_caller || existing.fd_family_caller || null
+  };
+  for (const [field, metaKey] of [
+    ['full_name', 'fd_full_name'],
+    ['date_of_birth', 'fd_dob'],
+    ['phone', 'fd_phone'],
+    ['patient_status', 'fd_patient_status'],
+    ['reason_for_visit', 'fd_reason_for_visit'],
+    ['subscriber_id', 'fd_subscriber_id'],
+    ['group_number', 'fd_group_number'],
+    ['family_caller', 'fd_family_caller']
+  ]) {
+    if (frontDeskState[field] != null) {
+      KellyToolExecutor._setSessionMeta(sid, metaKey, String(frontDeskState[field]), { fromMirror: true });
+    }
+  }
+  persistRailsSessionState(sid, {
+    active_lane: projection?.active_lane || 'basic_intake',
+    step: projection?.step || null,
+    flags
+  });
+}
+
 function mergeConversationStateUpdates(sessionId, sessionFields = {}, dispatchUpdates = {}) {
   const sid = String(sessionId || '').trim();
   if (!sid) return { ...sessionFields, ...dispatchUpdates };
@@ -386,6 +437,7 @@ function linkSessionToAppointment(sessionId, appointmentId) {
 module.exports = {
   ensureProjectionTable,
   persistRailsSessionState,
+  persistFrontDeskProjection,
   getRailsSessionProjection,
   getRailsSessionProjectionFromPostgres,
   postgresSsotEnabled,

@@ -397,6 +397,7 @@
             ensureRosterMount();
             wirePatientsPage();
             patientsDbg('init:pre-load', rosterDomSnapshot());
+            await loadRosterStats();
             await loadCustomers();
             patientsDbg('init:done', rosterDomSnapshot());
         }
@@ -521,6 +522,25 @@
             }).filter((p) => p.fhir_id);
         }
 
+        function clinicQ() {
+            const id = localStorage.getItem('clinic_id');
+            return id ? `?clinic_id=${encodeURIComponent(id)}` : '';
+        }
+
+        async function loadRosterStats() {
+            try {
+                const res = await fetch(`${API_BASE}/api/tenant/roster/stats${clinicQ()}`, authFetchOpts());
+                const data = await res.json();
+                if (data.success && data.roster_count != null) {
+                    const hint = document.getElementById('patientsFilterHint');
+                    if (hint) {
+                        hint.hidden = false;
+                        hint.textContent = `${data.roster_count} patient(s) on roster · CSV import in Settings → Practice`;
+                    }
+                }
+            } catch (_) {}
+        }
+
         async function enrichPatients(patients) {
             const cap = 40;
             const slice = patients.slice(0, cap);
@@ -529,7 +549,7 @@
                         // Fetch eligibility data (Stedi coverage/benefits)
                         let eligibilityData = null;
                         try {
-                            const eligRes = await fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(p.fhir_id)}/eligibility`, authFetchOpts());
+                            const eligRes = await fetch(`${API_BASE}/api/tenant/patients/${encodeURIComponent(p.fhir_id)}/eligibility${clinicQ()}`, authFetchOpts());
                             const eligResult = await eligRes.json();
                             if (eligResult.success && eligResult.eligibility && eligResult.eligibility.length > 0) {
                                 // Get the most recent eligibility check
@@ -888,7 +908,11 @@
         }
 
         function viewPatientDetails(fhirId) {
-            window.location.href = `patient-case.html?patient_id=${encodeURIComponent(fhirId)}`;
+            const params = new URLSearchParams(window.location.search);
+            params.set('patient_id', fhirId);
+            history.replaceState({}, '', `${window.location.pathname}?${params}`);
+            mountInsurancePanel(fhirId);
+            document.getElementById('insCoverageMount')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function viewPatientEhrDetails(fhirId) {
@@ -1029,7 +1053,7 @@
               </div>`;
             Promise.all([
                 fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/insurance`, authFetchOpts()).then((r) => r.json()),
-                fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/eligibility`, authFetchOpts()).then((r) => r.json())
+                fetch(`${API_BASE}/api/tenant/patients/${encodeURIComponent(pid)}/eligibility${clinicQ()}`, authFetchOpts()).then((r) => r.json())
             ]).then(([ins, elig]) => {
                 if (ins.success && Array.isArray(ins.insurance) && ins.insurance.length) {
                     const primary = ins.insurance.find((i) => i.is_primary) || ins.insurance[0];

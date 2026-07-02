@@ -120,6 +120,12 @@ function isToolAllowedForMode(toolName, ctx = {}) {
   if (!name) return false;
   if (ALWAYS_ALLOWED.has(name)) return true;
 
+  if (name === 'check_plan_benefits') {
+    const triagePolicy = String(ctx.triage_policy || ctx.triagePolicy || '').toLowerCase();
+    const useCase = String(ctx.use_case || ctx.prompt_use_case || '').toLowerCase();
+    if (triagePolicy === TriagePolicy.DISABLED || useCase === 'dental') return false;
+  }
+
   if (isSiteSensitiveToolBlocked(ctx, name)) return false;
   if (isClinicalToolBlocked(ctx, name)) return false;
 
@@ -173,6 +179,13 @@ function isToolAllowedForMode(toolName, ctx = {}) {
     ) {
       return false;
     }
+    try {
+      const triagePolicy = String(ctx.triage_policy || ctx.triagePolicy || '').toLowerCase();
+      if (triagePolicy === TriagePolicy.DISABLED && ctx.sessionId) {
+        const { frontDeskIntakeComplete } = require('../front-desk-intake');
+        if (!frontDeskIntakeComplete(ctx.sessionId)) return false;
+      }
+    } catch (_) {}
     if (subrail === Subrail.BOOKING) return true;
     if (mode === ConversationMode.TENANT_INBOUND_ADMIN && !subrail) return true;
     if (

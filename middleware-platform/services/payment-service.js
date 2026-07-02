@@ -11,6 +11,7 @@
 
 const crypto = require('crypto');
 const db = require('../database');
+const stripeConfig = require('../utils/stripe-config');
 
 class PaymentService {
     /**
@@ -200,22 +201,11 @@ class PaymentService {
      * SECURITY: No hardcoded fallback - must be set in environment
      */
     static getStripePublishableKey() {
-        const key = process.env.STRIPE_PUBLISHABLE_KEY;
-        if (!key) {
-            throw new Error('STRIPE_PUBLISHABLE_KEY environment variable is required');
-        }
-        return key;
+        return stripeConfig.getStripePublishableKey();
     }
 
-    /**
-     * Get Stripe secret key
-     * In production, use environment variables
-     */
     static getStripeSecretKey() {
-        if (!process.env.STRIPE_SECRET_KEY) {
-            throw new Error('STRIPE_SECRET_KEY environment variable is required');
-        }
-        return process.env.STRIPE_SECRET_KEY;
+        return stripeConfig.getStripeSecretKey();
     }
 }
 

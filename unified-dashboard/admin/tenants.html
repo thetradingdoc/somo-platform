@@ -154,9 +154,18 @@
       const panel = document.getElementById('detailPanel');
       panel.innerHTML = '<div class="admin-crm-card-title">Loading...</div>';
       try {
-        const r = await apiFetch(`/api/admin/tenants/${clinicId}`);
+        const [r, pmsRes] = await Promise.all([
+          apiFetch(`/api/admin/tenants/${clinicId}`),
+          apiFetch(`/api/admin/tenants/${clinicId}/pms`).catch(() => null)
+        ]);
         const t = r.tenant;
         const credits = r.credits || {};
+        const pms = pmsRes?.success ? pmsRes : null;
+        const pmsType = pms?.pms_type || '—';
+        const pmsEnabled = pms?.pms_enabled ? 'Yes' : 'No';
+        const pmsLastSync = pms?.pms_last_sync_at ? new Date(pms.pms_last_sync_at).toLocaleString() : '—';
+        const pmsLastError = pms?.pms_last_error || '—';
+        const pmsFailures = pms?.failures_24h ?? '—';
         panel.innerHTML = `
           <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">${esc(t.name)}${t.archived_at ? ' <span class="admin-crm-badge admin-crm-badge-muted">archived</span>' : ''}</h3></div>
           <dl class="admin-crm-kv">
@@ -166,6 +175,18 @@
             <div class="admin-crm-kv-row"><dt>Voice agent</dt><dd>${t.agent?.has_agent ? '<span class="admin-crm-yn-badge admin-crm-yn-yes">Configured</span>' : '<span class="admin-crm-yn-badge admin-crm-yn-no">Not configured</span>'}</dd></div>
             <div class="admin-crm-kv-row"><dt>Calls (30d)</dt><dd>${r.usage?.by_period?.last_30d?.calls ?? '—'}</dd></div>
           </dl>
+          <h4 style="margin:16px 18px 8px;font-size:13px;color:var(--muted);">PMS</h4>
+          <dl class="admin-crm-kv">
+            <div class="admin-crm-kv-row"><dt>Type</dt><dd>${esc(pmsType)}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Enabled</dt><dd>${pmsEnabled}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Last sync</dt><dd>${esc(pmsLastSync)}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Last error</dt><dd>${esc(pmsLastError)}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Failures (24h)</dt><dd>${pmsFailures}</dd></div>
+          </dl>
+          <div class="admin-crm-input-row">
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="setTenantPmsSomo('${clinicId}')">Set Somo PMS</button>
+            <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="setTenantPmsAthena('${clinicId}')">Set Athena PMS</button>
+          </div>
           <div class="admin-crm-input-row">
             <input type="number" class="admin-crm-text-input" id="creditAmount" min="1" value="60" style="max-width:90px;">
             <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="allocateCredits('${clinicId}')">Allocate free minutes</button>
@@ -191,6 +212,51 @@
       }
     }
     window.showDetail = showDetail;
+
+    async function setTenantPmsSomo(clinicId) {
+      try {
+        await apiFetch(`/api/admin/tenants/${clinicId}/pms`, {
+          method: 'PUT',
+          body: JSON.stringify({ pms_type: 'somo', pms_enabled: 1, config: { mirror_google: true } }),
+        });
+        showToast('Somo PMS enabled', 'success');
+        showDetail(clinicId);
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
+    }
+    window.setTenantPmsSomo = setTenantPmsSomo;
+
+    async function setTenantPmsAthena(clinicId) {
+      const practiceId = prompt('Athena practice_id:');
+      if (!practiceId) return;
+      const departmentId = prompt('Athena department_id (optional):') || '';
+      const clientId = prompt('Athena client_id:');
+      if (!clientId) return;
+      const clientSecret = prompt('Athena client_secret:');
+      if (!clientSecret) return;
+      try {
+        await apiFetch(`/api/admin/tenants/${clinicId}/pms`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            pms_type: 'athena',
+            pms_enabled: 1,
+            config: {
+              practice_id: practiceId,
+              department_id: departmentId || undefined,
+              client_id: clientId,
+              client_secret: clientSecret,
+              mirror_google: false
+            }
+          }),
+        });
+        showToast('Athena PMS enabled', 'success');
+        showDetail(clinicId);
+      } catch (e) {
+        showToast(e.message, 'error');
+      }
+    }
+    window.setTenantPmsAthena = setTenantPmsAthena;
 
     async function allocateCredits(clinicId) {
       const credits = parseInt(document.getElementById('creditAmount').value, 10);

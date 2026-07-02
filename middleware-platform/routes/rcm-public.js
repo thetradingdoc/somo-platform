@@ -2,13 +2,23 @@
 
 const express = require('express');
 const router = express.Router();
+const db = require('../database');
 const settlement = require('../services/rcm-payment-settlement');
 
 router.get('/pay/:token', async (req, res) => {
   try {
     const ctx = await settlement.getPaymentContext(req.params.token);
     if (!ctx.success) {
-      return res.status(ctx.status || 400).json({ success: false, error: ctx.error });
+      return res.status(ctx.status || 400).json({ success: false, error: ctx.error, code: ctx.code });
+    }
+    if (ctx.zero_balance) {
+      return res.json({
+        success: true,
+        zero_balance: true,
+        code: 'zero_balance',
+        payment: ctx.payment,
+        rails: ctx.rails
+      });
     }
     if (ctx.alreadyPaid) {
       return res.json({
@@ -22,6 +32,9 @@ router.get('/pay/:token', async (req, res) => {
       success: true,
       already_paid: false,
       payment: ctx.payment,
+      clinic: ctx.payment?.clinic_name
+        ? { name: ctx.payment.clinic_name, phone: ctx.payment.clinic_phone || null }
+        : null,
       rails: ctx.rails,
     });
   } catch (err) {
@@ -31,6 +44,17 @@ router.get('/pay/:token', async (req, res) => {
 
 router.post('/pay/:token/create-intent', async (req, res) => {
   try {
+    const { requireSmsConsentForPayment, recordRcmSmsConsent } = require('../services/tcpa-consent-service');
+    const row = db.db?.prepare('SELECT * FROM rcm_payments WHERE pay_token = ?').get(req.params.token);
+    const consent = requireSmsConsentForPayment({
+      smsConsent: req.body?.sms_consent,
+      phone: row?.patient_phone || req.body?.phone
+    });
+    if (!consent.ok) {
+      return res.status(400).json({ success: false, error: consent.error, code: consent.code });
+    }
+    if (consent.consented_at) recordRcmSmsConsent(req.params.token);
+
     const result = await settlement.createStripeIntent(req.params.token);
     if (!result.success) {
       return res.status(result.status || 400).json({ success: false, error: result.error });

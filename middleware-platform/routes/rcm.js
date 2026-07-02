@@ -1413,7 +1413,7 @@ router.post('/collection-queue/:journeyId/resend', async (req, res) => {
       }
     } catch (_) {}
 
-    const result = paymentRequestService.createRcmPaymentRequest({
+    const result = await paymentRequestService.createRcmPaymentRequest({
       clinicId,
       amount,
       journeyId,
@@ -1488,12 +1488,12 @@ router.post('/collection-queue/:journeyId/resend', async (req, res) => {
   }
 });
 
-router.post('/payments/request', (req, res) => {
+router.post('/payments/request', async (req, res) => {
   try {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
-    const result = paymentRequestService.createRcmPaymentRequest({
+    const result = await paymentRequestService.createRcmPaymentRequest({
       clinicId,
       amount: req.body?.amount,
       journeyId: req.body?.journey_id || null,

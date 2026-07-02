@@ -55,7 +55,8 @@ function buildJoinLink(appointment) {
  * Task 35: On booking — send SMS + email with appointment time and upload link; set reminder_booking_sent.
  * Call after createAppointment. No PHI beyond appointment time and links.
  */
-async function sendBookingConfirmationWithUploadLink(appointment) {
+async function sendBookingConfirmationWithUploadLink(appointment, options = {}) {
+  const locale = String(options.locale || appointment.preferred_language || appointment.locale || 'en').slice(0, 2);
   let uploadUrl = null;
   if (appointment.patient_id) {
     const built = buildUploadLinkForAppointment(appointment.patient_id, appointment.id, 7 * 24 * 60 * 60 * 1000);
@@ -75,7 +76,7 @@ async function sendBookingConfirmationWithUploadLink(appointment) {
 
   if (appointment.patient_email) {
     try {
-      await EmailService.sendAppointmentConfirmation(appointment, { uploadLink: uploadUrl });
+      await EmailService.sendAppointmentConfirmation(appointment, { uploadLink: uploadUrl, locale });
       console.log('✅ Booking confirmation email sent (with upload link)');
     } catch (e) {
       console.warn('⚠️ Booking confirmation email failed:', e.message);
@@ -90,10 +91,35 @@ async function sendBookingConfirmationWithUploadLink(appointment) {
   }
   if (SMSService && appointment.patient_phone) {
     try {
-      const smsText = uploadUrl
-        ? `Somo: Your appointment is confirmed for ${dateTimeStr}. Upload documents: ${uploadUrl}`
-        : `Somo: Your appointment is confirmed for ${dateTimeStr}.`;
-      const res = await SMSService.sendSMS(appointment.patient_phone, smsText);
+      const smsTemplates = {
+        en: (when, link) =>
+          link
+            ? `Somo: Your appointment is confirmed for ${when}. Upload documents: ${link}`
+            : `Somo: Your appointment is confirmed for ${when}.`,
+        es: (when, link) =>
+          link
+            ? `Somo: Su cita está confirmada para ${when}. Subir documentos: ${link}`
+            : `Somo: Su cita está confirmada para ${when}.`,
+        zh: (when, link) =>
+          link
+            ? `Somo：您的预约已确认，时间 ${when}。上传文件：${link}`
+            : `Somo：您的预约已确认，时间 ${when}。`,
+        ru: (when, link) =>
+          link
+            ? `Somo: Ваша запись подтверждена на ${when}. Загрузить документы: ${link}`
+            : `Somo: Ваша запись подтверждена на ${when}.`
+      };
+      const tpl = smsTemplates[locale] || smsTemplates.en;
+      const smsText = tpl(dateTimeStr, uploadUrl);
+      let fromNumber = options.fromNumber || null;
+      if (!fromNumber && appointment.customer_id) {
+        try {
+          const db = require('../database');
+          const customer = db.getCustomer?.(appointment.customer_id);
+          fromNumber = customer?.twilio_phone_number || null;
+        } catch (_) {}
+      }
+      const res = await SMSService.sendSMS(appointment.patient_phone, smsText, fromNumber);
       if (res && res.success) console.log('✅ Booking confirmation SMS sent');
     } catch (e) {
       console.warn('⚠️ Booking confirmation SMS failed:', e.message);

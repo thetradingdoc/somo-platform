@@ -7,13 +7,36 @@
 function resolveInsuranceSpineForRequest(sessionId, args, opts = {}) {
   const { resolveInsuranceCodes } = require('./resolve-insurance-codes');
   const codingReviewSvc = require('./coding-review-service');
+  const { loadTenantPolicyFromProfile, TriagePolicy } = require('./conversation-mode/tenant-policy');
+  const db = require('../database');
+
+  let triagePolicy = opts.triage_policy || args.triage_policy || null;
+  let tenantSpecialty = opts.tenantSpecialty || args.tenant_specialty || args.specialty || null;
+  if (!triagePolicy && (args.clinic_id || opts.clinicId)) {
+    try {
+      const policy = loadTenantPolicyFromProfile(db, args.clinic_id || opts.clinicId, args.customer_id || null);
+      triagePolicy = policy.triage_policy;
+    } catch (_) {}
+  }
+
+  const visitReason =
+    args.visit_reason ||
+    args.visitReason ||
+    args.reason_for_visit ||
+    opts.visit_reason ||
+    null;
+
   const spineResolved = resolveInsuranceCodes(sessionId, {
     service_code: args.service_code,
     adminOverride: opts.adminOverride === true,
     force_after_clarified: args.force_after_clarified === true || args.force_after_clarified === 'true',
     clinicId: args.clinic_id || null,
     patientId: args.patient_id || args.patientId || null,
-    flagHitl: (p) => codingReviewSvc.flagForReview(p)
+    flagHitl: (p) => codingReviewSvc.flagForReview(p),
+    triage_policy: triagePolicy,
+    visit_reason: visitReason,
+    tenantSpecialty: tenantSpecialty || (triagePolicy === TriagePolicy.DISABLED ? 'Dental' : null),
+    useAdminPath: opts.useAdminPath === true || args.use_admin_path === true
   });
 
   if (spineResolved.ok) {

@@ -171,4 +171,64 @@ const APPOINTMENT_TYPE_TO_SPECIALTY = {
   'General Consult': 'PrimaryCare'
 };
 
-module.exports = { getCptCodeForVisit, resolveCptForVisit, CPT_TABLE, APPOINTMENT_TYPE_TO_SPECIALTY };
+/** Dental CDT phrase → code (admin front-desk path). */
+const DENTAL_CDT_TRIGGERS = [
+  { patterns: [/\bcleaning\b/i, /\bprophylaxis\b/i, /\bhygiene\b/i], adult: 'D1110', child: 'D1120' },
+  { patterns: [/\bnew patient\b/i, /\bfirst time\b/i], code: 'D0150' },
+  { patterns: [/\bcheckup\b/i, /\bcheck.?up\b/i, /\bperiodic\b/i], code: 'D0120' },
+  { patterns: [/\btooth\s*pain\b/i, /\bproblem\b/i, /\bhurts\b/i], code: 'D0140' },
+  { patterns: [/\bfull.+x.?ray\b/i, /\bpanoramic\b/i, /\bpanorex\b/i], code: 'D0330' },
+  { patterns: [/\bbitewing\b/i], code: 'D0274' },
+  { patterns: [/\bfilling\b/i, /\bcavity\b/i], code: 'D2391' },
+  { patterns: [/\broot canal\b/i], code: 'D3310' },
+  { patterns: [/\bdeep cleaning\b/i], code: 'D4341' },
+  { patterns: [/\bextraction\b/i, /\bpull.+tooth\b/i], code: 'D7140' },
+  { patterns: [/\bemergency\b/i, /\bin pain\b/i], code: 'D9110' },
+  { patterns: [/\bfluoride\b/i], code: 'D1206' },
+  { patterns: [/\bsealant\b/i], code: 'D1351' }
+];
+
+const DENTAL_CDT_TABLE = {
+  Dental: {
+    new: { routine: 'D0150', urgent: 'D0140', emergent: 'D9110' },
+    established: { routine: 'D0120', urgent: 'D0140', emergent: 'D9110' }
+  }
+};
+
+function isDentalCdt(code) {
+  return /^D\d{4}$/i.test(String(code || '').trim());
+}
+
+function resolveDentalCdtFromReason(reasonText, opts = {}) {
+  const reason = String(reasonText || '').trim().toLowerCase();
+  const isChild = opts.isChild === true;
+  for (const entry of DENTAL_CDT_TRIGGERS) {
+    if (!entry.patterns.some((re) => re.test(reason))) continue;
+    const code = entry.adult
+      ? (isChild ? entry.child || entry.adult : entry.adult)
+      : entry.code;
+    return { code, matched_phrase: reason };
+  }
+  return { code: null, matched_phrase: null };
+}
+
+function getDentalCdtForVisit(opts = {}) {
+  const isNewPatient = opts.isNewPatient !== false;
+  const urgency = (opts.urgency || 'routine').toLowerCase();
+  const tier = urgency === 'emergent' ? 'emergent' : urgency === 'urgent' ? 'urgent' : 'routine';
+  const patientTier = isNewPatient ? 'new' : 'established';
+  const table = DENTAL_CDT_TABLE.Dental;
+  return table[patientTier]?.[tier] || 'D0120';
+}
+
+module.exports = {
+  getCptCodeForVisit,
+  resolveCptForVisit,
+  CPT_TABLE,
+  APPOINTMENT_TYPE_TO_SPECIALTY,
+  DENTAL_CDT_TRIGGERS,
+  DENTAL_CDT_TABLE,
+  isDentalCdt,
+  resolveDentalCdtFromReason,
+  getDentalCdtForVisit
+};

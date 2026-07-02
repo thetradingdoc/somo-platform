@@ -1,7 +1,8 @@
 const PATHWAYS = {
   triage: ['chief_complaint', 'body_sites', 'severity', 'timeline'],
   routine: ['chief_complaint'],
-  video: ['chief_complaint', 'severity']
+  video: ['chief_complaint', 'severity'],
+  front_desk: ['full_name', 'date_of_birth', 'phone', 'patient_status', 'reason_for_visit']
 };
 
 function getRequiredFieldsSchema() {
@@ -17,6 +18,10 @@ function getRequiredFieldsSchema() {
     video: {
       minimum_required: PATHWAYS.video,
       hard_blockers: ['chief_complaint']
+    },
+    front_desk: {
+      minimum_required: PATHWAYS.front_desk,
+      hard_blockers: ['full_name', 'phone', 'reason_for_visit']
     }
   };
 }

@@ -76,7 +76,7 @@ test.describe('Tenant front desk UI audit', () => {
       if (!providerCustomer) {
         providerCustomer = await ensureStandardProviderSession(page, request, context);
       } else {
-        await ensureStandardProviderSession(page, request, context);
+        await ensureStandardProviderSession(page, request, context, providerCustomer);
       }
 
       if (pageDef.setup === 'incompleteVoiceSetup') {

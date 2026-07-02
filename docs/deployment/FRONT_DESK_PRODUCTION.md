@@ -1,8 +1,14 @@
 # Front-desk production — callsomo.com
 
-**Last updated:** 2026-06-16
+**Last updated:** 2026-07-02
 
 Single operator entry point for the Somo **front-desk voice agent** (Kelly rails) on production.
+
+## Git vs production
+
+Local `main` may be **ahead of production** until you run a deploy. Check [`PHASE0_DEPLOY_STATE.md`](./PHASE0_DEPLOY_STATE.md) for the current deployed image SHA vs git tip. After committing front-desk batches, deploy with `npm run deploy:callsomo` and update `PHASE0_DEPLOY_STATE.md`.
+
+Pre-deploy gate: `cd middleware-platform && npm run verify:unblocked-phases`
 
 ## Architecture
 
@@ -211,14 +217,33 @@ node scripts/fix-operator-voice-openers.cjs
 node scripts/rollout-voice-outbound-opener.cjs --apply-db
 ```
 
-**Pre-deploy verification** (local):
+**Pre-deploy verification** (local — required before production deploy):
 
 ```bash
 cd middleware-platform
+npm run verify:front-desk-pilot
+```
+
+The master gate chains Phase 2 billing, golden loop, Phase 3 sandbox, and Stripe billing mode. For full Somo loop validation (Phase 8–9), also run:
+
+```bash
+npm run verify:phase8-loop
+npm run verify:golden-loop-somo
+```
+
+Optional deeper checks:
+
+```bash
 npm run test:kelly:rails:golden
 npx jest --testPathPattern='conversation-mode'
 npm run test:rails:conversation-sandbox
 npm run test:e2e:tenant-audit:safe
+```
+
+Enable front-desk gates in local CI:
+
+```bash
+FRONT_DESK_CI=1 ./scripts/ci-local.sh gate
 ```
 
 ## Smoke and acceptance

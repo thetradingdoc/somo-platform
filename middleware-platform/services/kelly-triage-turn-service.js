@@ -15,6 +15,23 @@ function isUnifiedChannelAdapterShadowEnabled() {
   return v === '1' || v === 'true' || v === 'yes';
 }
 
+/** Resolve a patient's full display name from the FHIR record (best-effort, never throws). */
+function resolvePatientNameById(patientId) {
+  if (!patientId) return null;
+  try {
+    const row = db.getFHIRPatient?.(patientId);
+    const rd = row?.resource_data
+      ? (typeof row.resource_data === 'string' ? JSON.parse(row.resource_data) : row.resource_data)
+      : null;
+    const n = rd?.name?.[0];
+    if (!n) return null;
+    const given = Array.isArray(n.given) ? n.given.join(' ') : (n.given || '');
+    return `${given} ${n.family || ''}`.trim() || n.text || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId }) {
   const KellyAgentService = require('./kelly-agent-service');
   const KellyToolExecutor = require('./kelly-tool-executor');
@@ -385,7 +402,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     channel: 'chat',
     clinicId,
     patientId: mappedPatientId,
-    patientName: null,
+    patientName: resolvePatientNameById(mappedPatientId),
     patientEmail: email,
     portalSessionId,
     preferredLanguage: effectivePreferredLanguage || null,
@@ -737,8 +754,78 @@ async function handlePatientTriageFromRequest(req) {
   return runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId: sid });
 }
 
+/**
+ * Server-authoritative first-contact opener for chat surfaces (triage + landing).
+ * Mirrors voice: branded, tone-aware, name-first when the caller is unknown; greets
+ * by name when a logged-in patient is known. Read-only (no session writes).
+ */
+function buildFirstContactOpener(req, { mappedPatientId = null } = {}) {
+  const {
+    resolvePracticeDisplayName,
+    resolveFirstContactGreeting
+  } = require('./call-opener-resolver');
+
+  let clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
+  if (!clinicId && mappedPatientId && db?.getPatientClinicIds) {
+    try { clinicId = db.getPatientClinicIds(mappedPatientId)?.[0] || null; } catch (_) {}
+  }
+
+  // Best-effort tenant config so chat honors tone_preset / custom greeting like voice.
+  let customerId = null;
+  try { customerId = clinicId ? (db.getCustomerIdForClinic?.(clinicId) || null) : null; } catch (_) {}
+  let settings = {};
+  try {
+    settings =
+      db.getVoiceAgentSettingsForProvider?.({
+        customerId: customerId || undefined,
+        clinicId: clinicId || undefined
+      }) || {};
+  } catch (_) { settings = {}; }
+
+  const practiceName = resolvePracticeDisplayName(db, {
+    clinicId: clinicId || undefined,
+    customerId: customerId || undefined
+  });
+
+  const knownName = resolvePatientNameById(mappedPatientId);
+
+  const greeting = resolveFirstContactGreeting({
+    channel: 'chat',
+    settings,
+    practiceName,
+    knownName,
+    callType: 'inbound_tenant',
+    direction: 'inbound'
+  });
+
+  return {
+    text: greeting.text,
+    asksName: greeting.asksName,
+    source: greeting.source,
+    practiceName: greeting.practiceName,
+    clinic_id: clinicId || null
+  };
+}
+
+async function handlePatientTriageOpenerFromRequest(req) {
+  const PatientPortalService = require('./patient-portal-service');
+  const sid = req.patientSessionId;
+  const sessionValidation = PatientPortalService.validateSession(sid);
+  const mappedPatientId = sessionValidation?.patient_id || null;
+  const opener = buildFirstContactOpener(req, { mappedPatientId });
+  return { status: 200, json: { success: true, ...opener, request_id: req.id } };
+}
+
+async function handlePublicLandingOpenerFromRequest(req) {
+  const opener = buildFirstContactOpener(req, { mappedPatientId: null });
+  return { status: 200, json: { success: true, ...opener, request_id: req.id } };
+}
+
 module.exports = {
   runKellyTriageTurnForHttpRequest,
   handlePatientTriageFromRequest,
   handlePublicLandingAssistantFromRequest,
+  buildFirstContactOpener,
+  handlePatientTriageOpenerFromRequest,
+  handlePublicLandingOpenerFromRequest,
 };

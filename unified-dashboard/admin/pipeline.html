@@ -488,6 +488,9 @@
             ${canCall
               ? `<button class="btn btn-primary admin-crm-btn-sm" onclick="event.stopPropagation();doCall(${l.id},'${esc(l.clinic_name)}', this)">Call</button>`
               : `<span class="admin-crm-badge admin-crm-badge-muted">No phone</span>`}
+            ${l.clinic_email
+              ? `<button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();doInvite('${l.id}', this)" title="Send pilot invite">Invite</button>`
+              : ''}
           </div>
         </div>`;
     }
@@ -496,6 +499,27 @@
       await shellCallLead(id, name, { buttonEl: btn, onSuccess: () => setTimeout(refreshAll, 2000) });
     }
     window.doCall = doCall;
+
+    async function doInvite(id, btn) {
+      if (!confirmAction('Send pilot invite and move lead to Won?')) return;
+      if (btn) btn.disabled = true;
+      try {
+        const r = await apiFetch(`/api/admin/invites/from-lead/${id}`, {
+          method: 'POST',
+          body: JSON.stringify({ send_email: true, convert: true }),
+        });
+        showToast('Pilot invite sent', 'success');
+        if (r.invite_url && navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(r.invite_url).catch(() => {});
+        }
+        refreshAll();
+      } catch (e) {
+        showToast(e.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    window.doInvite = doInvite;
 
     async function loadKanban() {
       const params = new URLSearchParams();

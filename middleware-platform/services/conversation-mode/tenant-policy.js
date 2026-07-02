@@ -30,8 +30,15 @@ const DEFAULT_TENANT_POLICY = Object.freeze({
 
 /** Policy defaults by customer use_case. */
 const USE_CASE_POLICIES = {
+  dental: {
+    triage_policy: TriagePolicy.DISABLED,
+    booking_mode: BookingMode.ADMIN_DIRECT,
+    billing_enabled: true,
+    records_enabled: true,
+    inconclusive_triage_action: InconclusiveTriageAction.HANDOFF
+  },
   healthcare_clinic: {
-    triage_policy: TriagePolicy.CONDITIONAL,
+    triage_policy: TriagePolicy.DISABLED,
     booking_mode: BookingMode.ADMIN_DIRECT,
     billing_enabled: true,
     records_enabled: true,

@@ -249,7 +249,7 @@ class EmailService {
     }
   }
 
-  static async sendEmail({ to, subject, html, text, attachments }) {
+  static async sendEmail({ to, subject, html, text, attachments, replyTo }) {
     try {
       const mode = this.getEmailProviderMode();
       const tryAzure = mode === 'azure' || mode === 'auto';
@@ -283,7 +283,8 @@ class EmailService {
             to: to,
             subject: subject,
             html: html,
-            text: text || html.replace(/<[^>]*>/g, '')
+            text: text || html.replace(/<[^>]*>/g, ''),
+            ...(replyTo ? { replyTo } : {})
           };
 
           if (attachments && attachments.length > 0) {
@@ -361,6 +362,7 @@ class EmailService {
    */
   static async sendAppointmentConfirmation(appointment, options = {}) {
     const { uploadLink } = options;
+    const locale = String(options.locale || appointment.preferred_language || 'en').slice(0, 2);
     // Format confirmation number (matches booking service format)
     const confirmationNumber = appointment.id && appointment.id.length > 13
       ? appointment.id.substring(5, 13).toUpperCase()
@@ -380,29 +382,109 @@ class EmailService {
       ? `<p>You can upload documents (labs, images) before your visit using this link: <a href="${uploadLink}">Upload documents</a>.</p>`
       : '';
 
+    const subjects = {
+      en: `Appointment Confirmed - ${dateTime}`,
+      es: `Cita confirmada - ${dateTime}`,
+      zh: `预约已确认 - ${dateTime}`,
+      ru: `Запись подтверждена - ${dateTime}`
+    };
+    const titles = {
+      en: 'Appointment confirmed',
+      es: 'Cita confirmada',
+      zh: '预约已确认',
+      ru: 'Запись подтверждена'
+    };
+    const intro = {
+      en: 'Your appointment is scheduled.',
+      es: 'Su cita está programada.',
+      zh: '您的预约已安排。',
+      ru: 'Ваша запись запланирована.'
+    };
+
     const calBtn = appointment.calendar_link
       ? `<p style="text-align:center;margin-top:16px;">${SomoEmail.button(appointment.calendar_link, 'Add to calendar')}</p>`
       : '';
-    const html = this._somoLayout('Appointment confirmed', dateTime, `
+    const clinicName = await (async () => {
+      if (appointment.clinic_name) return appointment.clinic_name;
+      if (!appointment.clinic_id) return 'Your care team';
+      try {
+        const db = require('../database');
+        const clinic = db.getClinicById?.(appointment.clinic_id);
+        return clinic?.name || 'Your care team';
+      } catch (_) {
+        return 'Your care team';
+      }
+    })();
+
+    const html = this._somoLayout(titles[locale] || titles.en, dateTime, `
       <h2>Hi ${SomoEmail.escapeHtml(appointment.patient_name)},</h2>
-      <p>Your appointment is scheduled.</p>
+      <p>${intro[locale] || intro.en}</p>
+      <p><em>On behalf of ${SomoEmail.escapeHtml(clinicName)}</em></p>
       ${SomoEmail.infoRows([
         { label: 'Date & time', value: dateTime },
         { label: 'Type', value: appointment.appointment_type || 'Consultation' },
         { label: 'Duration', value: `${appointment.duration_minutes || 50} minutes` },
-        { label: 'Provider', value: appointment.provider || 'Somo care team' },
+        { label: 'Provider', value: appointment.provider || clinicName },
         { label: 'Confirmation', value: confirmationNumber }
       ])}
       ${uploadBlock}
       ${calBtn}
       <p>You will receive a reminder about one hour before your visit.</p>
-      <p>Best regards,<br>The Somo team</p>
+      <p>Best regards,<br>${SomoEmail.escapeHtml(clinicName)} via Somo</p>
     `, { preheader: `Confirmed: ${dateTime}` });
+
+    let replyTo = null;
+    if (appointment.clinic_id) {
+      try {
+        const db = require('../database');
+        const clinic = db.getClinicById?.(appointment.clinic_id);
+        replyTo = clinic?.email || null;
+      } catch (_) {}
+    }
 
     return await this.sendEmail({
       to: appointment.patient_email,
-      subject: `Appointment Confirmed - ${dateTime}`,
-      html: html
+      subject: `${clinicName} — ${subjects[locale] || subjects.en}`,
+      html: html,
+      replyTo
+    });
+  }
+
+  /**
+   * Alert practice staff that a caller requested live handoff.
+   */
+  static async sendHandoffAlert({ to, clinic_name, session_id, reason, locale = 'en' } = {}) {
+    if (!to) return { skipped: true };
+    const title = locale === 'es' ? 'Solicitud de transferencia' : 'Caller handoff requested';
+    const html = this._somoLayout(title, clinic_name || 'Practice', `
+      <h2>${SomoEmail.escapeHtml(clinic_name || 'Your practice')}</h2>
+      <p>A caller on your Somo voice line requested live assistance.</p>
+      ${SomoEmail.infoRows([
+        { label: 'Reason', value: reason || 'handoff' },
+        { label: 'Session', value: session_id || 'n/a' }
+      ])}
+      <p>Check your provider dashboard for active escalations.</p>
+    `, { preheader: 'Caller handoff requested' });
+    return await this.sendEmail({ to, subject: `${clinic_name || 'Practice'} — caller handoff requested`, html });
+  }
+
+  static async sendProviderInvite({ to, practiceName, inviteUrl } = {}) {
+    if (!to || !inviteUrl) return { skipped: true };
+    const html = this._somoLayout(
+      'Set up Kelly',
+      practiceName || 'Your practice',
+      `
+      <h2>You're invited to Somo</h2>
+      <p>Set up Kelly, your AI front desk, for <strong>${SomoEmail.escapeHtml(practiceName || 'your practice')}</strong>.</p>
+      <p><a href="${SomoEmail.escapeHtml(inviteUrl)}" style="display:inline-block;padding:12px 20px;background:#16a637;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Set up Kelly</a></p>
+      <p style="font-size:13px;color:#64748b">This invite link expires in 14 days.</p>
+    `,
+      { preheader: 'Set up your AI front desk' }
+    );
+    return await this.sendEmail({
+      to,
+      subject: `${practiceName || 'Your practice'} — Set up Kelly on Somo`,
+      html
     });
   }
 
@@ -571,7 +653,7 @@ class EmailService {
    * @param {string} paymentRef - Payment intent ID or transfer ID
    * @param {Object} appointment - Optional { date, time, appointment_type }
    */
-  static async sendPaymentReceipt(checkout, amount, paymentRef, appointment) {
+  static async sendPaymentReceipt(checkout, amount, paymentRef, appointment, branding = {}) {
     const escapeHtml = (value) =>
       String(value == null ? '' : value)
         .replace(/&/g, '&amp;')
@@ -587,6 +669,28 @@ class EmailService {
     const txRef = escapeHtml(paymentRef || 'N/A');
     const email = escapeHtml(checkout.customer_email || '');
     const baseUrl = String(process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+
+    let clinicName = branding.clinicName || branding.clinic_name || null;
+    let clinicLogoUrl = branding.clinicLogoUrl || branding.clinic_logo_url || null;
+    if ((!clinicName || !clinicLogoUrl) && checkout.merchant_id) {
+      try {
+        const db = require('../database');
+        const merchant = db.getMerchant ? db.getMerchant(checkout.merchant_id) : null;
+        if (merchant) {
+          clinicName = clinicName || merchant.name || merchant.company_name || null;
+          const rawLogo = String(merchant.logo_url || merchant.image_url || '').trim();
+          if (!clinicLogoUrl && rawLogo) {
+            clinicLogoUrl = /^https?:\/\//i.test(rawLogo)
+              ? rawLogo
+              : `${baseUrl}${rawLogo.startsWith('/') ? '' : '/'}${rawLogo}`;
+          }
+        }
+      } catch (_) {}
+    }
+    const brandLabel = escapeHtml(clinicName || 'Somo');
+    const brandLogoBlock = clinicLogoUrl
+      ? `<img src="${escapeHtml(clinicLogoUrl)}" alt="${brandLabel}" style="max-height:40px;margin-bottom:8px;" />`
+      : '';
 
     let productImageUrl = '';
     try {
@@ -718,7 +822,8 @@ class EmailService {
         <div class="wrapper">
         <div class="container">
           <div class="header">
-            <h1 class="brand">Somo</h1>
+            ${brandLogoBlock}
+            <h1 class="brand">${brandLabel}</h1>
             <p class="header-subtitle">Payment receipt</p>
           </div>
           <div class="content">

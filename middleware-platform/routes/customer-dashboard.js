@@ -29,6 +29,21 @@ function getCustomerFromSession(req) {
 }
 
 /**
+ * Build a voice_call_log WHERE clause that matches this customer's calls by customer_id
+ * OR by any clinic mapped to the customer (so legacy rows logged with customer_id=NULL
+ * but a valid clinic_id still surface on the tenant dashboard).
+ * Returns { clause, params } where params must be appended in order.
+ */
+function voiceCallScopeClause(customerId) {
+    return {
+        clause:
+            '(customer_id = ? OR (clinic_id IS NOT NULL AND clinic_id IN ' +
+            '(SELECT clinic_id FROM customer_clinics WHERE customer_id = ?)))',
+        params: [customerId, customerId]
+    };
+}
+
+/**
  * GET /api/customer/dashboard/stats
  * Get dashboard stats scoped to this customer
  */
@@ -42,12 +57,13 @@ router.get('/stats', authLimiter, async (req, res) => {
             });
         }
 
-        // Get voice calls for this customer
+        // Get voice calls for this customer (by customer_id or mapped clinic_id)
+        const scope = voiceCallScopeClause(customer.id);
         const calls = db.db.prepare(`
             SELECT * FROM voice_call_log 
-            WHERE customer_id = ? 
+            WHERE ${scope.clause}
             ORDER BY created_at DESC
-        `).all(customer.id);
+        `).all(...scope.params);
 
         const totalCalls = calls.length;
         const today = new Date().toISOString().split('T')[0];
@@ -97,7 +113,22 @@ router.get('/stats', authLimiter, async (req, res) => {
                 today: {
                     calls: callsToday,
                     revenue: todayRevenue,
-                    orders: checkouts.filter(c => c.created_at && c.created_at.startsWith(today) && c.status === 'completed').length
+                    orders: checkouts.filter(c => c.created_at && c.created_at.startsWith(today) && c.status === 'completed').length,
+                    staff_minutes_saved: Math.round(
+                        calls.filter(c => c.created_at && c.created_at.startsWith(today))
+                            .reduce((sum, c) => sum + (c.call_duration_seconds || 0), 0) / 60
+                    )
+                },
+                roi: {
+                    calls_handled_today: callsToday,
+                    staff_minutes_saved_today: Math.round(
+                        calls.filter(c => c.created_at && c.created_at.startsWith(today))
+                            .reduce((sum, c) => sum + (c.call_duration_seconds || 0), 0) / 60
+                    ),
+                    appts_booked_today: appointments.filter(a => {
+                        const created = a.created_at || '';
+                        return created.startsWith(today) && a.status !== 'cancelled';
+                    }).length
                 },
                 priority: {
                     cases: upcomingAppointments.filter(a => a.status === 'scheduled').length
@@ -264,8 +295,9 @@ router.get('/calls', authLimiter, async (req, res) => {
 
         const { limit = 50, status } = req.query;
 
-        let query = 'SELECT * FROM voice_call_log WHERE customer_id = ?';
-        const params = [customer.id];
+        const scope = voiceCallScopeClause(customer.id);
+        let query = `SELECT * FROM voice_call_log WHERE ${scope.clause}`;
+        const params = [...scope.params];
 
         if (status) {
             query += ' AND status = ?';
@@ -280,11 +312,13 @@ router.get('/calls', authLimiter, async (req, res) => {
         }
 
         const calls = db.db.prepare(query).all(...params);
+        const { enrichCallRow } = require('../services/dashboard-call-enrichment');
+        const enriched = calls.map((c) => enrichCallRow(db, c));
 
         res.json({
             success: true,
-            calls,
-            count: calls.length
+            calls: enriched,
+            count: enriched.length
         });
     } catch (error) {
         console.error('❌ Get calls error:', error);
@@ -310,12 +344,13 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
             });
         }
 
-        // Get calls for this customer
+        // Get calls for this customer (by customer_id or mapped clinic_id)
+        const scope = voiceCallScopeClause(customer.id);
         const calls = db.db.prepare(`
             SELECT * FROM voice_call_log 
-            WHERE customer_id = ? 
+            WHERE ${scope.clause}
             ORDER BY created_at DESC
-        `).all(customer.id);
+        `).all(...scope.params);
 
         const today = new Date().toISOString().split('T')[0];
         const callsToday = calls.filter(c => c.created_at && c.created_at.startsWith(today));
@@ -358,9 +393,23 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
         const hasOutcomeCol = db.db.prepare('PRAGMA table_info(voice_call_log)').all()
             .some((c) => c.name === 'outcome');
 
+        const Metrics = require('../services/metrics');
+        const metricCounters = Metrics.getAll().counters || {};
+        const assistantLatencySamples = metricCounters['voice.speech.assistant_latency_samples'] || 0;
+        const assistantLatencyTotal = metricCounters['voice.speech.assistant_latency_ms_total'] || 0;
+        const avgAssistantLatencyMs = assistantLatencySamples
+            ? Math.round(assistantLatencyTotal / assistantLatencySamples)
+            : null;
+        const VOICE_LATENCY_SLO_MS = parseInt(process.env.VOICE_LATENCY_SLO_MS || '2500', 10);
+        const staffMinutesSaved = Math.round(
+            callsToday.reduce((sum, c) => sum + (c.call_duration_seconds || 0), 0) / 60
+        );
+
         const VoiceAgentRuntime = require('../services/voice-agent-runtime');
+        const { enrichCallRow, formatCopayDisplay } = require('../services/dashboard-call-enrichment');
 
         const recentCalls = calls.slice(0, 10).map(call => {
+            const enriched = enrichCallRow(db, call);
             let outcome = hasOutcomeCol ? call.outcome : null;
             if (!outcome) {
                 if (call.status === 'completed') outcome = 'info';
@@ -395,18 +444,23 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
                 } catch (_) {}
             }
             return {
-                id: call.id,
-                call_id: call.call_id,
-                status: call.status,
-                outcome,
+                id: enriched.id,
+                call_id: enriched.call_id,
+                status: enriched.status,
+                outcome: enriched.disposition || outcome,
+                disposition: enriched.disposition || outcome,
+                eligibility_status: enriched.eligibility_status,
+                copay_quote: enriched.copay_quote,
+                copay_quote_display: formatCopayDisplay(enriched.copay_quote),
+                copay_spoken: enriched.copay_spoken,
                 direction,
                 opener_used: openerUsed,
                 opener_match: openerMatch,
-                duration: call.call_duration_seconds,
-                duration_seconds: call.call_duration_seconds,
-                cost: call.total_cost_usd || 0,
-                created_at: call.created_at,
-                caller_label: VoiceAgentRuntime.formatCallerLabelFromCallRow(call)
+                duration: enriched.call_duration_seconds,
+                duration_seconds: enriched.call_duration_seconds,
+                cost: enriched.total_cost_usd || 0,
+                created_at: enriched.created_at,
+                caller_label: VoiceAgentRuntime.formatCallerLabelFromCallRow(enriched)
             };
         });
 
@@ -418,7 +472,12 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
                 avg_duration_seconds_today: avgDurationSecondsToday,
                 appts_booked_today: apptsBookedToday,
                 total_cost: calls.reduce((sum, c) => sum + (c.total_cost_usd || 0), 0),
-                cost_today: callsToday.reduce((sum, c) => sum + (c.total_cost_usd || 0), 0)
+                cost_today: callsToday.reduce((sum, c) => sum + (c.total_cost_usd || 0), 0),
+                staff_minutes_saved_today: staffMinutesSaved,
+                avg_assistant_latency_ms: avgAssistantLatencyMs,
+                voice_latency_slo_ms: VOICE_LATENCY_SLO_MS,
+                voice_latency_slo_met:
+                    avgAssistantLatencyMs == null ? null : avgAssistantLatencyMs <= VOICE_LATENCY_SLO_MS
             },
             recent_calls: recentCalls
         });

@@ -46,6 +46,7 @@ function recordAssistantLatency(opts = {}) {
   const latencyMs = Number(opts.latencyMs);
   if (!callId || !Number.isFinite(latencyMs)) return;
   Metrics.increment('voice.speech.assistant_latency_ms_total', Math.round(latencyMs));
+  Metrics.increment('voice.speech.assistant_latency_samples', 1);
   Metrics.increment(`voice.speech.call.${callId}.assistant_latency_ms_total`, Math.round(latencyMs));
 }
 

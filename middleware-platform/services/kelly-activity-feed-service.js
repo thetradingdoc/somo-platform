@@ -1,13 +1,17 @@
 'use strict';
 
 const db = require('../database');
+const { lookupSessionEnrichment } = require('./dashboard-call-enrichment');
 
 const PRIORITY_EVENT_TYPES = new Set([
   'appointment_booked',
   'appointment_cancelled',
   'appointment_rescheduled',
   'payment_link_sent',
-  'tool_completed'
+  'tool_completed',
+  'fail_closed_escalation',
+  'handoff_exhausted',
+  'handoff_recovery'
 ]);
 
 const TOOL_COMPLETED_HEADLINES = {
@@ -30,7 +34,18 @@ function resolvePatientName(patientId) {
   if (!patientId) return null;
   try {
     const fhir = db.getFHIRPatient?.(patientId);
-    if (fhir?.name) return fhir.name;
+    if (!fhir) return null;
+    if (typeof fhir.name === 'string' && fhir.name.trim()) return fhir.name.trim();
+    const rd = fhir.resource_data
+      ? (typeof fhir.resource_data === 'string' ? JSON.parse(fhir.resource_data) : fhir.resource_data)
+      : null;
+    const n = rd?.name?.[0];
+    if (n) {
+      const given = Array.isArray(n.given) ? n.given.join(' ') : (n.given || '');
+      const full = `${given} ${n.family || ''}`.trim();
+      if (full) return full;
+      if (n.text) return n.text;
+    }
   } catch (_) {}
   return null;
 }
@@ -99,6 +114,17 @@ function formatToolCompletedRow(base, payload, patientName) {
   return null;
 }
 
+function attachEnrichment(formatted) {
+  if (!formatted?.session_id) return formatted;
+  const extra = lookupSessionEnrichment(db, formatted.session_id);
+  return {
+    ...formatted,
+    disposition: extra.disposition || formatted.disposition || null,
+    eligibility_status: extra.eligibility_status || null,
+    copay_quote: extra.copay_quote ?? null
+  };
+}
+
 function formatActivityRow(row) {
   const payload = parsePayload(row);
   const patientId = payload.patient_id || null;
@@ -156,6 +182,19 @@ function formatActivityRow(row) {
         href: sessionId ? callDetailHref(sessionId) : 'revenue.html?tab=payments'
       };
     }
+    case 'first_contact':
+    case 'call_opener_used': {
+      const channel = String(payload.channel || (row.event_type === 'call_opener_used' ? 'voice' : 'chat')).toLowerCase();
+      const isChat = channel === 'chat';
+      const who = payload.patient_name && payload.patient_name !== 'Patient' ? payload.patient_name : null;
+      return {
+        ...base,
+        icon: isChat ? 'message' : 'phone',
+        headline: who ? `Kelly greeted ${who}` : `Kelly answered a new ${isChat ? 'chat' : 'call'}`,
+        subline: isChat ? 'First contact · chat' : 'First contact · voice',
+        href: callDetailHref(sessionId)
+      };
+    }
     case 'language_detected': {
       const lang = payload.language || 'unknown';
       return {
@@ -183,6 +222,17 @@ function formatActivityRow(row) {
         headline: 'Kelly blocked an unsafe action',
         subline: payload.runtime || 'Runtime guard',
         href: callDetailHref(sessionId)
+      };
+    case 'fail_closed_escalation':
+    case 'handoff_exhausted':
+    case 'handoff_recovery':
+      return {
+        ...base,
+        icon: 'phone',
+        headline: 'Kelly is transferring a call to your line',
+        subline: payload.reason || row.event_type.replace(/_/g, ' '),
+        href: callDetailHref(sessionId),
+        alert_type: 'risk'
       };
     case 'turn_resolved':
       return null;
@@ -215,7 +265,7 @@ function listActivityForClinic(clinicId, { limit = 20, since = null } = {}) {
   const items = [];
   for (const row of sorted) {
     const formatted = formatActivityRow(row);
-    if (formatted) items.push(formatted);
+    if (formatted) items.push(attachEnrichment(formatted));
     if (items.length >= cap) break;
   }
   return items;

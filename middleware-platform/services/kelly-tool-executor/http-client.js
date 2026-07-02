@@ -48,10 +48,10 @@ function ensureSlotBundles(result, date, practitionerId = null) {
 }
 
 async function postDirect(path, body = {}) {
-  const BookingService = require('../booking-service');
+  const PmsBooking = require('../pms/pms-booking');
   const p = String(path || '');
   if (p.includes('available-slots')) {
-    const resultRaw = await BookingService.getAvailableSlots(
+    const resultRaw = await PmsBooking.getAvailableSlots(
       body.date,
       body.provider || null,
       body.appointment_type,
@@ -62,7 +62,7 @@ async function postDirect(path, body = {}) {
     return ensureSlotBundles(resultRaw, body.date, body.practitioner_id || null);
   }
   if (p.includes('/schedule')) {
-    return BookingService.scheduleAppointment({
+    return PmsBooking.scheduleAppointment({
       patient_name: body.patient_name,
       patient_phone: body.patient_phone,
       patient_email: body.patient_email,
@@ -77,7 +77,8 @@ async function postDirect(path, body = {}) {
       timezone: body.timezone || 'America/New_York',
       clinic_id: body.clinic_id,
       primary_icd10: body.primary_icd10 || null,
-      primary_cpt: body.primary_cpt || null
+      primary_cpt: body.primary_cpt || null,
+      idempotency_key: body.session_id ? `book:${body.session_id}:${body.date}:${body.time}` : null
     });
   }
   if (p.includes('/appointments/search') || p.includes('search')) {
@@ -100,13 +101,13 @@ async function postDirect(path, body = {}) {
     if (!searchTerm) {
       return { success: false, error: 'search_term required' };
     }
-    return BookingService.searchAppointments(searchTerm, body.clinic_id || null);
+    return PmsBooking.searchAppointments(searchTerm, body.clinic_id || null);
   }
   if (p.includes('/cancel')) {
-    return BookingService.cancelAppointment(body.appointment_id, body.reason || null, body.clinic_id || null);
+    return PmsBooking.cancelAppointment(body.appointment_id, body.reason || null, body.clinic_id || null);
   }
   if (p.includes('/reschedule')) {
-    return BookingService.rescheduleAppointment(
+    return PmsBooking.rescheduleAppointment(
       body.appointment_id,
       body.new_date,
       body.new_time,

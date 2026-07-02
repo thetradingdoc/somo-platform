@@ -10,6 +10,7 @@
     "brand:sync": "node scripts/generate-brand-favicons.cjs && node scripts/sync-brand-assets.cjs",
     "check:legacy-hosts": "node scripts/check-legacy-hosts.cjs",
     "check:docs-stale-strings": "node scripts/check-docs-stale-strings.cjs",
+    "verify:doc-hygiene": "node scripts/verify-doc-links.cjs",
     "dev:one-place": "node scripts/dev-one-place.cjs",
     "perf:lighthouse": "node perf/run-lighthouse.mjs",
     "perf:budgets": "node scripts/check-performance-budgets.cjs",
@@ -84,7 +85,17 @@
     "commerce-pstn-replay": "npm run commerce-pstn-replay --prefix middleware-platform",
     "test:commerce-pstn-replay": "npm run test:commerce-pstn-replay --prefix middleware-platform",
     "test:commerce-pstn-replay:full": "npm run test:commerce-pstn-replay:full --prefix middleware-platform",
-    "test:commerce-pstn-replay:dry": "npm run test:commerce-pstn-replay:dry --prefix middleware-platform"
+    "test:commerce-pstn-replay:dry": "npm run test:commerce-pstn-replay:dry --prefix middleware-platform",
+    "verify:stripe-keys": "npm run verify:stripe-keys --prefix middleware-platform",
+    "verify:stripe-keys:live": "npm run verify:stripe-keys:live --prefix middleware-platform",
+    "verify:stripe-keys:both": "npm run verify:stripe-keys:both --prefix middleware-platform",
+    "billing:setup-stripe-prices": "npm run billing:setup-stripe-prices --prefix middleware-platform --",
+    "billing:setup-stripe-live-prices": "npm run billing:setup-stripe-live-prices --prefix middleware-platform --",
+    "billing:setup-stripe-webhook": "npm run billing:setup-stripe-webhook --prefix middleware-platform --",
+    "billing:setup-stripe-live-webhook": "npm run billing:setup-stripe-webhook --prefix middleware-platform -- --live",
+    "stripe:rotate-staging": "./scripts/rotate-stripe-staging.sh",
+    "stripe:rotate-production": "./scripts/rotate-stripe-production.sh",
+    "stripe:live-prewire": "./scripts/stripe-live-prewire.sh"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",

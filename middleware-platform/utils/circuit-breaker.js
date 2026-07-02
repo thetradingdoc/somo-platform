@@ -96,5 +96,6 @@ module.exports = {
   ONE_UP_HEALTH: '1uphealth',
   GROQ: 'groq',
   FHIR: 'fhir',
-  EPIC: 'epic'
+  EPIC: 'epic',
+  PMS_HUB: 'PMS_HUB'
 };

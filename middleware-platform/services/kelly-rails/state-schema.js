@@ -319,6 +319,20 @@ function routeOrchestratorLane(state = {}) {
 
   const clinicalHit = CLINICAL_SIGNALS.some((s) => msg.includes(s));
   const educationHit = EDUCATION_SIGNALS.some((s) => msg.includes(s));
+  const triageDisabled = flags.triage_policy === 'disabled' || flags.front_desk_mode;
+
+  if (triageDisabled && clinicalHit && !flags.basic_intake_complete) {
+    return { lane: KELLY_LANE.BASIC_INTAKE, step: LANE_FIRST_STEP[KELLY_LANE.BASIC_INTAKE] };
+  }
+  if (triageDisabled && clinicalHit && flags.basic_intake_complete) {
+    if (isAdminBookingPhrase(msg) || /book|schedule|appointment|cita|预约|запис/i.test(msg)) {
+      return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
+    }
+    return { lane: KELLY_LANE.BASIC_INTAKE, step: 'reason' };
+  }
+  if (triageDisabled && !clinicalHit && /book|schedule|appointment|new patient|reschedule/i.test(msg)) {
+    return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
+  }
 
   if (flags.routine_intake_active && educationHit && !clinicalHit) {
     return { lane: KELLY_LANE.EDUCATION, step: LANE_FIRST_STEP[KELLY_LANE.EDUCATION] };
@@ -329,6 +343,9 @@ function routeOrchestratorLane(state = {}) {
   }
 
   if (clinicalHit && !flags.routine_intake_active) {
+    if (triageDisabled) {
+      return { lane: KELLY_LANE.BASIC_INTAKE, step: flags.basic_intake_complete ? 'reason' : LANE_FIRST_STEP[KELLY_LANE.BASIC_INTAKE] };
+    }
     if (!flags.basic_intake_complete) {
       return finalizeRoute({ lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] });
     }
@@ -368,6 +385,9 @@ function routeOrchestratorLane(state = {}) {
   }
 
   if (clinicalHit) {
+    if (triageDisabled) {
+      return { lane: KELLY_LANE.BASIC_INTAKE, step: flags.basic_intake_complete ? 'reason' : LANE_FIRST_STEP[KELLY_LANE.BASIC_INTAKE] };
+    }
     return finalizeRoute({ lane: KELLY_LANE.CLINICAL, step: LANE_FIRST_STEP[KELLY_LANE.CLINICAL] });
   }
 

@@ -8,8 +8,25 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const { getOrCreate, STEDI } = require('../utils/circuit-breaker');
+const secureLogger = require('./secure-logger');
+const { redactForLog } = require('./log-redaction');
 
 const stediBreaker = getOrCreate(STEDI, { failureThreshold: 5, windowMs: 60000, resetTimeMs: 30000 });
+
+function classifyEligibilityQuality(response = {}) {
+  if (!response || response.eligible === false) return 'inactive';
+  const copay = response.copay;
+  const hasCopay = copay !== null && copay !== undefined && !Number.isNaN(Number(copay));
+  const hasBenefitDepth =
+    hasCopay ||
+    response.allowedAmount > 0 ||
+    response.deductibleRemaining != null ||
+    (response.planSummary && typeof response.planSummary === 'object' && Object.keys(response.planSummary).length > 0);
+  if (hasCopay && response.eligible) return 'hard_copay';
+  if (response.eligible && !hasBenefitDepth) return 'thin';
+  if (response.eligible) return 'hard_copay';
+  return 'thin';
+}
 
 class InsuranceService {
   // Stedi API Configuration (translate fallback on core; eligibility/claims on healthcare)
@@ -294,13 +311,46 @@ class InsuranceService {
    */
   static async checkEligibility(eligibilityData) {
     try {
-      console.log('\n🏥 INSURANCE: Checking Eligibility');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Patient:', eligibilityData.patientName);
-      console.log('Member ID:', eligibilityData.memberId);
-      console.log('Payer ID:', eligibilityData.payerId);
-      console.log('Service Code:', eligibilityData.serviceCode);
-      console.log('Date of Service:', eligibilityData.dateOfService);
+      const { isStediCircuitOpen, recordStediFailure, recordStediSuccess } = require('./stedi-circuit-breaker');
+      const { mergeByoCredentialing } = require('./byo-credentialing');
+      eligibilityData = mergeByoCredentialing(eligibilityData);
+
+      const customerId = eligibilityData.customerId || null;
+      if (customerId) {
+        const customer = db.getCustomer?.(customerId);
+        const enforcementPaused =
+          process.env.BILLING_ENFORCEMENT_PAUSED === '1' || customer?.billing_enforcement_paused === 1;
+        if (!enforcementPaused) {
+          const { checkDailyCap } = require('./eligibility-usage-service');
+          const cap = checkDailyCap(customerId);
+          if (!cap.allowed) {
+            return {
+              success: false,
+              eligible: false,
+              error: cap.message,
+              code: cap.code
+            };
+          }
+        }
+      }
+
+      if (isStediCircuitOpen()) {
+        return {
+          success: false,
+          eligible: false,
+          error: 'Eligibility temporarily unavailable. Please try again shortly.',
+          code: 'STEDI_CIRCUIT_OPEN'
+        };
+      }
+
+      secureLogger.info('INSURANCE: Checking Eligibility', redactForLog({
+        payerId: eligibilityData.payerId,
+        serviceCode: eligibilityData.serviceCode,
+        dateOfService: eligibilityData.dateOfService,
+        patientName: eligibilityData.patientName,
+        memberId: eligibilityData.memberId,
+        dateOfBirth: eligibilityData.dateOfBirth
+      }));
 
       const willUseV3 = this.canCallStediHealthcare();
 
@@ -334,18 +384,21 @@ class InsuranceService {
               eligibilityResponse.aaa_codes = aaa.codes;
               eligibilityResponse.aaa_messages = aaa.messages;
             }
-            console.log('✅ Stedi Healthcare eligibility v3 response');
-            console.log('   Eligible:', eligibilityResponse.eligible, 'Copay:', eligibilityResponse.copay);
-            if (v3.data.eligibilitySearchId) {
-              console.log('   Search ID:', v3.data.eligibilitySearchId);
-            }
+            secureLogger.info('Stedi Healthcare eligibility v3 response', {
+              eligible: eligibilityResponse.eligible,
+              copay: eligibilityResponse.copay,
+              searchId: v3.data.eligibilitySearchId || null
+            });
           }
         } catch (apiError) {
-          console.warn('⚠️  Stedi Healthcare eligibility v3 failed:', apiError.message);
+          secureLogger.warn('Stedi Healthcare eligibility v3 failed', { message: apiError.message });
+          try { recordStediFailure(); } catch (_) {}
           if (apiError.response) {
-            console.warn('   Status:', apiError.response.status);
             const msg = apiError.response.data?.message || apiError.response.data?.error;
-            if (msg) console.warn('   Detail:', String(msg).slice(0, 200));
+            secureLogger.warn('Stedi v3 HTTP detail', {
+              status: apiError.response.status,
+              detail: msg ? String(msg).slice(0, 200) : null
+            });
           }
         }
       }
@@ -358,19 +411,19 @@ class InsuranceService {
             () => stediClient.post('/x12/translate/270-to-edi', { json: x12Request }),
             () => { throw new Error('Circuit open - using simulation'); }
           );
-          console.log('✅ Stedi translate API response received');
+          secureLogger.info('Stedi translate API response received');
           const parsed = stedi271Parser.parse271Response(translateResponse.data || translateResponse);
           if (stedi271Parser.hasMeaningfulData(parsed)) {
             eligibilityResponse = this._eligibilityFromParsed271(parsed);
           }
         } catch (apiError) {
-          console.warn('⚠️  Stedi translate eligibility failed, using simulation:', apiError.message);
+          secureLogger.warn('Stedi translate eligibility failed, using simulation', { message: apiError.message });
           try {
             const Metrics = require('./metrics');
             Metrics.increment('stedi_eligibility_error_rate');
           } catch (_) {}
           if (apiError.response) {
-            console.warn('   Status:', apiError.response.status);
+            secureLogger.warn('Stedi translate HTTP detail', { status: apiError.response.status });
           }
         }
       }
@@ -379,10 +432,17 @@ class InsuranceService {
       if (usedHealthcareV3 && eligibilityResponse) {
         stediFailed = false;
       } else if (stediFailed) {
-        eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
+        const voiceSimulate =
+          process.env.VOICE_ELIGIBILITY_SIMULATE === '1' ||
+          (process.env.NODE_ENV !== 'production' && process.env.VOICE_ELIGIBILITY_SIMULATE !== '0');
+        if (voiceSimulate) {
+          eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
+        } else {
+          throw new Error('Stedi eligibility unavailable and simulation disabled for voice');
+        }
       }
 
-      // Attempt to parse 271-style benefit details if present on response
+      const eligibilityQuality = classifyEligibilityQuality(eligibilityResponse);
       const planSummary = eligibilityResponse.planSummary || null;
       const deductibleTotal = eligibilityResponse.deductibleTotal ?? null;
       const deductibleRemaining = eligibilityResponse.deductibleRemaining ?? null;
@@ -414,19 +474,38 @@ class InsuranceService {
         prior_auth_indicator: priorAuthIndicator,
         prior_auth_notes: priorAuthNotes.length ? JSON.stringify(priorAuthNotes) : null,
         prior_auth_source: priorAuthIndicator ? '271' : null,
+        eligibility_quality: eligibilityQuality,
         response_data: JSON.stringify(eligibilityResponse),
         created_at: new Date().toISOString()
       };
 
       db.createEligibilityCheck(eligibilityRecord);
 
-      console.log('✅ Eligibility check completed');
-      console.log('   Eligible:', eligibilityResponse.eligible);
-      if (eligibilityResponse.eligible) {
-        console.log('   Copay: $' + eligibilityResponse.copay);
-        console.log('   Insurance Pays: $' + eligibilityResponse.insurancePays);
-      }
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      try {
+        if (customerId) {
+          const { applyEligibilityUsage } = require('./apply-eligibility-usage');
+          const eventId =
+            eligibilityData.sessionId || eligibilityData.callId
+              ? `elig:${eligibilityData.callId || eligibilityData.sessionId}:${eligibilityData.payerId}:${eligibilityData.memberId || 'x'}`
+              : eligibilityRecord.id;
+          applyEligibilityUsage(db, {
+            customerId,
+            eventId,
+            payerId: eligibilityData.payerId,
+            quality: eligibilityQuality,
+            source: stediFailed ? 'simulation' : 'stedi'
+          });
+        }
+        try { recordStediSuccess(); } catch (_) {}
+      } catch (_) {}
+
+      secureLogger.info('Eligibility check completed', {
+        eligible: eligibilityResponse.eligible,
+        copay: eligibilityResponse.eligible ? eligibilityResponse.copay : null,
+        insurancePays: eligibilityResponse.eligible ? eligibilityResponse.insurancePays : null,
+        quality: eligibilityQuality,
+        source: stediFailed ? 'simulation' : 'stedi'
+      });
 
       const result = {
         success: true,
@@ -444,6 +523,7 @@ class InsuranceService {
         priorAuthNotes: priorAuthNotes,
         patientResponsibility: eligibilityResponse.copay || 0,
         eligibilityId: eligibilityRecord.id,
+        eligibility_quality: eligibilityQuality,
         message: eligibilityResponse.eligible
           ? `Eligible - Copay: $${eligibilityResponse.copay}, Insurance pays: $${eligibilityResponse.insurancePays}`
           : 'Not eligible for this service'
@@ -456,7 +536,7 @@ class InsuranceService {
       return result;
 
     } catch (error) {
-      console.error('❌ Error checking eligibility:', error.message);
+      secureLogger.error('Error checking eligibility', { message: error.message });
       return {
         success: false,
         eligible: false,
@@ -1591,4 +1671,5 @@ if (
 }
 
 module.exports = InsuranceService;
+module.exports.classifyEligibilityQuality = classifyEligibilityQuality;
 

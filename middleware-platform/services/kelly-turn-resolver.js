@@ -6,6 +6,7 @@ const { runKellyConversationTurn } = require('./kelly-conversation-bridge');
 const { handleTurn } = require('./kelly-rails/orchestrator');
 const db = require('../database');
 const { evaluateFirstTurnLanguage } = require('./kelly-rails/language');
+const { isLanguageSupported, getTenantVoiceLanguageConfig } = require('./tenant-language-config');
 const { emitLanguageMismatch } = require('./kelly-language-telemetry');
 const {
   isProductionKellyEnforced,
@@ -82,6 +83,23 @@ async function runKellyTurn(opts = {}) {
         clinic_id: clinicId || null,
         patient_id: opts.patientId || null,
       });
+      // First-contact marker for chat so it surfaces in the provider activity feed,
+      // mirroring the voice `call_opener_used` event. (Voice logs its own opener.)
+      if (channel === 'chat' && !prior.some((e) => e.event_type === 'first_contact')) {
+        emitKellyCallEvent({
+          session_id: sessionId,
+          call_id: opts.callId || null,
+          event_type: 'first_contact',
+          payload_json: {
+            channel,
+            clinic_id: clinicId || null,
+            patient_id: opts.patientId || null,
+            patient_name: opts.patientName || null,
+            source: 'chat'
+          },
+          clinic_id: clinicId || null
+        });
+      }
     }
     emitKellyCallEvent({
       session_id: sessionId || null,
@@ -104,7 +122,18 @@ async function runKellyTurn(opts = {}) {
         db.upsertKellySessionLanguage(sessionId, explicitLocale);
         opts.preferredLanguage = explicitLocale;
       } else if (message) {
+        const tenantLang = getTenantVoiceLanguageConfig(db, {
+          clinicId,
+          customerId: opts.customerId || null
+        });
         const detected = evaluateFirstTurnLanguage(message);
+        if (
+          detected.language &&
+          detected.language !== 'en' &&
+          !isLanguageSupported(detected.language, tenantLang.supported_languages)
+        ) {
+          detected.forceLanguageHandoff = true;
+        }
         db.upsertKellySessionLanguage(sessionId, detected.language);
         opts.preferredLanguage = detected.language;
         opts.languageConfidence = detected.confidence;
@@ -255,6 +284,22 @@ async function runKellyTurn(opts = {}) {
 
       if (scriptOnly && convResult.dispatch?.reply) {
         const latencyMs = Math.max(0, Date.now() - turnReceivedAt);
+        const dispatchTools = convResult.dispatch?.toolsUsed || [];
+        const toolContext = {
+          sessionId,
+          clinicId,
+          patientId: opts.patientId || null,
+          callerPhone: opts.callerPhone || null,
+          channel
+        };
+        for (const tool of dispatchTools) {
+          if (!tool?.name) continue;
+          try {
+            await KellyToolExecutor.execute(tool.name, tool.args || {}, toolContext);
+          } catch (toolErr) {
+            console.warn(`[kelly-turn] scriptOnly tool ${tool.name} failed:`, toolErr.message);
+          }
+        }
         const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);
         const out = {
           reply: convResult.dispatch.reply,

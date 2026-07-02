@@ -1,7 +1,7 @@
 # development - Unified Architecture and System Design
-> Last reviewed: 2026-05-21
+> Last reviewed: 2026-07-02
 
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-07-02
 
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
@@ -473,7 +473,7 @@ somo/
 
 ## New code guidelines
 
-- Prefer adding **Express routes** under `middleware-platform/routes/` and **mounting** them from `server.js` instead of growing inline handlers in `server.js` (~11k lines compose entry; see [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md)).
+- Prefer adding **Express routes** under `middleware-platform/routes/` and **mounting** them from `server.js` instead of growing inline handlers in `server.js` (~11k lines compose entry; see [`LIVE.md § server decomposition`](../architecture/LIVE.md#server-decomposition)).
 - **Jest** uses `middleware-platform/__tests__/` (see `jest.config.js`). The npm script runs `jest --passWithNoTests` until more tests land.
 - **Integration / manual scripts** may still live as `middleware-platform/test-*.js` or under `scripts/`; migrating those into `__tests__/` is incremental cleanup.
 - **Module boundaries (soft rule):** `routes/` → `services/` → `adapters/` / `database`; avoid `services/` importing Express `req`/`res`. Keeps units testable without booting HTTP.
@@ -2465,7 +2465,7 @@ Use this checklist to keep **documentation** and **CI expectations** aligned as 
 
 
 
-`middleware-platform/server.js` is the Express **compose entry** (~11k lines after phase 6+ extraction). Patient/public Kelly triage, checkout-chat, profile/auth/documents/wallet/insurance, admin dashboard API, and voice scheduling HTTP live in **`routes/`** + **`services/`** — see [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md) and [`RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md).
+`middleware-platform/server.js` is the Express **compose entry** (~11k lines after phase 6+ extraction). Patient/public Kelly triage, checkout-chat, profile/auth/documents/wallet/insurance, admin dashboard API, and voice scheduling HTTP live in **`routes/`** + **`services/`** — see [`LIVE.md § server decomposition`](../architecture/LIVE.md#server-decomposition) and [`LIVE.md § runtime entrypoints`](../architecture/LIVE.md#runtime-entrypoints-and-route-ownership).
 
 ## Rules for new work
 

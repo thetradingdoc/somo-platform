@@ -408,6 +408,7 @@ async function orchestrate(input) {
   }
 
   const BookingService = require('./booking-service');
+  const PmsBooking = require('./pms/pms-booking');
   const assessment = detectRedFlags(message);
   if (assessment?.isEmergency) {
     state.blocked = true;
@@ -1117,7 +1118,7 @@ async function orchestrate(input) {
         const clinicId = clinic_id || session.clinic_id || process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID;
         let slots = [];
         try {
-          const result = await BookingService.getAvailableSlots(state.date, null, state.appointment_type || 'General Consult', state.timezone || 'America/New_York', clinicId, null);
+          const result = await PmsBooking.getAvailableSlots(state.date, null, state.appointment_type || 'General Consult', state.timezone || 'America/New_York', clinicId, null);
           slots = (result?.slots || result?.available_slots || []).slice(0, 6);
         } catch (e) {
           console.warn('[orchestrator] getAvailableSlots failed:', e?.message || e);
@@ -1231,7 +1232,7 @@ async function orchestrate(input) {
     const clinicId = clinic_id || session.clinic_id || process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID;
     let slots = [];
     try {
-      const result = await BookingService.getAvailableSlots(state.date, null, state.appointment_type || 'General Consult', state.timezone || 'America/New_York', clinicId, null);
+      const result = await PmsBooking.getAvailableSlots(state.date, null, state.appointment_type || 'General Consult', state.timezone || 'America/New_York', clinicId, null);
       slots = (result?.slots || result?.available_slots || []).slice(0, 6);
     } catch (e) {
       console.warn('[orchestrator] getAvailableSlots failed:', e?.message || e);
@@ -1387,7 +1388,7 @@ async function orchestrate(input) {
         }
       }
 
-      const booked = await BookingService.scheduleAppointment({
+      const booked = await PmsBooking.scheduleAppointment({
         clinic_id: clinicId,
         patient_name: state.patient_name || 'Patient',
         patient_phone: patientPhone,

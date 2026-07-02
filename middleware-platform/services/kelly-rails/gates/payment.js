@@ -16,7 +16,15 @@ async function runDeterministicPayment(state, ctx) {
 
   let amount = state.flags.copay_amount;
   if (amount == null || !Number.isFinite(Number(amount))) {
-    amount = 25;
+    const metaCopay = KellyToolExecutor._getSessionMeta(sessionId, 'copay_amount');
+    amount = metaCopay != null ? Number(metaCopay) : null;
+  }
+  if (amount == null || !Number.isFinite(Number(amount)) || amount < 0) {
+    return {
+      reply: getDeterministicReply('payment_defer', withStickyLocale(state).locale),
+      toolsUsed: [],
+      endCall: false
+    };
   }
 
   const journeyId = KellyToolExecutor._getSessionMeta(sessionId, 'rcm_journey_id') || null;

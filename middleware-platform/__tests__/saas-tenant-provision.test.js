@@ -54,5 +54,9 @@ describe('provisionSaasTenant', () => {
       .all(result.clinicId);
     expect(pricingRows.length).toBeGreaterThan(0);
     expect(pricingRows.some((r) => r.appointment_type === 'General Consult')).toBe(true);
+
+    const credits = db.getCustomerCredits(customerId);
+    expect(credits).toBeTruthy();
+    expect(credits.credits_balance_minutes).toBeGreaterThan(0);
   });
 });

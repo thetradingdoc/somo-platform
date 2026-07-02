@@ -1338,9 +1338,57 @@ try {
     if (needPaIndicator) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN prior_auth_indicator TEXT;`);
     if (needPaNotes) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN prior_auth_notes TEXT;`);
     if (needPaSource) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN prior_auth_source TEXT;`);
+    const needEligQuality = !info.some(c => c.name === 'eligibility_quality');
+    if (needEligQuality) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN eligibility_quality TEXT;`);
   }
 } catch (migrationError) {
   console.warn('⚠️  Eligibility checks migration failed:', migrationError.message);
+}
+
+try {
+  const mig098 = require('./migrations/098_phase2_dental_copay');
+  if (mig098?.up) mig098.up(db);
+} catch (migrationError) {
+  console.warn('⚠️  Phase 2 dental copay migration failed:', migrationError.message);
+}
+
+try {
+  const mig099 = require('./migrations/099_phase3_pms_connect');
+  if (mig099?.up) mig099.up(db);
+} catch (migrationError) {
+  console.warn('⚠️  Phase 3 PMS connect migration failed:', migrationError.message);
+}
+
+try {
+  const mig100 = require('./migrations/100_phase1_voice_runtime');
+  if (mig100?.up) mig100.up(db);
+  console.log('✅ Migration applied: 100_phase1_voice_runtime');
+} catch (migrationError) {
+  console.warn('⚠️  Phase 1 voice runtime migration failed:', migrationError.message);
+}
+
+try {
+  const mig101 = require('./migrations/101_phase2_billing');
+  if (mig101?.up) mig101.up(db);
+  console.log('✅ Migration applied: 101_phase2_billing');
+} catch (migrationError) {
+  console.warn('⚠️  Phase 2 billing migration failed:', migrationError.message);
+}
+
+try {
+  const mig102 = require('./migrations/102_phase3_data_orchestration');
+  if (mig102?.up) mig102.up(db);
+  console.log('✅ Migration applied: 102_phase3_data_orchestration');
+} catch (migrationError) {
+  console.warn('⚠️  Phase 3 data orchestration migration failed:', migrationError.message);
+}
+
+try {
+  const mig103 = require('./migrations/103_phase4_pilot');
+  if (mig103?.up) mig103.up(db);
+  console.log('✅ Migration applied: 103_phase4_pilot');
+} catch (migrationError) {
+  console.warn('⚠️  Phase 4 pilot migration failed:', migrationError.message);
 }
 
 // Migration: code_acceptance_rates table (Tiba Phase 4 - φ^historical_i)
@@ -4784,6 +4832,33 @@ function migrateVoiceAgentSettingsClinic() {
   }
 }
 
+function migrateVoiceAgentLanguage() {
+  try {
+    require('./migrations/096_voice_agent_language_and_transfer').up(db);
+    console.log('✅ Migration complete: voice_agent_settings language columns (096)');
+  } catch (e) {
+    console.warn('⚠️  voice_agent_settings language migration (096) failed:', e.message);
+  }
+}
+
+function migrateAppointmentsPreferredLanguage() {
+  try {
+    require('./migrations/097_appointments_preferred_language').up(db);
+    console.log('✅ Migration complete: appointments.preferred_language (097)');
+  } catch (e) {
+    console.warn('⚠️  appointments preferred_language migration (097) failed:', e.message);
+  }
+}
+
+function migratePhase5VoiceOverflow() {
+  try {
+    require('./migrations/104_phase5_voice_overflow').up(db);
+    console.log('✅ Migration complete: phase5 voice overflow (104)');
+  } catch (e) {
+    console.warn('⚠️  phase5 voice overflow migration (104) failed:', e.message);
+  }
+}
+
 // ============================================
 // MIGRATION: idempotency_keys table (Section 22 - prevent double-billing)
 // ============================================
@@ -5764,6 +5839,9 @@ runStartupMigrations(
     migrateVoiceCallLogClinicId,
     migrateVoiceAgentUx,
     migrateVoiceAgentSettingsClinic,
+    migrateVoiceAgentLanguage,
+    migrateAppointmentsPreferredLanguage,
+    migratePhase5VoiceOverflow,
     migrateClinicMonthlyLlmCostTable,
     migrateClinicsMonthlyCostCap,
     migrateLongTermMemoryTables,
@@ -9953,7 +10031,13 @@ module.exports = {
       sync_status: settings.sync_status ?? undefined,
       synced_at: settings.synced_at ?? undefined,
       last_sync_error: settings.last_sync_error ?? undefined,
-      tone_preset: settings.tone_preset ?? undefined
+      tone_preset: settings.tone_preset ?? undefined,
+      supported_languages: settings.supported_languages
+        ? typeof settings.supported_languages === 'string'
+          ? settings.supported_languages
+          : JSON.stringify(settings.supported_languages)
+        : undefined,
+      language_mode: settings.language_mode ?? undefined
     };
 
     const optionalCols = [
@@ -9965,7 +10049,9 @@ module.exports = {
       'sync_status',
       'synced_at',
       'last_sync_error',
-      'tone_preset'
+      'tone_preset',
+      'supported_languages',
+      'language_mode'
     ];
 
     const hasIdCol = (() => {
@@ -10611,14 +10697,20 @@ module.exports = {
         .all()
         .some((c) => c.name === 'clinic_id');
       if (hasClinicCol) {
-        const byClinic = db
+        const rows = db
           .prepare(
             `SELECT * FROM fhir_patients
              WHERE phone = ? AND is_deleted = 0 AND clinic_id = ?
-             ORDER BY created_at DESC LIMIT 1`
+             ORDER BY created_at DESC LIMIT 5`
           )
-          .get(phone, clinicId);
-        if (byClinic) return parseRow(byClinic);
+          .all(phone, clinicId);
+        if (opts.returnAll) {
+          return rows.map(parseRow).filter(Boolean);
+        }
+        if (rows.length > 1 && opts.allowAmbiguous) {
+          return rows.map(parseRow).filter(Boolean);
+        }
+        if (rows[0]) return parseRow(rows[0]);
       }
       try {
         const byAppt = db
@@ -12063,9 +12155,10 @@ module.exports = {
       const hasCptModifiers = info.some(c => c.name === 'cpt_modifiers');
       const hasCalendarSource = info.some(c => c.name === 'calendar_source');
       const hasCalendarConfidence = info.some(c => c.name === 'calendar_confidence');
+      const hasPreferredLanguage = info.some(c => c.name === 'preferred_language');
       const baseCols = 'id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id, appointment_type, date, time, start_time, end_time, duration_minutes, provider';
       const baseVals = [appointment.id, appointment.clinic_id || null, appointment.customer_id || null, appointment.patient_name, appointment.patient_phone, appointment.patient_email, appointment.patient_id || null, appointment.appointment_type, appointment.date, appointment.time, appointment.start_time, appointment.end_time, appointment.duration_minutes, appointment.provider];
-      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + (hasVisitMode ? ', visit_mode' : '') + (hasSlotState ? ', slot_state' : '') + (hasPrimaryIcd10 ? ', primary_icd10' : '') + (hasPrimaryCpt ? ', primary_cpt' : '') + (hasPlaceOfService ? ', place_of_service' : '') + (hasCptModifiers ? ', cpt_modifiers' : '') + (hasCalendarSource ? ', calendar_source' : '') + (hasCalendarConfidence ? ', calendar_confidence' : '') + ', created_at';
+      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + (hasVisitMode ? ', visit_mode' : '') + (hasSlotState ? ', slot_state' : '') + (hasPrimaryIcd10 ? ', primary_icd10' : '') + (hasPrimaryCpt ? ', primary_cpt' : '') + (hasPlaceOfService ? ', place_of_service' : '') + (hasCptModifiers ? ', cpt_modifiers' : '') + (hasCalendarSource ? ', calendar_source' : '') + (hasCalendarConfidence ? ', calendar_confidence' : '') + (hasPreferredLanguage ? ', preferred_language' : '') + ', created_at';
       let vals = [...baseVals];
       if (hasPractitioner) vals.push(appointment.practitioner_id || null);
       vals.push(appointment.status, notes, appointment.calendar_event_id, appointment.calendar_link, appointment.video_room_name || null);
@@ -12078,6 +12171,7 @@ module.exports = {
       if (hasCptModifiers) vals.push(appointment.cpt_modifiers || null);
       if (hasCalendarSource) vals.push(appointment.calendar_source || null);
       if (hasCalendarConfidence) vals.push(appointment.calendar_confidence || null);
+      if (hasPreferredLanguage) vals.push(appointment.preferred_language || 'en');
       vals.push(appointment.created_at);
       const placeholders = vals.map(() => '?').join(', ');
       const stmt = db.prepare(`INSERT INTO appointments (${cols}) VALUES (${placeholders})`);
@@ -12658,8 +12752,8 @@ module.exports = {
         insurance_pays, deductible_total, deductible_remaining,
         coinsurance_percent, plan_summary, oop_max, oop_met,
         prior_auth_indicator, prior_auth_notes, prior_auth_source,
-        response_data, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        eligibility_quality, response_data, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       eligibility.id,
@@ -12681,6 +12775,7 @@ module.exports = {
       eligibility.prior_auth_indicator || null,
       eligibility.prior_auth_notes || null,
       eligibility.prior_auth_source || null,
+      eligibility.eligibility_quality || null,
       eligibility.response_data || null,
       eligibility.created_at || new Date().toISOString()
     );
@@ -17143,27 +17238,77 @@ module.exports = {
 
   insertHandoffEscalation(row = {}) {
     const id = row.id || `he_${require('crypto').randomBytes(12).toString('hex')}`;
+    const meta = row.metadata_json ? (typeof row.metadata_json === 'string' ? row.metadata_json : safeStringify(row.metadata_json)) : safeStringify(row.metadata || {});
+    const clinicId = row.clinic_id || null;
+    const customerId = row.customer_id || null;
     try {
-      db.prepare(`
-        INSERT INTO handoff_escalations (
-          id, session_id, call_id, reason, pstn_target,
-          script_played_at, transfer_attempted_at, outcome, metadata_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(
-        id,
-        row.session_id || null,
-        row.call_id || null,
-        row.reason || 'handoff',
-        row.pstn_target || null,
-        row.script_played_at || null,
-        row.transfer_attempted_at || null,
-        row.outcome || null,
-        row.metadata_json ? safeStringify(row.metadata_json) : safeStringify(row.metadata || {})
-      );
+      const cols = db.prepare('PRAGMA table_info(handoff_escalations)').all().map((c) => c.name);
+      const hasClinic = cols.includes('clinic_id');
+      const hasCustomer = cols.includes('customer_id');
+      if (hasClinic && hasCustomer) {
+        db.prepare(`
+          INSERT INTO handoff_escalations (
+            id, session_id, call_id, reason, pstn_target,
+            script_played_at, transfer_attempted_at, outcome, metadata_json, clinic_id, customer_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(
+          id,
+          row.session_id || null,
+          row.call_id || null,
+          row.reason || 'handoff',
+          row.pstn_target || null,
+          row.script_played_at || null,
+          row.transfer_attempted_at || null,
+          row.outcome || 'pending',
+          meta,
+          clinicId,
+          customerId
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO handoff_escalations (
+            id, session_id, call_id, reason, pstn_target,
+            script_played_at, transfer_attempted_at, outcome, metadata_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(
+          id,
+          row.session_id || null,
+          row.call_id || null,
+          row.reason || 'handoff',
+          row.pstn_target || null,
+          row.script_played_at || null,
+          row.transfer_attempted_at || null,
+          row.outcome || 'pending',
+          meta
+        );
+      }
       return id;
     } catch (e) {
       console.warn('[handoff_escalations] insert failed:', e.message);
       return null;
+    }
+  },
+
+  listActiveHandoffEscalationsForClinic(clinicId, { minutes = 15, limit = 10 } = {}) {
+    if (!clinicId) return [];
+    const windowMin = Math.max(1, Number(minutes) || 15);
+    const lim = Math.min(50, Math.max(1, Number(limit) || 10));
+    try {
+      const cols = db.prepare('PRAGMA table_info(handoff_escalations)').all().map((c) => c.name);
+      if (!cols.includes('clinic_id')) return [];
+      return db
+        .prepare(
+          `SELECT * FROM handoff_escalations
+           WHERE clinic_id = ?
+             AND datetime(created_at) >= datetime('now', ?)
+             AND COALESCE(outcome, 'pending') IN ('pending', 'transfer_requested', 'transfer_dispatched_ws')
+           ORDER BY datetime(created_at) DESC
+           LIMIT ?`
+        )
+        .all(clinicId, `-${windowMin} minutes`, lim);
+    } catch (e) {
+      console.warn('[handoff_escalations] listActive failed:', e.message);
+      return [];
     }
   },
 
@@ -17679,6 +17824,48 @@ module.exports = {
 
   getMonthlyUsage(customerId, billingMonth) {
     return db.prepare('SELECT * FROM monthly_usage WHERE customer_id = ? AND billing_month = ?').get(customerId, billingMonth);
+  },
+
+  getMonthlyEligibilityUsage(customerId, billingMonth) {
+    const row = db
+      .prepare('SELECT eligibility_checks_used, overage_eligibility_checks FROM monthly_usage WHERE customer_id = ? AND billing_month = ?')
+      .get(customerId, billingMonth);
+    return {
+      used: row?.eligibility_checks_used || 0,
+      overage: row?.overage_eligibility_checks || 0
+    };
+  },
+
+  trackMonthlyEligibilityUsage(customerId, billingMonth, checks = 1, overageChecks = 0) {
+    const { v4: uuidv4 } = require('uuid');
+    const existing = db
+      .prepare('SELECT * FROM monthly_usage WHERE customer_id = ? AND billing_month = ?')
+      .get(customerId, billingMonth);
+    if (existing) {
+      db.prepare(`
+        UPDATE monthly_usage
+        SET eligibility_checks_used = COALESCE(eligibility_checks_used, 0) + ?,
+            overage_eligibility_checks = COALESCE(overage_eligibility_checks, 0) + ?,
+            updated_at = datetime('now')
+        WHERE customer_id = ? AND billing_month = ?
+      `).run(checks, overageChecks, customerId, billingMonth);
+    } else {
+      db.prepare(`
+        INSERT INTO monthly_usage (
+          id, customer_id, billing_month, voice_minutes_used, api_requests_used,
+          free_credits_used, overage_voice_minutes, overage_api_requests,
+          eligibility_checks_used, overage_eligibility_checks
+        ) VALUES (?, ?, ?, 0, 0, 0, 0, 0, ?, ?)
+      `).run(uuidv4(), customerId, billingMonth, checks, overageChecks);
+    }
+    return this.getMonthlyEligibilityUsage(customerId, billingMonth);
+  },
+
+  getEligibilityUsageEventById(id) {
+    if (!id) return null;
+    return db
+      .prepare('SELECT id FROM eligibility_usage_events WHERE id = ? OR session_id = ? LIMIT 1')
+      .get(id, id);
   },
 
   getAllMonthlyUsage(customerId) {

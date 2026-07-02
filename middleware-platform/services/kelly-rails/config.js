@@ -41,7 +41,10 @@ function envTruthy(name) {
   return v === '1' || v === 'true';
 }
 
-function isKellyRailsEsEnabled() {
+function isKellyRailsEsEnabled(tenantLanguages = null) {
+  if (tenantLanguages && Array.isArray(tenantLanguages) && tenantLanguages.length > 0) {
+    return tenantLanguages.includes('es');
+  }
   return envTruthy('KELLY_RAILS_ES_ENABLED');
 }
 

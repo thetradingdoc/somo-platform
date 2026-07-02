@@ -311,7 +311,8 @@ class PaymentOrchestrator {
         console.log('💳 Processing direct Stripe payment');
 
         try {
-            const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+            const stripeConfig = require('../utils/stripe-config');
+            const stripe = require('stripe')(stripeConfig.getStripeSecretKey());
             
             if (!stripe) {
                 console.warn('⚠️ Stripe not configured, falling back to link payment');

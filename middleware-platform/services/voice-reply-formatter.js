@@ -107,6 +107,14 @@ function formatVoiceReply(reply, state = {}) {
   const stickyLocale = state.flags?.preferred_language || state.preferred_language;
   const effectiveState = stickyLocale ? { ...state, locale: stickyLocale } : state;
   let text = applyClinicalOpqrstVoiceLine(reply, effectiveState);
+  try {
+    const { sanitizeCopayUtterance } = require('./copay-quote-guard');
+    text = sanitizeCopayUtterance(text, {
+      clinicId: state.clinic_id || state.flags?.clinic_id,
+      sessionId: state.session_id || state.flags?.session_id,
+      customerId: state.customer_id || state.flags?.customer_id
+    });
+  } catch (_) {}
   text = clampVoiceReply(text, effectiveState.locale || 'en');
   return text;
 }

@@ -1,6 +1,9 @@
 'use strict';
 
-const { handlePatientTriageFromRequest } = require('../services/kelly-triage-turn-service');
+const {
+  handlePatientTriageFromRequest,
+  handlePatientTriageOpenerFromRequest
+} = require('../services/kelly-triage-turn-service');
 const { isValidIanaTimezone } = require('../lib/is-valid-iana-timezone');
 
 function registerPatientBookingRoutes(app, deps) {
@@ -286,24 +289,38 @@ app.post(
     }
 
     // Charge amount: server-resolved only (never trust req.body.amount_due for capture).
-    // Order: pending voice checkout row (if any) → visit_pricing for clinic + appointment type.
-    let amount = null;
-    if (voiceCheckout != null && voiceCheckout.amount != null) {
-      amount = parseFloat(voiceCheckout.amount);
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      try {
-        const pricing = db.getEffectiveVisitPrice(clinicId, appt.appointment_type || 'General Consult');
-        amount = pricing?.effective_price != null ? parseFloat(pricing.effective_price) : null;
-      } catch (_) {}
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({
+    // Order: pending voice checkout row → resolveAmountDue (eligibility/plan_rules) → visit_pricing (self-pay only).
+    const {
+      resolvePatientCheckoutAmount
+    } = require('../services/resolve-amount-due');
+    const PaymentFlowService = require('../services/payment-flow-service');
+    const checkoutResolution = await PaymentFlowService.resolvePatientCheckoutAmount({
+      patientId: patientId || appt.patient_id || null,
+      appointmentId,
+      voiceCheckoutAmount: voiceCheckout?.amount ?? null,
+      clinicId,
+      appointmentType: appt.appointment_type || 'General Consult'
+    });
+    if (!checkoutResolution.ok) {
+      const statusCode = checkoutResolution.error === 'amount_pending_verification' ? 409 : 400;
+      return res.status(statusCode).json({
         success: false,
-        error: 'Unable to resolve price for checkout',
+        error: checkoutResolution.error,
+        message: checkoutResolution.message || 'Unable to resolve price for checkout',
+        amount_resolution: checkoutResolution.amountDue || null,
         request_id: req.id
       });
     }
+    const amount = checkoutResolution.amount;
+    PaymentFlowService.logAmountResolution({
+      patient_id: patientId || appt.patient_id || null,
+      appointment_id: appointmentId,
+      quoted_amount: checkoutResolution.amountDue?.amount ?? amount,
+      charged_amount: amount,
+      source: checkoutResolution.amountDue?.source || 'patient_checkout',
+      status: checkoutResolution.amountDue?.status || 'hard_number',
+      details: { route: '/api/patient/appointments/:id/checkout' }
+    });
     const clientHint = req.body?.amount_due;
     if (clientHint != null && Number.isFinite(parseFloat(clientHint))) {
       const ch = parseFloat(clientHint);
@@ -483,7 +500,7 @@ app.get('/api/patient/booking/available-slots', apiLimiter, requirePatientSessio
   try {
     const args = req.query || {};
     const date = (args.date || '').toString().trim();
-    const BookingService = require('../services/booking-service');
+    const PmsBooking = require('../services/pms/pms-booking');
     const appointmentType = args.appointment_type || 'General Consult';
     const timezone = args.timezone || 'America/New_York';
     if (!isValidIanaTimezone(timezone)) {
@@ -491,7 +508,7 @@ app.get('/api/patient/booking/available-slots', apiLimiter, requirePatientSessio
     }
     const clinicId = resolveClinicIdFromRequest(req, args) || FALLBACK_CLINIC_ID;
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required', request_id: req.id });
-    const result = await BookingService.getAvailableSlots(date, null, appointmentType, timezone, clinicId, null);
+    const result = await PmsBooking.getAvailableSlots(date, null, appointmentType, timezone, clinicId, null);
     return res.json({ ...result, request_id: req.id });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
@@ -501,7 +518,7 @@ app.get('/api/patient/booking/available-slots', apiLimiter, requirePatientSessio
 app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, validatePatientBookingScheduleBody, withIdempotency('patient_booking_schedule'), express.json(), async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
-    const BookingService = require('../services/booking-service');
+    const PmsBooking = require('../services/pms/pms-booking');
     const PatientPortalService = require('../services/patient-portal-service');
 
     const args = req.body || {};
@@ -544,7 +561,7 @@ app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, val
       return res.status(400).json({ success: false, error: 'Invalid timezone. Use a valid IANA timezone (e.g., America/New_York).', request_id: req.id });
     }
 
-    const result = await BookingService.scheduleAppointment({
+    const result = await PmsBooking.scheduleAppointment({
       clinic_id: clinicId,
       patient_name,
       patient_phone,
@@ -577,7 +594,7 @@ app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const PatientPortalService = require('../services/patient-portal-service');
-    const BookingService = require('../services/booking-service');
+    const PmsBooking = require('../services/pms/pms-booking');
 
     const sid = req.patientSessionId;
     const sessionValidation = PatientPortalService.validateSession(sid);
@@ -594,6 +611,7 @@ app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express
     }
     const patient_name = body.patient_name || [sessionValidation?.first_name, sessionValidation?.last_name].filter(Boolean).join(' ').trim() || 'Patient';
     const patient_phone = body.patient_phone || sessionValidation?.phone || null;
+    const BookingService = require('../services/booking-service');
     const result = await BookingService.createAsyncReviewAppointment({
       patient_name,
       patient_phone,
@@ -631,6 +649,15 @@ app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, block
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const out = await handlePatientTriageFromRequest(req);
+    return res.status(out.status).json(out.json);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.get('/api/patient/triage/opener', apiLimiter, requirePatientSession, blockChatWhenDisabled, async (req, res) => {
+  try {
+    const out = await handlePatientTriageOpenerFromRequest(req);
     return res.status(out.status).json(out.json);
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
@@ -1332,7 +1359,7 @@ app.put('/api/patient/appointments/:id/reschedule', requirePatientSession, requi
     const clinicId = appointment.clinic_id || null;
 
     // Use existing reschedule endpoint logic
-    const result = await BookingService.rescheduleAppointment(
+    const result = await PmsBooking.rescheduleAppointment(
       appointmentId,
       new_date,
       new_time,
@@ -1399,7 +1426,7 @@ app.delete('/api/patient/appointments/:id', requirePatientSession, requireCsrfFo
     const clinicId = appointment.clinic_id || null;
 
     // Use existing cancel endpoint logic
-    const result = await BookingService.cancelAppointment(appointmentId, reason, clinicId);
+    const result = await PmsBooking.cancelAppointment(appointmentId, reason, clinicId);
     if (result.success) invalidateSlotAvailabilityCache();
 
     if (result.success) {

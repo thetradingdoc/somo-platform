@@ -21,6 +21,9 @@
   <script src="/assets/js/settings/tab-general.js"></script>
   <script src="/assets/js/settings/tab-voice.js"></script>
   <script src="/assets/js/settings/tab-calendar.js"></script>
+  <script src="/assets/js/settings/tab-pms.js"></script>
+  <script src="/assets/js/settings/tab-practice.js"></script>
+  <script src="/assets/js/settings/tab-credentials.js"></script>
   <script src="/assets/js/settings/tab-billing.js"></script>
 </head>
 
@@ -58,6 +61,7 @@
                 <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-integrations" id="settings-tab-integrations" data-settings-tab="integrations">Integrations</button>
                 <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-voice" id="settings-tab-voice" data-settings-tab="voice">Voice Agent</button>
                 <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-billing" id="settings-tab-billing" data-settings-tab="billing">Billing</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-credentials" id="settings-tab-credentials" data-settings-tab="credentials">Credentials</button>
                 <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-advanced" id="settings-tab-advanced" data-settings-tab="advanced">Advanced</button>
             </div>
 
@@ -151,6 +155,26 @@
                     <button class="btn btn-secondary btn-sm" onclick="manageTwilio()">
                         Manage
                     </button>
+                </div>
+
+                <div class="service-card" id="pmsCard">
+                    <div class="service-icon" style="background:#dcfce7;">🏥</div>
+                    <div class="service-info">
+                        <h4>Practice Management System</h4>
+                        <p class="service-status" id="pmsStatus">Checking connection...</p>
+                        <p class="service-status" id="pmsDetails"></p>
+                        <p class="service-status danger" id="pmsError"
+                            style="color: var(--danger); display: none;"></p>
+                        <select id="pmsTypeSelect" class="btn btn-secondary btn-sm" onchange="onPmsTypeChange(event)" style="margin-top:8px;">
+                            <option value="somo">Somo (default)</option>
+                            <option value="athena">Athena (medical)</option>
+                            <option value="dentrix" disabled>Dentrix (Phase 3B dental)</option>
+                            <option value="eaglesoft" disabled>Eaglesoft (Phase 3B dental)</option>
+                        </select>
+                    </div>
+                    <div class="service-action" id="pmsActions">
+                        <button class="btn btn-primary btn-sm" onclick="connectPmsSomo()">Connect</button>
+                    </div>
                 </div>
 
                 <div class="service-card" id="googleCalendarCard">
@@ -289,6 +313,18 @@
 
             <!-- Pay-as-you-go Billing -->
             <div class="settings-section settings-panel" data-settings-panel="billing">
+                <h3>📞 Voice subscription</h3>
+                <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 12px;">
+                    Monthly plans include voice minutes. Tax is calculated at Stripe Checkout when enabled.
+                </p>
+                <p id="voiceBillingPlanSummary" class="setting-description" style="margin-bottom: 16px;">Loading subscription…</p>
+                <button type="button" class="btn btn-primary btn-sm" onclick="viewPlans()">
+                    Choose or change plan
+                </button>
+            </div>
+
+            <!-- Pay-as-you-go Billing -->
+            <div class="settings-section settings-panel" data-settings-panel="billing">
                 <h3>💰 Pay-as-you-go Billing</h3>
                 <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 20px;">
                     Track your usage and manage payment methods. You're charged based on actual voice call minutes.
@@ -386,6 +422,42 @@
                 </div>
 
                 <div class="setting-row">
+                    <div class="setting-info" style="width:100%">
+                        <h4>Front desk &amp; PMS (pilot)</h4>
+                        <p class="setting-description">Transfer number, NPI, and roster import for E10 interim mode.</p>
+                        <label class="setting-description" for="practiceTransferNumber">Warm transfer number</label>
+                        <input id="practiceTransferNumber" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0;text-align:left" placeholder="+1…" />
+                        <label class="setting-description" for="practiceNpi">NPI</label>
+                        <input id="practiceNpi" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0;text-align:left" />
+                        <label class="setting-description" for="practiceAddress">Practice address</label>
+                        <input id="practiceAddress" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0;text-align:left" />
+                        <label class="setting-description" for="practiceOfficeType">Office type</label>
+                        <select id="practiceOfficeType" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0">
+                            <option value="dental">Dental</option>
+                            <option value="medical">Medical</option>
+                        </select>
+                        <p class="setting-description" id="e10SyncStatus" style="margin-top:8px">Loading sync status…</p>
+                        <p class="setting-description">
+                            <a href="/api/tenant/roster/template" download="roster-template.csv">Download roster CSV template</a>
+                        </p>
+                        <input type="file" id="rosterCsvFile" accept=".csv,text/csv" />
+                        <button class="btn btn-secondary btn-sm" type="button" onclick="importRosterCsv()" style="margin-left:8px">Import roster</button>
+                        <p id="rosterImportStatus" class="setting-description"></p>
+                        <button class="btn btn-primary btn-sm" type="button" onclick="savePracticeSettings()" style="margin-top:8px">Save practice settings</button>
+                        <p id="practiceSaveMsg" class="setting-description" style="display:none"></p>
+                        <details id="pmsHelpPanel" style="margin-top:12px" open>
+                            <summary>PMS help — Ascend vs on-prem</summary>
+                            <div class="setting-description" style="margin-top:8px">
+                              <p><strong>Dentrix Ascend (cloud)</strong> — Requires Henry Schein API Exchange approval. Once approved, connect under Integrations → PMS. Kelly writes appointments back automatically.</p>
+                              <p><strong>On-prem Dentrix / Eaglesoft</strong> — Use <em>E10 interim mode</em>: Somo calendar + nightly CSV digest until live write-back. Import roster CSV above; compare sync status on Today.</p>
+                              <p><strong>Need help?</strong> Email <a href="mailto:support@callsomo.com">support@callsomo.com</a> with your PMS type and NPI. Include whether you are shadow week or live.</p>
+                              <p><a href="settings.html" onclick="setTimeout(()=>document.querySelector('[data-settings-tab=integrations]')?.click(),0)">Open PMS integrations →</a></p>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <div class="setting-row">
                     <div class="setting-info">
                         <h4>API Key</h4>
                         <p class="setting-description" id="merchantApiKeyDisplay">mk_********************************
@@ -439,6 +511,34 @@
                         </button>
                     </div>
                 </div>
+            </div>
+
+            <div class="settings-section settings-panel" data-settings-panel="credentials" hidden>
+                <h3>Provider credentials</h3>
+                <p class="setting-description">License and NPI documentation for pilot compliance. Stored on your account profile.</p>
+                <label class="setting-description" for="credLicenseNumber">License number</label>
+                <input id="credLicenseNumber" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0;text-align:left" />
+                <label class="setting-description" for="credLicenseState">License state</label>
+                <input id="credLicenseState" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0;text-align:left" placeholder="NY" />
+                <label class="setting-description" for="credNpiDoc">NPI confirmation (PDF/image)</label>
+                <input type="file" id="credNpiDoc" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+                <p id="credNpiDocStatus" class="setting-description"></p>
+                <button class="btn btn-primary btn-sm" type="button" onclick="saveCredentialsSettings()" style="margin-top:8px">Save credentials</button>
+                <p id="credSaveMsg" class="setting-description" style="display:none"></p>
+            </div>
+
+            <!-- Team access (multi-user pilot) -->
+            <div class="settings-section settings-panel" data-settings-panel="advanced" id="teamAccessPanel">
+                <h3>👥 Team access</h3>
+                <p class="setting-description" style="margin-bottom:12px">
+                  Invite front-desk staff with their own login. The owner account keeps billing and voice controls.
+                </p>
+                <div id="teamMembersList" class="setting-description">Loading team…</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+                  <input id="teamInviteEmail" type="email" placeholder="colleague@office.com" class="btn btn-secondary btn-sm" style="flex:1;min-width:200px;text-align:left" />
+                  <button type="button" class="btn btn-primary btn-sm" id="teamInviteBtn">Send invite</button>
+                </div>
+                <p id="teamInviteMsg" class="setting-description" style="display:none;margin-top:8px"></p>
             </div>
 
             <!-- API & Developer -->

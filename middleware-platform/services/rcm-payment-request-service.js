@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const db = require('../database');
 const orchestrator = require('./rcm-journey-orchestrator');
+const PaymentFlowService = require('./payment-flow-service');
 
 function publicPayBaseFromEnv(req) {
   if (req) {
@@ -26,49 +27,29 @@ function payUrlFromToken(base, token) {
   return `${base}/patients/pay.html?token=${encodeURIComponent(token)}`;
 }
 
-function resolveCopayAmount({ amount, patientId, clinicId, journeyId }) {
-  if (amount != null && Number(amount) > 0) {
-    return Number(amount);
-  }
-
-  if (journeyId) {
-    try {
-      orchestrator.ensureKellyRcmTables();
-      const journey = db.db
-        .prepare(`SELECT amount_due FROM rcm_journeys WHERE id = ? AND clinic_id = ?`)
-        .get(String(journeyId), String(clinicId));
-      if (journey?.amount_due != null && Number(journey.amount_due) > 0) {
-        return Number(journey.amount_due);
-      }
-    } catch (_) {}
-  }
-
-  if (patientId) {
-    try {
-      const row = db.db
-        .prepare(
-          `SELECT copay_amount FROM eligibility_checks
-           WHERE patient_id = ?
-           ORDER BY created_at DESC LIMIT 1`
-        )
-        .get(String(patientId));
-      if (row?.copay_amount != null && Number(row.copay_amount) > 0) {
-        return Number(row.copay_amount);
-      }
-    } catch (_) {}
-  }
-
-  return null;
+/** @deprecated use resolveCheckoutAmount */
+async function resolveCopayAmount({ amount, patientId, clinicId, journeyId, sessionId, appointmentId }) {
+  const r = await PaymentFlowService.resolveCheckoutAmount({
+    amount,
+    patientId,
+    appointmentId,
+    sessionId,
+    journeyId,
+    requireHardNumber: true
+  });
+  return r.ok ? r.amount : null;
 }
 
 /**
  * Create an RCM payment request (shared by provider API and Kelly tool).
  */
-function createRcmPaymentRequest({
+async function createRcmPaymentRequest({
   clinicId,
   amount,
   journeyId = null,
   patientId = null,
+  sessionId = null,
+  appointmentId = null,
   method = 'manual',
   req = null,
   publicPayBase = null,
@@ -79,11 +60,24 @@ function createRcmPaymentRequest({
     return { success: false, error: 'clinic_id is required', status: 400 };
   }
 
-  const resolvedAmount = resolveCopayAmount({ amount, patientId, clinicId: clinic, journeyId });
-  const amt = Number(resolvedAmount ?? amount ?? 0);
-  if (!(amt > 0)) {
-    return { success: false, error: 'amount must be > 0', status: 400 };
+  const resolution = await PaymentFlowService.resolveCheckoutAmount({
+    amount,
+    patientId,
+    appointmentId,
+    sessionId,
+    journeyId,
+    requireHardNumber: true
+  });
+  if (!resolution.ok) {
+    return {
+      success: false,
+      error: resolution.error || 'quote_required',
+      message: resolution.message || 'Unable to resolve copay amount for payment.',
+      amount_resolution: resolution.amountDue || null,
+      status: resolution.error === 'amount_pending_verification' ? 409 : 400
+    };
   }
+  const amt = resolution.amount;
 
   const id = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const payToken = crypto.randomBytes(24).toString('hex');
@@ -109,6 +103,17 @@ function createRcmPaymentRequest({
       'patient_request',
       'Payment request created'
     );
+
+  PaymentFlowService.logAmountResolution({
+    patient_id: patientId,
+    appointment_id: appointmentId,
+    session_id: sessionId,
+    quoted_amount: resolution.amountDue?.amount ?? amt,
+    charged_amount: amt,
+    source: resolution.source || resolution.amountDue?.source || 'rcm_payment',
+    status: resolution.amountDue?.status || 'hard_number',
+    details: { route: 'createRcmPaymentRequest', payment_id: id }
+  });
 
   if (journeyId) {
     try {
@@ -137,6 +142,7 @@ function createRcmPaymentRequest({
     clinic_id: clinic,
     journey_id: journeyId,
     patient_id: patientId,
+    amount_resolution: resolution.amountDue || null
   };
 }
 
@@ -176,6 +182,20 @@ async function notifyPatientPaymentLink({
       );
     } catch (err) {
       results.sms = { success: false, error: err.message };
+    }
+  }
+
+  if (
+    results.sms?.success === false &&
+    (mode === 'both' || mode === 'sms') &&
+    patientEmail &&
+    !results.email
+  ) {
+    try {
+      const EmailService = require('./email-service');
+      results.email = await EmailService.sendPaymentLinkEmail(patientEmail, payUrl, order);
+    } catch (err) {
+      results.email = { success: false, error: err.message };
     }
   }
 

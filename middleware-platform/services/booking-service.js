@@ -520,7 +520,13 @@ class BookingService {
         timezone: appointmentData.timezone || BUSINESS_HOURS.timezone,
         created_at: new Date().toISOString(),
         primary_icd10: appointmentData.primary_icd10 || null,
-        primary_cpt: appointmentData.primary_cpt || null
+        primary_cpt: appointmentData.primary_cpt || null,
+        preferred_language: String(
+          appointmentData.preferred_language ||
+          appointmentData.locale ||
+          appointmentData.session_locale ||
+          'en'
+        ).slice(0, 2)
       };
 
       try {
@@ -554,6 +560,7 @@ class BookingService {
       });
 
       // Try to create Google Calendar event (per-clinic calendar)
+      if (!appointmentData.skip_google_mirror) {
       const calendarContext = this.getCalendarClient(clinicId);
       if (calendarContext && calendarContext.client) {
         const { client: calendar, calendarId } = calendarContext;
@@ -570,6 +577,9 @@ class BookingService {
         }
       } else {
         console.log('ℹ️  Running in mock mode - no calendar event created');
+      }
+      } else {
+        console.log('ℹ️  Google mirror disabled (mirror_google=false) — Somo DB only');
       }
 
       // SECURITY: Save to database with conflict check

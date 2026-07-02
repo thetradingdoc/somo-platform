@@ -120,6 +120,10 @@ const ROUTINE_INTAKE_TOOL_NAMES = new Set([
 const ROUTINE_INTAKE_KELLY_FLOW_VALUES = new Set(['routine_intake', 'skincare', 'skincare_intake']);
 
 function orchestratorEnabled() {
+  try {
+    const { isKellyRailsV2Enabled } = require('./kelly-rails/config');
+    if (isKellyRailsV2Enabled()) return false;
+  } catch (_) {}
   const v = process.env.KELLY_ORCHESTRATOR_PHASE;
   if (v === undefined || v === null || v === '') return true;
   return String(v).toLowerCase() !== '0' && String(v).toLowerCase() !== 'false';

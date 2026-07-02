@@ -21,6 +21,16 @@ const {
   normalizeSettingsRow
 } = require('../services/voice-settings-sync');
 const { resolveVoiceMerchantId } = require('../services/operator-tenant-bootstrap');
+const {
+  normalizeLanguageConfig,
+  PRESET_LABELS,
+  parseSupportedLanguages
+} = require('../services/tenant-language-config');
+const {
+  resolveTenantVoiceConfig,
+  resolveClinicForCustomer,
+  syncVoiceHoursToClinic
+} = require('../services/tenant-voice-config');
 
 const retellService = new RetellService();
 
@@ -77,6 +87,29 @@ function getSessionCustomer(req) {
     return session ? db.getCustomer(session.customer_id) : null;
 }
 
+function resolveClinicForCustomerLocal(customerId, clinicIdHint = null) {
+    return resolveClinicForCustomer(db, customerId, clinicIdHint);
+}
+
+function enrichSettingsRow(row, { customerId, clinicId } = {}) {
+    const out = { ...row };
+    const lang = normalizeLanguageConfig({
+        language_mode: out.language_mode,
+        supported_languages: out.supported_languages
+    });
+    out.language_mode = lang.language_mode;
+    out.supported_languages = lang.supported_languages;
+    out.language_preset_labels = PRESET_LABELS;
+    const clinic = resolveClinicForCustomerLocal(customerId, clinicId || out.clinic_id);
+    out.transfer_number = clinic?.transfer_number || null;
+    out.overflow_phone = clinic?.overflow_phone || null;
+    out.overflow_enabled = out.overflow_enabled !== 0 && out.overflow_enabled !== false;
+    out.porting_status = out.porting_status || 'not_started';
+    out.clinic_id = clinic?.clinic_id || out.clinic_id || null;
+    out.clinic_email = clinic?.email || null;
+    return out;
+}
+
 function parseSettingsRow(settings, { merchantId, customerId }) {
     const row = normalizeSettingsRow(settings) || {
         merchant_id: merchantId || (customerId ? db.customerVoiceSettingsMerchantKey(customerId) : null),
@@ -112,7 +145,7 @@ async function loadSettingsBundle(ctx) {
     if (!row.retell_agent_id && customer?.retell_agent_id) {
         row.retell_agent_id = customer.retell_agent_id;
     }
-    return { row, customer };
+    return { row: enrichSettingsRow(row, { customerId, clinicId: row.clinic_id }), customer };
 }
 
 router.get('/onboarding', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
@@ -204,6 +237,7 @@ router.get('/preview', optionalCustomerAuth, requireVoiceSettingsAccess, async (
         return res.json({
             success: true,
             preview: openers,
+            live_opener: openers.activeOpener,
             practice_name: practiceName,
             sync_status: row.sync_status || 'synced',
             synced_at: row.synced_at || row.prompt_synced_at || null
@@ -211,6 +245,30 @@ router.get('/preview', optionalCustomerAuth, requireVoiceSettingsAccess, async (
     } catch (error) {
         console.error('Voice preview GET error:', error);
         return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+router.post('/preview/tts', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const text = String(req.body?.text || req.query?.text || '').trim().slice(0, 1500);
+        if (!text) {
+            return res.status(400).json({ success: false, error: 'text required' });
+        }
+        if (!process.env.OPENAI_API_KEY) {
+            return res.json({ success: true, tts_available: false, text });
+        }
+        const OpenAI = require('openai');
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const voice = process.env.WEB_VOICE_TTS_VOICE || 'alloy';
+        const model = process.env.WEB_VOICE_TTS_MODEL || 'gpt-4o-mini-tts';
+        const tts = await openai.audio.speech.create({ model, voice, input: text });
+        const buf = Buffer.from(await tts.arrayBuffer());
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.send(buf);
+    } catch (error) {
+        console.error('Voice preview TTS error:', error);
+        return res.status(500).json({ success: false, error: 'tts_failed', message: error.message });
     }
 });
 
@@ -289,7 +347,19 @@ async function handleSettingsSave(req, res) {
         outbound_allowed_types = null,
         tone_preset = null,
         settings_version = null,
-        clinic_id = null
+        clinic_id = null,
+        language_mode = null,
+        supported_languages = null,
+        transfer_number = null,
+        overflow_phone = null,
+        overflow_enabled = undefined,
+        porting_status = null,
+        clinic_email = null,
+        coverage_mode = null,
+        coverage_hours = null,
+        after_hours_action = null,
+        ai_disclosure_enabled = undefined,
+        voice_reply_suppress_enabled = undefined
     } = body;
 
     const safeEnabled = !!enabled;
@@ -314,13 +384,70 @@ async function handleSettingsSave(req, res) {
     if (outbound_enabled !== undefined) settingsPatch.outbound_enabled = !!outbound_enabled;
     if (outbound_quiet_hours !== null) settingsPatch.outbound_quiet_hours = outbound_quiet_hours;
     if (outbound_allowed_types !== null) settingsPatch.outbound_allowed_types = outbound_allowed_types;
-    if (tone_preset) settingsPatch.tone_preset = tone_preset;
+    if (tone_preset) {
+        const ALLOWED_TONES = ['warm', 'warm_confident', 'professional', 'concise'];
+        settingsPatch.tone_preset = ALLOWED_TONES.includes(String(tone_preset))
+            ? String(tone_preset)
+            : 'warm';
+    }
+
+    const langConfig = normalizeLanguageConfig({
+        language_mode,
+        supported_languages
+    });
+    settingsPatch.language_mode = langConfig.language_mode;
+    settingsPatch.supported_languages = langConfig.supported_languages;
+
+    if (coverage_mode !== null) {
+      const allowedModes = ['full_replacement', 'coverage'];
+      settingsPatch.coverage_mode = allowedModes.includes(String(coverage_mode))
+        ? String(coverage_mode)
+        : 'full_replacement';
+    }
+    if (coverage_hours !== null && typeof coverage_hours === 'object') {
+      settingsPatch.coverage_hours = coverage_hours;
+    }
+    if (after_hours_action !== null) {
+      const allowedActions = ['message_only', 'transfer', 'voicemail'];
+      settingsPatch.after_hours_action = allowedActions.includes(String(after_hours_action))
+        ? String(after_hours_action)
+        : 'message_only';
+    }
+    if (ai_disclosure_enabled !== undefined) {
+      settingsPatch.ai_disclosure_enabled = ai_disclosure_enabled ? 1 : 0;
+    }
+    if (voice_reply_suppress_enabled !== undefined) {
+      settingsPatch.voice_reply_suppress_enabled = voice_reply_suppress_enabled ? 1 : 0;
+    }
+
+    const resolvedClinicId = clinic_id || req.query.clinic_id || null;
+    const clinic = resolveClinicForCustomerLocal(customerId, resolvedClinicId);
+    if (transfer_number !== null && clinic?.clinic_id) {
+        db.updateClinic(clinic.clinic_id, { transfer_number: String(transfer_number).trim() || null });
+    }
+    if (overflow_phone !== null && clinic?.clinic_id) {
+        db.updateClinic(clinic.clinic_id, { overflow_phone: String(overflow_phone).trim() || null });
+    }
+    if (overflow_enabled !== undefined) {
+      settingsPatch.overflow_enabled = overflow_enabled ? 1 : 0;
+    }
+    if (porting_status !== null) {
+      const allowedPorting = ['not_started', 'requested', 'in_progress', 'complete'];
+      const ps = String(porting_status).trim();
+      if (allowedPorting.includes(ps)) settingsPatch.porting_status = ps;
+    }
+    if (clinic_email !== null && clinic?.clinic_id) {
+        db.updateClinic(clinic.clinic_id, { email: String(clinic_email).trim() || null });
+    }
+    if (normalizedHours && clinic?.clinic_id) {
+        syncVoiceHoursToClinic(db, clinic.clinic_id, normalizedHours);
+    }
 
     try {
         const syncResult = await saveAndSyncVoiceSettings(db, {
             merchantId,
             customerId,
-            clinicId: clinic_id || req.query.clinic_id || null,
+            clinicId: resolvedClinicId || clinic?.clinic_id || null,
             settingsPatch,
             retellService,
             expectedVersion: settings_version
@@ -390,6 +517,21 @@ router.post('/setup-complete', optionalCustomerAuth, requireVoiceSettingsAccess,
         if (!customer) {
             return res.status(401).json({ success: false, error: 'Authentication required' });
         }
+
+        const { merchantId, customerId } = resolveVoiceSettingsContext(req);
+        const tenantConfig = resolveTenantVoiceConfig(db, {
+            customerId: customerId || customer.id,
+            merchantId: merchantId || customer.merchant_id
+        });
+        if (!tenantConfig.config_status?.ready) {
+            return res.status(400).json({
+                success: false,
+                error: 'config_incomplete',
+                message: 'Complete required voice setup before going live.',
+                config_status: tenantConfig.config_status
+            });
+        }
+
         const updates = {
             voice_setup_completed_at: new Date().toISOString()
         };
@@ -419,6 +561,29 @@ router.post('/setup-complete', optionalCustomerAuth, requireVoiceSettingsAccess,
         });
     } catch (error) {
         console.error('Voice setup complete error:', error);
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+router.get('/config-status', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const { merchantId, customerId } = resolveVoiceSettingsContext(req);
+        const clinicId = req.query.clinic_id || null;
+        const config = resolveTenantVoiceConfig(db, { merchantId, customerId, clinicId });
+        return res.json({
+            success: true,
+            config_status: config.config_status,
+            clinic_id: config.clinic_id,
+            customer_id: config.customer_id,
+            language_mode: config.language_mode,
+            supported_languages: config.supported_languages,
+            transfer_number: config.transfer_number,
+            retell_agent_id: config.retell_agent_id,
+            prompt_profile_id: config.prompt_profile_id,
+            clinic_email: config.clinic_email
+        });
+    } catch (error) {
+        console.error('Voice config-status error:', error);
         return res.status(500).json({ success: false, error: 'server_error', message: error.message });
     }
 });

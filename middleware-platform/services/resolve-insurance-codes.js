@@ -6,8 +6,10 @@
 
 const TriageRAGService = require('./triage-rag-service');
 const knowledgeService = require('./knowledge-service');
-const { resolveCptForVisit } = require('../utils/cpt-helper');
+const { resolveCptForVisit, isDentalCdt } = require('../utils/cpt-helper');
+const { resolveAdminInsuranceCodes } = require('./resolve-admin-visit-codes');
 const { CODING_CONFIDENCE_THRESHOLD, isConfidenceNearThreshold } = require('../config/coding-thresholds');
+const { TriagePolicy } = require('./conversation-mode/tenant-policy');
 
 function resolveInsuranceCodes(sessionId, opts = {}) {
   const {
@@ -16,8 +18,27 @@ function resolveInsuranceCodes(sessionId, opts = {}) {
     force_after_clarified: forceAfterClarified = false,
     clinicId = null,
     patientId = null,
-    flagHitl = null
+    flagHitl = null,
+    triage_policy: triagePolicy = null,
+    visit_reason: visitReason = null,
+    tenantSpecialty = null,
+    useAdminPath = false
   } = opts;
+
+  const adminPath =
+    useAdminPath === true ||
+    triagePolicy === TriagePolicy.DISABLED ||
+    String(triagePolicy || '').toLowerCase() === 'disabled';
+
+  if (adminPath) {
+    return resolveAdminInsuranceCodes({
+      visit_reason: visitReason,
+      visitReasonText: visitReason,
+      tenantSpecialty: tenantSpecialty || 'Dental',
+      isNewPatient: opts.isNewPatient !== false,
+      patient_age: opts.patient_age
+    });
+  }
 
   if (clientServiceCode && !adminOverride) {
     return {
@@ -127,10 +148,10 @@ function resolveInsuranceCodes(sessionId, opts = {}) {
     };
   }
 
-  const codeValidation = knowledgeService.validateCodesExist({
-    icd10: [primaryIcd10],
-    cpt: [serviceCode]
-  });
+  const codeValidation = knowledgeService.validateCodesExist(
+    { icd10: [primaryIcd10], cpt: [serviceCode] },
+    isDentalCdt(serviceCode) ? { trustFormattedCodes: true } : {}
+  );
   if (!codeValidation.valid) {
     return {
       ok: false,
@@ -141,7 +162,9 @@ function resolveInsuranceCodes(sessionId, opts = {}) {
     };
   }
 
-  const pairCheck = knowledgeService.validateCodePair(primaryIcd10, serviceCode);
+  const pairCheck = isDentalCdt(serviceCode)
+    ? { valid: true }
+    : knowledgeService.validateCodePair(primaryIcd10, serviceCode);
   if (!pairCheck.valid) {
     if (flagHitl) {
       flagHitl({

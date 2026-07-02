@@ -29,6 +29,14 @@ async function ensureCustomerRetellAgent(db, customerId, options = {}) {
     if (agentResult.success && agentResult.agent_id) {
       db.updateCustomerRetellAgent(customerId, agentResult.agent_id, 'active');
 
+      try {
+        await retellService.updateAgent(agentResult.agent_id, {
+          agent_name: customer.company_name || customer.name || 'Kelly Front Desk'
+        });
+      } catch (nameErr) {
+        console.warn(`[ensureRetellAgent] agent name sync skipped: ${nameErr.message}`);
+      }
+
       const merchantId = customer.merchant_id || null;
       if (typeof db.upsertVoiceAgentSettings === 'function') {
         let existing = null;

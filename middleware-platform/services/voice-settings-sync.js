@@ -133,6 +133,13 @@ function normalizeSettingsRow(row) {
   }
   out.outbound_enabled = out.outbound_enabled === 1 || out.outbound_enabled === true;
   out.inbound_greeting = out.greeting;
+  if (out.supported_languages && typeof out.supported_languages === 'string') {
+    try {
+      out.supported_languages = JSON.parse(out.supported_languages);
+    } catch (_) {
+      out.supported_languages = ['en'];
+    }
+  }
   return out;
 }
 
