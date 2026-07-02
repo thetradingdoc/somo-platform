@@ -201,6 +201,40 @@ function syncVoiceHoursToClinic(db, clinicId, businessHours) {
   });
 }
 
+function setCopayQuoteSpeakEnabled(db, clinicId, enabled) {
+  if (!db?.db || !clinicId) return false;
+  const on = enabled === true || enabled === 1 || enabled === '1';
+  const profile = db.db
+    .prepare('SELECT id, policy_json FROM prompt_profiles WHERE clinic_id = ? LIMIT 1')
+    .get(clinicId);
+  if (profile?.id) {
+    let policy = {};
+    try {
+      policy = parseJsonField(profile.policy_json, {}) || {};
+    } catch (_) {}
+    policy.copay_quote_speak_enabled = on;
+    db.db
+      .prepare(`UPDATE prompt_profiles SET policy_json = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(JSON.stringify(policy), profile.id);
+  }
+  return true;
+}
+
+function setVoiceReplySuppressEnabled(db, clinicId, enabled) {
+  if (!db?.db || !clinicId) return false;
+  const on = enabled === true || enabled === 1 || enabled === '1';
+  const vas = db.db.prepare('SELECT id FROM voice_agent_settings WHERE clinic_id = ? LIMIT 1').get(clinicId);
+  if (vas?.id) {
+    db.db
+      .prepare(
+        `UPDATE voice_agent_settings SET voice_reply_suppress_enabled = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+      .run(on ? 1 : 0, vas.id);
+    return true;
+  }
+  return false;
+}
+
 function ensureCustomerClinicLink(db, customerId, clinicId, { isPrimary = true } = {}) {
   if (!db?.db || !customerId || !clinicId) return false;
   try {
@@ -224,5 +258,7 @@ module.exports = {
   syncVoiceHoursToClinic,
   voiceHoursToSchedulingColumns,
   ensureCustomerClinicLink,
+  setCopayQuoteSpeakEnabled,
+  setVoiceReplySuppressEnabled,
   parseJsonField
 };

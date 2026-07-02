@@ -69,11 +69,36 @@ deploy_api() {
   ensure_api_domain_mapping
   "$ROOT/scripts/ensure-cloudrun-public-invoker.sh"
 
+  if [[ -z "${RETELL_API_KEY:-}" ]] && [[ -f "$ROOT/middleware-platform/.env" ]]; then
+    RETELL_FROM_ENV="$(grep -E '^RETELL_API_KEY=' "$ROOT/middleware-platform/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+    if [[ -n "$RETELL_FROM_ENV" ]]; then
+      export RETELL_API_KEY="$RETELL_FROM_ENV"
+    fi
+  fi
+
   if [[ -n "${RETELL_API_KEY:-}" ]]; then
     echo "==> Configure Retell agent..."
     (cd "$ROOT/middleware-platform" && API_BASE_URL="$MIDDLEWARE_API_BASE" node configure-retell.js)
+    echo "==> Operator sync (Twilio + Retell WSS)..."
+    if ! node "$ROOT/scripts/callsomo-operator-sync.cjs"; then
+      if [[ "${ALLOW_RETELL_SYNC_FAIL:-}" == "1" ]]; then
+        echo "WARN: operator-sync failed — ALLOW_RETELL_SYNC_FAIL=1"
+      else
+        echo "ERROR: operator-sync failed — set ALLOW_RETELL_SYNC_FAIL=1 to override" >&2
+        exit 1
+      fi
+    fi
+    echo "==> Verify Retell agent config..."
+    if ! (cd "$ROOT/middleware-platform" && npm run verify:agent-config); then
+      if [[ "${ALLOW_RETELL_SYNC_FAIL:-}" == "1" ]]; then
+        echo "WARN: verify:agent-config failed — ALLOW_RETELL_SYNC_FAIL=1"
+      else
+        echo "ERROR: verify:agent-config failed" >&2
+        exit 1
+      fi
+    fi
   else
-    echo "==> RETELL_API_KEY not set — skip configure-retell.js"
+    echo "==> RETELL_API_KEY not set — skip configure-retell.js (set in middleware-platform/.env or shell)"
   fi
 }
 
@@ -85,6 +110,18 @@ fi
 # UI first so callsomo.com updates even if Cloud Build / API deploy is slow or fails.
 if [[ "$SKIP_UI" -eq 0 ]]; then
   deploy_ui
+fi
+
+if [[ "$SKIP_API" -eq 0 ]]; then
+  echo "==> Pre-deploy dental PSTN eval..."
+  if ! npm run verify:dental-pstn-eval --prefix "$ROOT/middleware-platform"; then
+    if [[ "${ALLOW_SKIP_DENTAL_PSTN:-}" == "1" ]]; then
+      echo "WARN: verify:dental-pstn-eval failed — ALLOW_SKIP_DENTAL_PSTN=1"
+    else
+      echo "ERROR: verify:dental-pstn-eval failed — set ALLOW_SKIP_DENTAL_PSTN=1 to override" >&2
+      exit 1
+    fi
+  fi
 fi
 
 if [[ "$SKIP_API" -eq 0 ]]; then

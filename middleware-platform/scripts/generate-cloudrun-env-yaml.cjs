@@ -189,6 +189,9 @@ const merged = {
   STAGING: isStaging ? '1' : '0',
   ALLOW_STRIPE_TEST_IN_PRODUCTION: isStaging ? '1' : '0',
   STRIPE_BILLING_MODE: isStaging ? 'test' : (parsed.STRIPE_BILLING_MODE || 'live'),
+  PILOT_INVITE_ONLY: parsed.PILOT_INVITE_ONLY || (profile === 'production' ? '1' : parsed.PILOT_INVITE_ONLY || '0'),
+  PILOT_RATE_LIMIT_ENABLED:
+    parsed.PILOT_RATE_LIMIT_ENABLED || (profile === 'production' ? '1' : parsed.PILOT_RATE_LIMIT_ENABLED || '0'),
 };
 
 if (isStaging || profile === 'production') {

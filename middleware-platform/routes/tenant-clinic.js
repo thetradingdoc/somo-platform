@@ -4,6 +4,11 @@ const express = require('express');
 const db = require('../database');
 const { requireCustomerPmsAuth } = require('../middleware/pms-tenant-auth');
 const { updateTenantFlags } = require('../services/tenant-flags-service');
+const {
+  resolveTenantVoiceConfig,
+  setCopayQuoteSpeakEnabled,
+  setVoiceReplySuppressEnabled
+} = require('../services/tenant-voice-config');
 
 const router = express.Router();
 router.use(requireCustomerPmsAuth);
@@ -12,6 +17,10 @@ router.get('/', (req, res) => {
   try {
     const clinic = db.getClinicById?.(req.pmsClinicId);
     if (!clinic) return res.status(404).json({ success: false, error: 'clinic_not_found' });
+    const voiceCfg = resolveTenantVoiceConfig(db, {
+      clinicId: clinic.clinic_id,
+      customerId: req.pmsCustomerId || null
+    });
     return res.json({
       success: true,
       clinic: {
@@ -27,6 +36,7 @@ router.get('/', (req, res) => {
         office_type: clinic.office_type || null,
         shadow_week_active: clinic.shadow_week_active === 1,
         pilot_live_at: clinic.pilot_live_at || null,
+        copay_quote_speak_enabled: voiceCfg?.copay_quote_speak_enabled === true,
         eligibility_configured: Boolean(process.env.STEDI_API_KEY || process.env.STEDI_TEST_API_KEY)
       }
     });
@@ -59,6 +69,12 @@ router.patch('/', (req, res) => {
     }
     if (Object.keys(patch).length) {
       db.updateClinic(clinicId, patch);
+    }
+    if (body.copay_quote_speak_enabled !== undefined) {
+      setCopayQuoteSpeakEnabled(db, clinicId, body.copay_quote_speak_enabled);
+    }
+    if (body.voice_reply_suppress_enabled !== undefined) {
+      setVoiceReplySuppressEnabled(db, clinicId, body.voice_reply_suppress_enabled);
     }
     const flags = updateTenantFlags(clinicId, {
       office_type: body.office_type,

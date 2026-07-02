@@ -7,6 +7,8 @@
 
 Complete every row below. Store signed BAAs in your compliance vault (not in git).
 
+**Engineering gate:** `npm run verify:compliance-readiness` confirms templates + technical guardrails. Unsigned Stripe/GCP/LLM vendor BAAs are **legal parallel ops** — they do not block pilot deploy. **Stedi BAA** remains required before live eligibility (Stedi vendor blocker).
+
 | Vendor | Role | PHI exposure | BAA required | Status | Signed date | Notes |
 |--------|------|--------------|--------------|--------|-------------|-------|
 | **Retell AI** | Voice agent runtime, call audio/transcripts | High — voice calls, caller demographics | Yes | ☑ | | Primary voice stack — signed |

@@ -19,17 +19,28 @@ Plan todos: `fd2-prod-stedi`, `fd2-stedi-baa-enrollment` in [provider portal pla
 
 Code/scripts ready (run on prod when enrolled):
 
-- `npm run setup:phase2-shadow -- --clinic-id <id>` — shadow week (`copay_quote_speak_enabled=0`)
-- `npm run verify:stripe-billing-mode` — confirms test vs live Stripe config
-- `npm run verify:phase2-billing` — eligibility metering, TCPA, payment idempotency, alerts
+```bash
+cd middleware-platform
+npm run setup:phase2-prod-stedi          # cutover checklist + gcloud hints
+npm run setup:phase2-shadow -- --clinic-id <id>
+npm run setup:pilot-go-live -- --clinic-id <id>
+npm run setup:pilot-live -- --clinic-id <id>   # after shadow week passes
+npm run verify:pilot-lifecycle -- --clinic-id <id>
+npm run verify:pilot-copay-desk-parity -- --clinic-id <id>
+npm run verify:pilot-prod-readiness
+PILOT_PROD_STRICT=1 CLOUDRUN_VERIFY=1 npm run verify:pilot-prod-readiness
+npm run verify:stripe-billing-mode
+npm run verify:phase2-billing
+npm run verify:phase2-ops -- --clinic-id <id>
+```
 
 Manual ops still required:
 
 - [ ] Stedi **production** API key + real NPI enrolled per pilot tenant
 - [ ] `STEDI_TEST_MODE=0` on production voice
-- [ ] Stripe **live** Connect (`STRIPE_BILLING_MODE=live`)
+- [ ] Stripe **live** Connect (`STRIPE_BILLING_MODE=live`) — deferred until first paying customer
 - [ ] Shadow week on real calls — compare desk quotes vs `amount_resolution_log`
-- [ ] Enable `copay_quote_speak_enabled=1` after shadow week passes
+- [ ] Enable copay speak + go live — `npm run setup:pilot-live -- --clinic-id <id>`
 
 ## Ops monitoring
 

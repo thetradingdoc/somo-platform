@@ -25,6 +25,7 @@ function main() {
     ['scripts/verify-staging-parity.cjs', 'verify-staging-parity'],
     ['scripts/verify-log-redaction.cjs', 'verify-log-redaction'],
     ['scripts/verify-pilot-scenario-matrix.cjs', 'verify-pilot-scenario-matrix'],
+    ['scripts/verify-dental-pstn-eval.cjs', 'verify-dental-pstn-eval'],
     ['scripts/verify-phase6-ops.cjs', 'verify-phase6-ops']
   ];
 

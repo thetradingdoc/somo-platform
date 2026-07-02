@@ -1,0 +1,17 @@
+# Pilot week hourly ops report (example cron)
+
+Run during the first live pilot week:
+
+```bash
+# Every hour during business hours (adjust TZ for NYC office)
+0 9-18 * * 1-5 cd /path/to/somo/middleware-platform && npm run report:front-desk-ops >> /var/log/somo-pilot-ops.log 2>&1
+```
+
+Manual one-shot:
+
+```bash
+cd middleware-platform
+npm run report:front-desk-ops
+```
+
+See also: `docs/voice-agent/PILOT_ONCALL_WEEK.md`
