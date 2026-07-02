@@ -80,7 +80,7 @@ deploy_api() {
     echo "==> Configure Retell agent..."
     (cd "$ROOT/middleware-platform" && API_BASE_URL="$MIDDLEWARE_API_BASE" node configure-retell.js)
     echo "==> Operator sync (Twilio + Retell WSS)..."
-    if ! node "$ROOT/scripts/callsomo-operator-sync.cjs"; then
+    if ! API_BASE_URL="$MIDDLEWARE_API_BASE" DEPLOY_INTENT=production node "$ROOT/scripts/callsomo-operator-sync.cjs"; then
       if [[ "${ALLOW_RETELL_SYNC_FAIL:-}" == "1" ]]; then
         echo "WARN: operator-sync failed — ALLOW_RETELL_SYNC_FAIL=1"
       else

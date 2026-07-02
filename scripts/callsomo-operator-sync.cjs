@@ -17,6 +17,7 @@
 
 const { execSync, spawnSync } = require('child_process');
 const path = require('path');
+const http = require('http');
 const https = require('https');
 
 const ROOT = path.join(__dirname, '..');
@@ -24,10 +25,31 @@ const MP = path.join(ROOT, 'middleware-platform');
 
 require(path.join(MP, 'node_modules', 'dotenv')).config({ path: path.join(MP, '.env') });
 
-const API_BASE = (process.env.API_BASE_URL || process.env.BASE_URL || 'https://api.callsomo.com').replace(
-  /\/+$/,
-  ''
-);
+function isLocalApiUrl(url) {
+  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(String(url || ''));
+}
+
+function resolveApiBase() {
+  const deployProd =
+    process.env.DEPLOY_INTENT === 'production' ||
+    process.argv.includes('--production');
+  const candidates = [
+    process.env.MIDDLEWARE_API_BASE,
+    process.env.CLOUDRUN_BASE_URL,
+    process.env.API_BASE_URL,
+    process.env.BASE_URL,
+    'https://api.callsomo.com'
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const url = String(raw).replace(/\/+$/, '');
+    if (deployProd && isLocalApiUrl(url)) continue;
+    return url;
+  }
+  return 'https://api.callsomo.com';
+}
+
+const API_BASE = resolveApiBase();
 const UI_BASE = (process.env.UI_BASE_URL || 'https://callsomo.com').replace(/\/+$/, '');
 const LLM_WS =
   process.env.RETELL_LLM_WEBSOCKET_URL ||
@@ -60,7 +82,8 @@ function extractCustomerId(voiceUrl) {
 
 async function httpStatus(url) {
   return new Promise((resolve) => {
-    const req = https.get(url, { timeout: 15000 }, (res) => {
+    const lib = String(url).startsWith('http://') ? http : https;
+    const req = lib.get(url, { timeout: 15000 }, (res) => {
       res.resume();
       resolve(res.statusCode);
     });
