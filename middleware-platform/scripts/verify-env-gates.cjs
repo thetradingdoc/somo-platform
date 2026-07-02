@@ -10,6 +10,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const {
   isProductionProfile,
   isDeployedProfile,
+  getKellyRoutingViolations,
+  getDeployedProfileViolations,
   getAllEnvGateViolations
 } = require('../services/hipaa-production-guards');
 
