@@ -214,6 +214,16 @@ async function assignLineAndStartTrial(db, customer, phoneInput) {
 
 router.post('/signup', signupFlowLimiter, async (req, res) => {
   try {
+    const { isPilotInviteOnly } = require('../services/pilot-config');
+    if (isPilotInviteOnly()) {
+      return res.status(403).json({
+        success: false,
+        error: 'pilot_invite_only',
+        message: 'Self-serve signup is closed during the pilot. Request access on the waitlist or use your invite link.',
+        redirect: '/waitlist.html'
+      });
+    }
+
     const {
       name,
       email,

@@ -6,7 +6,8 @@
 
 const express = require('express');
 const db = require('../database');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripeConfig = require('../utils/stripe-config');
+const stripe = stripeConfig.initializeStripe();
 const { authLimiter } = require('../middleware/rate-limiter');
 
 const router = express.Router();

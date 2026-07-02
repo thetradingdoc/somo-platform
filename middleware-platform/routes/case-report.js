@@ -7,20 +7,20 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { requireCustomerAuth } = require('../middleware/customer-auth');
 const FHIRService = require('../services/fhir-service');
 const EmailService = require('../services/email-service');
+const stripeConfig = require('../utils/stripe-config');
 let stripe = null;
-try { stripe = require('stripe')(process.env.STRIPE_SECRET_KEY); } catch (_) {}
+try { stripe = stripeConfig.initializeStripe(); } catch (_) {}
 
 /**
  * GET /api/patient/:patientId/case-report
  * Aggregate longitudinal view for a single patient.
  * Protected by admin auth to ensure only staff can view longitudinal data.
  */
-router.get('/api/patient/:patientId/case-report', async (req, res) => {
+router.get('/api/patient/:patientId/case-report', requireCustomerAuth, async (req, res) => {
   try {
-    // Basic RBAC: ensure caller has a valid admin session (provider/staff).
-    // In server.js, caseReportRoutes should be mounted behind requireAdminAuth for UI calls.
     const { patientId } = req.params;
     if (!patientId) {
       return res.status(400).json({ success: false, error: 'patientId is required' });
@@ -34,7 +34,23 @@ router.get('/api/patient/:patientId/case-report', async (req, res) => {
     if (!patientRow) {
       return res.status(404).json({ success: false, error: 'Patient not found' });
     }
+
+    const merchantId = req.merchant_id || req.customer?.merchant_id;
+    const patientMerchant = patientRow.merchant_id || patientRow.resource_data?.managingOrganization?.reference?.replace('Organization/', '');
+    if (merchantId && patientMerchant && patientMerchant !== merchantId) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
     const canonicalPatientId = patientRow.resource_id || patientId;
+
+    db.logHipaaAccess({
+      user_id: req.customer?.id,
+      resource_type: 'case_report',
+      resource_id: canonicalPatientId,
+      patient_id: canonicalPatientId,
+      action: 'read',
+      ip_address: req.ip || req.headers['x-forwarded-for']
+    });
 
     const patientResource = patientRow.resource_data;
     const encounters = db.getFHIRPatientEncounters

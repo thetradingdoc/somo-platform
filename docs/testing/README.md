@@ -1,7 +1,16 @@
 # testing — consolidated documentation
-> Last reviewed: 2026-06-16
+> Last reviewed: 2026-07-02
 
-**Last Updated:** 2026-06-16
+**Last Updated:** 2026-07-02
+
+### Front-desk verify gates
+
+```bash
+cd middleware-platform
+npm run verify:unblocked-phases
+```
+
+See [`voice-agent/unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md) for the full gate matrix. Playwright onboarding: `e2e/provider/onboarding-journey.spec.cjs`.
 
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.

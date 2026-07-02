@@ -11,6 +11,7 @@ const { runDeterministicCancel } = require('./cancel');
 const { runDeterministicReschedule } = require('./reschedule');
 const { runDeterministicApptLookup } = require('./lookup');
 const { runDeterministicBookingConflict } = require('./conflict');
+const { runDeterministicFrontDeskIntake } = require('./front-desk-intake');
 
 module.exports = {
   runDeterministicSafety,
@@ -19,6 +20,7 @@ module.exports = {
   runDeterministicSchedule,
   runDeterministicClinicalIntro,
   runDeterministicOpqrst,
+  runDeterministicFrontDeskIntake,
   runDeterministicRecords,
   runDeterministicCancel,
   runDeterministicReschedule,

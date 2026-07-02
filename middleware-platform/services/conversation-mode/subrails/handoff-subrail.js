@@ -100,7 +100,18 @@ async function handleHandoffSubrail(ctx = {}) {
         'I understand you have a billing concern. Let me connect you with our billing team who can review your account.',
       handoff_step: 'attempt',
       disposition: 'handoff_requested',
-      flags: { pending_human_handoff: true, billing_dispute: true },
+      flags: { pending_human_handoff: true, billing_dispute: true, request_warm_transfer: true },
+      context_payload: contextPayload,
+      active_subrail: 'handoff'
+    };
+  }
+
+  if (/upset|angry|frustrated|manager|supervisor|speak to someone|human|representative|operator/.test(msg)) {
+    return {
+      reply: 'I understand — let me connect you with a team member right away. One moment please.',
+      handoff_step: 'attempt',
+      disposition: 'handoff_requested',
+      flags: { pending_human_handoff: true, upset_caller: true, request_warm_transfer: true },
       context_payload: contextPayload,
       active_subrail: 'handoff'
     };
@@ -111,7 +122,7 @@ async function handleHandoffSubrail(ctx = {}) {
     handoff_step: 'attempt',
     active_subrail: 'handoff',
     disposition: 'handoff_requested',
-    flags: { pending_human_handoff: true },
+    flags: { pending_human_handoff: true, request_warm_transfer: true },
     context_payload: contextPayload
   };
 }

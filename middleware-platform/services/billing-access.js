@@ -169,18 +169,44 @@ function canProvisionNumber(db, customerId) {
   return { allowed: false, reason: 'payment_required' };
 }
 
-function buildBlockedTwiml(message) {
-  const safe = String(message || 'This service is unavailable.')
+function escapeTwimlText(text) {
+  return String(text || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function buildBlockedTwiml(message) {
+  const safe = escapeTwimlText(message || 'This service is unavailable.');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">${safe}</Say>
   <Hangup/>
 </Response>`;
 }
+
+/** Forward to practice line when overflow/credits-exhausted and a PSTN target exists. */
+function buildForwardOrBlockedTwiml(message, transferNumber) {
+  const pstn = String(transferNumber || '').replace(/\D/g, '');
+  if (pstn.length >= 10) {
+    const safe = escapeTwimlText(message || 'Please hold while we connect you.');
+    const dial = escapeTwimlText(transferNumber);
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${safe}</Say>
+  <Dial>${dial}</Dial>
+</Response>`;
+  }
+  return buildBlockedTwiml(message);
+}
+
+const OVERFLOW_FORWARD_REASONS = new Set([
+  'no_minutes',
+  'trial_minutes_exhausted',
+  'trial_expired',
+  'concurrent_overflow'
+]);
 
 function getRateLimitForCustomer(customer) {
   return getMaxRequestsPerMinute(customer?.plan_tier || 'starter');
@@ -212,6 +238,8 @@ module.exports = {
   isSubscriptionBlocking,
   isPastDueGraceExpired,
   buildBlockedTwiml,
+  buildForwardOrBlockedTwiml,
+  OVERFLOW_FORWARD_REASONS,
   getRateLimitForCustomer,
   getConcurrentCallsForCustomer,
   canAddPhoneNumber,

@@ -152,6 +152,24 @@ async function handleOperatorOutboundTurn(ctx = {}) {
       : 'Thanks for picking up. Is there anything you would like me to help with today?';
   }
 
+  const CONFIRM_RE =
+    /\b(yes|yeah|yep|sure|correct|confirmed|i('ll| will) be there|still coming|see you then|that works)\b/i;
+  if (isReminder && step === 'update' && CONFIRM_RE.test(msg) && appointmentId) {
+    return {
+      reply: 'Perfect — you are all set. We look forward to seeing you. Have a great day!',
+      endCall: true,
+      conversation_mode: 'operator_outbound',
+      operator_stage: 'close',
+      disposition: 'appointment_confirmed',
+      toolsUsed: [{ name: 'confirm_appointment', args: { appointment_id: appointmentId, confirmed_by: 'patient', method: 'outbound_call' } }],
+      state_updates: {
+        operator_stage: 'close',
+        appointment_confirmed: true,
+        appointment_id: appointmentId
+      }
+    };
+  }
+
   if (/speak to someone|human|callback|representative/.test(msg)) {
     reply =
       'I will have a team member call you back shortly. Is this the best number to reach you?';
@@ -164,11 +182,6 @@ async function handleOperatorOutboundTurn(ctx = {}) {
       active_subrail: 'handoff',
       disposition: 'handoff_requested'
     };
-  }
-
-  if (/no|nothing|all set|goodbye|bye|that's all|thank you/.test(msg) && idx >= 1) {
-    reply = stageReply('close', ctx);
-    endCall = true;
   }
 
   if (/cancel|reschedule|change my appointment|move my appointment/.test(msg)) {
@@ -195,6 +208,11 @@ async function handleOperatorOutboundTurn(ctx = {}) {
       },
       toolsUsed: []
     };
+  }
+
+  if (/\b(no|nothing|all set|goodbye|bye|that's all|thank you)\b/i.test(msg) && idx >= 1) {
+    reply = stageReply('close', ctx);
+    endCall = true;
   }
 
   const disposition = endCall

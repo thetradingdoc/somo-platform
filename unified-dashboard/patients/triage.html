@@ -177,8 +177,12 @@
   <script type="module">
     import { getPatientFeatureFlags, mountBottomTabs } from '../assets/js/patient-shell.js';
     document.addEventListener('DOMContentLoaded', async () => {
-      mountBottomTabs();
       const features = await getPatientFeatureFlags();
+      if (features.portal_mode === 'dental_pay_only') {
+        window.location.href = 'pay.html';
+        return;
+      }
+      mountBottomTabs();
       if (!features.chat_enabled) {
         window.location.href = 'book.html?chat=disabled';
       }
@@ -274,11 +278,25 @@
       }
     }
 
-    const LANGUAGES_LIST = 'English, Spanish, Russian, Chinese, French, German, Swahili, and other common languages';
+    // Fallback greeting (used only if the server opener call fails). Kept short and
+    // without an enumerated language list per the unified greeting policy.
     function buildKellyGreeting(firstName) {
       const first = (firstName || 'Patient').trim() || 'Patient';
       const cap = first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
-      return `Hi ${cap}, my name is Kelly. I'm your virtual assistant today. How can I help you today? You can respond in any of the following languages: ${LANGUAGES_LIST}. If this feels like an emergency, please call 911 or go to the nearest ER.`;
+      return `Hi ${cap}, I'm Kelly, your virtual assistant. How can I help you today? If this is an emergency, call 911 or go to the nearest ER.`;
+    }
+
+    // Server-authoritative, branded, name-first opener (parity with voice).
+    async function fetchServerOpener(firstName) {
+      try {
+        const r = await fetch(`${API_BASE}/api/patient/triage/opener`, {
+          headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+        });
+        const j = await r.json().catch(() => null);
+        if (handleSessionExpired(r, j)) return null;
+        if (r.ok && j && j.success && j.text) return j.text;
+      } catch (_) {}
+      return buildKellyGreeting(firstName);
     }
 
     async function fetchPatientAndHydrate() {
@@ -450,7 +468,7 @@
         returnLink.href = decodeURIComponent(returnParam);
       }
       const firstName = await fetchPatientAndHydrate();
-      const greeting = buildKellyGreeting(firstName);
+      const greeting = (await fetchServerOpener(firstName)) || buildKellyGreeting(firstName);
       if (hasSession) {
         const loaded = await loadHistoryIfResuming();
         if (msgs.children.length === 0) {

@@ -3,15 +3,34 @@
 const { KELLY_LANE } = require('../state-schema');
 const { buildBoundedPromptContext } = require('../prompt-bounding-locale');
 
+// Política compartida de primer contacto + conversación (voz y chat).
+const FIRST_CONTACT_POLICY =
+  'Estilo de conversación: comienza cada respuesta reconociendo brevemente lo que dijo el paciente y luego pregunta una sola cosa. ' +
+  'Sé cálida, segura y sin prisa — nunca apresurada ni robótica. ' +
+  'Primero el nombre: si aún no sabes el nombre del paciente, pídelo antes de "¿en qué puedo ayudarte?"; ' +
+  'una vez que lo sepas, dirígete a la persona por su nombre.';
+
 const BASE =
   'Eres Kelly, asistente clínica de consultorio. Usa herramientas para hechos; nunca inventes citas, copagos ni enlaces de pago. ' +
-  'Responde en español, breve y amable. Voz: una pregunta por turno, unas 20 palabras.';
+  'Responde en español, breve y amable. Voz: una pregunta por turno, unas 20 palabras. ' +
+  FIRST_CONTACT_POLICY;
 
 const LANE_HINTS = {
-  [KELLY_LANE.BASIC_INTAKE]: (step) =>
-    `Carril: datos básicos (paso: ${step}). Recoge nombre, contacto y consentimiento antes de preguntas clínicas.`,
+  [KELLY_LANE.BASIC_INTAKE]: (step, providerCtx = {}) => {
+    const knownName = providerCtx.pmsPatientName ? String(providerCtx.pmsPatientName).trim() : '';
+    const stepHints = {
+      identity: knownName
+        ? `La persona se llama ${knownName}; no pidas el nombre completo. Saluda por su nombre y continúa el registro.`
+        : 'Pida solo el nombre completo.',
+      contact: 'Pida solo el mejor número de teléfono.',
+      dob: 'Pida solo la fecha de nacimiento.',
+      status: 'Pregunte si es paciente nuevo o ya nos visitó.',
+      reason: 'Pida el motivo administrativo de la visita (sin OPQRST).'
+    };
+    return `Carril: recepción (paso: ${step}). ${stepHints[step] || 'Recoja datos de registro de uno en uno.'} Una pregunta por turno.`;
+  },
   [KELLY_LANE.CLINICAL]: (step) =>
-    `Carril: intake clínico (paso: ${step}). Recoge OPQRST e historial; ejecuta triage RAG en evaluación. Una pregunta por turno.`,
+    `Carril: motivo de visita (paso: ${step}). Motivo administrativo breve — sin OPQRST ni triage clínico.`,
   [KELLY_LANE.BOOKING]: (step) =>
     `Carril: reserva (paso: ${step}). Busca horarios y agenda; no preguntes tipo de piel de skincare.`,
   [KELLY_LANE.PAYMENT]: (step) =>
@@ -32,7 +51,7 @@ const LANE_HINTS = {
 
 function laneSystemPrompt(lane, step, state, providerCtx = {}) {
   const hintFn = LANE_HINTS[lane];
-  const hint = hintFn ? hintFn(step) : '';
+  const hint = hintFn ? hintFn(step, providerCtx) : '';
 
   const identityParts = [];
   const name = providerCtx.clinicName ? String(providerCtx.clinicName).trim() : null;
@@ -52,7 +71,8 @@ function laneSystemPrompt(lane, step, state, providerCtx = {}) {
   const identityBlock = identityParts.length ? identityParts.join(' ') + '\n\n' : '';
 
   const bounded = buildBoundedPromptContext({ ...state, locale: state.flags?.preferred_language || state.locale || 'es' });
-  return `${identityBlock}${BASE}\n\n${hint}${bounded.promptSuffix}\nSesión: ${state.session_id || ''}`;
+  const pmsBlock = providerCtx.pmsContextBlock ? `\n\n${providerCtx.pmsContextBlock}` : '';
+  return `${identityBlock}${BASE}\n\n${hint}${pmsBlock}${bounded.promptSuffix}\nSesión: ${state.session_id || ''}`;
 }
 
-module.exports = { laneSystemPrompt, BASE, LANE_HINTS };
+module.exports = { laneSystemPrompt, BASE, LANE_HINTS, FIRST_CONTACT_POLICY };

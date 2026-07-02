@@ -21,13 +21,14 @@ const {
   runDeterministicCancel,
   runDeterministicClinicalIntro,
   runDeterministicOpqrst,
+  runDeterministicFrontDeskIntake,
   runDeterministicSchedule,
   runDeterministicBookingConflict
 } = require('./gates');
 const { sessionRow, argsFromMeta, opqrstComplete, transitionToRebookBooking } = require('./gates/shared');
 
 const NEXT_STEP = {
-  basic_intake: { identity: 'contact', contact: 'policy', policy: 'done' },
+  basic_intake: { identity: 'contact', contact: 'dob', dob: 'status', status: 'reason', reason: 'done' },
   clinical: {
     clinical_intake: 'medical_history',
     medical_history: 'medications',
@@ -139,9 +140,11 @@ function advanceAfterStep(state, { outcome, toolsUsed = [] } = {}) {
     return;
   }
 
-  if (lane === KELLY_LANE.BASIC_INTAKE && state.step === 'policy') {
+  if (lane === KELLY_LANE.BASIC_INTAKE && state.step === 'reason') {
     state.flags.basic_intake_complete = true;
+    state.flags.front_desk_intake_complete = true;
     KellyToolExecutor._setSessionMeta(state.session_id, 'basic_intake_complete', '1');
+    KellyToolExecutor._setSessionMeta(state.session_id, 'front_desk_intake_complete', '1');
   }
 
   if (lane === KELLY_LANE.SUPPORT && state.step === 'handoff') {
@@ -175,6 +178,7 @@ async function executeLaneStep(state, ctx) {
     runDeterministicCancel,
     runDeterministicClinicalIntro,
     runDeterministicOpqrst,
+    runDeterministicFrontDeskIntake,
     runDeterministicSchedule,
     runDeterministicBookingConflict
   });

@@ -130,7 +130,7 @@ These require live prod/staging access, human QA, or clinical sign-off:
 - [x] **RS-2-01** `database/connection.js` — path resolution, WAL, Postgres pool init (query helpers still in `database.js`)
 - [ ] **RS-2-02** `deferred` — Move inline `migrate*()` batch to `database/migrations/startup/*.js`
 - [ ] **RS-2-03** `deferred` — Move query helpers to `database/repositories/<domain>.js` per `ARCHITECTURE.md` Phase 2
-- [ ] **RS-2-04** `deferred` — Split `server.js` per `docs/architecture/SERVER_DECOMPOSITION.md`
+- [ ] **RS-2-04** `deferred` — Split `server.js` per [`LIVE.md § server decomposition`](../docs/architecture/LIVE.md#server-decomposition)
 - [ ] **RS-2-05** `deferred` — Formalize `Knowledge/` boundary (`@somo/knowledge` workspace or `data/knowledge` symlink)
 - [ ] **RS-2-06** `deferred` — Consolidate `middleware-platform/scripts/` into `payor/`, `verify/`, `seed/` subdirs
 - [ ] **RS-2-07** `deferred` — Continue Postgres-primary path per `docs/Database/OPERATIONS.md` — reduce dual-write complexity
@@ -320,7 +320,7 @@ Engineering ~complete; human/staging proof required. Reference: [`docs/runbooks/
 
 ### Kelly RCM pipeline (TODO-01–24)
 
-**SSOT:** [`docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md`](../docs/architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md)
+**SSOT:** [`LIVE.md § kelly agentic rails`](../docs/architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan)
 
 Open roadmap items: TODO-01–04 (P0 Kelly status/provisioning), TODO-05–07 (journey backbone), TODO-08–16 (timeline, ledger, payments), TODO-18/20/24 (deferred command center). Playwright-driven UI consistency gaps: provider shell on all pages, theme/icon normalization, legacy commerce traces.
 

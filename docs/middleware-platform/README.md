@@ -1,7 +1,11 @@
 # Middleware platform documentation (consolidated)
-> Last reviewed: 2026-06-16
+> Last reviewed: 2026-07-02
 
-**Last Updated:** 2026-06-16
+**Last Updated:** 2026-07-02
+
+### NYC front desk (Kelly voice)
+
+Runtime: `voice-incoming-handler.js` → Retell → `kelly-turn-resolver.js` → Kelly Rails v2 + `conversation-mode/`. Verify: `npm run verify:unblocked-phases`. Docs: [`voice-agent/README.md`](../voice-agent/README.md).
 
 ## 2026-06-16 changelog
 
@@ -89,7 +93,7 @@
 
 Middleware-specific docs for Kelly, Skin & Care intake, voice/Retell, Step10/LangGraph, checkout and payments, security, catalog/OBF, and operations.
 
-**Patient portal — Timeline / billing / journal:** API contracts and SQLite scope are summarized in **[`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)** (`calendar-range`, billing events, `include_empty_days`, Postgres caveat). HTTP ownership: **`routes/patient-routine.js`**, **`routes/patient-billing-portal.js`** (see [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md)).
+**Patient portal — Timeline / billing / journal:** API contracts and SQLite scope are summarized in **[`LIVE.md § patient timeline`](../architecture/LIVE.md#patient-timeline-routine-and-billing)** (`calendar-range`, billing events, `include_empty_days`, Postgres caveat). HTTP ownership: **`routes/patient-routine.js`**, **`routes/patient-billing-portal.js`** (see [`LIVE.md § server decomposition`](../architecture/LIVE.md#server-decomposition)).
 
 ### Documentation parity tracker
 
@@ -101,7 +105,7 @@ Middleware-specific docs for Kelly, Skin & Care intake, voice/Retell, Step10/Lan
 
 Route ownership anchors for developer navigation (expand in future updates):
 
-- **Patient portal (routine / timeline / shelf / billing / booking)** — see [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md)
+- **Patient portal (routine / timeline / shelf / billing / booking)** — see [`LIVE.md § server decomposition`](../architecture/LIVE.md#server-decomposition)
   - `routes/patient-routine.js` — template, daily, photo, journal calendar-range, progress-summary, handoff
   - `routes/patient-shelf.js` — shelf products + link to routine items
   - `routes/patient-products.js` — product catalog and lists
@@ -176,7 +180,7 @@ Failure-mode notes:
 
 Per-domain debug quick links:
 
-- Runtime/call paths: [`docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)
+- Runtime/call paths: [`LIVE.md § runtime entrypoints`](../architecture/LIVE.md#runtime-entrypoints-and-route-ownership)
 - Ownership map: `docs/development/README.md#consolidated-code_ownership_by_surfacemd`
 - Scripts map: `docs/development/README.md#consolidated-scripts_operations_mapmd`
 - Gap tracker: `docs/meta/README.md#codebase-batch-review-and-documentation-gaps`
@@ -548,7 +552,7 @@ This document orients new contributors. Deep dives live in `docs/` and `docs/arc
 
 ## `server.js` scale
 
-- Compose entry ~**11k** lines after phase 6+ extraction; ownership map: [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md).
+- Compose entry ~**11k** lines after phase 6+ extraction; ownership map: [`LIVE.md § server decomposition`](../architecture/LIVE.md#server-decomposition).
 - Policy for new routes: `docs/development/README.md#server-js-refactor-policy` — add handlers under `routes/` + `services/`, not inline in `server.js`.
 
 ## Security & payments

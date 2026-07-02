@@ -357,6 +357,11 @@ function syncCopayFromEligibility({ clinicId, patientId, journeyId }) {
     },
     dedupeKey: `eligibility_copay:${patientId}:${row.copay_amount}`,
   });
+  try {
+    db.db
+      .prepare(`UPDATE rcm_journeys SET amount_due = ?, updated_at = datetime('now') WHERE id = ? AND clinic_id = ?`)
+      .run(Number(row.copay_amount), String(journeyId), String(clinicId));
+  } catch (_) {}
   return row.copay_amount;
 }
 

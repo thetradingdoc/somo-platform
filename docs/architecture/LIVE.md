@@ -1,12 +1,76 @@
 # LIVE
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-02
 
 <a id="route-ownership-pre-phase-3"></a>
 
-## Route ownership (Pre-Phase 3)
+## Route ownership
 
 See [`ROUTE_OWNERSHIP.md`](./ROUTE_OWNERSHIP.md) — KEEP / FREEZE / DELETE table for health finance agent vs legacy commerce.
+
+**PMS hub (Phase 3A):** See [`PMS_CONNECT_ARCHITECTURE.md`](./PMS_CONNECT_ARCHITECTURE.md) — Somo adapter, tenant auth, Kelly context, write-back paths.
+
+<a id="nyc-front-desk-onboarding"></a>
+
+## NYC front desk — provider onboarding
+
+Operator-invite pilot path (Batch 4):
+
+```mermaid
+flowchart LR
+  Admin[admin pipeline] --> Invite[provider_invites API]
+  Invite --> InviteHtml[invite.html]
+  InviteHtml --> VoiceSetup[voice-setup.html]
+  VoiceSetup --> Agent[agent.html]
+  Agent --> Today[today.html go-live checklist]
+```
+
+| Step | Artifact |
+|------|----------|
+| Send invite | `routes/provider-invites.js`, `admin/pipeline.html` |
+| Accept + provision | `invite.html`, `saas-tenant-provision.js` |
+| Voice setup | `voice-setup.html`, `routes/tenant-clinic.js` PATCH |
+| Go-live checklist | `today.html` — forward line, test call, shadow week |
+| Gate | `npm run verify:phase4-pilot` |
+
+Docs: [`phase4-pilot-checklist.md`](../voice-agent/phase4-pilot-checklist.md)
+
+<a id="voice-overflow-admission"></a>
+
+## Voice overflow and billing admission
+
+Inbound calls hit admission in `voice-incoming-handler.js` before Retell connect:
+
+1. `canAcceptInboundCall` — credits / subscription (`billing-access.js`)
+2. Concurrent capacity — `voice-active-calls`
+3. Rate limit — `voice-limit-service`
+
+When blocked for `no_minutes` or concurrent busy, forward TwiML uses **`runtime.overflowNumber` only** (respects `overflow_enabled`; no `transferNumber` fallback). See `voice-agent-runtime.resolveOverflowNumber`.
+
+<a id="voice-verify-gates"></a>
+
+## Voice verify gate matrix
+
+Master gate: `npm run verify:unblocked-phases` (chains phase 2–9 + ops alerts).
+
+| Gate | Script |
+|------|--------|
+| Phase 2 billing / copay | `verify:phase2-billing`, `verify:phase2-sandbox` |
+| Phase 3 PMS | `verify:phase3-sandbox`, `verify:phase3-data` |
+| Phase 4 invite UI | `verify:phase4-pilot` |
+| Phase 5 overflow / confirm | `verify:phase5-fast-follows` |
+| Phase 6 ops | `verify:phase6-ops` |
+| Phase 7 portal | `verify:phase7-portal` |
+| Phase 8 eval | `verify:phase8-loop`, `verify:dental-pstn-eval` |
+| Phase 9 deploy | `verify:phase9-deploy` |
+
+Ops index: [`unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md)
+
+## 2026-07-02 changelog
+
+- Documented provider invite → voice setup → today onboarding path.
+- Documented overflow admission (`overflow_enabled`, no transfer fallback).
+- Linked `verify:unblocked-phases` matrix and voice-agent README refresh.
 
 ## 2026-06-24 changelog
 

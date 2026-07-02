@@ -3,15 +3,35 @@
 const { KELLY_LANE } = require('../state-schema');
 const { buildBoundedPromptContext } = require('../prompt-bounding-locale');
 
+// Shared first-contact + conversation policy (channel-agnostic; applies to voice and chat).
+const FIRST_CONTACT_POLICY =
+  'Conversation style: begin each reply with a brief acknowledgment of what the patient just said, then ask for exactly one thing. ' +
+  'Be warm, confident, and unhurried — never rushed, scripted, or robotic. ' +
+  "Name-first: if you do not yet know the patient's name, ask for it before \"how can I help you\"; " +
+  'once you know it, address them by their first name. ' +
+  'Voice: ask one question per turn (~20 words).';
+
 const BASE =
   'You are Kelly, a clinical office assistant. Use tools for facts; never invent appointments, copays, or payment links. ' +
-  'Keep replies concise and patient-friendly.';
+  'Keep replies concise and patient-friendly. ' +
+  FIRST_CONTACT_POLICY;
 
 const LANE_HINTS = {
-  [KELLY_LANE.BASIC_INTAKE]: (step) =>
-    `Lane: basic intake (step: ${step}). Collect identity, contact, and consent before clinical questions. Voice: one field per turn.`,
+  [KELLY_LANE.BASIC_INTAKE]: (step, providerCtx = {}) => {
+    const knownName = providerCtx.pmsPatientName ? String(providerCtx.pmsPatientName).trim() : '';
+    const stepHints = {
+      identity: knownName
+        ? `Caller is ${knownName}; do not ask for full name. Greet by first name and continue intake.`
+        : 'Ask for full name only.',
+      contact: 'Ask for best callback phone number only.',
+      dob: 'Ask for date of birth only.',
+      status: 'Ask if new or returning patient only.',
+      reason: 'Ask administrative reason for visit (not clinical OPQRST).'
+    };
+    return `Lane: front desk intake (step: ${step}). ${stepHints[step] || 'Collect registration fields one at a time.'} Voice: one field per turn.`;
+  },
   [KELLY_LANE.CLINICAL]: (step) =>
-    `Lane: clinical intake (step: ${step}). Gather OPQRST and medical history; run triage RAG when assessment step is active. Voice: one question per turn.`,
+    `Lane: reason for visit (step: ${step}). Collect brief administrative reason only — do not run OPQRST or clinical triage for front-desk tenants.`,
   [KELLY_LANE.BOOKING]: (step) =>
     `Lane: booking (step: ${step}). Find slots and schedule; do not ask for skincare skin type.`,
   [KELLY_LANE.PAYMENT]: (step) =>
@@ -32,7 +52,7 @@ const LANE_HINTS = {
 
 function laneSystemPrompt(lane, step, state, providerCtx = {}) {
   const hintFn = LANE_HINTS[lane];
-  const hint = hintFn ? hintFn(step) : '';
+  const hint = hintFn ? hintFn(step, providerCtx) : '';
 
   const identityParts = [];
   const name = providerCtx.clinicName ? String(providerCtx.clinicName).trim() : null;
@@ -52,7 +72,8 @@ function laneSystemPrompt(lane, step, state, providerCtx = {}) {
   const identityBlock = identityParts.length ? identityParts.join(' ') + '\n\n' : '';
 
   const { promptSuffix } = buildBoundedPromptContext(state);
-  return `${identityBlock}${BASE}\n\n${hint}${promptSuffix}\nSession: ${state.session_id || ''}`;
+  const pmsBlock = providerCtx.pmsContextBlock ? `\n\n${providerCtx.pmsContextBlock}` : '';
+  return `${identityBlock}${BASE}\n\n${hint}${pmsBlock}${promptSuffix}\nSession: ${state.session_id || ''}`;
 }
 
-module.exports = { laneSystemPrompt, BASE, LANE_HINTS };
+module.exports = { laneSystemPrompt, BASE, LANE_HINTS, FIRST_CONTACT_POLICY };

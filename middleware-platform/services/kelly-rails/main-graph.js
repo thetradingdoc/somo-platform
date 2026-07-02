@@ -58,6 +58,7 @@ function buildExecuteTurnInput(state = {}, ctx = {}, opts = {}) {
     providerInstructions: ctx.providerInstructions || opts.providerInstructions || null,
     locale: ctx.locale || opts.locale || opts.preferredLanguage,
     preferredLanguage: ctx.locale || opts.preferredLanguage || opts.locale,
+    pmsContext: ctx.pmsContext || opts.pmsContext || null,
     conversation_mode:
       opts.conversation_mode || ctx.conversation_mode || session.conversation_mode || null,
     active_subrail: opts.active_subrail || ctx.active_subrail || session.active_subrail || null,
@@ -177,6 +178,7 @@ async function invokeMainGraph(opts = {}) {
       locale,
       db: opts.db || null,
       providerInstructions: opts.providerInstructions || null,
+      pmsContext: opts.pmsContext || null,
       conversation_mode: opts.conversation_mode || null,
       active_subrail: opts.active_subrail || null,
       kelly_lane_hint: opts.kelly_lane_hint || null,

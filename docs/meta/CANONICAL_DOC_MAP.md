@@ -1,11 +1,12 @@
 # Canonical documentation map
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-02
 
 Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); see [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
 
 | Topic | Read first | Companion / depth |
 |-------|------------|-------------------|
+| **NYC front desk (active pilot SSOT)** | Master plan `~/.cursor/plans/provider_portal_production_20d1693f.plan.md` | [`architecture/LIVE.md`](../architecture/LIVE.md), [`voice-agent/unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md) |
 | **Healthcare financial agent (SSOT)** | Master plan `~/.cursor/plans/somo_health_session_architecture_723cc4d3.plan.md` | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) |
 | **Repo overview** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
 | **Deploy / CI / GCP (live)** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#callsomo-gcp-cutover) | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md), [`deployment/README.md`](../deployment/README.md) (historical) |
@@ -24,6 +25,10 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`kelly-rails/`](../../middleware-platform/services/kelly-rails/) in code |
 | **Conversation mode rails** | [`conversation/CONVERSATION_MODE_MATRIX.md`](../conversation/CONVERSATION_MODE_MATRIX.md) | [`runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md), `services/conversation-mode/*` |
 | **Kelly front-desk UX** | [`product/KELLY_FRONT_DESK_UX.md`](../product/KELLY_FRONT_DESK_UX.md) | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md), `call-opener-resolver.js` |
+| **PMS connect (Phase 3)** | [`architecture/PMS_CONNECT_ARCHITECTURE.md`](../architecture/PMS_CONNECT_ARCHITECTURE.md) | [`voice-agent/phase3-pilot-checklist.md`](../voice-agent/phase3-pilot-checklist.md), `services/pms/*` |
+| **Voice ops / verify gates** | [`voice-agent/unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md) | `npm run verify:unblocked-phases`, phase2–4 pilot checklists |
+| **Front-desk deploy** | [`deployment/FRONT_DESK_PRODUCTION.md`](../deployment/FRONT_DESK_PRODUCTION.md) | [`deployment/FRONT_DESK_DEPLOY_CHECKLIST.md`](../deployment/FRONT_DESK_DEPLOY_CHECKLIST.md), [`PHASE0_DEPLOY_STATE.md`](../deployment/PHASE0_DEPLOY_STATE.md) |
+| **Pilot week runbooks** | [`voice-agent/PILOT_ONCALL_WEEK.md`](../voice-agent/PILOT_ONCALL_WEEK.md) | [`SHADOW_WEEK_RUNBOOK.md`](../voice-agent/SHADOW_WEEK_RUNBOOK.md), [`PILOT_INCIDENT_PLAYBOOK.md`](../voice-agent/PILOT_INCIDENT_PLAYBOOK.md) |
 | **Tenant portal audit** | [`testing/TESTING.md`](../testing/TESTING.md#tenant-front-desk-audit) | `e2e/tenant-front-desk-audit.spec.cjs`, `test-results/tenant-front-desk-audit.md` |
 | **Kelly Phase C (language + voice)** | [`runbooks/KELLY_PHASE_C_STAGING.md`](../runbooks/KELLY_PHASE_C_STAGING.md) | [`DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md`](../agent/kelly-rails/DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md), [`todos/PENDING.md`](../../todos/PENDING.md) (Phase C section) |
 | **Payor / provider search** | [`Payor/README.md`](../Payor/README.md) | [`Payor/OPERATIONS.md`](../Payor/OPERATIONS.md) |

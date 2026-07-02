@@ -157,11 +157,36 @@ function createVoiceIncomingHandler(deps) {
     }
 
     if (customerId && !isOutboundSales) {
-      const { canAcceptInboundCall, buildBlockedTwiml } = require('./billing-access');
+      const {
+        canAcceptInboundCall,
+        buildBlockedTwiml,
+        buildForwardOrBlockedTwiml,
+        OVERFLOW_FORWARD_REASONS
+      } = require('./billing-access');
       const access = canAcceptInboundCall(db, customerId);
       if (!access.allowed) {
         console.warn(`⚠️  Inbound blocked for customer ${customerId}: ${access.reason}`);
-        return res.type('text/xml').send(buildBlockedTwiml(access.message));
+        let twiml = buildBlockedTwiml(access.message);
+        if (OVERFLOW_FORWARD_REASONS.has(access.reason) && matchedCustomer) {
+          try {
+            const VoiceAgentRuntime = require('./voice-agent-runtime');
+            const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
+              merchantId: matchedCustomer.merchant_id,
+              customerId: matchedCustomer.id,
+              clinicId: clinicId || undefined
+            });
+            const overflowTarget = runtime.overflowNumber;
+            if (overflowTarget) {
+              twiml = buildForwardOrBlockedTwiml(
+                'Please hold while we connect you to the office.',
+                overflowTarget
+              );
+            }
+          } catch (overflowErr) {
+            console.warn('⚠️  Overflow forward resolution failed:', overflowErr.message);
+          }
+        }
+        return res.type('text/xml').send(twiml);
       }
       if (access.trial) {
         try {
@@ -180,13 +205,9 @@ function createVoiceIncomingHandler(deps) {
         });
         const admission = VoiceAgentRuntime.evaluateCallAdmission(runtime);
         if (!admission.allowed) {
-          const msg = admission.message || VoiceAgentRuntime.buildUnavailableMessage();
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Polly.Joanna">${String(msg).replace(/[<>&"']/g, '')}</Say>
-  <Hangup/>
-</Response>`;
-          console.warn(`⚠️  Inbound voice gate (${admission.reason}) for customer ${matchedCustomer.id}`);
+          const { buildAdmissionTwiml } = require('./voice-admission-twiml');
+          const twiml = buildAdmissionTwiml(admission);
+          console.warn(`⚠️  Inbound voice gate (${admission.reason}, ${admission.action}) for customer ${matchedCustomer.id}`);
           return res.type('text/xml').send(twiml);
         }
       } catch (gateErr) {
@@ -239,11 +260,31 @@ function createVoiceIncomingHandler(deps) {
           max_concurrent_calls: capacity.max,
           limit_type: 'max_concurrent_calls'
         }));
-        const busyTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+        let busyTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">All of our lines are currently busy. Please try again in a moment.</Say>
   <Hangup/>
 </Response>`;
+        if (matchedCustomer) {
+          try {
+            const VoiceAgentRuntime = require('./voice-agent-runtime');
+            const { buildForwardOrBlockedTwiml } = require('./billing-access');
+            const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
+              merchantId: matchedCustomer.merchant_id,
+              customerId: matchedCustomer.id,
+              clinicId: clinicId || undefined
+            });
+            const overflowTarget = runtime.overflowNumber;
+            if (overflowTarget) {
+              busyTwiml = buildForwardOrBlockedTwiml(
+                'All of our lines are busy. Connecting you to the office now.',
+                overflowTarget
+              );
+            }
+          } catch (overflowErr) {
+            console.warn('⚠️  Concurrent overflow forward resolution failed:', overflowErr.message);
+          }
+        }
         return res.type('text/xml').send(busyTwiml);
       }
     }
@@ -438,6 +479,30 @@ function createVoiceIncomingHandler(deps) {
       dynamicVariables.call_type = 'operator_outbound';
       dynamicVariables.direction = 'outbound';
     }
+    if (!isOutboundSales && !isNavigationInbound) {
+      dynamicVariables.call_type = metadata.call_type || 'inbound_tenant';
+      dynamicVariables.direction = 'inbound';
+    }
+
+    const { validateHealthcareVoiceVars } = require('./voice-dynamic-vars');
+    const varCheck = validateHealthcareVoiceVars({
+      customer: matchedCustomer,
+      customerId,
+      clinicId: dynamicVariables.clinic_id || clinicId,
+      callType: dynamicVariables.call_type || metadata.call_type
+    });
+    if (!varCheck.ok && matchedCustomer && !isOutboundSales && !isNavigationInbound) {
+      console.warn(
+        `⚠️  Healthcare voice vars missing (${(varCheck.missing || []).join(', ')}) customer=${customerId}`
+      );
+      const { buildMissingRetellTwiml } = require('./voice-inbound-tenant');
+      return res.type('text/xml').send(
+        buildMissingRetellTwiml(
+          'We are unable to connect your call right now. Please try again shortly.',
+          { db, clinicId, customerId, reason: 'missing_dynamic_vars' }
+        )
+      );
+    }
 
     // Pre-populate patient context only when site is verified (no global FHIR fallback)
     if (!isOutboundSales && req.body.From) {
@@ -449,31 +514,39 @@ function createVoiceIncomingHandler(deps) {
         if (!canPrepopulatePatient(vctx)) {
           // skip pre-pop — safer than wrong patient
         } else {
-        const callerPhone = SMSService.formatPhoneNumber(req.body.From);
-        const { findFHIRPatientForVoice } = require('./fhir-voice-lookup');
-        const lookupOpts = {
-          phone: callerPhone,
-          clinicId: vctx.clinic_id,
-          customerId: vctx.customer_id || metadata.customer_id || null,
-          merchantId: siteContextForMetadata?.merchant_id || metadata.merchant_id || null,
-          requireClinicScope: true
-        };
-        let patient = findFHIRPatientForVoice(db, lookupOpts);
-        if (!patient) {
+        const callerPhone = normalizePhoneNumber(req.body.From);
+        const { PmsHub } = require('./pms/pms-hub');
+        const clinicForPms = vctx.clinic_id || clinicId;
+        const hub = clinicForPms ? PmsHub.tryForClinic(clinicForPms) : null;
+        let pmsCtx = null;
+        if (hub) {
+          pmsCtx = await hub.getPatientContext({
+            caller_phone: callerPhone,
+            call_id: slotCallKey || metadata.call_id || null
+          });
+        }
+        if (!pmsCtx?.patient && callerPhone) {
           const altPhone = normalizePhoneNumber(req.body.From);
-          if (altPhone !== callerPhone) {
-            patient = findFHIRPatientForVoice(db, { ...lookupOpts, phone: altPhone });
+          if (altPhone !== callerPhone && hub) {
+            pmsCtx = await hub.getPatientContext({
+              caller_phone: altPhone,
+              call_id: slotCallKey || metadata.call_id || null
+            });
           }
         }
-        if (patient) {
-          const data = patient.resource_data && typeof patient.resource_data === 'object' ? patient.resource_data : {};
-          const name = data?.name?.[0];
-          const patientName = name ? [name.given?.join(' '), name.family].filter(Boolean).join(' ').trim() : (patient.name || null);
-          const hasInsurance = !!(data?.insurance?.length || patient.insurance_verified);
-          dynamicVariables.patient_id = String(patient.resource_id);
+        const patient = pmsCtx?.patient;
+        if (patient && !pmsCtx?.ambiguous) {
+          const patientName = patient.full_name || [patient.first_name, patient.last_name].filter(Boolean).join(' ');
+          dynamicVariables.patient_id = String(patient.id);
           if (patientName) dynamicVariables.patient_name = String(patientName);
-          dynamicVariables.has_insurance = hasInsurance ? 'yes' : 'no';
-          console.log(`✅ Pre-populated patient context: ${patientName || patient.resource_id} (insurance: ${dynamicVariables.has_insurance})`);
+          dynamicVariables.has_insurance = pmsCtx.has_insurance ? 'yes' : 'no';
+          dynamicVariables.is_returning = pmsCtx.is_returning ? 'yes' : 'no';
+          dynamicVariables.balance_flag = pmsCtx.balance_flag ? 'yes' : 'no';
+          if (pmsCtx.next_appointment) {
+            dynamicVariables.next_appointment = `${pmsCtx.next_appointment.date} ${pmsCtx.next_appointment.time}`;
+          }
+          dynamicVariables.pms_context = 'yes';
+          console.log(`✅ PMS patient context: ${patientName || patient.id} (insurance: ${dynamicVariables.has_insurance})`);
         }
         }
       } catch (e) {
@@ -689,9 +762,23 @@ function createVoiceIncomingHandler(deps) {
                 db.getCustomerIdForClinic?.(clinicId) ||
                 db.ensureCustomerIdForClinic?.(clinicId) ||
                 null;
-              if (!resolvedCustomerId) {
-                console.warn(`⚠️  Could not resolve customer_id for clinic ${clinicId}; logging voice call without customer_id`);
-              }
+            }
+            if (!resolvedCustomerId) {
+              // Observable metric: a null customer_id means the call won't surface on the
+              // tenant dashboard's customer-scoped query (dashboard now also falls back to clinic_id).
+              console.error(
+                `[voice_call_log] UNRESOLVED_CUSTOMER_ID call_id=${callId} clinic_id=${clinicId || 'none'} ` +
+                  `incoming_customer_id=${customerId || 'none'} direction=${isOutboundSales ? 'outbound' : 'inbound'}`
+              );
+              try {
+                db.insertKellyCallEvent?.({
+                  session_id: callId,
+                  call_id: callId,
+                  event_type: 'voice_call_customer_unresolved',
+                  clinic_id: clinicId || null,
+                  payload_json: { call_id: callId, clinic_id: clinicId || null }
+                });
+              } catch (_) {}
             }
 
             const callDirection = isOutboundSales ? 'outbound' : 'inbound';

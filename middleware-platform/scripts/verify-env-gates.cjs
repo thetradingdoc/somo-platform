@@ -2,49 +2,42 @@
 'use strict';
 
 /**
- * Production env gate — fail unsafe Kelly routing in production profile.
- *
- * Fails when CLOUDRUN_PROFILE=production and:
- *   - CONVERSATION_MODE_ROUTING=shadow, OR
- *   - KELLY_ALLOW_HYBRID_GRAPH=1
+ * Production env gate — Kelly routing + HIPAA/voice vendor requirements.
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-function truthy(v) {
-  const s = String(v ?? '').trim().toLowerCase();
-  return s === '1' || s === 'true' || s === 'yes';
-}
+const {
+  isProductionProfile,
+  isDeployedProfile,
+  getKellyRoutingViolations,
+  getDeployedProfileViolations,
+  getAllEnvGateViolations
+} = require('../services/hipaa-production-guards');
 
 function main() {
   const profile = String(process.env.CLOUDRUN_PROFILE || '').trim().toLowerCase();
-  const isProd = profile === 'production' || profile === 'prod';
-  const modeRouting = String(process.env.CONVERSATION_MODE_ROUTING || '').trim().toLowerCase();
-  const hybrid = process.env.KELLY_ALLOW_HYBRID_GRAPH;
+  const isCi = ['1', 'true', 'yes'].includes(String(process.env.CI || '').trim().toLowerCase());
+  const violations = isCi
+    ? [
+        ...getKellyRoutingViolations(process.env),
+        ...getDeployedProfileViolations(process.env)
+      ]
+    : getAllEnvGateViolations(process.env);
 
   const report = {
     cloudrun_profile: profile || null,
-    conversation_mode_routing: modeRouting || null,
-    kelly_allow_hybrid_graph: hybrid ?? null,
-    production_profile: isProd,
-    violations: []
+    conversation_mode_routing: process.env.CONVERSATION_MODE_ROUTING || null,
+    kelly_allow_hybrid_graph: process.env.KELLY_ALLOW_HYBRID_GRAPH ?? null,
+    baa_acknowledged: process.env.BAA_ACKNOWLEDGED ?? null,
+    require_jwt_for_fhir: process.env.REQUIRE_JWT_FOR_FHIR ?? null,
+    admin_portal_secret_set: !!(process.env.ADMIN_PORTAL_SECRET || '').trim(),
+    production_profile: isProductionProfile(),
+    deployed_profile: isDeployedProfile(),
+    violations,
+    pass: violations.length === 0
   };
 
-  if (isProd) {
-    if (modeRouting === 'shadow') {
-      report.violations.push('CONVERSATION_MODE_ROUTING=shadow is not allowed in production');
-    }
-    if (truthy(hybrid)) {
-      report.violations.push('KELLY_ALLOW_HYBRID_GRAPH=1 is not allowed in production');
-    }
-  }
-
-  const profileIsDeployed = isProd || profile === 'staging';
-  if (profileIsDeployed && truthy(process.env.ALLOW_DEV_CLINIC_FALLBACK)) {
-    report.violations.push('ALLOW_DEV_CLINIC_FALLBACK must be unset for staging/production');
-  }
-
-  report.pass = report.violations.length === 0;
   console.log(JSON.stringify(report, null, 2));
   process.exit(report.pass ? 0 : 1);
 }

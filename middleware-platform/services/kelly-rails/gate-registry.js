@@ -38,6 +38,12 @@ function buildGateRegistry(runners) {
       run: runners.runDeterministicClinicalIntro,
       owns: (r) => r && !!r.reply
     },
+    {
+      id: 'front_desk_intake',
+      priority: 91,
+      run: runners.runDeterministicFrontDeskIntake,
+      owns: (r) => r && !!r.reply
+    },
     { id: 'opqrst', priority: 92, run: runners.runDeterministicOpqrst, owns: (r) => r && !!r.reply },
     {
       id: 'schedule',
@@ -76,6 +82,7 @@ async function runPreBookingGates(registry, state, ctx, advanceAfterStep) {
     'reschedule',
     'cancel',
     'clinical_intro',
+    'front_desk_intake',
     'opqrst'
   ]);
   const sorted = sortGatesByPriority(registry).filter((g) => preIds.has(g.id));

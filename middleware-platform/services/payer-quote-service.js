@@ -11,7 +11,9 @@ const db = require('../database');
 const VALID_STATUS = new Set(['hard_number', 'estimate', 'cannot_determine']);
 
 function normalizeCpt(code) {
-  return String(code || '').replace(/\./g, '').trim().toUpperCase();
+  const raw = String(code || '').replace(/\./g, '').trim().toUpperCase();
+  if (/^D\d{4}$/.test(raw)) return raw;
+  return raw;
 }
 
 function findMatchingRule(payerId, planId, cpt) {

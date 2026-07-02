@@ -2639,8 +2639,19 @@
       }
     }
 
+    async function fetchScheduleOpener() {
+      try {
+        const r = await fetch(`${API_BASE}/api/patient/triage/opener`, {
+          headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+        });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j && j.success && j.text) return j.text;
+      } catch (_) {}
+      return 'Hi — I can help you choose a time and set up your visit. What can we help you with today?';
+    }
+
     if (openChatModal) {
-      openChatModal.addEventListener('click', () => {
+      openChatModal.addEventListener('click', async () => {
         if (!sid) {
           window.location.href = 'patient-login.html';
           return;
@@ -2648,7 +2659,8 @@
         chatModal.classList.remove('hidden');
         chatModal.classList.add('flex');
         if (!chatMsgs.hasChildNodes()) {
-          chatAdd('assistant', 'Hi — I can help you choose a time and set up your visit. What can we help you with today?');
+          const opener = await fetchScheduleOpener();
+          chatAdd('assistant', opener);
           chatSetChips([
             { label: 'Book a general visit', value: 'I want to book a general visit' },
             { label: 'I have symptoms', value: 'I have symptoms' },
@@ -2700,8 +2712,15 @@
     }
   </script>
   <script type="module">
-    import { mountBottomTabs } from '../assets/js/patient-shell.js';
-    mountBottomTabs();
+    import { mountBottomTabs, getPatientFeatureFlags } from '../assets/js/patient-shell.js';
+    getPatientFeatureFlags().then((f) => {
+      if (f.portal_mode === 'dental_pay_only') {
+        window.location.replace('pay.html');
+        return;
+      }
+      document.title = 'Book a visit · Somo';
+      mountBottomTabs();
+    }).catch(() => mountBottomTabs());
   </script>
 </body>
 </html>

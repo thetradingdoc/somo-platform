@@ -148,7 +148,10 @@ function pageKeyFromPath() {
 
 const DEFAULT_PATIENT_FEATURES = Object.freeze({
   wallet_enabled: false,
-  chat_enabled: false
+  chat_enabled: false,
+  portal_mode: 'full',
+  schedule_enabled: true,
+  triage_enabled: true
 });
 
 let patientFeaturesPromise = null;
@@ -167,7 +170,10 @@ export async function getPatientFeatureFlags() {
       if (!res.ok || !data?.success || !data?.features) return { ...DEFAULT_PATIENT_FEATURES };
       return {
         wallet_enabled: !!data.features.wallet_enabled,
-        chat_enabled: !!data.features.chat_enabled
+        chat_enabled: !!data.features.chat_enabled,
+        portal_mode: data.features.portal_mode || 'full',
+        schedule_enabled: data.features.schedule_enabled !== false,
+        triage_enabled: data.features.triage_enabled !== false
       };
     } catch (_) {
       return { ...DEFAULT_PATIENT_FEATURES };
@@ -217,6 +223,14 @@ export function mountBottomTabs() {
       document.querySelectorAll('a[href="wallet.html"]').forEach((el) => el.remove());
       if ((window.location.pathname || '').endsWith('/wallet.html') || (window.location.pathname || '').endsWith('wallet.html')) {
         window.location.href = 'appointments.html?wallet=disabled';
+      }
+    }
+    if (features.portal_mode === 'dental_pay_only') {
+      tabs.querySelectorAll('a[href="schedule.html"], a[href="triage.html"], a[href="my-records.html"]').forEach((el) => el.remove());
+      document.querySelectorAll('a[href="schedule.html"], a[href="triage.html"]').forEach((el) => el.remove());
+      const path = (window.location.pathname || '').split('/').pop() || '';
+      if (/^(schedule|triage)\.html$/i.test(path)) {
+        window.location.href = 'pay.html';
       }
     }
   }).catch(() => {});

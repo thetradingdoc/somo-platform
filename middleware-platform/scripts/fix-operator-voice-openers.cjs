@@ -32,6 +32,8 @@ const {
 
   isLegacyGenericGreeting,
 
+  isManagedDefaultGreeting,
+
   resolvePracticeDisplayName
 
 } = require('../services/call-opener-resolver');
@@ -96,9 +98,13 @@ function main() {
     !currentGreeting ||
     isLegacyGenericGreeting(currentGreeting) ||
     /somo owner/i.test(currentGreeting) ||
-    /our office/i.test(currentGreeting)
+    /our office/i.test(currentGreeting) ||
+    isManagedDefaultGreeting(currentGreeting)
   ) {
-    patch.greeting = inboundDefault;
+    // Idempotent: only patch when the result actually differs from what is stored.
+    if (String(currentGreeting || '').trim() !== inboundDefault) {
+      patch.greeting = inboundDefault;
+    }
   }
 
   if (
@@ -107,10 +113,14 @@ function main() {
     !/somo/i.test(currentOutbound) ||
     /our office/i.test(currentOutbound)
   ) {
-    patch.outbound_opener = outboundDefault;
+    if (String(currentOutbound || '').trim() !== outboundDefault) {
+      patch.outbound_opener = outboundDefault;
+    }
   }
 
-  patch.outbound_enabled = 1;
+  if (Number(settings?.outbound_enabled) !== 1) {
+    patch.outbound_enabled = 1;
+  }
 
 
 
@@ -176,7 +186,16 @@ function main() {
 
   }
 
-  console.log('✅ Updated operator tenant (company_name + voice_agent_settings).');
+  const changedSettings = Object.keys(patch);
+  const changedCustomer = Object.keys(customerPatch);
+  if (!changedSettings.length && !changedCustomer.length) {
+    console.log('✅ Operator tenant already up to date — no changes applied.');
+  } else {
+    console.log(
+      `✅ Updated operator tenant. customer: [${changedCustomer.join(', ') || 'none'}], ` +
+        `settings: [${changedSettings.join(', ') || 'none'}].`
+    );
+  }
 
 }
 

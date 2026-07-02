@@ -85,7 +85,12 @@ describe('collect_insurance HTTP spine integration', () => {
     };
 
     const result = await KellyToolExecutor._collectInsurance(
-      { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', member_id: 'MBR1' },
+      {
+        payer_id: 'BCBS_PILOT',
+        plan_id: 'plan_x',
+        member_id: 'MBR1',
+        date_of_birth: '1990-01-15'
+      },
       { sessionId, patientId: 'p_test', callerPhone: '+15555550123' }
     );
 

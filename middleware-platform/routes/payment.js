@@ -7,6 +7,7 @@ const express = require('express');
 const path = require('path');
 const PaymentService = require('../services/payment-service');
 const db = require('../database');
+const stripeConfig = require('../utils/stripe-config');
 const {
   resolveProviderId,
   enrichVoiceCheckout,
@@ -109,8 +110,10 @@ router.get('/intent-metadata', async (req, res) => {
       error: 'payment_intent and payment_intent_client_secret are required'
     });
   }
-  const stripeSecret = process.env.STRIPE_SECRET_KEY;
-  if (!stripeSecret) {
+  let stripeSecret;
+  try {
+    stripeSecret = stripeConfig.getStripeSecretKey();
+  } catch (_) {
     return res.status(503).json({ success: false, error: 'stripe_not_configured' });
   }
   try {
@@ -640,7 +643,7 @@ router.post('/refund', withPaymentIdempotency('payment_refund', (req) => `refund
       });
     }
 
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const stripe = require('stripe')(stripeConfig.getStripeSecretKey());
     const refundCents = amount != null ? Math.round(parseFloat(amount) * 100) : undefined;
     const refundOpts = {
       payment_intent: piId,

@@ -42,6 +42,12 @@
       headers: getAuthHeaders(),
       body: JSON.stringify({ enabled })
     });
+    if (res.status === 401) {
+      const err = new Error('Session expired — please sign in again.');
+      err.code = 'auth_required';
+      err.status = 401;
+      throw err;
+    }
     if (!res.ok) throw new Error('Toggle failed');
     const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Toggle failed');
@@ -183,6 +189,44 @@
     }
   }
 
+  function dispositionLabel(disposition) {
+    const map = {
+      booked: 'Booked',
+      insurance_verified: 'Insurance OK',
+      copay_collected: 'Copay paid',
+      copay_pending: 'Copay pending',
+      handoff: 'Handoff',
+      message_taken: 'Message',
+      stedi_down: 'Eligibility down',
+      pms_sync_pending: 'PMS pending'
+    };
+    const key = String(disposition || '').toLowerCase();
+    return map[key] || outcomeLabel(disposition);
+  }
+
+  function defaultOutboundOpener(practiceName) {
+    const name = String(practiceName || '').trim() || 'our office';
+    return `Hi, I'm Kelly from ${name}. Is now still a good time to talk?`;
+  }
+
+  function applyOutboundOpenerDefault(settings, inputId, practiceName) {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const existing = String(settings?.outbound_opener || '').trim();
+    if (existing) {
+      el.value = existing;
+      return;
+    }
+    const name =
+      practiceName ||
+      settings?.practice_name ||
+      settings?.company_name ||
+      window.__ppKellyStatus?.practice_name ||
+      '';
+    el.value = defaultOutboundOpener(name);
+    el.placeholder = el.value;
+  }
+
   global.VoiceAgentPage = {
     API_BASE,
     fetchKellyStatus,
@@ -196,7 +240,10 @@
     formatDuration,
     outcomeBadgeClass,
     outcomeLabel,
+    dispositionLabel,
     formatPromptSyncedAt,
+    defaultOutboundOpener,
+    applyOutboundOpenerDefault,
     fetchOnboarding,
     resolveOnboardingRedirect,
     shouldRedirectToSetup

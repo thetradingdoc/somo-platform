@@ -9,6 +9,9 @@ const axios = require('axios');
 /** US area codes that cannot be used for Twilio local search (e.g. +1555… test lines). */
 const INVALID_US_AREA_CODES = new Set(['555', '000', '001']);
 
+/** NYC metro area codes — preferred for healthcare front-desk pilots (VO-P0-2). */
+const NYC_AREA_CODES = ['212', '718', '347', '929', '917', '646', '332'];
+
 /**
  * Extract 3-digit US area code from E.164 (+1XXXXXXXXXX).
  * @returns {string|null}
@@ -206,6 +209,13 @@ class TwilioPhoneService {
 
     const strategies = [];
     if (preferred) strategies.push({ areaCode: preferred, label: 'mobile_area_code' });
+    if (options.preferNycAreaCodes) {
+      for (const ac of NYC_AREA_CODES) {
+        if (ac !== preferred && !strategies.some((s) => s.areaCode === ac)) {
+          strategies.push({ areaCode: ac, label: 'nyc_area_code' });
+        }
+      }
+    }
     if (fallbackAc && fallbackAc !== preferred) {
       strategies.push({ areaCode: fallbackAc, label: 'trial_default_area_code' });
     }
@@ -234,7 +244,7 @@ class TwilioPhoneService {
    * @returns {Promise<Object>} Provisioned phone number details
    */
   async provisionPhoneNumberForCustomer(options) {
-    const { customerId, areaCode, phoneE164, webhookUrl } = options;
+    const { customerId, areaCode, phoneE164, webhookUrl, preferNycAreaCodes } = options;
 
     if (!customerId) {
       throw new Error('Customer ID is required');
@@ -248,7 +258,8 @@ class TwilioPhoneService {
       const { numbers, strategy } = await this.searchAvailableWithFallback({
         country: 'US',
         areaCode: areaCode || null,
-        phoneE164: phoneE164 || null
+        phoneE164: phoneE164 || null,
+        preferNycAreaCodes: !!preferNycAreaCodes
       });
 
       if (!numbers || numbers.length === 0) {
@@ -439,4 +450,5 @@ module.exports = TwilioPhoneService;
 module.exports.extractUsAreaCodeFromE164 = extractUsAreaCodeFromE164;
 module.exports.isValidUsAreaCode = isValidUsAreaCode;
 module.exports.normalizeUsAreaCode = normalizeUsAreaCode;
+module.exports.NYC_AREA_CODES = NYC_AREA_CODES;
 

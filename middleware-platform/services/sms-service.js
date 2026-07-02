@@ -181,10 +181,10 @@ class SMSService {
      * @param {string} message - SMS message content
      * @returns {Promise<Object>} Result object with success status
      */
-    static async sendSMS(phoneNumber, message) {
+    static async sendSMS(phoneNumber, message, fromOverride = null) {
         try {
             const client = this.getTwilioClient();
-            const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+            const fromNumber = fromOverride || process.env.TWILIO_PHONE_NUMBER;
             const formattedPhone = this.formatPhoneNumber(phoneNumber);
 
             if (!this.validatePhoneNumber(formattedPhone)) {

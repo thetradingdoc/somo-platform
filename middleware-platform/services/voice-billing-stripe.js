@@ -8,28 +8,19 @@ const { getTier, getTopupPack } = require('./plan-catalog');
 const { canProvisionNumber } = require('./billing-access');
 const TwilioPhoneService = require('./twilio-phone-service');
 
+const stripeConfig = require('../utils/stripe-config');
+
 function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error('STRIPE_SECRET_KEY not set');
+  const key = stripeConfig.getStripeSecretKey();
   return new Stripe(key, { apiVersion: '2024-04-10' });
 }
 
 function priceIdForTier(tierId) {
-  const map = {
-    starter: process.env.STRIPE_PRICE_STARTER,
-    practice: process.env.STRIPE_PRICE_PRACTICE,
-    clinic_pro: process.env.STRIPE_PRICE_CLINIC_PRO
-  };
-  return map[tierId] || null;
+  return stripeConfig.getStripePriceId(tierId, 'tier');
 }
 
 function priceIdForTopup(packId) {
-  const map = {
-    small: process.env.STRIPE_PRICE_TOPUP_SMALL,
-    standard: process.env.STRIPE_PRICE_TOPUP_STANDARD,
-    large: process.env.STRIPE_PRICE_TOPUP_LARGE
-  };
-  return map[packId] || null;
+  return stripeConfig.getStripePriceId(packId, 'topup');
 }
 
 function apiBaseUrl() {
@@ -38,6 +29,15 @@ function apiBaseUrl() {
 
 function portalBaseUrl() {
   return (process.env.ADMIN_PORTAL_BASE_URL || process.env.BASE_URL || apiBaseUrl()).replace(/\/$/, '');
+}
+
+function checkoutTaxSessionFields() {
+  if (process.env.STRIPE_CHECKOUT_AUTOMATIC_TAX !== '1') return {};
+  return {
+    automatic_tax: { enabled: true },
+    billing_address_collection: 'required',
+    customer_update: { address: 'auto' }
+  };
 }
 
 async function ensureStripeCustomer(customer) {
@@ -74,7 +74,10 @@ async function provisionCustomerPhone(customerId) {
   const provisioned = await twilio.provisionPhoneNumberForCustomer({
     customerId,
     areaCode,
-    webhookUrl
+    webhookUrl,
+    preferNycAreaCodes:
+      customer.billing_vertical === 'healthcare' ||
+      ['dental', 'dental_office', 'healthcare_clinic'].includes(String(customer.use_case || ''))
   });
   const isFirstNumber = !customer.twilio_phone_number;
   if (typeof db.addCustomerPhoneNumber === 'function') {
@@ -250,8 +253,9 @@ async function createSubscriptionCheckout(customerId, tierId, vertical = 'genera
     mode: 'subscription',
     customer: stripeCustomerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${portalBaseUrl()}/business/settings.html?billing=success`,
+    success_url: `${portalBaseUrl()}/business/today.html?onboarding=checkout`,
     cancel_url: `${portalBaseUrl()}/business/settings.html?billing=cancelled`,
+    ...checkoutTaxSessionFields(),
     metadata: {
       customer_id: customerId,
       plan_tier: tierId,
@@ -285,6 +289,7 @@ async function createTopupCheckout(customerId, packId) {
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${portalBaseUrl()}/business/settings.html?topup=success`,
     cancel_url: `${portalBaseUrl()}/business/settings.html?topup=cancelled`,
+    ...checkoutTaxSessionFields(),
     metadata: {
       customer_id: customerId,
       type: 'voice_topup',
@@ -321,6 +326,16 @@ function getBillingStatus(customerId) {
   const trialMinutesAllocated = simTrial ? getTrialMinutesAllocated() : null;
   const trialMinutesRemaining = simTrial ? getTrialMinutesRemaining(db, customer) : null;
 
+  const {
+    getIncludedEligibilityChecks,
+    getEligibilityOverageRate
+  } = require('./plan-catalog');
+  let eligibilityUsage = { checks_today: 0, checks_month: 0, daily_cap: 50 };
+  try {
+    const { getUsageForCustomer } = require('./eligibility-usage-service');
+    eligibilityUsage = getUsageForCustomer(customerId);
+  } catch (_) {}
+
   return {
     plan_tier: customer.plan_tier,
     subscription_status: customer.subscription_status,
@@ -339,7 +354,12 @@ function getBillingStatus(customerId) {
     phone_verified: customer.phone_verified === 1,
     is_somo_demo_signup: isSomoDemoSignup(customer),
     sim_trial_enabled: simTrial,
-    trial_welcome_dismissed: !!customer.trial_welcome_dismissed_at
+    trial_welcome_dismissed: !!customer.trial_welcome_dismissed_at,
+    included_eligibility_checks_per_cycle: getIncludedEligibilityChecks(customer.plan_tier),
+    eligibility_overage_rate_usd: getEligibilityOverageRate(customer.plan_tier),
+    eligibility_checks_used: eligibilityUsage.checks_month,
+    eligibility_checks_today: eligibilityUsage.checks_today,
+    eligibility_daily_cap: eligibilityUsage.daily_cap
   };
 }
 

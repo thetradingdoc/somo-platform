@@ -7,7 +7,8 @@ const rateLimit = require('express-rate-limit');
 
 const INTERNAL_JOB_TOKEN = process.env.INTERNAL_JOB_TOKEN || null;
 const shouldSkipInternalJob = (req) =>
-  INTERNAL_JOB_TOKEN && req.headers['x-internal-job-token'] === INTERNAL_JOB_TOKEN;
+  process.env.AUDIT_MIDDLEWARE === '1' ||
+  (INTERNAL_JOB_TOKEN && req.headers['x-internal-job-token'] === INTERNAL_JOB_TOKEN);
 
 /** GET catalog list — separate bucket so checkout + landing + retries do not exhaust the global API limiter. */
 function isPublicCatalogRead(req) {

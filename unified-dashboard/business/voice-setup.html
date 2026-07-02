@@ -30,9 +30,32 @@
       <label class="va-field-label" style="margin-top:12px;display:block">Tone</label>
       <select id="setupTone" class="va-textarea" style="width:100%;padding:10px">
         <option value="warm">Warm</option>
+        <option value="warm_confident">Warm, confident &amp; unhurried</option>
         <option value="professional">Professional</option>
         <option value="concise">Concise</option>
       </select>
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupLanguageMode">Languages Kelly supports</label>
+      <select id="setupLanguageMode" class="va-textarea" style="width:100%;padding:10px">
+        <option value="en_only">English only</option>
+        <option value="en_es">English + Spanish</option>
+        <option value="en_ru">English + Russian</option>
+        <option value="en_zh">English + Mandarin (Chinese)</option>
+      </select>
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupTransferNumber">Warm transfer number</label>
+      <input id="setupTransferNumber" class="va-textarea" style="width:100%;padding:10px" placeholder="+1… office line for live handoffs" required />
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupPracticeAddress">Practice address</label>
+      <input id="setupPracticeAddress" class="va-textarea" style="width:100%;padding:10px" placeholder="123 Main St, New York, NY" />
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupNpi">NPI (optional for pilot)</label>
+      <input id="setupNpi" class="va-textarea" style="width:100%;padding:10px" placeholder="10-digit NPI" />
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupPmsType">PMS type</label>
+      <select id="setupPmsType" class="va-textarea" style="width:100%;padding:10px">
+        <option value="somo">Somo calendar (E10 interim)</option>
+        <option value="dentrix" disabled>Dentrix Ascend (pending API)</option>
+        <option value="eaglesoft" disabled>Eaglesoft (pending API)</option>
+        <option value="athena">Athena (medical)</option>
+      </select>
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupClinicEmail">Practice email (alerts &amp; handoffs)</label>
+      <input id="setupClinicEmail" type="email" class="va-textarea" style="width:100%;padding:10px" placeholder="frontdesk@yourpractice.com" />
       <button type="button" class="signup-btn signup-btn-primary" id="setupNext1" style="margin-top:16px;width:100%">Continue</button>
     </div>
 
@@ -61,6 +84,14 @@
     </div>
 
     <div id="step5" class="setup-step hidden">
+      <div class="signup-reveal" style="margin-top:0;margin-bottom:16px;padding:14px 16px;background:var(--signup-surface,#f8fafc);border-radius:8px;border:1px solid var(--signup-border,#e2e8f0)">
+        <p class="signup-reveal-label" style="margin:0 0 6px">Forward your office line</p>
+        <p style="font-size:0.9rem;color:var(--signup-muted);margin:0 0 8px;line-height:1.45">
+          Point your main office phone's call forwarding to your Somo number below so patients reach Kelly.
+          When Kelly is paused, calls forward to your warm transfer number instead.
+        </p>
+        <a href="/docs/runbooks/CALL_FORWARDING_SETUP.md" target="_blank" rel="noopener" style="font-size:0.9rem">Call forwarding runbook →</a>
+      </div>
       <p style="font-size:0.95rem;color:var(--signup-muted);margin:12px 0">
         Call your Somo number to hear the inbound greeting. Outbound can be tested from Voice Agent after setup.
       </p>

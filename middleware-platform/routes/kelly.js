@@ -80,6 +80,24 @@ router.get('/activity', requireCustomerAuth, async (req, res) => {
   }
 });
 
+router.get('/escalations/active', requireCustomerAuth, async (req, res) => {
+  try {
+    const clinicId = resolveClinicIdFromRequest(req);
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
+    }
+    const minutes = parseInt(req.query.minutes, 10) || 15;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const escalations = db.listActiveHandoffEscalationsForClinic
+      ? db.listActiveHandoffEscalationsForClinic(clinicId, { minutes, limit })
+      : [];
+    return res.json({ success: true, escalations, clinic_id: clinicId });
+  } catch (error) {
+    console.error('❌ Kelly escalations error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load active escalations', message: error.message });
+  }
+});
+
 /**
  * GET /api/kelly/calls/:sessionId — aggregated call forensics for provider portal.
  */
@@ -166,6 +184,9 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
       callSummary.final_step = last.step || null;
     }
 
+    const { lookupSessionEnrichment, formatCopayDisplay } = require('../services/dashboard-call-enrichment');
+    const sessionEnrichment = lookupSessionEnrichment(db, sessionId);
+
     return res.json({
       success: true,
       session_id: sessionId,
@@ -179,7 +200,14 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
       tools,
       booking_outcome: bookingOutcome,
       orchestration_trace: orchestration,
-      call_summary: callSummary,
+      call_summary: {
+        ...callSummary,
+        disposition: sessionEnrichment.disposition,
+        eligibility_status: sessionEnrichment.eligibility_status,
+        copay_quote: sessionEnrichment.copay_quote,
+        copay_quote_display: formatCopayDisplay(sessionEnrichment.copay_quote),
+        copay_spoken: sessionEnrichment.copay_spoken
+      },
       appointment,
       handoff_escalations: db.listHandoffEscalationsForCall
         ? db.listHandoffEscalationsForCall(sessionId, { limit: 20 })

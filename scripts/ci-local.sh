@@ -81,10 +81,22 @@ if [[ -f var/db/middleware-dev.db ]]; then
   node scripts/verify-threshold-ssot.cjs || echo "⚠️  verify-threshold-ssot failed"
 fi
 
+step "Phase 3 PMS sandbox gate"
+cd "$MP"
+npm run ci:phase3 || echo "⚠️  Phase 3 sandbox gate failed"
+
+step "Phase 3B Athena sandbox gate (optional)"
+cd "$MP"
+if [[ -n "${ATHENA_CLIENT_ID:-}" ]]; then
+  npm run verify:phase3-athena || echo "⚠️  Phase 3B Athena gate failed"
+else
+  echo "ℹ️  Skipping Athena gate — ATHENA_CLIENT_ID not set"
+fi
+
 step "Coding prod gates"
 node scripts/verify-no-hardcoded-coding.cjs || { echo "❌ verify-no-hardcoded-coding failed"; exit 1; }
 node scripts/verify-threshold-ssot.cjs || { echo "❌ verify-threshold-ssot failed"; exit 1; }
-if [[ -f var/db/middleware-dev.db ]]; then
+if [[ -f var/db/middleware-dev.db ]] && [[ "${CI:-}" != "true" ]]; then
   DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-db-path.cjs || { echo "❌ verify-db-path failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-tools.cjs || { echo "❌ verify-kelly-tools failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-http-collect.cjs || { echo "❌ verify-kelly-http-collect failed"; exit 1; }
@@ -107,7 +119,11 @@ if [[ -f var/db/middleware-dev.db ]]; then
     fi
   fi
 else
-  echo "ℹ️  DB-backed coding gates skipped (var/db/middleware-dev.db missing)"
+  if [[ -f var/db/middleware-dev.db ]] && [[ "${CI:-}" == "true" ]]; then
+    echo "ℹ️  DB-backed coding gates skipped in CI (codebook Session 2 not imported on runners)"
+  else
+    echo "ℹ️  DB-backed coding gates skipped (var/db/middleware-dev.db missing)"
+  fi
 fi
 
 step "Jest (middleware-platform)"

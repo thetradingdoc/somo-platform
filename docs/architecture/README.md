@@ -1,5 +1,5 @@
 # architecture - Unified Architecture and System Design
-> Last reviewed: 2026-05-30
+> Last reviewed: 2026-07-02
 
 **Last Updated:** 2026-05-30
 

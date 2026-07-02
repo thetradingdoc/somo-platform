@@ -7,7 +7,7 @@
  */
 
 const db = require('../database');
-const BookingService = require('./booking-service');
+const PmsBooking = require('./pms/pms-booking');
 const SMSService = require('./sms-service');
 
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 min
@@ -91,7 +91,7 @@ async function processIncoming(from, to, body) {
     const n = parseInt(msg, 10);
     if (n >= 1 && n <= session.dates.length) {
       const date = session.dates[n - 1];
-      const slots = await BookingService.getAvailableSlots(date, null, null, 'America/New_York', session.clinicId);
+      const slots = await PmsBooking.getAvailableSlots(date, null, null, 'America/New_York', session.clinicId);
       const slotList = (slots.available_slots || slots.slots || []).slice(0, 8);
       if (slotList.length === 0) {
         clearSession(from);
@@ -113,7 +113,7 @@ async function processIncoming(from, to, body) {
 
   if (session.step === 'confirm' && (msg === 'yes' || msg === 'y')) {
     try {
-      const result = await BookingService.scheduleAppointment({
+      const result = await PmsBooking.scheduleAppointment({
         patient_name: 'SMS Booking',
         patient_phone: from,
         patient_email: null,

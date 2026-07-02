@@ -441,7 +441,7 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <button class="back-btn" onclick="window.location.href='billing.html?section=invoices'">← Back to Invoices</button>
+            <button class="back-btn" id="invoiceBackBtn" type="button">← Back to Invoices</button>
 
             <div class="invoice-container" id="invoiceContainer">
                 <div class="empty-state">
@@ -454,6 +454,17 @@
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+        function invoiceBackHref() {
+            if (window.__SOMO_DENTAL_PORTAL === true || localStorage.getItem('office_type') === 'dental') {
+                return 'settings.html?tab=billing';
+            }
+            return 'billing.html?section=invoices';
+        }
+
+        document.getElementById('invoiceBackBtn')?.addEventListener('click', () => {
+            window.location.href = invoiceBackHref();
+        });
 
         // Check authentication
         if (sessionStorage.getItem('authenticated') !== 'true') {
@@ -742,7 +753,7 @@
                 <div class="empty-state">
                     <div class="empty-state-icon">❌</div>
                     <p>${message}</p>
-                    <button class="btn-primary" onclick="window.location.href='billing.html?section=invoices'" style="margin-top: 16px;">
+                    <button class="btn-primary" onclick="window.location.href=invoiceBackHref()" style="margin-top: 16px;">
                         Back to Invoices
                     </button>
                 </div>

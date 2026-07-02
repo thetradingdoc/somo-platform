@@ -37,6 +37,7 @@
         <div class="admin-crm-lead-actions">
           <div class="admin-crm-lead-score" id="leadScore">—</div>
           <button class="admin-crm-btn-outline admin-crm-btn-danger" id="deleteBtn" data-require-capability="platform.leads">Delete lead</button>
+          <button class="admin-crm-btn-outline" id="inviteBtn" data-require-capability="platform.leads">Send pilot invite</button>
           <button class="btn btn-primary" id="callBtn" data-require-capability="platform.leads">Call now</button>
         </div>
       </div>
@@ -123,6 +124,7 @@
       document.getElementById('btnEmail').onclick = sendEmail;
       document.getElementById('stageSelect').onchange = (e) => updateStage(e.target.value);
       document.getElementById('deleteBtn').onclick = deleteLead;
+      document.getElementById('inviteBtn').onclick = sendPilotInvite;
       document.getElementById('btnAcceptSuggestion').onclick = acceptSuggestion;
       document.getElementById('btnDismissSuggestion').onclick = dismissSuggestion;
       loadLead();
@@ -251,6 +253,31 @@
           <span>${esc(a.content || a.activity_description || a.activity_subject)}</span>
         </div>
       `).join('');
+    }
+
+    async function sendPilotInvite() {
+      if (!leadData?.clinic_email && !leadData?.email) {
+        return showToast('Add an email to this lead before sending an invite.', 'warning');
+      }
+      const email = leadData.clinic_email || leadData.email;
+      if (!confirmAction(`Send pilot invite to ${email}? Lead will move to Won.`)) return;
+      const btn = document.getElementById('inviteBtn');
+      btn.disabled = true;
+      try {
+        const r = await apiFetch(`/api/admin/invites/from-lead/${leadId}`, {
+          method: 'POST',
+          body: JSON.stringify({ email, send_email: true, convert: true }),
+        });
+        showToast(`Invite sent — link copied to clipboard`, 'success');
+        if (r.invite_url && navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(r.invite_url).catch(() => {});
+        }
+        loadLead(true);
+      } catch (e) {
+        showToast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function deleteLead() {

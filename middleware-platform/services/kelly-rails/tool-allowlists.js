@@ -48,6 +48,8 @@ const ALLOWLISTS = {
   payment: {
     pay_invoice: ['get_triage_session', 'get_patient_claims'],
     insurance: ['collect_insurance', 'compute_visit_quote', 'get_patient_claims'],
+    front_desk_insurance: ['collect_insurance', 'compute_visit_quote', 'get_patient_claims'],
+    self_pay: ['compute_visit_quote', 'request_patient_payment', 'get_triage_session'],
     receipt_logic: ['get_patient_claims', 'request_patient_payment']
   },
   post_payment: {

@@ -61,12 +61,19 @@ function recordResult(report, entry) {
   else report.summary.skip += 1;
 }
 
-async function ensureStandardProviderSession(page, request, context) {
-  const customer = await loginProviderViaApi(request);
+async function ensureStandardProviderSession(page, request, context, existingCustomer = null) {
+  let customer = existingCustomer;
   if (!customer) {
-    throw new Error(
-      'Provider login failed — set PW_PROVIDER_EMAIL / PW_PROVIDER_PASS (default provider@callsomo.com / demo123)'
-    );
+    customer = await loginProviderViaApi(request);
+    if (!customer) {
+      throw new Error(
+        'Provider login failed — set PW_PROVIDER_EMAIL / PW_PROVIDER_PASS (default provider@callsomo.com / demo123)'
+      );
+    }
+    const { cookies } = await request.storageState();
+    if (context && cookies.length) {
+      await context.addCookies(cookies);
+    }
   }
 
   db.updateCustomer(customer.id, {
@@ -74,11 +81,9 @@ async function ensureStandardProviderSession(page, request, context) {
     kelly_status: 'active',
     trial_status: customer.trial_status || 'active'
   });
-  const fresh = db.getCustomer(customer.id);
-
-  const { cookies } = await request.storageState();
-  if (context && cookies.length) {
-    await context.addCookies(cookies);
+  const fresh = db.getCustomer(customer.id) || customer;
+  if (!fresh?.id) {
+    throw new Error(`Provider customer not found in DB after login (id=${customer.id})`);
   }
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
@@ -526,6 +531,8 @@ const TENANT_PAGES = [
       });
     }
   },
+  { id: 'calls', path: '/business/calls.html', stayOnPage: true, maxProbes: 12 },
+  { id: 'invoice-detail', path: '/business/invoice-detail.html?id=test-invoice', stayOnPage: true, maxProbes: 8 },
   { id: 'revenue-pipeline', path: '/business/revenue.html?tab=pipeline', stayOnPage: true, maxProbes: 15 },
   { id: 'revenue-claims', path: '/business/revenue.html?tab=claims', stayOnPage: true, maxProbes: 12 },
   { id: 'revenue-payments', path: '/business/revenue.html?tab=payments', stayOnPage: true, maxProbes: 15 },

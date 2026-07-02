@@ -15,6 +15,7 @@
   <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/voice-agent-page.js"></script>
 </head>
 <body class="provider-portal provider-portal--today" data-page="today">
   <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">
@@ -82,7 +83,8 @@
 
         <section class="pp-panel pp-panel--compact" id="ppOnboardingChecklist" data-testid="pp-onboarding-checklist" hidden>
           <div class="pp-panel-head pp-panel-head--compact">
-            <div class="pp-panel-title">Get your front desk live</div>
+            <div class="pp-panel-title">Go-live checklist</div>
+            <p class="pp-panel-sub" id="ppOnboardingChecklistSub">Complete these steps before speaking copay quotes on live calls.</p>
           </div>
           <div class="pp-panel-body pp-panel-body--compact" id="ppOnboardingChecklistBody"></div>
         </section>
@@ -134,6 +136,15 @@
                 <a class="pp-btn pp-btn-link" href="patients.html">View all</a>
               </div>
               <div class="pp-panel-body pp-panel-body--compact" id="recentMessagesPanel">
+                <div class="pp-skeleton"></div>
+              </div>
+            </section>
+
+            <section class="pp-panel pp-panel--rail pp-panel--comms" id="ppRoiPanel" data-testid="pp-roi-panel">
+              <div class="pp-panel-head pp-panel-head--compact">
+                <div class="pp-panel-title">Front desk ROI</div>
+              </div>
+              <div class="pp-panel-body pp-panel-body--compact" id="ppRoiBody">
                 <div class="pp-skeleton"></div>
               </div>
             </section>
@@ -398,6 +409,36 @@
       }).length;
     }
 
+    function renderRoi(roi) {
+      const el = document.getElementById('ppRoiBody');
+      if (!el) return;
+      const r = roi || {};
+      const calls = r.calls_handled_today ?? 0;
+      const mins = r.staff_minutes_saved_today ?? 0;
+      const appts = r.appts_booked_today ?? 0;
+      el.innerHTML = `
+        <div style="display:grid;gap:10px;font-size:0.9rem">
+          <div><strong>${calls}</strong> calls handled today</div>
+          <div><strong>${mins}</strong> staff minutes saved (est.)</div>
+          <div><strong>${appts}</strong> appointments booked today</div>
+          <p style="margin:4px 0 0;color:var(--gray-600,#64748b);font-size:0.82rem">Kelly front desk time your team did not spend on the phone.</p>
+        </div>`;
+    }
+
+    async function fetchRoiStats() {
+      try {
+        const res = await (window.ppFetch || fetch)(`${API_BASE}/api/customer/dashboard/stats`, {
+          credentials: 'include',
+          headers: window.ppGetAuthHeaders?.() || {}
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) return null;
+        return data.stats?.roi || null;
+      } catch (_) {
+        return null;
+      }
+    }
+
     function renderKpis(appts, metrics, messageCount, weekStats) {
       const confirmed = appts.filter((a) => ['confirmed', 'arrived', 'in_room'].includes((a.status || '').toLowerCase())).length;
       const upcoming = Math.max(appts.length - confirmed, 0);
@@ -527,6 +568,22 @@
       }).join('');
     }
 
+    function kellyActivityChips(item) {
+      const chips = [];
+      const disp = item.disposition;
+      if (disp) {
+        const label = window.VoiceAgentPage?.dispositionLabel?.(disp) || String(disp).replace(/_/g, ' ');
+        chips.push(`<span class="pp-chip pp-chip--info">${escapeHtml(label)}</span>`);
+      }
+      if (item.eligibility_status) {
+        chips.push(`<span class="pp-chip pp-chip--success">${escapeHtml(String(item.eligibility_status).replace(/_/g, ' '))}</span>`);
+      }
+      if (item.copay_quote != null && !Number.isNaN(Number(item.copay_quote))) {
+        chips.push(`<span class="pp-chip pp-chip--neutral">Copay $${Number(item.copay_quote).toFixed(2)}</span>`);
+      }
+      return chips.length ? `<div class="pp-feed-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${chips.join('')}</div>` : '';
+    }
+
     function renderKellyActivity(items) {
       const el = document.getElementById('kellyActivityPanel');
       if (!el) return;
@@ -549,6 +606,7 @@
                 <span class="pp-feed-time">${escapeHtml(formatFeedTime(item.at))}</span>
               </div>
               <div class="pp-feed-desc">${escapeHtml(item.subline || '')}</div>
+              ${kellyActivityChips(item)}
             </div>
           </div>`;
       }).join('');
@@ -704,6 +762,7 @@
       if (typeof window.ppFlushAlertStrip === 'function') window.ppFlushAlertStrip();
       renderKpis(apptsToday, {}, (rail.messages || []).length, weekStats);
       renderSchedule();
+      fetchRoiStats().then(renderRoi).catch(() => renderRoi(null));
 
       await window.fetchPortalBadges();
       window.renderProviderSidebar('today');
@@ -757,28 +816,60 @@
       if (!panel || !body) return;
       try {
         const API_BASE = (window.API_BASE || window.location.origin).replace(/\/$/, '');
-        const [agentRes, dashRes] = await Promise.all([
+        const clinicId = localStorage.getItem('clinic_id');
+        const clinicQ = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : '';
+        const [agentRes, dashRes, clinicRes, onboardRes] = await Promise.all([
           fetch(`${API_BASE}/api/voice-agent/status`, { credentials: 'include' }).catch(() => null),
           fetch(`${API_BASE}/api/customer/dashboard`, { credentials: 'include' }).catch(() => null),
+          fetch(`${API_BASE}/api/tenant/clinic${clinicQ}`, { credentials: 'include' }).catch(() => null),
+          fetch(`${API_BASE}/api/voice-agent/onboarding`, { credentials: 'include' }).catch(() => null),
         ]);
         const agent = agentRes?.ok ? await agentRes.json().catch(() => ({})) : {};
         const dash = dashRes?.ok ? await dashRes.json().catch(() => ({})) : {};
+        const clinicData = clinicRes?.ok ? await clinicRes.json().catch(() => ({})) : {};
+        const onboard = onboardRes?.ok ? await onboardRes.json().catch(() => ({})) : {};
+        const clinic = clinicData.clinic || {};
         const kellyOn = !!(agent.enabled ?? agent.voice_agent_enabled);
         const hasCalls = Number(dash.calls_this_week ?? dash.recent_calls?.length ?? 0) > 0;
-        const hasPayments = Number(dash.payments_this_week ?? dash.recent_payments?.length ?? 0) > 0;
-        const hasAppts = Number(dash.appointments_today ?? dash.appointments?.length ?? 0) > 0;
+        const voiceSetupDone =
+          onboard.onboarding_state === 'voice_setup_complete' ||
+          onboard.onboarding_state === 'live' ||
+          !!clinic.pilot_live_at;
+        const transferSet = !!(clinic.transfer_number && String(clinic.transfer_number).replace(/\D/g, '').length >= 10);
+        const shadowStarted = !!clinic.shadow_week_active;
+        const isLive = !!clinic.pilot_live_at;
         const items = [
+          { id: 'voice-setup', label: 'Complete Kelly voice setup (greeting, hours, transfer #)', done: voiceSetupDone, href: 'voice-setup.html' },
+          { id: 'forward-line', label: 'Forward your main office line to Kelly', done: transferSet && hasCalls, href: 'settings.html#practice' },
           { id: 'test-call', label: 'Place a test call to your Kelly line', done: hasCalls, href: 'agent.html' },
-          { id: 'test-payment', label: 'Send a test payment link', done: hasPayments, href: 'agent.html#test-payment' },
-          { id: 'verify-calendar', label: 'Verify today\'s schedule on calendar', done: hasAppts, href: 'calendar.html' },
-          { id: 'kelly-on', label: 'Turn Kelly on for live calls', done: kellyOn, href: 'agent.html' },
+          { id: 'shadow-week', label: 'Run shadow week (copay logged, not spoken)', done: shadowStarted || isLive, href: 'settings.html#practice' },
+          { id: 'kelly-on', label: 'Turn Kelly on for live calls', done: kellyOn && isLive, href: 'agent.html' },
         ];
         const pending = items.filter((i) => !i.done);
-        if (pending.length === 0) {
+        const forceShow = new URLSearchParams(window.location.search).get('onboarding');
+        if (pending.length === 0 && !forceShow) {
           panel.hidden = true;
           return;
         }
         panel.hidden = false;
+        if (forceShow === 'checkout') {
+          const sub = document.getElementById('ppOnboardingChecklistSub');
+          if (sub) sub.textContent = 'Subscription active — finish these steps to go live with Kelly.';
+          if (typeof window.ppPushAlert === 'function') {
+            window.ppPushAlert({
+              id: 'post-pay-checklist',
+              type: 'success',
+              icon: 'check',
+              message: 'Payment received. Complete the go-live checklist below.',
+              href: '#ppOnboardingChecklist',
+              ctaLabel: 'View checklist'
+            });
+            window.ppFlushAlertStrip();
+          }
+          const url = new URL(window.location.href);
+          url.searchParams.delete('onboarding');
+          window.history.replaceState({}, document.title, url.pathname + url.search);
+        }
         body.innerHTML = items.map((item) => `
           <div class="pp-onboard-row${item.done ? ' is-done' : ''}" data-testid="onboard-${item.id}">
             <span class="pp-onboard-check">${item.done ? '✓' : '○'}</span>
@@ -787,6 +878,90 @@
       } catch (_) {
         panel.hidden = true;
       }
+    }
+
+    async function loadProviderEmptyStates() {
+      if (typeof window.ppPushAlert !== 'function') return;
+      try {
+        const API_BASE = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+        const clinicId = localStorage.getItem('clinic_id');
+        const q = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : '';
+        const [syncRes, clinicRes] = await Promise.all([
+          fetch(`${API_BASE}/api/tenant/pms/sync-status${q}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/api/tenant/clinic${q}`, { credentials: 'include' })
+        ]);
+        if (syncRes.ok) {
+          const sync = await syncRes.json();
+          const pending = Number(sync.pending_sync_queue || 0) + Number(sync.pending_pms_writes || 0);
+          if (sync.pms_enabled && pending > 0) {
+            window.ppPushAlert({
+              id: 'pms-sync-pending',
+              type: 'info',
+              icon: 'refresh',
+              message: `PMS sync pending — ${pending} write(s) queued. Schedule may update shortly.`,
+              href: 'settings.html#practice',
+              ctaLabel: 'PMS settings'
+            });
+          } else if (!sync.pms_enabled && sync.office_type === 'dental') {
+            window.ppPushAlert({
+              id: 'pms-not-connected',
+              type: 'info',
+              icon: 'link',
+              message: 'Connect your PMS or use Somo scheduling until Dentrix sync is live.',
+              href: 'settings.html#practice',
+              ctaLabel: 'Connect PMS'
+            });
+          }
+        }
+        if (clinicRes.ok) {
+          const clinicData = await clinicRes.json();
+          if (clinicData.clinic?.eligibility_configured === false) {
+            window.ppPushAlert({
+              id: 'stedi-down',
+              type: 'warning',
+              icon: 'shield',
+              message: 'Insurance eligibility is temporarily unavailable — Kelly will take insurance details for manual verification.',
+              href: 'settings.html#practice',
+              ctaLabel: 'Practice settings'
+            });
+          }
+        }
+        window.ppFlushAlertStrip();
+      } catch (_) {}
+    }
+
+    async function loadShadowWeekBanner() {
+      if (typeof window.ppPushAlert !== 'function') return;
+      try {
+        const API_BASE = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+        const clinicId = localStorage.getItem('clinic_id');
+        const q = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : '';
+        const res = await fetch(`${API_BASE}/api/tenant/clinic${q}`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const c = data.clinic || {};
+        if (c.shadow_week_active) {
+          window.ppPushAlert({
+            id: 'shadow-week',
+            type: 'warning',
+            icon: 'eye',
+            message: 'Shadow week active — copay amounts are logged but not spoken on calls. Compare desk quotes vs dashboard before going live.',
+            href: 'agent.html',
+            ctaLabel: 'Agent settings'
+          });
+          window.ppFlushAlertStrip();
+        } else if (c.pilot_live_at) {
+          window.ppPushAlert({
+            id: 'pilot-live',
+            type: 'success',
+            icon: 'check',
+            message: "You're live — Kelly is speaking copay quotes on calls.",
+            href: 'calls.html',
+            ctaLabel: 'View calls'
+          });
+          window.ppFlushAlertStrip();
+        }
+      } catch (_) {}
     }
 
     async function loadOnboardingNudge() {
@@ -799,7 +974,22 @@
         const data = await res.json();
         const state = data.onboarding_state;
         if (!state || state === 'voice_setup_complete' || state === 'live') {
-          strip.hidden = true;
+          if (typeof window.ppPushAlert === 'function') {
+            window.__ppAlertItems = (window.__ppAlertItems || []).filter((a) => a.id !== 'onboarding-nudge');
+            window.ppFlushAlertStrip();
+          }
+          return;
+        }
+        if (typeof window.ppPushAlert === 'function') {
+          window.ppPushAlert({
+            id: 'onboarding-nudge',
+            type: 'info',
+            icon: 'microphone',
+            message: 'Finish setting up Kelly front desk — greeting, hours, languages, and transfer number.',
+            href: 'voice-setup.html',
+            ctaLabel: 'Continue setup'
+          });
+          window.ppFlushAlertStrip();
           return;
         }
         strip.hidden = false;
@@ -816,6 +1006,8 @@
       wireTopbarIcons();
       loadOnboardingNudge();
       loadOnboardingChecklist();
+      loadShadowWeekBanner();
+      loadProviderEmptyStates();
       loadDashboard();
       if (typeof window.ppOnPaymentRefresh === 'function') {
         window.ppOnPaymentRefresh(() => loadDashboard().catch(() => {}));

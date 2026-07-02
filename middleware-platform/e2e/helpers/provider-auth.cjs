@@ -3,7 +3,11 @@
 const path = require('path');
 
 if (!process.env.DB_PATH) {
-  process.env.DB_PATH = path.join(__dirname, '..', '..', 'var', 'db', 'middleware-dev.db');
+  const apiBase = (process.env.PW_API_BASE_URL || '').replace(/\/$/, '');
+  process.env.DB_PATH =
+    apiBase.includes(':4001') || process.env.AUDIT_MIDDLEWARE === '1'
+      ? path.join(__dirname, '..', '..', 'middleware-audit.db')
+      : path.join(__dirname, '..', '..', 'var', 'db', 'middleware-dev.db');
 }
 
 const db = require('../../database');

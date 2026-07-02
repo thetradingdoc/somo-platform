@@ -25,6 +25,7 @@ function registerVoiceAppointmentRoutes(app, deps) {
   const PaymentFlowService = require('../services/payment-flow-service');
   const FHIRService = require('../services/fhir-service');
   const InsuranceService = require('../services/insurance-service');
+  const PmsBooking = require('../services/pms/pms-booking');
   const BookingService = require('../services/booking-service');
   const PatientIntakeService = require('../services/patient-intake-service');
   const { findFHIRPatientForVoice } = require('../services/fhir-voice-lookup');
@@ -110,7 +111,48 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
       }
     }
 
-    // If appointment_id is available, calculate patient responsibility based on insurance
+    // If appointment_id is available, resolve amount via SSOT (eligibility → plan_rules → journey)
+    if (appointmentId && amount == null) {
+      try {
+        const appointment = appointmentRecord || await db.getAppointment(appointmentId, clinicId || null, customerId || null);
+        if (appointment && !clinicId) {
+          clinicId = appointment.clinic_id || clinicId;
+        }
+        if (appointment?.patient_id) {
+          const resolved = await PaymentFlowService.resolveAmountDue({
+            patientId: appointment.patient_id,
+            appointmentId,
+            sessionId: triageSessionIdForAudit
+          });
+          if (resolved.status === 'hard_number') {
+            amount = resolved.amount;
+            console.log(`💰 resolveAmountDue voice checkout: $${Number(amount).toFixed(2)}`);
+            PaymentFlowService.logAmountResolution({
+              patient_id: appointment.patient_id,
+              appointment_id: appointmentId,
+              session_id: triageSessionIdForAudit,
+              quoted_amount: resolved.amount,
+              charged_amount: resolved.amount,
+              source: resolved.source,
+              status: resolved.status,
+              details: { route: '/voice/appointments/checkout' }
+            });
+          } else if (resolved.status === 'thin' || resolved.status === 'estimate') {
+            return res.status(409).json({
+              success: false,
+              error: 'amount_pending_verification',
+              message:
+                'Coverage amount is not yet confirmed. We will text your confirmed amount before your visit.',
+              amount_resolution: resolved
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️  resolveAmountDue for voice checkout failed:', error.message);
+      }
+    }
+
+    // Legacy fallback when SSOT did not resolve (deprecated path)
     if (appointmentId && amount == null) {
       try {
         const appointment = appointmentRecord || await db.getAppointment(appointmentId, clinicId || null, customerId || null);
@@ -1194,7 +1236,7 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
       } catch (_) {}
     }
 
-    const result = await BookingService.scheduleAppointment(appointmentData);
+    const result = await PmsBooking.scheduleAppointment(appointmentData);
     if (result.success) invalidateSlotAvailabilityCache();
 
     // S1: duplicate detection should return explicit actionable 409 for voice clients.
@@ -1454,7 +1496,7 @@ app.post('/voice/appointments/reschedule', async (req, res) => {
       });
     }
 
-    const result = await BookingService.rescheduleAppointment(
+    const result = await PmsBooking.rescheduleAppointment(
       appointmentId,
       newDate,
       newTime,
@@ -1490,7 +1532,7 @@ app.post('/voice/appointments/cancel', async (req, res) => {
       });
     }
 
-    const result = await BookingService.cancelAppointment(appointmentId, reason, clinicId);
+    const result = await PmsBooking.cancelAppointment(appointmentId, reason, clinicId);
     if (result?.success) invalidateSlotAvailabilityCache();
 
     res.json(result);
@@ -1714,7 +1756,7 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
       }
     }
 
-    const resultRaw = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId, practitionerId);
+    const resultRaw = await PmsBooking.getAvailableSlots(date, provider, appointmentType, timezone, clinicId, practitionerId);
     const result = ensureSlotBundles(resultRaw, date, practitionerId);
     if (result.success) {
       cache.set('slot_availability', result, cacheKey);
@@ -1786,8 +1828,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
       return res.status(spineResult.httpStatus).json(spineResult.body);
     }
     applySpineResolvedToArgs(args, spineResult.spineResolved);
-
-    // Optional: patient_id to link insurance to patient
+    const spineResolved = spineResult.spineResolved;
     const patientId = args.patient_id || args.patientId || null;
     // Bug 5: Normalize phone for consistent lookups (getFHIRPatientByPhone, findOrCreatePatient)
     let patientPhone = (args.patient_phone || args.phone || '').toString().trim();
@@ -2209,15 +2250,14 @@ app.post('/voice/insurance/collect', async (req, res) => {
         }
 
         // IMPORTANT: Update eligibility record with patient_id if it was missing
-        if (finalPatientId && eligibilityResult?.id) {
+        if (finalPatientId && eligibilityResult?.eligibilityId) {
           try {
-            // Update the eligibility record to link it to the patient
             db.db.prepare(`
               UPDATE eligibility_checks 
               SET patient_id = ?
               WHERE id = ?
-            `).run(finalPatientId, eligibilityResult.id);
-            console.log(`   ✅ Linked eligibility record ${eligibilityResult.id} to patient ${finalPatientId}`);
+            `).run(finalPatientId, eligibilityResult.eligibilityId);
+            console.log(`   ✅ Linked eligibility record ${eligibilityResult.eligibilityId} to patient ${finalPatientId}`);
           } catch (updateError) {
             console.warn('⚠️  Could not update eligibility record with patient_id:', updateError.message);
           }
@@ -2345,6 +2385,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
 
     try {
       const { computeVisitQuote } = require('../services/payer-quote-service');
+      const journeyGates = require('../services/journey-gates-service');
       response.quote = await computeVisitQuote({
         primary_icd10: spineResolved.primary_icd10,
         primary_cpt: spineResolved.primary_cpt,
@@ -2354,6 +2395,30 @@ app.post('/voice/insurance/collect', async (req, res) => {
         call_id: insuranceSessionId
       });
       response.code_source = spineResolved.code_source;
+
+      const amountResolved = await PaymentFlowService.resolveAmountDue({
+        patientId: finalPatientId,
+        sessionId: insuranceSessionId,
+        payerId: payerId || args.payer_id,
+        planId: args.plan_id,
+        serviceCode: spineResolved.primary_cpt
+      });
+      response.amount_resolution = amountResolved;
+      const quoteGate = journeyGates.checkQuoteGate({ resolution: amountResolved });
+      if (quoteGate.allowed) {
+        response.quote_delivered = true;
+        response.copay_due_now = amountResolved.amount;
+      } else {
+        response.quote_delivered = false;
+      }
+      PaymentFlowService.logAmountResolution({
+        patient_id: finalPatientId,
+        session_id: insuranceSessionId,
+        quoted_amount: amountResolved.amount,
+        source: amountResolved.source,
+        status: amountResolved.status,
+        details: { route: '/voice/insurance/collect', payer_id: payerId }
+      });
     } catch (quoteErr) {
       console.warn('⚠️  Could not compute visit quote:', quoteErr.message);
     }

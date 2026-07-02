@@ -22,7 +22,7 @@ function verifyApiKey(req, res, next) {
     '/health',
     '/',
     '/voice/incoming', // Retell webhook
-    '/webhook/stripe', // Stripe webhook
+    '/webhooks/stripe', // Stripe webhook (canonical)
     '/webhook/circle', // Circle webhook
     '/payment/', // Public payment pages
     '/api/patient/verify/', // Patient verification

@@ -15,7 +15,10 @@
 const db = require('../database');
 const CircleService = require('./circle-service');
 
-const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '3') / 100; // Default 3%
+const PLATFORM_FEE_PERCENT = (() => {
+  const { getSettlementPlatformFeePercent } = require('./platform-fee-config');
+  return getSettlementPlatformFeePercent() / 100;
+})(); // fraction for settlement math
 
 /**
  * Execute instant settlement with 3-way split (State Machine Implementation)

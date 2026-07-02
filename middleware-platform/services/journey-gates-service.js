@@ -75,8 +75,15 @@ function checkCodingGate({ sessionId, triageRow, db }) {
   };
 }
 
-function checkQuoteGate({ quoteResult }) {
-  const status = quoteResult?.status || 'cannot_determine';
+function quoteStatusFromResolution(resolution) {
+  if (!resolution) return 'cannot_determine';
+  if (resolution.status) return resolution.status;
+  if (resolution.quote?.status) return resolution.quote.status;
+  return 'cannot_determine';
+}
+
+function checkQuoteGate({ quoteResult, resolution } = {}) {
+  const status = quoteResult?.status || quoteStatusFromResolution(resolution) || 'cannot_determine';
   const ok = status === 'hard_number';
   return {
     allowed: ok,
@@ -112,6 +119,7 @@ function checkBookingAfterQuoteGate({ sessionFlags = {} }) {
 module.exports = {
   checkCodingGate,
   checkQuoteGate,
+  quoteStatusFromResolution,
   checkPaymentGate,
   checkBookingAfterQuoteGate,
   HOLDING,

@@ -820,10 +820,19 @@
     state.step = STEPS.persona;
   }
 
-  function init() {
+  async function init() {
     if (urlParams.get('fresh') === '1') {
       clearSignupSession();
     }
+    try {
+      const pilotRes = await fetch(`${API_BASE}/api/public/pilot-config`);
+      const pilot = await pilotRes.json().catch(() => ({}));
+      if (pilot.pilot_invite_only) {
+        window.location.href = pilot.waitlist_url || '/waitlist.html';
+        return;
+      }
+    } catch (_) {}
+
     applyPrefill();
     populateCountries();
     const countrySel = $('signupCountry');

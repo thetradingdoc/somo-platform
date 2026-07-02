@@ -77,6 +77,23 @@
                     </div>
         </section>
 
+        <section class="va-zone" id="zoneCoverage">
+          <h3 style="margin:0 0 8px;font-size:1rem">Coverage schedule</h3>
+          <p style="margin:0 0 12px;font-size:0.85rem;color:var(--gray-600,#64748b)">
+            <strong>Pause</strong> (toggle above) stops Kelly immediately. <strong>Coverage mode</strong> limits when Kelly answers vs your staff.
+          </p>
+          <div class="va-field-label">When Kelly answers</div>
+          <select id="vaCoverageMode" class="va-textarea" style="width:100%;max-width:360px;padding:8px 10px;margin-bottom:12px">
+            <option value="full_replacement">Full replacement — Kelly answers all hours configured above</option>
+            <option value="coverage">Coverage only — Kelly fills gaps outside your front desk schedule</option>
+          </select>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveCoverage">Save coverage mode</button>
+            <button type="button" class="pp-btn pp-btn-outline pp-btn-sm" id="vaKillSwitch" data-testid="agent-kill-switch" style="border-color:#b91c1c;color:#b91c1c">Emergency kill switch</button>
+          </div>
+          <p id="vaKillSwitchHint" class="va-save-hint" style="margin-top:8px"></p>
+        </section>
+
         <section class="va-zone" id="zonePolicy">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between">
             <div>
@@ -100,6 +117,22 @@
           <div id="vaHoursPicker"></div>
           <div class="va-field-label" style="margin-top:12px">After-hours message</div>
           <textarea class="va-textarea" id="vaAfterHours" rows="2" placeholder="Message when closed…"></textarea>
+          <div class="va-field-label" style="margin-top:12px">Languages Kelly supports</div>
+          <select class="va-textarea" id="vaLanguageMode" style="width:100%;padding:8px 10px">
+            <option value="en_only">English only</option>
+            <option value="en_es">English + Spanish</option>
+            <option value="en_ru">English + Russian</option>
+            <option value="en_zh">English + Mandarin (Chinese)</option>
+          </select>
+          <div class="va-field-label" style="margin-top:12px">Warm transfer number</div>
+          <input type="tel" class="va-textarea" id="vaTransferNumber" style="width:100%;padding:8px 10px" placeholder="+1… rings your office for live handoffs" />
+          <div class="va-field-label" style="margin-top:12px">Overflow line (multi-line busy forward)</div>
+          <input type="tel" class="va-textarea" id="vaOverflowPhone" style="width:100%;padding:8px 10px" placeholder="+1… second line when all Kelly slots are busy" />
+          <label class="va-field-label" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <input type="checkbox" id="vaOverflowEnabled" checked /> Forward overflow &amp; credits-exhausted to office line
+          </label>
+          <div class="va-field-label" style="margin-top:12px">Practice email (handoff alerts)</div>
+          <input type="email" class="va-textarea" id="vaClinicEmail" style="width:100%;padding:8px 10px" placeholder="frontdesk@yourpractice.com" />
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
             <button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="vaSaveGreeting">Save inbound</button>
             <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaSaveHours">Save hours</button>
@@ -140,6 +173,22 @@
           </details>
         </section>
 
+        <section class="va-zone" id="zonePorting">
+          <h3 style="margin:0 0 8px;font-size:1rem">Number porting</h3>
+          <p style="margin:0 0 12px;font-size:0.85rem;color:var(--gray-600,#64748b)">
+            Port your existing office line to Somo so callers reach Kelly on your published number.
+            Email <a href="mailto:support@callsomo.com">support@callsomo.com</a> with your carrier LOA when ready.
+          </p>
+          <div class="va-field-label">Porting status</div>
+          <select id="vaPortingStatus" class="va-textarea" style="width:100%;max-width:280px;padding:8px 10px">
+            <option value="not_started">Not started</option>
+            <option value="requested">Requested</option>
+            <option value="in_progress">In progress</option>
+            <option value="complete">Complete</option>
+          </select>
+          <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" id="vaSavePorting" style="margin-top:10px">Save porting status</button>
+        </section>
+
         <!-- Zone 3: Calls -->
         <section class="va-zone" id="zoneCalls" data-testid="agent-recent-calls">
           <div class="va-kpi-row">
@@ -155,7 +204,12 @@
               <div class="va-kpi-label">Appts booked</div>
               <div class="va-kpi-value" id="vaKpiAppts">0</div>
                     </div>
+            <div class="va-kpi">
+              <div class="va-kpi-label">Avg reply latency</div>
+              <div class="va-kpi-value" id="vaKpiLatency">—</div>
                     </div>
+                    </div>
+          <p id="vaLatencySlo" style="font-size:0.85rem;color:var(--gray-600,#64748b);margin:0 0 12px"></p>
           <div class="va-field-label">Recent calls</div>
           <div class="va-call-list" id="vaCallList">
             <p style="color:var(--gray-500);font-size:0.9rem">No calls yet. Call your line to test your greeting.</p>
@@ -183,6 +237,13 @@
       let kellyEnabled = true;
       let autosaveTimer = null;
       let promptAutosaveTimer = null;
+      let customer = null;
+
+      function getVaClinicId() {
+        return typeof window.ppGetClinicId === 'function'
+          ? window.ppGetClinicId()
+          : customer?.clinic_id || customer?.clinicId || 'clinic-default';
+      }
 
       function showVaToast(message, type) {
         const el = document.getElementById('vaToast');
@@ -246,7 +307,6 @@
           });
         }
 
-        let customer = null;
         try {
           customer = JSON.parse(sessionStorage.getItem('customer') || 'null');
         } catch (_) {}
@@ -268,17 +328,12 @@
           return;
         }
 
-        function getVaClinicId() {
-          return typeof window.ppGetClinicId === 'function'
-            ? window.ppGetClinicId()
-            : customer?.clinic_id || customer?.clinicId || 'clinic-default';
-        }
-
         hoursPickerApi = VoiceHoursPicker.mount(document.getElementById('vaHoursPicker'), {
           onChange: scheduleAutosave
         });
 
         document.getElementById('vaSaveGreeting').addEventListener('click', saveGreeting);
+        document.getElementById('vaSavePorting')?.addEventListener('click', savePortingStatus);
         document.getElementById('vaSaveHours').addEventListener('click', saveHours);
         document.getElementById('vaSaveOutbound').addEventListener('click', saveOutbound);
         document.getElementById('vaTestOutbound')?.addEventListener('click', testOutbound);
@@ -286,10 +341,16 @@
         document.getElementById('vaPreviewBtn')?.addEventListener('click', refreshLivePreview);
         document.getElementById('vaGreeting').addEventListener('input', () => { scheduleAutosave(); schedulePreview(); });
         document.getElementById('vaAfterHours').addEventListener('input', scheduleAutosave);
+        const vaLang = document.getElementById('vaLanguageMode');
+        const vaXfer = document.getElementById('vaTransferNumber');
+        if (vaLang) vaLang.addEventListener('change', scheduleAutosave);
+        if (vaXfer) vaXfer.addEventListener('input', scheduleAutosave);
         document.getElementById('vaPrompt').addEventListener('input', schedulePromptAutosave);
         document.getElementById('vaOutboundOpener')?.addEventListener('input', schedulePreview);
         document.getElementById('vaOutboundEnabled')?.addEventListener('change', schedulePreview);
         document.getElementById('vaToggle').addEventListener('click', onToggle);
+        document.getElementById('vaSaveCoverage')?.addEventListener('click', saveCoverageMode);
+        document.getElementById('vaKillSwitch')?.addEventListener('click', onKillSwitch);
         document.getElementById('vaCopyPhone').addEventListener('click', copyPhone);
         document.getElementById('vaTestPayment')?.addEventListener('click', testPaymentLink);
         if (window.location.hash === '#test-payment') {
@@ -384,8 +445,10 @@
           badge.className = 'va-badge ' + (kellyEnabled ? 'va-badge-active' : 'va-badge-paused');
 
           const parts = [];
-          if (billing?.trial_minutes_remaining != null) {
-            parts.push(billing.trial_minutes_remaining + ' minutes remaining');
+          if (billing?.trial_minutes_remaining != null && billing?.trial_status && billing.trial_status !== 'none') {
+            parts.push(billing.trial_minutes_remaining + ' trial minutes remaining');
+          } else if (billing?.minutes_remaining != null) {
+            parts.push(billing.minutes_remaining + ' agent minutes remaining');
           }
           if (billing?.trial_days_left != null) {
             parts.push(billing.trial_days_left + ' days left in trial');
@@ -406,6 +469,8 @@
         }
         if (settings.outbound_opener) {
           document.getElementById('vaOutboundOpener').value = settings.outbound_opener;
+        } else if (window.VoiceAgentPage?.applyOutboundOpenerDefault) {
+          window.VoiceAgentPage.applyOutboundOpenerDefault(settings, 'vaOutboundOpener', settings.practice_name);
         }
         if (document.getElementById('vaOutboundEnabled')) {
           document.getElementById('vaOutboundEnabled').checked = !!settings.outbound_enabled;
@@ -415,6 +480,33 @@
         }
         if (hoursPickerApi && settings.business_hours) {
           hoursPickerApi.setValue(settings.business_hours);
+        }
+        if (settings.language_mode && document.getElementById('vaLanguageMode')) {
+          document.getElementById('vaLanguageMode').value = settings.language_mode;
+        }
+        if (settings.transfer_number && document.getElementById('vaTransferNumber')) {
+          document.getElementById('vaTransferNumber').value = settings.transfer_number;
+        }
+        if (settings.overflow_phone && document.getElementById('vaOverflowPhone')) {
+          document.getElementById('vaOverflowPhone').value = settings.overflow_phone;
+        }
+        if (document.getElementById('vaOverflowEnabled')) {
+          document.getElementById('vaOverflowEnabled').checked = settings.overflow_enabled !== false;
+        }
+        if (settings.porting_status && document.getElementById('vaPortingStatus')) {
+          document.getElementById('vaPortingStatus').value = settings.porting_status;
+        }
+        if (settings.clinic_email && document.getElementById('vaClinicEmail')) {
+          document.getElementById('vaClinicEmail').value = settings.clinic_email;
+        }
+        if (settings.coverage_mode && document.getElementById('vaCoverageMode')) {
+          document.getElementById('vaCoverageMode').value = settings.coverage_mode;
+        }
+        const killHint = document.getElementById('vaKillSwitchHint');
+        if (killHint) {
+          killHint.textContent = settings.enabled === false && !kellyEnabled
+            ? 'Kill switch active — Kelly will not answer until you turn the line back on.'
+            : '';
         }
         updateSyncChip(settings);
         updatePromptSyncLabel(settings.synced_at || settings.prompt_synced_at || null);
@@ -439,6 +531,24 @@
             s.avg_duration_seconds_today || 0
           );
           document.getElementById('vaKpiAppts').textContent = String(s.appts_booked_today ?? 0);
+          const latEl = document.getElementById('vaKpiLatency');
+          const sloEl = document.getElementById('vaLatencySlo');
+          if (latEl) {
+            latEl.textContent =
+              s.avg_assistant_latency_ms != null ? `${s.avg_assistant_latency_ms}ms` : '—';
+          }
+          if (sloEl) {
+            const slo = s.voice_latency_slo_ms || 2500;
+            if (s.avg_assistant_latency_ms == null) {
+              sloEl.textContent = `Voice latency SLO target: ${slo}ms (no samples yet today)`;
+            } else if (s.voice_latency_slo_met) {
+              sloEl.textContent = `Within SLO — avg ${s.avg_assistant_latency_ms}ms (target ≤ ${slo}ms)`;
+              sloEl.style.color = '#15803d';
+            } else {
+              sloEl.textContent = `Above SLO — avg ${s.avg_assistant_latency_ms}ms (target ≤ ${slo}ms)`;
+              sloEl.style.color = '#b45309';
+            }
+          }
 
           const list = document.getElementById('vaCallList');
           const calls = data.recent_calls || [];
@@ -456,13 +566,18 @@
                   })
                 : '—';
               const label = c.caller_label || 'Caller';
-              const oc = c.outcome || 'info';
+              const oc = c.disposition || c.outcome || 'info';
+              const elig = c.eligibility_status ? ` · ${c.eligibility_status}` : '';
+              const copay = c.copay_quote_display ? ` · ${c.copay_quote_display}` : '';
               const dir = c.direction ? ` · ${c.direction}` : '';
               const match = c.opener_match === false ? ' · script mismatch' : '';
+              const dispLabel = VoiceAgentPage.dispositionLabel
+                ? VoiceAgentPage.dispositionLabel(oc)
+                : VoiceAgentPage.outcomeLabel(oc);
               return `<div class="va-call-row">
                 <span style="min-width:56px;font-size:0.85rem;color:#64748b">${time}</span>
-                <span style="flex:1;font-weight:500">${label}${dir}${match}</span>
-                <span class="${VoiceAgentPage.outcomeBadgeClass(oc)}">${VoiceAgentPage.outcomeLabel(oc)}</span>
+                <span style="flex:1;font-weight:500">${label}${dir}${elig}${copay}${match}</span>
+                <span class="${VoiceAgentPage.outcomeBadgeClass(oc)}">${dispLabel}</span>
                 <span style="font-size:0.85rem;color:#64748b">${VoiceAgentPage.formatDuration(c.duration_seconds || c.duration)}</span>
               </div>`;
             })
@@ -550,16 +665,91 @@
           const badge = document.getElementById('vaStatusBadge');
           badge.textContent = next ? 'Active' : 'Paused';
           badge.className = 'va-badge ' + (next ? 'va-badge-active' : 'va-badge-paused');
+          const killHint = document.getElementById('vaKillSwitchHint');
+          if (killHint && next) killHint.textContent = '';
         } catch (e) {
+          if (e.code === 'auth_required' || e.status === 401) {
+            showVaToast('Session expired — redirecting to sign in.', 'error');
+            setTimeout(() => {
+              window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+            }, 900);
+            return;
+          }
           showVaToast(e.message || 'Could not update agent status', 'error');
         } finally {
           toggle.disabled = false;
         }
       }
 
+      async function saveCoverageMode() {
+        try {
+          const mode = document.getElementById('vaCoverageMode')?.value || 'full_replacement';
+          await VoiceAgentPage.saveVoiceSettings({
+            enabled: kellyEnabled,
+            clinic_id: getVaClinicId(),
+            coverage_mode: mode,
+            retell_agent_id: cachedSettings?.retell_agent_id || null,
+            settings_version: cachedSettings?.settings_version ?? null,
+            greeting: document.getElementById('vaGreeting').value.trim(),
+            business_hours: hoursPickerApi ? hoursPickerApi.getValue() : null
+          });
+          showVaToast('Coverage mode saved.', 'success');
+          await refreshSettings();
+        } catch (e) {
+          showRetellSyncFailure(e);
+        }
+      }
+
+      async function onKillSwitch() {
+        if (!confirm('Emergency kill switch — Kelly will stop answering all calls until you turn the line back on. Continue?')) {
+          return;
+        }
+        try {
+          await VoiceAgentPage.toggleKelly(false);
+          kellyEnabled = false;
+          document.getElementById('vaToggle')?.classList.remove('on');
+          const badge = document.getElementById('vaStatusBadge');
+          badge.textContent = 'Off';
+          badge.className = 'va-badge va-badge-paused';
+          const killHint = document.getElementById('vaKillSwitchHint');
+          if (killHint) {
+            killHint.textContent = 'Kill switch active — Kelly will not answer until you turn the line back on.';
+          }
+          showVaToast('Kelly stopped — kill switch active.', 'error');
+        } catch (e) {
+          showVaToast(e.message || 'Kill switch failed', 'error');
+        }
+      }
+
       function copyPhone() {
         const n = document.getElementById('vaPhone').textContent;
         if (n && n !== '—') navigator.clipboard?.writeText(n);
+      }
+
+      function voiceLanguageAndTransferFields() {
+        return {
+          language_mode: document.getElementById('vaLanguageMode')?.value || 'en_only',
+          transfer_number: document.getElementById('vaTransferNumber')?.value?.trim() || null,
+          overflow_phone: document.getElementById('vaOverflowPhone')?.value?.trim() || null,
+          overflow_enabled: document.getElementById('vaOverflowEnabled')?.checked !== false,
+          clinic_email: document.getElementById('vaClinicEmail')?.value?.trim() || null
+        };
+      }
+
+      async function savePortingStatus() {
+        try {
+          await VoiceAgentPage.saveVoiceSettings({
+            enabled: kellyEnabled,
+            clinic_id: getVaClinicId(),
+            porting_status: document.getElementById('vaPortingStatus')?.value || 'not_started',
+            retell_agent_id: cachedSettings?.retell_agent_id || null,
+            settings_version: cachedSettings?.settings_version ?? null
+          });
+          showVaToast('Porting status saved.', 'success');
+          await refreshSettings();
+        } catch (e) {
+          showRetellSyncFailure(e);
+        }
       }
 
       async function saveGreeting(fromAutosave) {
@@ -572,7 +762,8 @@
             after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
             business_hours: hoursPickerApi ? hoursPickerApi.getValue() : null,
             retell_agent_id: cachedSettings?.retell_agent_id || null,
-            settings_version: cachedSettings?.settings_version ?? null
+            settings_version: cachedSettings?.settings_version ?? null,
+            ...voiceLanguageAndTransferFields()
           });
           const saved = 'Saved · synced to live inbound calls';
           hint.textContent = saved;
@@ -599,7 +790,8 @@
             after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
             business_hours: hoursPickerApi.getValue(),
             retell_agent_id: cachedSettings?.retell_agent_id || null,
-            settings_version: cachedSettings?.settings_version ?? null
+            settings_version: cachedSettings?.settings_version ?? null,
+            ...voiceLanguageAndTransferFields()
           });
           hint.textContent = 'Saved · hours apply on your next call';
           hint.classList.add('ok');

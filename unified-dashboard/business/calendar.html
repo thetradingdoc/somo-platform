@@ -604,6 +604,7 @@
             video_room: a.video_room_name || (a.id ? (String(a.id).startsWith('appt-') ? a.id : 'appt-' + a.id) : null),
             ehr_sync_status: a.ehr_sync_status || null,
             ehr_sync_last_error: a.ehr_sync_last_error || null,
+            pms_sync_status: a.pms_sync_status || null,
             triage_session_id: a.triage_session_id || null,
             booked_by_kelly: isBookedByKelly(a)
           }
@@ -611,13 +612,20 @@
       });
     }
 
+    function pmsSyncBadge(status) {
+      if (!status || status === 'synced' || status === 'success') return '';
+      const label = status === 'pending' ? 'PMS pending' : `PMS ${status}`;
+      return `<span class="pp-chip pp-chip--muted cal-pms-badge">${escapeHtml(label)}</span>`;
+    }
+
     function calendarEventContent(arg) {
       const p = arg.event.extendedProps || {};
       const title = arg.event.title || '';
       const kelly = p.booked_by_kelly || p.triage_session_id;
-      if (!kelly) return { html: `<span class="fc-event-title">${escapeHtml(title)}</span>` };
+      const pms = pmsSyncBadge(p.pms_sync_status);
+      if (!kelly && !pms) return { html: `<span class="fc-event-title">${escapeHtml(title)}</span>` };
       return {
-        html: `<span class="fc-event-title">${escapeHtml(title)}</span> ${kellyBookedBadgeHtml()}`
+        html: `<span class="fc-event-title">${escapeHtml(title)}</span> ${kelly ? kellyBookedBadgeHtml() : ''} ${pms}`
       };
     }
 
@@ -1314,6 +1322,7 @@
             <div><strong>Confirmation:</strong> ${p.confirmation}</div>
             <div><strong>Status:</strong> ${statusBadge(p.status)}</div>
             <div><strong>EHR Sync:</strong> ${ehrSyncBadge(p.ehr_sync_status)}${p.ehr_sync_last_error ? ` <span style="color:#b91c1c;font-size:11px;">(${escapeHtml(String(p.ehr_sync_last_error).slice(0, 80))})</span>` : ''}</div>
+            <div><strong>PMS Sync:</strong> ${p.pms_sync_status ? escapeHtml(String(p.pms_sync_status)) : '—'}</div>
             <div><strong>Type:</strong> ${p.appointment_type}</div>
             <div><strong>Clinician / provider:</strong> ${p.provider || 'Team'}</div>
             <div><strong>When:</strong> ${escapeHtml(when)} (${escapeHtml(p.timezone || 'America/New_York')})</div>
@@ -1456,16 +1465,24 @@
 
       updateViewTabsUi();
 
-      if (isBoard) {
-        renderScheduleBoardView();
+      if (!isBoard) {
+        if (calendar) {
+          const fcMap = { list: 'listWeek', week: 'timeGridWeek', month: 'dayGridMonth' };
+          const fcView = fcMap[view] || 'listWeek';
+          if (calendar.view.type !== fcView) calendar.changeView(fcView);
+          requestAnimationFrame(() => {
+            try {
+              calendar.updateSize();
+            } catch (_) {}
+            refresh();
+          });
+        } else {
+          refresh();
+        }
         return;
       }
 
-      if (!calendar) return;
-      const fcMap = { list: 'listWeek', week: 'timeGridWeek', month: 'dayGridMonth' };
-      const fcView = fcMap[view] || 'listWeek';
-      if (calendar.view.type !== fcView) calendar.changeView(fcView);
-      else refresh();
+      renderScheduleBoardView();
     }
 
     async function openApptFromQuery() {
@@ -1484,6 +1501,12 @@
     }
 
     async function initCalendar() {
+      if (window.__SOMO_DENTAL_PORTAL || localStorage.getItem('office_type') === 'dental') {
+        ['btnJoinVideo', 'btnSendVideoLink'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = 'none';
+        });
+      }
       if (typeof mountProviderPage !== 'function') {
         console.error('Provider shell scripts failed to load');
         return;

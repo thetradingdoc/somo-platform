@@ -1,11 +1,21 @@
 # Somo Platform Documentation
-> Last reviewed: 2026-06-16
+> Last reviewed: 2026-07-02
 
-**Last Updated:** 2026-06-16
+**Last Updated:** 2026-07-02
+
+### NYC front desk (active pilot)
+
+- **Master plan:** `~/.cursor/plans/provider_portal_production_20d1693f.plan.md`
+- **Architecture:** **[architecture/LIVE.md](./architecture/LIVE.md)** — onboarding, overflow, verify gates
+- **Voice agent:** **[voice-agent/README.md](./voice-agent/README.md)** — runtime paths, prompts
+- **Ops gates:** **[voice-agent/unblocked-phases-ops.md](./voice-agent/unblocked-phases-ops.md)** — `npm run verify:unblocked-phases`
+- **PMS connect:** **[architecture/PMS_CONNECT_ARCHITECTURE.md](./architecture/PMS_CONNECT_ARCHITECTURE.md)**
 
 ### Front-desk production (callsomo.com)
 
 - **Deploy + smoke:** **[deployment/FRONT_DESK_PRODUCTION.md](./deployment/FRONT_DESK_PRODUCTION.md)** — Cloud Run API, Firebase UI, Retell/Twilio, DNS order.
+- **Deploy checklist:** **[deployment/FRONT_DESK_DEPLOY_CHECKLIST.md](./deployment/FRONT_DESK_DEPLOY_CHECKLIST.md)**
+- **Git vs prod alignment:** **[deployment/PHASE0_DEPLOY_STATE.md](./deployment/PHASE0_DEPLOY_STATE.md)**
 
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
@@ -16,9 +26,9 @@
 ### Consumer brand (Somo)
 
 - **Single source of truth:** **[SOMO_GUIDELINES.md](./Brand/SOMO_GUIDELINES.md)** — naming, tokens, typography.
-- **Logo / favicon / email HTML:** **[LOGO_AND_ICON_SSOT.md](./Brand/LOGO_AND_ICON_SSOT.md)**
+- **Logo / favicon / email HTML:** **[Brand/README.md](./Brand/README.md)** · **[SOMO_GUIDELINES.md](./Brand/SOMO_GUIDELINES.md)**
 - **Index:** **[Brand folder README](./Brand/README.md)**
-- **Doc hygiene (what to read first):** **[meta/ENGINEERING_DOC_HYGIENE.md](./meta/ENGINEERING_DOC_HYGIENE.md)**
+- **Doc hygiene (what to read first):** **[meta/README.md](./meta/README.md)**
 
 ### Documentation placement policy (April 2026)
 
@@ -38,7 +48,7 @@
 7. **Consumer video health:** **[VIDEO_HEALTH.md](./product/VIDEO_HEALTH.md)** — LiveKit, Kelly PA, local `./run` at `/health-video/`.
 8. Architecture decisions (ADRs): **[architecture/decisions/README.md](./architecture/README.md#decisions-readme)**.
 9. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/README.md#commerce-agentic-checkout-file-map)**.
-10. `server.js` decomposition & route ownership: **[SERVER_DECOMPOSITION.md](./architecture/SERVER_DECOMPOSITION.md)**, **[RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md](./architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)**.
+10. Routes & `server.js` ownership: **[LIVE.md § runtime entrypoints](./architecture/LIVE.md#runtime-entrypoints-and-route-ownership)**, **[ROUTE_OWNERSHIP.md](./architecture/ROUTE_OWNERSHIP.md)**.
 11. `server.js` refactor policy (new routes only in `routes/`): **[SERVER_JS_REFACTOR_POLICY.md](./development/README.md#server-js-refactor-policy)**.
 12. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/README.md#periodic-maintenance)**.
 13. Secret scanning expectations: **[Security docs](./security/README.md)**.
@@ -76,8 +86,7 @@
 
 #### Somo demo (production API + outbound)
 - **[Agent index](./agent/README.md)** — Somo demo vs Kelly
-- **[Somo demo reference](./agent/somo-demo/README.md)** — architecture, ADRs, templates
-- **[Somo demo runbook](./agent/somo-demo/RUNBOOK.md)** — local dev, Phase A prod gates, outbound sales
+- **[Somo demo (retired)](./agent/README.md)** — use platform DID navigation runbook for consumer demo
 - Backlog: [`../todos/PENDING.md`](../todos/PENDING.md)
 
 #### Marketing landing (Somo)
@@ -91,11 +100,13 @@
 - **[Voice inbound troubleshooting](./runbooks/OPERATIONS.md#voice-inbound-troubleshooting)**
 
 #### Architecture
-- **[Kelly agentic rails (build plan)](./architecture/KELLY_AGENTIC_RAILS_TARGET_AND_BUILD_PLAN.md)** — LangGraph-first roadmap
-- **[Kelly rails v2 as-built](./architecture/kelly_rails_v2_as_built.md)** — `kelly-rails/` orchestrator SSOT
-- **[Patient Timeline & billing (mobile + APIs)](./architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)** — Expo tabs, routine APIs, `calendar-range`, billing events, SQLite vs Postgres scope
-- **[`server.js` decomposition (phase 6+)](./architecture/SERVER_DECOMPOSITION.md)** — extracted `routes/patient-*`, Kelly triage service, landing assistant, checkout-chat, admin/voice; ~11k lines remain in compose entry
-- **[Runtime entrypoints & route ownership](./architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)** — what mounts where on port 4000
+- **[Live architecture snapshot](./architecture/LIVE.md)** — current platform SSOT (routes, Kelly rails, front-desk onboarding)
+- **[Kelly rails v2 (code)](../../middleware-platform/services/kelly-rails/)** — orchestrator SSOT in repo
+- **[Kelly orchestration](./architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md)** — L2/L4 stack
+- **[PMS connect](./architecture/PMS_CONNECT_ARCHITECTURE.md)** — hub + adapters
+- **[Patient Timeline & billing (mobile + APIs)](./architecture/LIVE.md#patient-timeline-routine-and-billing)** — Expo tabs, routine APIs
+- **[Route ownership](./architecture/ROUTE_OWNERSHIP.md)** — KEEP / FREEZE / DELETE
+- **[Runtime entrypoints](./architecture/LIVE.md#runtime-entrypoints-and-route-ownership)** — what mounts on port 4000
 - **[Architecture decisions (ADRs)](./architecture/README.md#decisions-readme)** — SQLite, voice/commerce LLM, agentic checkout surfaces
 - **[Agentic checkout file map](./architecture/README.md#commerce-agentic-checkout-file-map)** — web, RN, API ownership
 - **[Platform Vision](./architecture/README.md#vision-vision)** - Platform goals and roadmap
@@ -110,7 +121,7 @@
 - **[Code Reviews](./development/README.md#code-reviews-code-review-and-cleanup)** - Code review findings
 - **[Improvement Plan](./development/README.md#improvement-plan)** - Codebase improvements
 - **[Code Structure](./development/README.md#guides-code-structure)** - Code organization
-- **[Runtime entrypoints & route ownership](./architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)** — compose entry, `routes/`, static SPA mounts (`bootstrap/static-hosting.js`)
+- **[Runtime entrypoints](./architecture/LIVE.md#runtime-entrypoints-and-route-ownership)** — compose entry, `routes/`, static SPA mounts (`bootstrap/static-hosting.js`)
 - **[Code Ownership By Surface](./development/README.md#consolidated-code_ownership_by_surfacemd)** - Where to change what
 - **[Scripts Operations Map](./development/README.md#consolidated-scripts_operations_mapmd)** - Script risk tiers and execution map
 - **[Reliability Guide](./development/README.md#guides-reliability)** - Reliability patterns
@@ -124,7 +135,7 @@
 
 #### API & Integrations
 - **[API Reference](./api/README.md#api-documentation)** - Complete API documentation
-- **[Medicaid provider directory (public search)](./Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md)** - pipeline + `/api/public/providers/*`
+- **[Medicaid provider directory (public search)](./Payor/README.md)** - pipeline + `/api/public/providers/*`
 - **[Invoice API](./api/README.md#invoice-api)** - Invoice endpoints
 - **[Stedi Integration](./integrations/README.md#stedi-api-stedi-api-endpoints)** - Stedi API
 - **[UHC FHIR Integration](./integrations/README.md#uhc-fhir-uhc-fhir-service-usage)** - UHC FHIR
@@ -132,7 +143,7 @@
 
 #### Setup & Configuration
 - **[Main Setup](./setup/README.md#getting-started-setup)** - Platform setup
-- **[Environment variables by surface](./setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md)** - middleware, landing, Playwright, CI
+- **[Environment variables](./setup/README.md)** - middleware, landing, Playwright, CI
 - **[Stripe Issuing Setup](./integrations/README.md#stripe-issuing-stripe-issuing)** - Stripe configuration
 - **[Google OAuth](./setup/README.md#google-google-oauth-complete-guide)** - Google Calendar OAuth
 - **GCP configuration** - see [Deployment (GCP Source of Truth)](./deployment/README.md)

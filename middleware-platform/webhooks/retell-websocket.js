@@ -604,6 +604,14 @@ class RetellWebSocketHandler {
                 console.log(`✅ Voice caller name pre-filled from call metadata: ${pn}`);
             }
 
+            try {
+                const { pmsContextFromDynamicVars } = require('../services/kelly-rails/prompts/pms-context-block');
+                const pmsCtx = pmsContextFromDynamicVars(dv);
+                if (pmsCtx) {
+                    connection.pmsContext = pmsCtx;
+                }
+            } catch (_) {}
+
             const callTypeMeta =
                 callMeta.metadata?.call_type ||
                 dv?.call_type ||
@@ -738,6 +746,32 @@ class RetellWebSocketHandler {
             if (connection.session && connection.clinic_id && !connection.session.clinicId) {
                 CallSessionService.updateSession(callId, { clinicId: connection.clinic_id });
                 connection.session.clinicId = connection.clinic_id;
+            }
+
+            // Stamp Kelly session meta for hydrate / policy routing (Track A7)
+            try {
+                const KellyToolExecutor = require('../services/kelly-tool-executor');
+                const { resolveTenantVoiceConfig } = require('../services/tenant-voice-config');
+                if (connection.clinic_id) {
+                    KellyToolExecutor._setSessionMeta(callId, 'clinic_id', String(connection.clinic_id));
+                }
+                if (connection.customer_id) {
+                    KellyToolExecutor._setSessionMeta(callId, 'customer_id', String(connection.customer_id));
+                }
+                const tenantCfg = resolveTenantVoiceConfig(this.db, {
+                    clinicId: connection.clinic_id,
+                    customerId: connection.customer_id
+                });
+                const prefLang =
+                    connection.preferred_language ||
+                    dv?.preferred_language ||
+                    dv?.locale ||
+                    (tenantCfg.supported_languages && tenantCfg.supported_languages[0]) ||
+                    'en';
+                KellyToolExecutor._setSessionMeta(callId, 'preferred_language', String(prefLang).slice(0, 2));
+                connection.preferred_language = String(prefLang).slice(0, 2);
+            } catch (metaErr) {
+                console.warn('⚠️  session meta stamp failed:', metaErr.message);
             }
 
             // Persist call state once clinic_id is available (medical coding agent)
@@ -1177,9 +1211,11 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                             clinic_id: connection.clinic_id,
                             customer_id: connection.customer_id
                         });
+                        const escBrand = connection._lastOpenerBundle?.practiceName;
+                        const escBrandLabel = escBrand && escBrand !== 'our office' ? escBrand : 'our office';
                         agentReply =
                             esc.reply ||
-                            'Thanks for calling Somo. I am having trouble loading your account. Let me connect you with our team.';
+                            `Thanks for calling ${escBrandLabel}. I am having trouble loading your account. Let me connect you with our team.`;
                         kellyResult = {
                             reply: agentReply,
                             blocked: true,
@@ -1278,7 +1314,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                         null,
                     routing_world: connection?.routing_world || null,
                     fail_closed: !!connection?.conversation_fail_closed,
-                    site_context_status: connection?.site_context_status || null
+                    site_context_status: connection?.site_context_status || null,
+                    pmsContext: connection?.pmsContext || null
                 };
                 const fillerMs = parseInt(process.env.KELLY_VOICE_FILLER_MS || '1200', 10) || 1200;
                 const voiceLocaleForFiller =
@@ -1500,6 +1537,24 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
 
             const transferNum = kellyResult?.transfer_number || null;
             const endCall = kellyResult?.end_call || false;
+            const shadowSuppress = connection.voiceRuntime?.voiceReplySuppressEnabled === true;
+            if (shadowSuppress && agentReply) {
+                console.log(JSON.stringify({
+                    component: 'retell_websocket',
+                    event: 'shadow_reply_suppressed',
+                    call_id: callId,
+                    reply_preview: String(agentReply).slice(0, 160)
+                }));
+                try {
+                    this.db?.insertKellyCallEvent?.({
+                        session_id: connection.session_id || callId,
+                        call_id: callId,
+                        event_type: 'shadow_reply_suppressed',
+                        payload_json: { reply_length: String(agentReply).length }
+                    });
+                } catch (_) {}
+                return;
+            }
             if (transferNum || (endCall && kellyResult?.blocked)) {
                 this.sendEscalationResponse(connection.ws, agentReply, message.response_id, {
                     transferNumber: transferNum,
@@ -3157,14 +3212,21 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 connection.agentBlocked = true;
                 connection.awaitingName = false;
                 const blockMsg = admission.message || VoiceAgentRuntime.buildUnavailableMessage();
-                this.sendRetellResponse(connection.ws, blockMsg, responseId, { endCall: true });
+                if (admission.action === 'forward_pstn' && admission.transferNumber) {
+                    this.sendEscalationResponse(connection.ws, blockMsg, responseId, {
+                        transferNumber: admission.transferNumber,
+                        endCall: true
+                    });
+                } else {
+                    this.sendRetellResponse(connection.ws, blockMsg, responseId, { endCall: true });
+                }
                 connection.sentInitialGreeting = true;
                 connection.conversationHistory.push({
                     role: 'assistant',
                     content: blockMsg,
                     timestamp: Date.now()
                 });
-                console.log(`🚫 Provider call blocked (${admission.reason}) for ${callId}`);
+                console.log(`🚫 Provider call blocked (${admission.reason}, ${admission.action}) for ${callId}`);
                 return;
             }
 
@@ -3208,8 +3270,13 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                   ? openerBundle.inbound.afterHoursMessage
                   : openerBundle.inbound.text;
 
+            // Name-first intake: await the caller's name only when the opener actually
+            // asks for it (asksName), and only when we don't already know it (caller-ID pre-fill).
+            const nameAlreadyKnown = !!(connection.initialName || connection.customerName);
+            const inboundAsksName =
+                !isOutbound && openerBundle.activeOpener?.asksName === true && !nameAlreadyKnown;
             if (!connection.sentInitialGreeting && connection.providerGreeting && !isOutbound) {
-                connection.awaitingName = false;
+                connection.awaitingName = inboundAsksName;
                 this.sendRetellResponse(connection.ws, connection.providerGreeting, responseId);
                 connection.sentInitialGreeting = true;
                 connection.conversationHistory.push({
@@ -3264,6 +3331,15 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             words = words.slice(1);
         }
         words = words.filter((x) => !fillerWord.test(x));
+        if (words.length === 0) return null;
+        // Guard against capturing an intent/command as a name when the caller answers
+        // the name prompt with what they want instead (e.g. "Book appointment", "Need a refill").
+        // `neverName` words are essentially never first names; `intentyWord` words only
+        // disqualify multi-word phrases (so real single names like "Bill"/"Will" still pass).
+        const neverName = /^(book|booking|appointment|appointments|schedule|scheduling|scheduled|reschedule|rescheduling|cancel|cancellation|cancelled|canceled|refill|refills|prescription|prescriptions|medication|medications|copay|deductible|billing|invoice|insurance|emergency|urgent|checkup|consultation|referral|symptom|symptoms)$/iu;
+        const intentyWord = /^(need|needed|want|wanted|looking|help|question|questions|pay|payment|payments|talk|speak|transfer|human|agent|representative|manager|about|regarding|results|result|test|tests|lab|labs|hours|hour|calling|visit|visits|info|information|confirm|confirmation|reminder|status|order|orders|records|record|portal|website|address|directions|location|doctor|nurse|provider|appoint)$/iu;
+        if (words.some((w) => neverName.test(w))) return null;
+        if (words.length > 1 && words.some((w) => intentyWord.test(w))) return null;
         if (words.length >= 1 && words.length <= 3 && words.every(nameWord)) {
             return words.join(' ');
         }
@@ -3388,8 +3464,11 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             isOutboundCallType(callType) || String(direction || '').toLowerCase() === 'outbound';
 
         let opening = null;
+        let askNameAfterGreeting = false;
         if (connection._lastOpenerBundle?.activeOpener?.text && !connection.sentInitialGreeting) {
             opening = connection._lastOpenerBundle.activeOpener.text;
+            const ao = connection._lastOpenerBundle.activeOpener;
+            askNameAfterGreeting = ao.direction === 'inbound' && ao.asksName === true;
         }
 
         if (!opening) {
@@ -3420,21 +3499,31 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 opening = openerBundle.inbound.afterHoursMessage;
             } else {
                 opening = openerBundle.inbound.text;
+                askNameAfterGreeting = openerBundle.inbound.asksName === true;
             }
         }
 
         if (!opening) {
+            const fbBrand = openerBundle?.practiceName || connection._lastOpenerBundle?.practiceName;
+            const fbBrandLabel = fbBrand && fbBrand !== 'our office' ? fbBrand : 'the front desk';
             if (connection.conversation_fail_closed) {
                 opening =
                     'Thanks for calling. I am having trouble loading your account details. Let me connect you with support.';
             } else if (isOutbound) {
-                opening = 'Hi, I am Kelly calling from Somo. Do you have a moment?';
+                opening = `Hi, I am Kelly calling from ${fbBrandLabel}. Do you have a moment?`;
             } else {
-                opening = connection.providerGreeting || 'Hi, I am Kelly from Somo. How can I help you today?';
+                opening =
+                    connection.providerGreeting ||
+                    `Hi, I am Kelly at ${fbBrandLabel}. Can I start with your name?`;
+                askNameAfterGreeting = true;
             }
         }
 
-        connection.awaitingName = false;
+        // Don't re-ask for a name we already captured (caller-ID / FHIR pre-fill).
+        if (connection.initialName || connection.customerName) {
+            askNameAfterGreeting = false;
+        }
+        connection.awaitingName = askNameAfterGreeting;
         this.sendRetellResponse(connection.ws, opening, responseId);
         connection.sentInitialGreeting = true;
         connection.opener_delivered = true;
@@ -3768,6 +3857,38 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                         );
                         this.db.setVoiceCallOutcome(callId, oc);
                     } catch (_) {}
+                }
+                // Surface voice bookings in the provider activity feed (feed-only notification).
+                try {
+                    const appt = response.data.appointment || {};
+                    const clinicId = this.getClinicId?.(callId) || connection?.clinic_id || null;
+                    const customerId = connection?.customer_id || null;
+                    const patientName =
+                        args.patient_name ||
+                        connection?.customerName ||
+                        connection?.initialName ||
+                        'Patient';
+                    this.db.insertKellyCallEvent?.({
+                        session_id: callId,
+                        call_id: callId,
+                        event_type: 'appointment_booked',
+                        clinic_id: clinicId,
+                        customer_id: customerId,
+                        payload_json: {
+                            tool_name: 'schedule_appointment',
+                            appointment_id: appt.id || null,
+                            appointment_type:
+                                args.appointment_type || appt.appointment_type || appt.specialty || null,
+                            patient_name: patientName,
+                            patient_id: appt.patient_id || connection?.patientId || null,
+                            confirmation_number: appt.confirmation_number || null,
+                            when: appt.start_time || appt.datetime || args.datetime || null,
+                            clinic_id: clinicId,
+                            customer_id: customerId
+                        }
+                    });
+                } catch (e) {
+                    console.warn('[voice] appointment_booked event emit failed:', e?.message);
                 }
             } else if (!response.data.success) {
                 console.warn(`⚠️  Appointment scheduling failed: ${response.data.error || 'Unknown error'}`);

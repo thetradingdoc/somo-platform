@@ -2153,7 +2153,9 @@ function redirectLegacyLandingPath(req, res) {
   if (process.env.LOCAL_DEV_ROOT === 'health') {
     return redirectHealthVideoEntry(res);
   }
-  return res.redirect(302, '/business/trial-activation.html');
+  const params = new URLSearchParams(req.query);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return res.redirect(301, `/${qs}`);
 }
 
 /** Production API hostnames (split-domain). */
@@ -2318,19 +2320,19 @@ app.get('/waitlist', (req, res) => {
   return res.sendFile(getUnifiedDashboardPath('waitlist.html'));
 });
 
-// Invite links route approved users directly to login.
+// Invite links — serve invite acceptance page (Phase 4 pilot)
 app.get('/invite', (req, res) => {
   const code = String(req.query?.code || '').trim();
   if (code) {
-    return res.redirect(`/login?invite_code=${encodeURIComponent(code)}`);
+    return res.sendFile(getUnifiedDashboardPath('business/invite.html'));
   }
-  return res.redirect('/login?access=invite');
+  return res.sendFile(getUnifiedDashboardPath('business/invite.html'));
 });
 
 app.get('/invite/:code', (req, res) => {
   const code = String(req.params?.code || '').trim();
   if (!code) return res.redirect('/invite');
-  return res.redirect(`/login?invite_code=${encodeURIComponent(code)}`);
+  return res.redirect(`/invite?code=${encodeURIComponent(code)}`);
 });
 
 app.get('/login', (req, res) => {
@@ -2454,6 +2456,12 @@ function clearCustomerSessionCookie(res, req) {
 
 // Signup page (provider intake) — only on root / marketing host
 app.get('/signup', (req, res) => {
+  const { isPilotInviteOnly } = require('./services/pilot-config');
+  if (isPilotInviteOnly()) {
+    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    return res.redirect(302, `/waitlist.html${q}`);
+  }
+
   const hostname = getHostname(req);
   if (isProductionApiHostname(hostname)) {
     return res.redirect('/');
@@ -2600,6 +2608,9 @@ const signupRoutes = require('./routes/signup');
 // Only register API routes, not root (root is handled above)
 app.use('/api', signupRoutes);
 
+const publicPilotConfigRoutes = require('./routes/public-pilot-config');
+app.use('/api/public', publicPilotConfigRoutes);
+
 // ============================================
 // Credits Routes (Credits Purchase & Balance)
 // ============================================
@@ -2673,6 +2684,21 @@ app.use('/api/admin/tenants', adminTenantsRoutes);
 // Tenant config routes
 const tenantConfigRoutes = require('./routes/tenant-config');
 app.use('/api/tenant', tenantConfigRoutes);
+
+const tenantPmsRoutes = require('./routes/tenant-pms');
+app.use('/api/tenant/pms', tenantPmsRoutes);
+const tenantRosterRoutes = require('./routes/tenant-roster');
+app.use('/api/tenant/roster', tenantRosterRoutes);
+const tenantPatientsRoutes = require('./routes/tenant-patients');
+app.use('/api/tenant/patients', tenantPatientsRoutes);
+const tenantClinicRoutes = require('./routes/tenant-clinic');
+app.use('/api/tenant/clinic', tenantClinicRoutes);
+const { publicRouter: providerInvitesPublic, adminRouter: providerInvitesAdmin } = require('./routes/provider-invites');
+app.use('/api/invites', providerInvitesPublic);
+app.use('/api/admin/invites', providerInvitesAdmin);
+
+const agentPatientContextRoutes = require('./routes/agent-patient-context');
+app.use('/api/agent', agentPatientContextRoutes);
 
 // LiveKit video conferencing (token endpoint)
 // (mounted above) app.use('/api/livekit', livekitTokenRoutes);
@@ -2900,6 +2926,8 @@ const rcmPublicRoutes = require('./routes/rcm-public');
 app.use('/api/public/rcm', rcmPublicRoutes);
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
 app.use('/api/internal/service-ops', internalServiceOpsRoutes);
+const internalEventsRoutes = require('./routes/internal-events');
+app.use('/api/internal/events', internalEventsRoutes);
 const impactPublicRoutes = require('./routes/impact-public');
 app.use('/api/public/impact', impactPublicRoutes);
 
@@ -5027,6 +5055,8 @@ function invalidateSlotAvailabilityCache() {
   } catch (_) {}
 }
 
+const PmsBooking = require('./services/pms/pms-booking');
+
 app.post('/api/appointments/schedule', async (req, res) => {
   try {
     if (legacyAppointmentsApiDisabled(res)) return;
@@ -5058,7 +5088,7 @@ app.post('/api/appointments/schedule', async (req, res) => {
     const sessionIdForGuard = resolveVoiceSessionIdForGuard(args, req);
     if (sessionIdForGuard && !enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, 'schedule')) return;
 
-    const result = await BookingService.scheduleAppointment(appointmentData);
+    const result = await PmsBooking.scheduleAppointment(appointmentData);
     if (result.success) invalidateSlotAvailabilityCache();
 
     // Auto-checkout is intentionally centralized in KellyToolExecutor to avoid multi-path duplicate checkout creation.
@@ -5100,7 +5130,8 @@ app.get('/api/appointments/available-slots', async (req, res) => {
     const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', timezone, practitionerId || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) return res.json(cached);
-    const resultRaw = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, timezone, clinicId, practitionerId);
+    const PmsBooking = require('./services/pms/pms-booking');
+    const resultRaw = await PmsBooking.getAvailableSlots(date, args.provider, args.appointment_type, timezone, clinicId, practitionerId);
     const result = ensureSlotBundles(resultRaw, date, practitionerId);
     if (result.success) cache.set('slot_availability', result, cacheKey);
     res.json(result);
@@ -5134,7 +5165,8 @@ app.post('/api/appointments/available-slots', async (req, res) => {
     const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', timezone, practitionerId || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) return res.json(cached);
-    const resultRaw = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, timezone, clinicId, practitionerId);
+    const PmsBooking = require('./services/pms/pms-booking');
+    const resultRaw = await PmsBooking.getAvailableSlots(date, args.provider, args.appointment_type, timezone, clinicId, practitionerId);
     const result = ensureSlotBundles(resultRaw, date, practitionerId);
     if (result.success) cache.set('slot_availability', result, cacheKey);
     res.json(result);
@@ -5174,7 +5206,7 @@ app.post('/api/appointments/reschedule', async (req, res) => {
     if (args.timezone && !isValidIanaTimezone(args.timezone)) {
       return res.status(400).json({ success: false, error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".' });
     }
-    const result = await BookingService.rescheduleAppointment(appointmentId, newDate, newTime, args.reason, args.timezone, clinicId);
+    const result = await PmsBooking.rescheduleAppointment(appointmentId, newDate, newTime, args.reason, args.timezone, clinicId);
     if (result?.success) invalidateSlotAvailabilityCache();
     res.json(result);
   } catch (error) {
@@ -5190,7 +5222,7 @@ app.post('/api/appointments/cancel', async (req, res) => {
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required' });
     const appointmentId = args.appointment_id || args.confirmation_number;
     if (!appointmentId) return res.status(400).json({ success: false, error: 'appointment_id is required' });
-    const result = await BookingService.cancelAppointment(appointmentId, args.reason, clinicId);
+    const result = await PmsBooking.cancelAppointment(appointmentId, args.reason, clinicId);
     if (result?.success) invalidateSlotAvailabilityCache();
     res.json(result);
   } catch (error) {
@@ -8175,492 +8207,6 @@ app.post('/webhook/retell/end-of-call', async (req, res) => {
   }
 });
 
-// Stripe webhook
-app.post('/webhook/stripe', async (req, res) => {
-  if (process.env.ALLOW_LEGACY_STRIPE_WEBHOOK !== '1') {
-    return res.status(410).json({
-      success: false,
-      error: 'Legacy webhook path disabled. Use POST /webhooks/stripe.',
-      canonical_path: '/webhooks/stripe'
-    });
-  }
-  try {
-    console.log('\n💳 STRIPE: Webhook received');
-
-    const sig = req.headers['stripe-signature'];
-    let event;
-
-    try {
-      if (!stripe) {
-        return res.status(503).json({
-          success: false,
-          error: 'Stripe webhook processing is not configured'
-        });
-      }
-
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      console.error('⚠️ Webhook signature verification failed:', err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        const paymentIntent = event.data.object;
-        console.log(`✅ PaymentIntent ${paymentIntent.id} succeeded`);
-
-        // Check if this is a wallet deposit payment
-        if (paymentIntent.metadata && paymentIntent.metadata.type === 'wallet_deposit') {
-          console.log(`💰 Processing wallet deposit for PaymentIntent ${paymentIntent.id}`);
-
-          const depositId = paymentIntent.metadata.deposit_id;
-          const walletId = paymentIntent.metadata.wallet_id;
-          const patientId = paymentIntent.metadata.patient_id;
-          const amount = paymentIntent.amount / 100; // Convert from cents to dollars
-
-          try {
-            // Find the pending transfer record
-            const transferStmt = db.db.prepare(`
-              SELECT * FROM circle_transfers 
-              WHERE id = ? OR circle_transfer_id = ?
-              ORDER BY created_at DESC LIMIT 1
-            `);
-            const transfer = transferStmt.get(depositId, paymentIntent.id);
-
-            if (transfer && transfer.status === 'pending') {
-              // Fund the wallet with USDC
-              const CircleService = require('./services/circle-service');
-              const fundResult = await CircleService.fundWallet(walletId, amount);
-
-              if (fundResult.success) {
-                // Update transfer status to completed
-                const updateStmt = db.db.prepare(`
-                  UPDATE circle_transfers 
-                  SET status = ?, completed_at = ?, circle_transfer_id = ?
-                  WHERE id = ?
-                `);
-                updateStmt.run(
-                  'completed',
-                  new Date().toISOString(),
-                  fundResult.transferId || paymentIntent.id,
-                  depositId
-                );
-
-                console.log(`✅ Wallet deposit completed: ${depositId}`);
-                console.log(`   Amount: $${amount.toFixed(2)} USDC`);
-                console.log(`   Wallet: ${walletId}`);
-                console.log(`   Circle Transfer: ${fundResult.transferId}`);
-              } else {
-                console.error(`❌ Failed to fund wallet: ${fundResult.error}`);
-                // Keep status as pending - will retry or handle manually
-              }
-            } else if (!transfer) {
-              // Transfer record doesn't exist - create it
-              const insertStmt = db.db.prepare(`
-                INSERT INTO circle_transfers (
-                  id, claim_id, from_wallet_id, to_wallet_id, amount, currency,
-                  circle_transfer_id, status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `);
-              insertStmt.run(
-                depositId || `deposit_${Date.now()}`,
-                null,
-                'stripe',
-                walletId,
-                amount,
-                'USDC',
-                paymentIntent.id,
-                'pending',
-                new Date().toISOString()
-              );
-
-              // Try to fund wallet
-              if (CircleService && CircleService.isAvailable()) {
-                const fundResult = await CircleService.fundWallet(walletId, amount);
-
-                if (fundResult.success) {
-                  const updateStmt = db.db.prepare(`
-                    UPDATE circle_transfers 
-                    SET status = ?, completed_at = ?, circle_transfer_id = ?
-                    WHERE circle_transfer_id = ?
-                  `);
-                  updateStmt.run(
-                    'completed',
-                    new Date().toISOString(),
-                    fundResult.transferId || paymentIntent.id,
-                    paymentIntent.id
-                  );
-
-                  console.log(`✅ Wallet deposit created and completed from webhook`);
-                }
-              } else {
-                console.warn('⚠️  Circle service not available - wallet deposit will remain pending');
-              }
-            }
-          } catch (error) {
-            console.error(`❌ Error processing wallet deposit webhook:`, error);
-            // Don't throw - we'll retry or handle manually
-          }
-        } else if (paymentIntent.metadata && paymentIntent.metadata.checkout_id) {
-          // VOICE CHECKOUT PAYMENT - Complete checkout automatically
-          console.log(`💳 Processing voice checkout payment: ${paymentIntent.id}`);
-          console.log(`   Checkout ID: ${paymentIntent.metadata.checkout_id}`);
-
-          try {
-            const checkoutId = paymentIntent.metadata.checkout_id;
-            const checkout = await db.getVoiceCheckout(checkoutId);
-
-            if (!checkout) {
-              console.error(`❌ Checkout not found: ${checkoutId}`);
-              // Return 200 to prevent Stripe retries, but log error
-              return res.json({ received: true, error: 'Checkout not found' });
-            }
-
-            // IDEMPOTENCY: Check if already completed
-            if (checkout.status === 'completed') {
-              console.log(`✅ Checkout ${checkoutId} already completed - skipping`);
-              return res.json({ received: true, message: 'Already completed' });
-            }
-
-            // Process payment token if provided
-            if (paymentIntent.metadata.payment_token) {
-              const PaymentService = require('./services/payment-service');
-              const tokenResult = await PaymentService.processPayment(
-                paymentIntent.metadata.payment_token,
-                paymentIntent.id
-              );
-
-              if (!tokenResult.success) {
-                console.warn(`⚠️  Token processing failed: ${tokenResult.error}`);
-                // Continue anyway - payment succeeded in Stripe
-              }
-            }
-
-            // Complete checkout (inline implementation - same logic as /voice/checkout/complete route)
-            const { v4: uuidv4 } = require('uuid');
-            const axios = require('axios');
-            const VoiceAdapter = require('./adapters/voice-adapter');
-
-            // Get merchant - return error if not found (no fallback for security)
-            let merchant = db.getMerchant(checkout.merchant_id);
-
-            if (!merchant) {
-              console.error('❌ ERROR: Merchant not found for checkout:', checkout.id);
-              console.error('   Checkout merchant_id:', checkout.merchant_id);
-              throw new Error('Merchant not found. Please ensure merchant is configured in the system.');
-            }
-
-            // Decrement inventory
-            if (checkout.product_id && checkout.quantity) {
-              try {
-                const product = db.getProduct(checkout.product_id);
-                if (product && product.merchant_id === checkout.merchant_id && product.inventory >= checkout.quantity) {
-                  db.updateInventory(checkout.product_id, checkout.quantity);
-                }
-              } catch (inventoryError) {
-                console.error('❌ Error decrementing inventory:', inventoryError);
-              }
-            }
-
-            // Create order
-            const orderData = VoiceAdapter.toMerchantOrderFormat(checkout);
-            let merchantOrder = null;
-
-            if (merchant.api_url) {
-              try {
-                const orderResponse = await axios.post(`${merchant.api_url}/api/orders`, orderData, { timeout: 10000 });
-                merchantOrder = orderResponse.data.order;
-              } catch (apiError) {
-                console.error('❌ Merchant API call failed:', apiError.message);
-              }
-            }
-
-            if (!merchantOrder) {
-              const orderId = uuidv4();
-              db.createOrder({
-                id: orderId,
-                merchant_id: checkout.merchant_id,
-                product_id: checkout.product_id,
-                quantity: checkout.quantity,
-                customer_email: checkout.customer_email || 'guest@example.com',
-                customer_name: checkout.customer_name,
-                customer_phone: checkout.customer_phone,
-                total_amount: checkout.amount,
-                status: 'paid',
-                payment_status: 'paid',
-                source: 'voice'
-              });
-              merchantOrder = { id: orderId };
-            }
-
-            // Update checkout status
-            await db.updateVoiceCheckout(checkoutId, {
-              status: 'completed',
-              payment_intent_id: paymentIntent.id,
-              merchant_order_id: merchantOrder.id,
-              completed_at: new Date().toISOString()
-            });
-
-            // Phase 4.1 & 4.2: Confirm appointment (S-3: defer to avoid blocking; handle errors)
-            if (checkout.appointment_id) {
-              const apptId = checkout.appointment_id;
-              const clinicIdForConfirm = checkout.clinic_id || null;
-              const piId = paymentIntent.id;
-              const piStatus = paymentIntent.status;
-              // Bug 4: Wrap async callback so rejections are caught (setImmediate doesn't await)
-              setImmediate(() => {
-                (async () => {
-                  try {
-                    const BookingService = require('./services/booking-service');
-                    await BookingService.confirmAppointment(apptId, clinicIdForConfirm);
-                    const apt = await db.getAppointment(apptId);
-                    if (apt && apt.visit_mode === 'sync_video' && piStatus === 'requires_capture' && db.updateAppointment) {
-                      db.updateAppointment(apptId, { stripe_payment_intent_id: piId }, clinicIdForConfirm);
-                    }
-                    console.log(`✅ Appointment ${apptId} confirmed via webhook`);
-                  } catch (confirmErr) {
-                    console.error(`❌ setImmediate confirmAppointment failed: ${confirmErr.message}`, confirmErr.stack);
-                  }
-                })().catch(e => console.error('Unhandled webhook setImmediate error:', e));
-              });
-            }
-
-            // Create transaction record for admin tracking
-            db.createTransaction({
-              id: uuidv4(),
-              merchant_id: checkout.merchant_id,
-              platform: 'voice',
-              platform_order_id: checkoutId,
-              merchant_order_id: merchantOrder.id,
-              product_id: checkout.product_id,
-              amount: checkout.amount,
-              status: 'completed',
-              customer_email: checkout.customer_email || checkout.customer_phone,
-              completed_at: new Date().toISOString()
-            });
-
-            console.log(`✅ Voice checkout ${checkoutId} completed via webhook`);
-          } catch (error) {
-            console.error(`❌ Error completing voice checkout from webhook:`, error);
-            console.error(`   Checkout ID: ${paymentIntent.metadata.checkout_id}`);
-            console.error(`   Payment Intent: ${paymentIntent.id}`);
-            console.error(`   Error: ${error.message}`);
-            console.error(`   Stack: ${error.stack}`);
-
-            // Log error but return 200 to prevent Stripe retries
-            // Admin can manually retry failed checkouts
-            // Return 200 so Stripe doesn't retry (we'll handle manually)
-            return res.json({
-              received: true,
-              error: 'Checkout completion failed - logged for manual review'
-            });
-          }
-        } else {
-          // Regular payment intent - handle as before
-          console.log(`📝 Processing regular payment: ${paymentIntent.id}`);
-        }
-        break;
-
-      case 'checkout.session.completed':
-        const checkoutSession = event.data.object;
-        console.log(`✅ Checkout session completed: ${checkoutSession.id}`);
-
-        if (
-          checkoutSession.mode === 'subscription' &&
-          checkoutSession.metadata &&
-          String(checkoutSession.metadata.type || '') === 'care_program'
-        ) {
-          try {
-            ensureBillingTables();
-            const { activateCareProgramSubscription } = require('./services/care-program-billing-service');
-            activateCareProgramSubscription(db, {
-              sessionId: checkoutSession.metadata.patient_session_id,
-              patientId: checkoutSession.metadata.patient_id || null,
-              concernId: checkoutSession.metadata.concern_id || null,
-              stripeCustomerId: checkoutSession.customer,
-              stripeSubscriptionId: checkoutSession.subscription,
-            });
-            console.log('[StripeWebhook] care_program subscription activated for session', checkoutSession.metadata.patient_session_id);
-          } catch (careProgErr) {
-            console.error('[StripeWebhook] care_program activation failed:', careProgErr.message);
-          }
-        }
-
-        // Handle payment method setup (for pay-as-you-go billing)
-        if (checkoutSession.mode === 'setup' && checkoutSession.setup_intent) {
-          try {
-            const setupIntent = await stripe.setupIntents.retrieve(checkoutSession.setup_intent);
-            const customerId = checkoutSession.metadata?.customer_id;
-
-            if (customerId && setupIntent.payment_method) {
-              const paymentMethod = await stripe.paymentMethods.retrieve(setupIntent.payment_method);
-
-              // Update customer with payment method
-              db.updateCustomer(customerId, {
-                stripe_customer_id: checkoutSession.customer || null,
-                stripe_payment_method_id: setupIntent.payment_method,
-                card_last4: paymentMethod.card?.last4 || null,
-                card_brand: paymentMethod.card?.brand || null,
-                card_verified: 1,
-                card_verified_at: new Date().toISOString()
-              });
-
-              console.log(`✅ Payment method saved for customer ${customerId}`);
-            }
-          } catch (error) {
-            console.error('❌ Error processing setup intent:', error);
-          }
-        }
-        break;
-
-      case 'payment_intent.payment_failed':
-        const failedPayment = event.data.object;
-        console.log(`❌ PaymentIntent ${failedPayment.id} failed`);
-
-        // Update wallet deposit status if this was a wallet deposit
-        if (failedPayment.metadata && failedPayment.metadata.type === 'wallet_deposit') {
-          const depositId = failedPayment.metadata.deposit_id;
-
-          try {
-            const updateStmt = db.db.prepare(`
-              UPDATE circle_transfers 
-              SET status = ?, error_message = ?
-              WHERE id = ? OR circle_transfer_id = ?
-            `);
-            updateStmt.run(
-              'failed',
-              `Payment failed: ${failedPayment.last_payment_error?.message || 'Unknown error'}`,
-              depositId,
-              failedPayment.id
-            );
-
-            console.log(`❌ Wallet deposit marked as failed: ${depositId}`);
-          } catch (error) {
-            console.error(`❌ Error updating failed deposit:`, error);
-          }
-        } else if (failedPayment.metadata && failedPayment.metadata.checkout_id) {
-          // VOICE CHECKOUT PAYMENT FAILED - Update checkout status
-          const checkoutId = failedPayment.metadata.checkout_id;
-          console.log(`❌ Voice checkout payment failed: ${checkoutId}`);
-
-          try {
-            await db.updateVoiceCheckout(checkoutId, {
-              status: 'failed',
-              payment_intent_id: failedPayment.id
-            });
-
-            // Create failed transaction record for admin tracking
-            const { v4: uuidv4 } = require('uuid');
-            const checkout = await db.getVoiceCheckout(checkoutId);
-            if (checkout) {
-              db.createTransaction({
-                id: uuidv4(),
-                merchant_id: checkout.merchant_id,
-                platform: 'voice',
-                platform_order_id: checkoutId,
-                product_id: checkout.product_id,
-                amount: checkout.amount,
-                status: 'failed',
-                customer_email: checkout.customer_email || checkout.customer_phone,
-                completed_at: null
-              });
-            }
-
-            console.log(`✅ Checkout ${checkoutId} marked as failed`);
-          } catch (error) {
-            console.error(`❌ Error updating failed checkout:`, error);
-          }
-        }
-        break;
-
-      case 'payment_intent.canceled':
-        const canceledPayment = event.data.object;
-        console.log(`🚫 PaymentIntent ${canceledPayment.id} canceled`);
-
-        if (canceledPayment.metadata && canceledPayment.metadata.checkout_id) {
-          // VOICE CHECKOUT PAYMENT CANCELED - Update checkout status
-          const checkoutId = canceledPayment.metadata.checkout_id;
-          console.log(`🚫 Voice checkout payment canceled: ${checkoutId}`);
-
-          try {
-            await db.updateVoiceCheckout(checkoutId, {
-              status: 'cancelled',
-              payment_intent_id: canceledPayment.id
-            });
-
-            // Create cancelled transaction record for admin tracking
-            const { v4: uuidv4 } = require('uuid');
-            const checkout = await db.getVoiceCheckout(checkoutId);
-            if (checkout) {
-              db.createTransaction({
-                id: uuidv4(),
-                merchant_id: checkout.merchant_id,
-                platform: 'voice',
-                platform_order_id: checkoutId,
-                product_id: checkout.product_id,
-                amount: checkout.amount,
-                status: 'cancelled',
-                customer_email: checkout.customer_email || checkout.customer_phone,
-                completed_at: null
-              });
-            }
-
-            console.log(`✅ Checkout ${checkoutId} marked as cancelled`);
-          } catch (error) {
-            console.error(`❌ Error updating cancelled checkout:`, error);
-          }
-        }
-        break;
-
-      case 'charge.refunded':
-        const charge = event.data.object;
-        console.log(`↩️  Charge ${charge.id} refunded`);
-        const paymentIntentId = charge.payment_intent;
-        if (paymentIntentId) {
-          try {
-            const refundAmount = (charge.amount_refunded || 0) / 100;
-            db.insertFinancialEvent({
-              event_type: 'refund',
-              actor_type: 'system',
-              actor_id: null,
-              amount: -refundAmount,
-              currency: (charge.currency || 'usd').toUpperCase(),
-              rail_type: 'stripe',
-              status: 'succeeded',
-              cause: 'charge_refunded',
-              metadata: { charge_id: charge.id, payment_intent_id: paymentIntentId }
-            });
-            console.log(`✅ Refund event recorded: $${refundAmount}`);
-          } catch (e) {
-            console.warn('⚠️  insertFinancialEvent for refund failed:', e.message);
-          }
-        }
-        break;
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
-    }
-
-    res.json({ received: true });
-
-  } catch (error) {
-    console.error('❌ Error processing Stripe webhook:', error);
-    console.error('   Event type:', event?.type);
-    console.error('   Payment Intent:', event?.data?.object?.id);
-    console.error('   Stack:', error.stack);
-
-    // S-3: Always return 200 to Stripe—prevents retry storms. Log for manual review.
-    res.status(200).json({
-      received: true,
-      error: 'Webhook processing failed - logged for review',
-      error_message: error.message
-    });
-  }
-});
 
 // ============================================
 // EHR INTEGRATION ENDPOINTS
@@ -8669,13 +8215,23 @@ app.post('/webhook/stripe', async (req, res) => {
 // Initiate OAuth connection to EHR (1upHealth aggregator)
 app.get('/api/ehr/connect', async (req, res) => {
   try {
-    const { ehr_name, provider_id } = req.query;
+    const { ehr_name, provider_id, clinic_id } = req.query;
 
     if (!ehr_name) {
       return res.status(400).json({
         success: false,
         error: 'ehr_name is required (epic, cerner, athena, etc.)'
       });
+    }
+
+    try {
+      const { assert1upHealthAllowed } = require('./services/dental-ehr-routing-guard');
+      assert1upHealthAllowed({ clinicId: clinic_id, providerId: provider_id });
+    } catch (blockErr) {
+      if (blockErr.status === 403) {
+        return res.status(403).json({ success: false, error: blockErr.message, code: blockErr.code });
+      }
+      throw blockErr;
     }
 
     const providerId = provider_id || 'default';
@@ -8729,13 +8285,23 @@ app.get('/api/ehr/oauth/callback', async (req, res) => {
 // Sync encounters from EHR (manual trigger)
 app.post('/api/ehr/sync/encounters', async (req, res) => {
   try {
-    const { connection_id, date } = req.body;
+    const { connection_id, date, clinic_id } = req.body;
 
     if (!connection_id) {
       return res.status(400).json({
         success: false,
         error: 'connection_id is required'
       });
+    }
+
+    try {
+      const { assert1upHealthAllowed } = require('./services/dental-ehr-routing-guard');
+      assert1upHealthAllowed({ clinicId: clinic_id });
+    } catch (blockErr) {
+      if (blockErr.status === 403) {
+        return res.status(403).json({ success: false, error: blockErr.message, code: blockErr.code });
+      }
+      throw blockErr;
     }
 
     const result = await EHRSyncService.syncConnection(connection_id, date);
@@ -9786,6 +9352,10 @@ function onServerListening() {
     const cacheService = require('./services/cache-service');
     if (typeof cacheService.warm === 'function') cacheService.warm();
   } catch (e) { console.warn('⚠️  Cache warm skipped:', e.message); }
+  try {
+    const { startPmsWriteRetryWorker } = require('./services/pms/pms-write-service');
+    startPmsWriteRetryWorker();
+  } catch (e) { console.warn('⚠️  PMS write retry worker skipped:', e.message); }
   try {
     const SpecialistResolverService = require('./services/specialist-resolver-service');
     if (SpecialistResolverService.cleanupCache) {

@@ -22,6 +22,8 @@ if (!key || !key.startsWith('sk_test_')) {
 const stripe = new Stripe(key, { apiVersion: '2024-04-10' });
 const writeEnv = process.argv.includes('--write-env');
 
+const SAAS_TAX_CODE = 'txcd_10103001';
+
 const CATALOG = {
   STRIPE_PRICE_STARTER: { name: 'Voice Starter', amount: 7900, recurring: true },
   STRIPE_PRICE_PRACTICE: { name: 'Voice Practice', amount: 19900, recurring: true },
@@ -32,11 +34,15 @@ const CATALOG = {
 };
 
 async function ensurePrice(name, amountCents, recurring) {
-  const product = await stripe.products.create({ name: `Somo ${name}` });
+  const product = await stripe.products.create({
+    name: `Somo ${name}`,
+    tax_code: SAAS_TAX_CODE
+  });
   const price = await stripe.prices.create({
     product: product.id,
     unit_amount: amountCents,
     currency: 'usd',
+    tax_behavior: 'exclusive',
     ...(recurring ? { recurring: { interval: 'month' } } : {})
   });
   return price.id;

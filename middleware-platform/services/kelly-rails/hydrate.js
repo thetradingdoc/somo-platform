@@ -159,6 +159,17 @@ function hydrateSessionForTurn(sessionId, { patientId, activeLane } = {}) {
   const preferred = KellyToolExecutor._getSessionMeta(sid, 'kelly_session_locale');
   if (preferred) flags.preferred_language = preferred;
 
+  const clinicId = KellyToolExecutor._getSessionMeta(sid, 'clinic_id');
+  const customerId = KellyToolExecutor._getSessionMeta(sid, 'customer_id');
+  try {
+    const { loadTenantPolicyFromProfile } = require('../conversation-mode/tenant-policy');
+    const policy = loadTenantPolicyFromProfile(db, clinicId, customerId);
+    if (policy?.triage_policy) {
+      flags.triage_policy = policy.triage_policy;
+      if (policy.triage_policy === 'disabled') flags.front_desk_mode = true;
+    }
+  } catch (_) {}
+
   return {
     flags,
     projection,

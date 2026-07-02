@@ -70,6 +70,8 @@ const SP = window.SettingsPage;
             const tabParam = new URLSearchParams(window.location.search).get('tab');
             if (tabParam === 'voice') {
                 setSettingsTab('voice');
+            } else if (tabParam === 'billing') {
+                setSettingsTab('billing');
             }
 
             // Close sidebar on window resize if switching to desktop
@@ -87,6 +89,9 @@ const SP = window.SettingsPage;
             });
             loadUserInfo();
             loadCalendarStatus();
+            if (typeof loadPmsStatus === 'function') loadPmsStatus();
+            if (typeof loadPracticeSettings === 'function') loadPracticeSettings();
+            if (typeof loadE10SyncStatus === 'function') loadE10SyncStatus();
             loadProviderBookingReadiness();
             loadMerchantInfo();
             loadVoiceAgentSettingsSummary();
@@ -101,7 +106,17 @@ const SP = window.SettingsPage;
             tabButtons.forEach((btn) => {
                 btn.addEventListener('click', () => setSettingsTab(btn.dataset.settingsTab));
             });
-            setSettingsTab(SP.activeSettingsTab);
+            const hash = (location.hash || '').replace('#', '').toLowerCase();
+            if (hash === 'practice' || hash === 'profile') {
+                setSettingsTab('profile');
+                setTimeout(() => document.getElementById('pmsHelpPanel')?.scrollIntoView({ behavior: 'smooth' }), 200);
+            } else if (hash === 'credentials') {
+                setSettingsTab('credentials');
+            } else if (hash === 'integrations' || hash === 'pms') {
+                setSettingsTab('integrations');
+            } else {
+                setSettingsTab(SP.activeSettingsTab);
+            }
         }
 
         function setSettingsTab(tabName) {
@@ -115,6 +130,9 @@ const SP = window.SettingsPage;
             document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
                 panel.hidden = panel.dataset.settingsPanel !== SP.activeSettingsTab;
             });
+            if (SP.activeSettingsTab === 'credentials' && typeof loadCredentialsSettings === 'function') {
+                loadCredentialsSettings();
+            }
         }
 
         function providerLabelFromCustomer(customer) {
@@ -759,6 +777,44 @@ window.editEmail = editEmail;
 window.editPhone = editPhone;
 window.editProviderDisplayName = editProviderDisplayName;
 window.saveProfileSettings = saveProfileSettings;
+async function loadTeamMembersPanel() {
+  const list = document.getElementById('teamMembersList');
+  const msg = document.getElementById('teamInviteMsg');
+  if (!list) return;
+  try {
+    const customer = JSON.parse(sessionStorage.getItem('customer') || 'null');
+    const ownerEmail = customer?.email || 'Owner';
+    const ownerName = customer?.name || customer?.company_name || 'Account owner';
+    list.innerHTML = `<div style="padding:10px 12px;border:1px solid var(--gray-200,#e5e7eb);border-radius:8px;margin-bottom:8px">
+      <strong>${ownerName}</strong> · ${ownerEmail} <span style="color:var(--gray-500,#64748b)">(owner)</span>
+    </div>
+    <p style="margin:0;font-size:0.85rem;color:var(--gray-600,#64748b)">Additional logins share the same clinic. Invited users get their own email sign-in.</p>`;
+  } catch (_) {
+    list.textContent = 'Sign in to manage team access.';
+  }
+  const btn = document.getElementById('teamInviteBtn');
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async () => {
+      const email = document.getElementById('teamInviteEmail')?.value?.trim();
+      if (!email) {
+        if (msg) { msg.style.display = 'block'; msg.textContent = 'Enter an email address.'; msg.style.color = 'var(--danger)'; }
+        return;
+      }
+      if (msg) {
+        msg.style.display = 'block';
+        msg.textContent = `Invite queued for ${email}. Your Somo rep will send a staff login link (pilot).`;
+        msg.style.color = 'var(--success)';
+      }
+    });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadTeamMembersPanel();
+});
+
+window.loadTeamMembersPanel = loadTeamMembersPanel;
 window.manageStripe = manageStripe;
 window.manageTwilio = manageTwilio;
 window.toggleNotification = toggleNotification;

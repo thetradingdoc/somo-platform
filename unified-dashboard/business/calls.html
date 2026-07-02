@@ -12,6 +12,16 @@
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
+  <script src="/assets/js/voice-agent-page.js"></script>
+  <style>
+    .pp-call-row { display:grid; grid-template-columns:1fr auto auto auto; gap:8px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--border,#e5e7eb); cursor:pointer; }
+    .pp-call-row.is-active { background:rgba(22,166,55,.08); }
+    .pp-call-row-meta { font-size:12px; color:var(--muted,#64748b); }
+    .pp-call-pill { font-size:11px; padding:2px 8px; border-radius:999px; background:#f1f5f9; white-space:nowrap; }
+    .pp-call-pill--elig { background:#ecfdf3; color:#166534; }
+    .pp-call-pill--copay { background:#eff6ff; color:#1d4ed8; }
+    @media (max-width:720px) { .pp-call-row { grid-template-columns:1fr; } }
+  </style>
 </head>
 <body class="provider-portal provider-portal--scroll" data-page="calls">
   <div class="pp-app" id="ppAppMount"></div>
@@ -27,6 +37,10 @@
       try { return new Date(iso).toLocaleString(); } catch (_) { return iso; }
     }
 
+    function pill(label, cls) {
+      return label ? `<span class="pp-call-pill ${cls || ''}">${escapeHtml(label)}</span>` : '';
+    }
+
     async function loadCalls() {
       const listEl = document.getElementById('ppCallsList');
       listEl.innerHTML = '<div class="pp-skeleton"></div>';
@@ -35,14 +49,29 @@
           fetch(`${API_BASE}/api/customer/dashboard/calls?limit=50`, { credentials: 'include' }).then(r => r.json()));
         const calls = json.calls || [];
         if (!calls.length) {
-          listEl.innerHTML = '<div class="pp-empty">No calls yet. When Kelly answers your line, calls appear here.</div>';
+          listEl.innerHTML = window.ppDentalEmptyState
+            ? window.ppDentalEmptyState(
+                'No calls yet',
+                'When Kelly answers your line, calls appear here with eligibility and copay details.',
+                { href: 'agent.html', label: 'Configure Kelly' }
+              )
+            : '<div class="pp-empty">No calls yet. When Kelly answers your line, calls appear here.</div>';
           return;
         }
         listEl.innerHTML = calls.map((c) => {
           const sid = c.call_id || c.id;
+          const disp = c.disposition || c.outcome || '—';
+          const dispLabel = window.VoiceAgentPage?.dispositionLabel?.(disp) || disp;
+          const elig = c.eligibility_status ? String(c.eligibility_status).replace(/_/g, ' ') : '';
+          const copay = c.copay_quote != null ? `$${Number(c.copay_quote).toFixed(2)}` : '';
           return `<div class="pp-call-row" data-session-id="${escapeHtml(sid)}" role="button" tabindex="0">
-            <div class="pp-call-row-title">${escapeHtml(c.direction || 'inbound')} · ${escapeHtml(c.status || 'completed')}</div>
-            <div class="pp-call-row-meta">${formatWhen(c.created_at)}</div>
+            <div>
+              <div class="pp-call-row-title">${escapeHtml(c.direction || 'inbound')} · ${escapeHtml(c.status || 'completed')}</div>
+              <div class="pp-call-row-meta">${formatWhen(c.created_at)}</div>
+            </div>
+            ${pill(dispLabel)}
+            ${pill(elig, 'pp-call-pill--elig')}
+            ${pill(copay, 'pp-call-pill--copay')}
           </div>`;
         }).join('');
         listEl.querySelectorAll('.pp-call-row').forEach((row) => {
@@ -70,6 +99,13 @@
         let html = `<div class="pp-call-detail" data-testid="pp-call-detail">
           <p><strong>Session</strong> ${escapeHtml(sessionId)}</p>
           <p><strong>Events</strong> ${json.event_count || 0}</p>`;
+        if (summary.disposition || summary.eligibility_status || summary.copay_quote_display) {
+          html += '<div class="pp-call-summary" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">';
+          if (summary.disposition) html += pill(window.VoiceAgentPage?.dispositionLabel?.(summary.disposition) || summary.disposition);
+          if (summary.eligibility_status) html += pill(summary.eligibility_status, 'pp-call-pill--elig');
+          if (summary.copay_quote_display) html += pill(`Copay ${summary.copay_quote_display}`, 'pp-call-pill--copay');
+          html += '</div>';
+        }
         if (summary.conversation_mode || summary.final_lane) {
           html += '<div class="pp-call-summary">';
           if (summary.routing_world) {
@@ -94,17 +130,9 @@
         if (json.booking_outcome) {
           html += `<h4>Booking</h4><div class="pp-event-line">${escapeHtml(JSON.stringify(json.booking_outcome))}</div>`;
         }
-        if (json.site_context?.site_context_status) {
-          html += `<h4>Site context</h4><div class="pp-event-line">${escapeHtml(json.site_context.site_context_status)} · ${escapeHtml(json.site_context.clinic_id_source || '—')}</div>`;
-        }
         if (json.handoff_escalations?.length) {
           html += '<h4>Handoff escalations</h4>' + json.handoff_escalations.map((h) =>
             `<div class="pp-event-line">${escapeHtml(h.reason || 'handoff')} · ${escapeHtml(h.outcome || '—')}${h.pstn_target ? ' → ' + escapeHtml(h.pstn_target) : ''} · ${formatWhen(h.created_at)}</div>`
-          ).join('');
-        }
-        if (json.orchestration_trace?.length) {
-          html += '<h4>Orchestration</h4>' + json.orchestration_trace.slice(-8).map((t) =>
-            `<div class="pp-event-line">${escapeHtml(t.gate_matched || t.lane || '—')} → ${escapeHtml(t.gate_outcome || '')}</div>`
           ).join('');
         }
         html += '</div>';
@@ -120,7 +148,7 @@
         activeId: 'calls',
         eyebrow: 'Voice',
         title: 'Call log',
-        subtitle: 'Kelly calls, tools used, and booking outcomes'
+        subtitle: 'Eligibility, copay quotes, and disposition per call'
       });
       const main = document.getElementById('ppMainContent');
       main.innerHTML = `

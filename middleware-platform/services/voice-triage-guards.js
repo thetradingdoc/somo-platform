@@ -99,6 +99,23 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
     return { ok: true };
   }
 
+  if (bumpOp === 'insurance') {
+    try {
+      const { loadTenantPolicyFromProfile, TriagePolicy } = require('./conversation-mode/tenant-policy');
+      const { frontDeskIntakeComplete } = require('./front-desk-intake');
+      const clinicId = args?.clinic_id || null;
+      const policy = loadTenantPolicyFromProfile(db, clinicId, args?.customer_id || null);
+      const visitReason = args?.visit_reason || args?.reason_for_visit;
+      if (
+        policy?.triage_policy === TriagePolicy.DISABLED &&
+        visitReason &&
+        frontDeskIntakeComplete(sessionIdForGuard)
+      ) {
+        return { ok: true };
+      }
+    } catch (_) {}
+  }
+
   const THRESHOLD = threshold();
   const routineNoSymptoms = KellyToolExecutor._routineNoSymptomsEffective
     ? KellyToolExecutor._routineNoSymptomsEffective(sessionIdForGuard)

@@ -199,9 +199,9 @@ function provisionSaasTenant(dbModule, options = {}) {
       const slug = uniqueClinicSlug(sqlite, displayName);
       sqlite.prepare(`
         INSERT INTO clinics (
-          clinic_id, name, slug, phone_number, email, merchant_id, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, 1)
-      `).run(clinicId, displayName, slug, normalizedPhone, contactEmail, merchantId);
+          clinic_id, name, slug, phone_number, email, merchant_id, is_active, transfer_number
+        ) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+      `).run(clinicId, displayName, slug, normalizedPhone, contactEmail, merchantId, normalizedPhone || null);
 
       if (normalizedPhone) {
         try {
@@ -212,6 +212,15 @@ function provisionSaasTenant(dbModule, options = {}) {
             status: 'active'
           });
         } catch (_) {}
+      }
+    }
+
+    if (customerId && clinicId) {
+      try {
+        const { ensureCustomerClinicLink } = require('./tenant-voice-config');
+        ensureCustomerClinicLink(dbModule, customerId, clinicId, { isPrimary: true });
+      } catch (linkErr) {
+        console.warn('⚠️  [provision] customer_clinics link skipped:', linkErr.message);
       }
     }
 
@@ -266,6 +275,9 @@ function provisionSaasTenant(dbModule, options = {}) {
 
   ensureStripeMerchantReady(dbModule, customerId).catch(() => {});
 
+  const { ensureSignupTrialCredits } = require('./subscription-credits');
+  ensureSignupTrialCredits(dbModule, customerId);
+
   return { merchantId, clinicId, promptProfileId: profileId };
 }
 
@@ -290,6 +302,8 @@ function seedVoiceAgentSettings(dbModule, { customerId, merchantId, customer, cl
   });
   const effectiveMerchantId =
     merchantId || customer?.merchant_id || dbModule.customerVoiceSettingsMerchantKey(customerId);
+  const { languagesFromProviderProfile } = require('./tenant-language-config');
+  const langFromProfile = languagesFromProviderProfile(customer || dbModule.getCustomer(customerId));
   const seedSettings = {
     retell_agent_id: customer?.retell_agent_id || null,
     enabled: true,
@@ -305,6 +319,12 @@ function seedVoiceAgentSettings(dbModule, { customerId, merchantId, customer, cl
       fri: '09:00-17:00'
     },
     tone_preset: 'warm',
+    language_mode: existing?.language_mode || langFromProfile?.language_mode || 'en_only',
+    supported_languages: existing?.supported_languages || langFromProfile?.supported_languages || ['en'],
+    coverage_mode: existing?.coverage_mode || 'full_replacement',
+    after_hours_action: existing?.after_hours_action || 'message_only',
+    ai_disclosure_enabled: existing?.ai_disclosure_enabled ?? 1,
+    voice_reply_suppress_enabled: existing?.voice_reply_suppress_enabled ?? 0,
     sync_status: 'synced'
   };
   dbModule.upsertVoiceAgentSettings(effectiveMerchantId, seedSettings, customerId);

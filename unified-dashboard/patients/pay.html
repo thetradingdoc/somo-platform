@@ -405,7 +405,7 @@
     <div class="brand-icon">
       <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
     </div>
-    <span class="brand-name">Somo</span>
+    <span class="brand-name" id="brand-name">Somo</span>
   </div>
 
   <!-- ══ LOADING STATE ════════════════════════════════════════ -->
@@ -451,6 +451,10 @@
 
         <!-- Card (Stripe) panel -->
         <div id="card-panel">
+          <label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--text-muted);margin-bottom:14px;cursor:pointer">
+            <input type="checkbox" id="sms-consent" style="margin-top:3px" />
+            <span>I agree to receive payment and appointment texts at the number on file. Message and data rates may apply.</span>
+          </label>
           <div id="payment-element"></div>
           <button class="btn-pay" id="btn-pay-card" onclick="handleCardPay()">
             <div class="spinner"></div>
@@ -511,6 +515,29 @@
       Your payment of <span class="state-amount" id="success-amount">—</span> was successful.
       The provider has been notified and your balance is now settled.
     </p>
+    <p class="state-body" id="success-receipt-note" style="font-size:0.9rem;color:var(--text-muted,#6b7280)">
+      A receipt has been sent to the email on file. Save this page or check your inbox for your copay confirmation.
+    </p>
+    <a class="btn-secondary" href="appointments.html">← Back to appointments</a>
+  </div>
+
+  <!-- ══ ZERO BALANCE STATE ═══════════════════════════════════ -->
+  <div id="zero-balance-state" class="page-state" role="status">
+    <div class="state-icon paid">✓</div>
+    <div class="state-title">Nothing to pay</div>
+    <p class="state-body">
+      Your balance is <span class="state-amount">$0.00</span>. No payment is required right now.
+    </p>
+    <a class="btn-secondary" href="wallet.html">← View wallet</a>
+  </div>
+
+  <!-- ══ EXPIRED LINK STATE ═══════════════════════════════════ -->
+  <div id="expired-state" class="page-state" role="alert">
+    <div class="state-icon error">⏱</div>
+    <div class="state-title">Link expired</div>
+    <p class="state-body">
+      This payment link is no longer valid. Please contact your provider's office for a new link.
+    </p>
     <a class="btn-secondary" href="wallet.html">← View wallet</a>
   </div>
 
@@ -522,6 +549,7 @@
       This payment link is invalid or has expired. Please contact your provider for a new link.
     </p>
     <a class="btn-secondary" href="wallet.html">← View wallet</a>
+    <button type="button" class="btn-secondary" id="error-retry-btn" style="margin-top:12px;display:none" onclick="location.reload()">Try again</button>
   </div>
 
 
@@ -587,7 +615,21 @@
       const data = await res.json();
 
       if (!res.ok || !data.success) {
+        if (data.code === 'payment_link_expired' || res.status === 410) {
+          showExpiredLink();
+          return;
+        }
         showFatalError(data.error || 'Payment link not found or has expired.');
+        return;
+      }
+
+      if (data.zero_balance || data.code === 'zero_balance') {
+        $('zero-balance-state').querySelector('.state-amount').textContent = fmtMoney(
+          data.payment?.amount ?? 0,
+          data.payment?.currency || 'USD'
+        );
+        hide('loading-state');
+        show('zero-balance-state');
         return;
       }
 
@@ -612,11 +654,19 @@
     const cur = data.payment.currency || 'USD';
     const cardOk = data.rails.card?.available;
     const usdcOk = data.rails.usdc?.available;
+    const clinic = data.clinic || {};
+    if (clinic.name) {
+      $('brand-name').textContent = clinic.name;
+      document.title = `Pay ${fmtMoney(amt, cur)} · ${clinic.name}`;
+    }
+    const clinicLine = clinic.name
+      ? `${clinic.name}${clinic.phone ? ' · ' + clinic.phone : ''}`
+      : 'Your provider';
 
     // Amount banner
     $('amount-display').textContent = fmtMoney(amt, cur);
     $('btn-amount').textContent = fmtMoney(amt, cur);
-    $('context-text').textContent = `Copay / balance · Secure payment`;
+    $('context-text').textContent = `${clinicLine} · Copay / balance due`;
 
     // Rail selector visibility
     if (cardOk && usdcOk) {
@@ -640,7 +690,7 @@
     if (!cardOk && usdcOk) {
       switchRail('usdc');
     } else if (!cardOk && !usdcOk) {
-      showFatalError(
+      showNoRailsError(
         data.rails.card?.reason || data.rails.usdc?.reason ||
         'No payment methods are available for this link.'
       );
@@ -666,13 +716,19 @@
     stripe = Stripe(publishableKey);
 
     try {
+      const smsConsent = document.getElementById('sms-consent')?.checked === true;
       const res  = await fetch(`${API()}/api/public/rcm/pay/${encodeURIComponent(token)}/create-intent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sms_consent: smsConsent })
       });
       const data = await res.json();
 
       if (!data.success) {
+        if (data.code === 'TCPA_SMS_CONSENT_REQUIRED') {
+          setInlineError('SMS consent is required before paying by card.');
+          return;
+        }
         if (res.status === 409) {
           // Already paid — show paid state
           $('paid-amount').textContent = fmtMoney(amountDollars, currency);
@@ -845,11 +901,30 @@
     }
   }
 
-  function showFatalError(msg) {
-    $('fatal-error-msg').textContent = msg;
+  function showExpiredLink() {
     hide('loading-state');
     hide('payment-form');
-    ['already-paid-state','success-state'].forEach(hide);
+    ['already-paid-state', 'success-state', 'error-state', 'zero-balance-state'].forEach(hide);
+    show('expired-state');
+  }
+
+  function showNoRailsError(msg) {
+    $('fatal-error-msg').textContent = msg;
+    document.querySelector('#error-state .state-title').textContent = 'Payment unavailable';
+    $('error-retry-btn').style.display = 'none';
+    hide('loading-state');
+    hide('payment-form');
+    ['already-paid-state', 'success-state', 'zero-balance-state', 'expired-state'].forEach(hide);
+    show('error-state');
+  }
+
+  function showFatalError(msg) {
+    document.querySelector('#error-state .state-title').textContent = 'Unable to load';
+    $('fatal-error-msg').textContent = msg;
+    $('error-retry-btn').style.display = 'inline-flex';
+    hide('loading-state');
+    hide('payment-form');
+    ['already-paid-state', 'success-state', 'zero-balance-state', 'expired-state'].forEach(hide);
     show('error-state');
   }
 

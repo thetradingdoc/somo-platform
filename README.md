@@ -1,14 +1,17 @@
-# Somo — Healthcare Financial Agent
-> Last reviewed: 2026-06-25
+# Somo — Healthcare Platform
+> Last reviewed: 2026-07-02
 
 **Version**: 3.2.0  
-**Status**: Consumer health session (P0–P2) + B2B front desk in production — see [`docs/meta/PO_SURFACE_SCORECARD.md`](docs/meta/PO_SURFACE_SCORECARD.md)  
-**Last Updated:** 2026-06-25
+**Status**: NYC B2B front desk pilot (primary) + consumer health session — see [`docs/meta/CANONICAL_DOC_MAP.md`](docs/meta/CANONICAL_DOC_MAP.md)  
+**Last Updated:** 2026-07-02
 
-> **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
+> **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/deployment/FRONT_DESK_PRODUCTION.md`](docs/deployment/FRONT_DESK_PRODUCTION.md).
 
-> **Master plan (SSOT):** Somo Health Finance Agent — `~/.cursor/plans/somo_health_session_architecture_723cc4d3.plan.md`  
-> **Architecture:** [`docs/architecture/HEALTH_SESSION_ARCHITECTURE.md`](docs/architecture/HEALTH_SESSION_ARCHITECTURE.md)
+> **Front-desk master plan (active pilot):** `~/.cursor/plans/provider_portal_production_20d1693f.plan.md`  
+> **Front-desk architecture:** [`docs/architecture/LIVE.md`](docs/architecture/LIVE.md) · [`docs/voice-agent/README.md`](docs/voice-agent/README.md)
+
+> **Consumer health plan:** `~/.cursor/plans/somo_health_session_architecture_723cc4d3.plan.md`  
+> **Consumer architecture:** [`docs/architecture/HEALTH_SESSION_ARCHITECTURE.md`](docs/architecture/HEALTH_SESSION_ARCHITECTURE.md)
 
 > **Trading agent (separate repo):** [richiejeremiah/trading-agent](https://github.com/richiejeremiah/trading-agent) — biotech paper trading; not maintained in this repository.
 
@@ -22,19 +25,31 @@
 
 ## Overview
 
-**Somo** is a **healthcare financial agent** platform. The consumer journey starts with **Safe VideoGPT for Healthcare** — educational multilingual video health chat (Kelly, physician assistant) — and extends to finance rails: eligibility, copay quote, payment, and routed care (P3+).
+**Somo** is a healthcare platform with two active product lines:
+
+| Product line | User | Entry | Kelly persona |
+|--------------|------|-------|---------------|
+| **Somo front desk** (B2B pilot) | Dental / medical practice | `/business/trial-activation.html` → `invite.html` → `voice-setup.html` | **Kelly front desk** — receptionist, scheduling, copay |
+| **Somo Health** (consumer) | Anonymous patient | `/health-video/` (`LOCAL_DEV_ROOT=health`) | **Kelly PA** — education only, no diagnosis |
+| **Somo pay** (RCM) | Provider | `business/*.html` | Billing, eligibility, claims |
+
+### Front desk — quick start
+
+```bash
+cd middleware-platform
+npm run verify:unblocked-phases   # structural gates
+npm run deploy:callsomo           # from repo root — API + Firebase UI
+```
+
+Docs: [`docs/voice-agent/unblocked-phases-ops.md`](docs/voice-agent/unblocked-phases-ops.md) · [`docs/deployment/FRONT_DESK_PRODUCTION.md`](docs/deployment/FRONT_DESK_PRODUCTION.md)
+
+### Consumer health — quick start
 
 ```bash
 # Local dev — consumer health at http://localhost:4000/health-video/
 ./run
 # or: cd middleware-platform && npm run health:dev
 ```
-
-| Product line | User | Entry | Kelly persona |
-|--------------|------|-------|---------------|
-| **Somo Health** (consumer) | Anonymous patient | `/health-video/` (`LOCAL_DEV_ROOT=health`) | **Kelly PA** — education only, no diagnosis |
-| **Somo front desk** (B2B) | Practice / trial | `/business/trial-activation.html` | **Kelly front desk** — receptionist, booking |
-| **Somo pay** (RCM) | Provider | `business/*.html` | Billing, eligibility, claims |
 
 ### Consumer health — quick features
 
@@ -161,7 +176,7 @@ With `middleware-platform` running (`npm start`), visit:
 | Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
 | API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |
 
-Production hosts: `callsomo.com` (UI), `api.callsomo.com` (API). See [`docs/runbooks/CALLSOMO_GCP_CUTOVER.md`](docs/runbooks/CALLSOMO_GCP_CUTOVER.md).
+Production hosts: `callsomo.com` (UI), `api.callsomo.com` (API). See [`docs/deployment/FRONT_DESK_PRODUCTION.md`](docs/deployment/FRONT_DESK_PRODUCTION.md).
 
 > The `/admin` route now provides a lightweight launcher linking to the clinic, insurer, and patient portals plus the API hub.
 
@@ -406,9 +421,9 @@ Playwright (landing + prod smoke): see **[docs/testing/README.md](docs/testing/R
 
 ## 🚢 Deployment
 
-**Canonical:** **[docs/deployment/README.md](docs/deployment/README.md)** — GCP workflows, gates, and rollback ([docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md](docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md)).
+**Canonical:** **[docs/deployment/README.md](docs/deployment/README.md)** — GCP workflows, gates, and rollback ([docs/runbooks/README.md](docs/runbooks/README.md)).
 
-Scheduled prod monitors: **[docs/runbooks/PROD_MONITORING_WORKFLOWS.md](docs/runbooks/PROD_MONITORING_WORKFLOWS.md)**.
+Scheduled prod monitors: **[docs/runbooks/README.md](docs/runbooks/README.md)**.
 
 Legacy `netlify.toml` / `railway.json` files may still exist for historical reference; do not treat them as the primary deploy path unless an active runbook says otherwise.
 
@@ -589,7 +604,7 @@ All documentation has been organized in the [`docs/`](./docs/) folder:
 - **Setup Guides**: [Setup](./docs/setup/README.md#getting-started-setup), [Stripe Issuing](./docs/integrations/README.md#stripe-issuing-stripe-issuing)
 - **Open work:** [todos/PENDING.md](./todos/PENDING.md)
 - **Architecture**: [Vision](./docs/architecture/README.md#vision-vision), [Payment Architecture](./docs/architecture/README.md#payments-payment-architecture)
-- **RCM patient pay (Kelly)**: [RCM Patient Pay Gateway](./docs/RCM/RCM_PATIENT_PAY_GATEWAY.md)
+- **RCM patient pay (Kelly)**: [RCM README](./docs/RCM/README.md)
 - **API**: [API Documentation](./docs/api/README.md#api-documentation)
 - **Deployment**: [Security](./docs/deployment/README.md#security-security-improvements), [Backup Strategy](./docs/deployment/README.md#guides-backup-strategy)
 - **Voice Agent**: [Main voice agent prompt](./docs/voice-agent/prompts/kelly-voice-agent-prompt.md)

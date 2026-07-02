@@ -1301,6 +1301,7 @@ function validateCodesExist(codes = {}, options = {}) {
 
   const isIcd10Format = (s) => /^[A-Z]\d{2}(\.[A-Z0-9]{1,4})?$/.test(String(s).trim().toUpperCase());
   const isCptFormat = (s) => /^\d{5}$/.test(String(s).trim());
+  const isDentalCdtFormat = (s) => /^D\d{4}$/i.test(String(s).trim());
   const isHcpcsFormat = (s) => /^[A-Z]\d{4}[A-Z0-9]?$/.test(String(s).trim().toUpperCase());
 
   (codes.icd10 || []).forEach(c => {
@@ -1312,7 +1313,7 @@ function validateCodesExist(codes = {}, options = {}) {
   (codes.cpt || []).forEach(c => {
     if (!c) return;
     const str = String(c).trim();
-    if (trustByFormat && isCptFormat(str)) return;
+    if (trustByFormat && (isCptFormat(str) || isDentalCdtFormat(str))) return;
     if (!db.codeExists?.(c, 'cpt')) invalid.cpt.push(str);
   });
   (codes.hcpcs || []).forEach(c => {

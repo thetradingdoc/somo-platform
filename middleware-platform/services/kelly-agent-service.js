@@ -420,7 +420,7 @@ function _buildCompactSystemPrompt(context) {
     KellyOrchestratorPhase.orchestratorEnabled() && orchestration
       ? ` Phase: ${orchestration.phase}.`
       : '';
-  return `You are Kelly (Somo).${orchHint}
+  return `You are Kelly, the clinic's front desk assistant.${orchHint}
 
 GOAL: triage OPQRST and route to the right specialist, verify insurance, quote copay, then book.
 
@@ -1073,7 +1073,47 @@ const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300
 // Rebuilt each turn on purpose: context.kellyScriptHint and date strings change; caching would be unsafe.
 // When KELLY_PHASE_PROMPTS=1, ROUTINE_INTAKE / ROUTINE_FOLLOWUP use kelly-prompt-builder; other phases still use this.
 // ─────────────────────────────────────────────────────────────
+function _buildFrontDeskSystemPrompt(context) {
+  const { channel, patientName, preferredLanguage, kellyScriptHint } = context;
+  const isVoice = channel === 'voice';
+  const todayIso = new Date().toISOString().slice(0, 10);
+  return `You are Kelly, a warm front-desk voice assistant for the practice.
+## Your Role
+- Greet callers, collect administrative intake (name, DOB, phone, new/returning, reason for visit).
+- Help schedule, reschedule, or cancel appointments after intake is complete.
+- Answer general office questions (hours, location, directions).
+- Escalate to a live team member when the caller is upset or you cannot complete intake after two attempts.
+
+## Front-desk policy (no clinical triage)
+- Do NOT run OPQRST or clinical symptom triage unless explicitly enabled by clinic policy.
+- Do NOT call store_triage_opqrst, store_triage_rich_intake, or run_triage_rag.
+- Booking tools (get_available_slots, schedule_appointment) only after basic intake is complete.
+
+## Greeting
+- Name-first: ask for the caller's name before other questions when unknown.
+- Acknowledge-then-ask: one question per turn.
+${patientName ? `- Caller name: ${patientName}` : ''}
+- Today: ${todayIso}
+
+## Language
+- Respond in the caller's language when supported by the practice.
+${preferredLanguage ? `- Session locale hint: ${preferredLanguage}` : ''}
+${kellyScriptHint ? `\n## Script hint\n${kellyScriptHint}\n` : ''}
+${isVoice ? '- Keep replies concise for voice.' : ''}`;
+}
+
 function _buildSystemPromptLegacy(context) {
+  try {
+    const KellyToolExecutor = require('./kelly-tool-executor');
+    const { loadTenantPolicyFromProfile, TriagePolicy } = require('./conversation-mode/tenant-policy');
+    const db = require('./database');
+    const clinicId = context.clinicId || KellyToolExecutor._getSessionMeta(context.sessionId, 'clinic_id');
+    const customerId = KellyToolExecutor._getSessionMeta(context.sessionId, 'customer_id');
+    const policy = loadTenantPolicyFromProfile(db, clinicId, customerId);
+    if (policy?.triage_policy === TriagePolicy.DISABLED) {
+      return _buildFrontDeskSystemPrompt(context);
+    }
+  } catch (_) {}
   const { channel, clinicId, patientName, preferredLanguage, kellyScriptHint, orchestration } = context;
   const isVoice = channel === 'voice';
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -1084,7 +1124,7 @@ function _buildSystemPromptLegacy(context) {
       ? `\n${KellyOrchestratorPhase.buildOrchestrationPromptSection(orchestration)}\n`
       : '';
 
-  return `You are Kelly, a warm and empathetic medical voice assistant for Somo.
+  return `You are Kelly, a warm and empathetic medical voice assistant for the clinic's front desk.
 ${orchestrationBlock}
 ## Your Role
 You help patients:
@@ -1100,7 +1140,9 @@ You help patients:
 - Do not mention a past year unless the patient explicitly said it or a tool returned it.
 
 ## Greeting Policy (VERY IMPORTANT)
-- First turn greeting must be short and natural: one sentence like "Hi, I'm Kelly. How can I help today?"
+- Name-first: if you do not yet know the caller's name, the first greeting must be short and ask for it, like "Hi, I'm Kelly. Can I start with your name?" Once known, use their first name.
+- Acknowledge-then-ask: begin each reply with a brief acknowledgment of what the patient said, then ask exactly one thing.
+- Tone: warm, confident, and unhurried — never rushed or robotic.
 - Do NOT enumerate language lists in greeting.
 - Do NOT include emergency disclaimers in normal greeting unless the patient reports red-flag symptoms.
 - On subsequent turns, do NOT repeat the greeting. Continue directly with triage questions or next steps.
@@ -1295,6 +1337,11 @@ Examples:
 - **Slot selection (CRITICAL)**: When the user selects a slot (e.g. "option 7", "option 1", "7", "5:00 PM", "the first one"), treat it as a FINAL choice. Immediately ask for name, email, and phone to complete the booking. Do NOT re-list the slots, do NOT ask "Does that work for you?" or "Would that work?" — that adds a pointless extra turn. Go straight to: "To complete your booking, I'll need your full name, email, and phone number."
 
 ${isVoice ? '## Voice Format\nKeep all replies SHORT. Max 2 sentences per turn. No bullet points. No headers. Just natural speech.' : '## Chat Format\nYou can use slightly longer replies. Bullet points OK when listing options. Keep it conversational.'}
+
+## Conversation Style (always)
+- Reflect then ask: first briefly acknowledge or mirror what the caller just said in one short clause, then ask one focused next question.
+- Begin each reply with a brief acknowledgment of what the patient just said before moving to the next step.
+- Tone: warm, confident, and unhurried. Stay calm, never rush the caller, and project quiet confidence.${isVoice ? '\n- Voice: at most one question per turn; no stacked multi-part questions.' : ''}
 
 ${KellyAgentService._languageDirective(preferredLanguage)}
 ${kellyScriptHint ? `## Recent Specialist Routing Context\nWhen presenting availability this turn, preserve this exact routing note before slot options: "${kellyScriptHint}"` : ''}
@@ -3560,12 +3607,24 @@ Antworten Sie durchgehend auf Deutsch.`,
     } catch (_) { context.skinConflicts = []; }
 
     // Deterministic required-fields gate after pre-extract.
-    const pathway =
-      channel === 'voice' ? 'triage'
-        : (orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
-           orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP)
-          ? 'routine'
-          : 'triage';
+    let pathway = 'triage';
+    if (channel === 'voice') {
+      try {
+        const { loadTenantPolicyFromProfile } = require('./conversation-mode/tenant-policy');
+        const { TriagePolicy } = require('./conversation-mode/tenant-policy');
+        const clinicId = KellyToolExecutor._getSessionMeta(sessionId, 'clinic_id');
+        const customerId = KellyToolExecutor._getSessionMeta(sessionId, 'customer_id');
+        const policy = loadTenantPolicyFromProfile(db, clinicId, customerId);
+        if (policy?.triage_policy === TriagePolicy.DISABLED) pathway = 'front_desk';
+      } catch (_) {
+        pathway = 'triage';
+      }
+    } else if (
+      orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
+      orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP
+    ) {
+      pathway = 'routine';
+    }
     const gateEval = SessionStateStore.evaluateGate({ pathway, sessionId });
     try {
       const tentativeRaw = KellyToolExecutor._getSessionMeta(sessionId, 'step1_tentative_fields_json') || '[]';
@@ -3610,9 +3669,14 @@ Antworten Sie durchgehend auf Deutsch.`,
         KellyToolExecutor._setSessionMeta(sessionId, 'step1_last_missing_field', String(nextMissingField || ''));
         KellyToolExecutor._setSessionMeta(sessionId, 'step1_repeat_missing_field_count', String(repeatMissingFieldCount));
       } catch (_) {}
-      if (repeatMissingFieldCount >= 3) {
+      if (repeatMissingFieldCount >= (pathway === 'front_desk' ? 2 : 3)) {
         loopBreakerTriggered = true;
-        try { KellyToolExecutor._setSessionMeta(sessionId, 'orchestrator_force_phase', 'TRIAGE_ACTIVE'); } catch (_) {}
+        if (pathway === 'front_desk') {
+          try { KellyToolExecutor._setSessionMeta(sessionId, 'request_warm_transfer', '1'); } catch (_) {}
+          try { KellyToolExecutor._setSessionMeta(sessionId, 'orchestrator_force_phase', 'HANDOFF'); } catch (_) {}
+        } else {
+          try { KellyToolExecutor._setSessionMeta(sessionId, 'orchestrator_force_phase', 'TRIAGE_ACTIVE'); } catch (_) {}
+        }
       }
     }
     try {
@@ -3811,6 +3875,37 @@ Antworten Sie durchgehend auf Deutsch.`,
     }
 
     if (loopBreakerTriggered) {
+      if (pathway === 'front_desk') {
+        try {
+          const { attemptEscalation } = require('./escalation-service');
+          const clinicIdForEsc =
+            KellyToolExecutor._getSessionMeta(sessionId, 'clinic_id') || clinicId;
+          const customerIdForEsc =
+            KellyToolExecutor._getSessionMeta(sessionId, 'customer_id') || customerId;
+          const escalated = attemptEscalation(db, {
+            sessionId,
+            callId: sessionId,
+            clinicId: clinicIdForEsc,
+            customerId: customerIdForEsc,
+            locale: preferredLanguage || 'en',
+            reason: 'intake_unresolvable'
+          });
+          const replyText = escalated.reply || 'Let me connect you with our front desk team.';
+          this._appendToHistory(sessionId, 'assistant', replyText);
+          return {
+            reply: replyText,
+            endCall: !!escalated.end_call,
+            transfer_number: escalated.transfer_number || null,
+            toolsUsed: [],
+            language: preferredLanguage || 'en',
+            gate_status: gateEval,
+            loop_breaker_triggered: true,
+            warm_transfer: !!escalated.transfer_number
+          };
+        } catch (escErr) {
+          console.warn('[kelly] front_desk loop breaker escalation failed:', escErr.message);
+        }
+      }
       const gateQuestion = await AskNextQuestionService.generateQuestion({
         missingField: nextMissingField,
         pathway,
@@ -4721,9 +4816,25 @@ Antworten Sie durchgehend auf Deutsch.`,
                 const patientEmail = _extractEmail(contextText);
                 const patientPhone = _extractPhone(contextText) || callerPhone || null;
                 const patientNameResolved = patientName || _extractPatientName(contextText) || 'Patient';
-                // PHASE 2: collect_insurance disabled (cash-only flow)
-                // const memberId = _extractInsuranceMemberId(contextText);
-                // if (memberId) { await KellyToolExecutor.execute('collect_insurance', {...}); }
+                const memberId = _extractInsuranceMemberId(contextText);
+                const visitReason =
+                  KellyToolExecutor._getSessionMeta(sessionId, 'visit_reason') ||
+                  KellyToolExecutor._getSessionMeta(sessionId, 'reason_for_visit') ||
+                  appointmentType;
+                if (memberId && visitReason) {
+                  try {
+                    await KellyToolExecutor.execute(
+                      'collect_insurance',
+                      {
+                        clinic_id: clinicId,
+                        member_id: memberId,
+                        visit_reason: visitReason,
+                        patient_phone: patientPhone || undefined
+                      },
+                      { sessionId, clinicId, patientId, callerPhone, channel }
+                    );
+                  } catch (_) {}
+                }
 
                 if (patientEmail && selected?.practitioner_id) {
                   const selectedTimeRaw = selected?.time || selected?.start_time || selected?.start || 'ASYNC';
@@ -6179,7 +6290,7 @@ Antworten Sie durchgehend auf Deutsch.`,
 
       if (endCall) {
         // Do one more LLM call to get a closing reply (LLMRouter respects forceProvider / primary)
-        let closeReply = 'Thank you for calling Somo. Take care!';
+        let closeReply = 'Thank you for calling. Take care!';
         try {
           const closeOpts = { messages, tools: [], channel, maxTokens: 100 };
           if (forceProvider) closeOpts.forceProvider = forceProvider;
@@ -6472,19 +6583,34 @@ Antworten Sie durchgehend auf Deutsch.`,
 
     let amount = parseFloat(String(KellyToolExecutor._getSessionMeta(sessionId, 'copay_amount') || ''), 10);
     if (!Number.isFinite(amount) || amount <= 0) {
+      try {
+        const PaymentFlowService = require('./payment-flow-service');
+        const resolution = await PaymentFlowService.resolveCheckoutAmount({
+          patientId,
+          sessionId,
+          journeyId: KellyToolExecutor._getSessionMeta(sessionId, 'rcm_journey_id') || null,
+          requireHardNumber: true
+        });
+        if (resolution.ok) amount = resolution.amount;
+      } catch (_) {}
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
       const db = require('../database');
       if (patientId && db.db) {
         try {
           const elig = db.db
             .prepare(
-              `SELECT copay_amount FROM eligibility_checks WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1`
+              `SELECT copay_amount, eligibility_quality FROM eligibility_checks WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1`
             )
             .get(patientId);
-          if (elig?.copay_amount) amount = Number(elig.copay_amount);
+          const quality = String(elig?.eligibility_quality || '').toLowerCase();
+          if (elig?.copay_amount != null && quality !== 'thin') {
+            amount = Number(elig.copay_amount);
+          }
         } catch (_) {}
       }
     }
-    if (!Number.isFinite(amount) || amount <= 0) amount = 25;
+    if (!Number.isFinite(amount) || amount <= 0) return null;
 
     const journeyId = KellyToolExecutor._getSessionMeta(sessionId, 'rcm_journey_id') || null;
     const out = await KellyToolExecutor.execute(

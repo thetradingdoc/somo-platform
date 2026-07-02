@@ -900,7 +900,12 @@ class KellyToolExecutor {
           if (quote.status === 'hard_number' && sessionId) {
             KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', quote.status);
             KellyToolExecutor._setSessionMeta(sessionId, 'last_copay_due', String(quote.copay_due_now));
-            if (args.deliver_quote === true || args.deliver_quote === 'true') {
+            const journeyGatesQuote = require('./journey-gates-service');
+            const quoteGate = journeyGatesQuote.checkQuoteGate({ quoteResult: quote });
+            if (
+              quoteGate.allowed &&
+              (args.deliver_quote === true || args.deliver_quote === 'true')
+            ) {
               KellyToolExecutor._setSessionMeta(sessionId, 'quote_delivered', '1');
             }
           }
@@ -1375,6 +1380,23 @@ class KellyToolExecutor {
           });
 
         case 'create_appointment_checkout': {
+          const journeyGatesCheckout = require('./journey-gates-service');
+          const quoteDeliveredCheckout = KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered');
+          const lastQuoteStatus = KellyToolExecutor._getSessionMeta(sessionId, 'last_quote_status');
+          const checkoutQuoteGate = journeyGatesCheckout.checkPaymentGate({
+            sessionFlags: { quote_delivered: quoteDeliveredCheckout }
+          });
+          const hardQuoteGate = journeyGatesCheckout.checkQuoteGate({
+            quoteResult: { status: lastQuoteStatus || (quoteDeliveredCheckout ? 'hard_number' : 'cannot_determine') }
+          });
+          if (!checkoutQuoteGate.allowed || !hardQuoteGate.allowed) {
+            return {
+              success: false,
+              error: 'QUOTE_REQUIRED',
+              error_code: 'QUOTE_REQUIRED',
+              message: checkoutQuoteGate.holding_utterance || hardQuoteGate.holding_utterance
+            };
+          }
           const checkoutResult = await this._post('/voice/appointments/checkout', {
             ...args,
             clinic_id: clinicId
@@ -1438,27 +1460,46 @@ class KellyToolExecutor {
         case 'request_patient_payment': {
           const journeyGates = require('./journey-gates-service');
           const quoteDelivered = KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered');
+          const lastQuoteStatus = KellyToolExecutor._getSessionMeta(sessionId, 'last_quote_status');
           const paymentGate = journeyGates.checkPaymentGate({
             sessionFlags: { quote_delivered: quoteDelivered }
           });
-          if (!paymentGate.allowed) {
+          const hardQuoteGate = journeyGates.checkQuoteGate({
+            quoteResult: { status: lastQuoteStatus || (quoteDelivered ? 'hard_number' : 'cannot_determine') }
+          });
+          if (!paymentGate.allowed || !hardQuoteGate.allowed) {
             return {
               success: false,
               error: 'QUOTE_REQUIRED',
               error_code: 'QUOTE_REQUIRED',
-              message: paymentGate.holding_utterance
+              message: paymentGate.holding_utterance || hardQuoteGate.holding_utterance
             };
           }
           const paymentRequestService = require('./rcm-payment-request-service');
           const resolvedPatientId = args.patient_id || patientId || null;
-          const result = paymentRequestService.createRcmPaymentRequest({
+          const result = await paymentRequestService.createRcmPaymentRequest({
             clinicId,
             amount: args.amount,
             journeyId: args.journey_id || null,
             patientId: resolvedPatientId,
+            sessionId,
+            appointmentId: args.appointment_id || null,
             method: 'kelly_request',
           });
           if (!result.success) return result;
+
+          if (clinicId && resolvedPatientId) {
+            const { writeCopayNote } = require('./pms/pms-write-service');
+            writeCopayNote(clinicId, {
+              appointment_id: args.appointment_id || null,
+              patient_id: resolvedPatientId,
+              amount: result.amount,
+              reference: `pending:${result.pay_token}`,
+              session_id: sessionId
+            }).catch((e) => {
+              console.warn('[request_patient_payment] PMS pending copay note failed:', e.message);
+            });
+          }
 
           let patientEmail = args.patient_email || args.customer_email || null;
           let patientPhone = args.patient_phone || callerPhone || null;
@@ -2751,8 +2792,8 @@ class KellyToolExecutor {
     }
 
     if (String(process.env.RCM_E2E_DIRECT_TOOLS || '').trim() === '1') {
-      const BookingService = require('./booking-service');
-      const resultRaw = await BookingService.getAvailableSlots(
+      const PmsBooking = require('./pms/pms-booking');
+      const resultRaw = await PmsBooking.getAvailableSlots(
         date,
         null,
         appointmentType,

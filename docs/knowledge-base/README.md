@@ -1,7 +1,7 @@
 # Knowledge assets index
 
-> **Last reviewed:** 2026-05-25
-> Medical coding architecture and operations are canonical in [`docs/Medical Coding/`](../Medical%20Coding/README.md).
+> **Last reviewed:** 2026-07-02  
+> **Stale:** This index describes legacy `Knowledge/` asset paths. For medical coding SSOT use [`docs/Medical Coding/`](../Medical%20Coding/README.md).
 
 This page is now an index to the `Knowledge/` asset tree only.
 

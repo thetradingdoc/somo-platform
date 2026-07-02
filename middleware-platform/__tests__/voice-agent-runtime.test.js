@@ -30,11 +30,55 @@ describe('voice-agent-runtime', () => {
       unavailableMessage: 'Unavailable',
       afterHoursMessage: 'Closed',
       businessHours: null,
-      greeting: 'Hi'
+      greeting: 'Hi',
+      transferNumber: '+15551112222',
+      coverageMode: 'full_replacement',
+      coverageHours: null,
+      afterHoursAction: 'message_only'
     };
     const r = evaluateCallAdmission(runtime);
     expect(r.allowed).toBe(false);
     expect(r.reason).toBe('disabled');
+    expect(r.action).toBe('forward_pstn');
+    expect(r.transferNumber).toBe('+15551112222');
+  });
+
+  test('evaluateCallAdmission forwards when coverage off', () => {
+    const wed10 = new Date('2026-06-03T15:00:00');
+    const runtime = {
+      agentEnabled: true,
+      unavailableMessage: 'Unavailable',
+      afterHoursMessage: 'Kelly is off shift.',
+      businessHours: { wed: '09:00-17:00' },
+      coverageMode: 'coverage',
+      coverageHours: { mon: '09:00-12:00' },
+      afterHoursAction: 'message_only',
+      transferNumber: '+15559998888',
+      greeting: 'Hi'
+    };
+    const r = evaluateCallAdmission(runtime, wed10);
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toBe('coverage_off');
+    expect(r.action).toBe('forward_pstn');
+  });
+
+  test('evaluateCallAdmission after_hours transfer when configured', () => {
+    const sun10 = new Date('2026-06-07T15:00:00');
+    const runtime = {
+      agentEnabled: true,
+      unavailableMessage: 'Unavailable',
+      afterHoursMessage: 'Closed.',
+      businessHours: { mon: '09:00-17:00' },
+      coverageMode: 'full_replacement',
+      coverageHours: null,
+      afterHoursAction: 'transfer',
+      transferNumber: '+15557776666',
+      greeting: 'Hi'
+    };
+    const r = evaluateCallAdmission(runtime, sun10);
+    expect(r.reason).toBe('after_hours');
+    expect(r.action).toBe('forward_pstn');
+    expect(r.transferNumber).toBe('+15557776666');
   });
 
   test('buildDefaultGreeting includes practice name', () => {

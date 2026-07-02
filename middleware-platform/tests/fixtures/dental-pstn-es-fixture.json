@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "locale": "es-US",
+  "description": "Spanish dental front-desk utterances for PSTN replay (DENTAL-011)",
+  "scenarios": [
+    {
+      "id": "DENTAL-011",
+      "utterances": [
+        "Hola, necesito una cita para una limpieza.",
+        "Sí, la próxima semana por la mañana está bien."
+      ],
+      "expected_tools": ["schedule_appointment"]
+    }
+  ]
+}
