@@ -188,7 +188,7 @@ async function runKellyTurn(opts = {}) {
   const locale = String(opts.preferredLanguage || sessionLanguage || 'en').slice(0, 2);
   opts.locale = locale;
 
-  if (!opts.skipIdentityAdmission) {
+  if (!opts.skipIdentityAdmission && !opts.forceLanguageHandoff) {
     const {
       evaluateIdentityAdmission,
       emitIdentityInvalid
