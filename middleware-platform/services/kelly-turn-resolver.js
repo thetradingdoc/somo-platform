@@ -250,6 +250,16 @@ async function runKellyTurn(opts = {}) {
   if (sessionId && shouldUseKellyRailsV2Production(sessionId, clinicId)) {
     opts.db = opts.db || db;
 
+    if (opts.forceLanguageHandoff) {
+      const out = await handleTurn(opts);
+      const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);
+      if (executorTools.length) {
+        out.toolsUsed = [...new Set([...(out?.toolsUsed || []), ...executorTools])];
+      }
+      recordKellyLlmUsage(opts, out, Math.max(0, Date.now() - turnReceivedAt));
+      return out;
+    }
+
     let convResult = null;
     try {
       const { runConversationDispatch, emitDisposition } = require('./conversation-mode/conversation-mode-session');
