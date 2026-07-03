@@ -2,36 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#16a637">
   <title>Somo Provider — Tenants</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
+  <script src="/assets/js/html-escape.js"></script>
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
   <script src="/assets/js/provider-session.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
-  <style>
-    .tenant-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .tenant-table th, .tenant-table td { padding: 10px 12px; border-bottom: 1px solid var(--border, #21283a); text-align: left; }
-    .tenant-table th { color: var(--muted, #8b94a7); font-weight: 600; }
-    .tenant-wrap { padding: 16px 0; overflow-x: auto; }
-  </style>
+  <script src="/assets/js/sfd-nameplate.js"></script>
 </head>
-<body>
-  <div id="pp-app"></div>
-  <main id="pp-main" class="pp-main">
-    <div class="tenant-wrap">
-      <div id="tenantState" class="pp-state pp-state-loading"><div class="pp-skeleton"></div></div>
-      <table class="tenant-table hidden" id="tenantTable">
+<body class="provider-portal provider-portal--scroll" data-page="tenants">
+  <main class="main-content pp-content" id="ppMainContent">
+    <div class="pp-page-shell sfd-card" style="padding:16px;overflow-x:auto">
+      <div id="tenantState" class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div>
+      <table class="sfd-table hidden" id="tenantTable">
         <thead>
           <tr>
-            <th>Clinic</th>
-            <th>Status</th>
-            <th>Minutes balance</th>
-            <th>Calls (7d)</th>
-            <th>Agent</th>
+            <th scope="col">Clinic</th>
+            <th scope="col">Status</th>
+            <th scope="col">Minutes balance</th>
+            <th scope="col">Calls (7d)</th>
+            <th scope="col">Agent</th>
           </tr>
         </thead>
         <tbody id="tenantBody"></tbody>
@@ -44,15 +40,23 @@
       if (typeof hydrateProviderSession === 'function') {
         await hydrateProviderSession(window.API_BASE || window.location.origin);
       }
+      if (typeof mountProviderPage === 'function') {
+        mountProviderPage({
+          activeId: 'tenants',
+          eyebrow: 'Platform',
+          title: 'Tenants',
+          subtitle: 'Cross-clinic tenant overview',
+        });
+      }
       const allowed = (typeof hasCapability === 'function' && hasCapability('platform.tenants'))
         || (typeof isAdminUser === 'function' && isAdminUser());
       const state = document.getElementById('tenantState');
       const table = document.getElementById('tenantTable');
       const body = document.getElementById('tenantBody');
-      if (typeof mountProviderPage === 'function') mountProviderPage({ title: 'Tenants', activeNav: 'tenants' });
+      const NP = window.SfdNameplate;
       if (!allowed) {
-        state.className = 'pp-state pp-state-error';
-        state.textContent = 'Access denied — platform.tenants capability required.';
+        state.className = 'sfd-empty-state';
+        state.innerHTML = '<p>Access denied — platform.tenants capability required.</p>';
         return;
       }
       try {
@@ -61,20 +65,29 @@
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
         const tenants = data.tenants || [];
-        body.innerHTML = tenants.map((t) => `
-          <tr>
-            <td>${t.name || t.clinic_id}</td>
-            <td>${t.is_active ? 'Active' : 'Inactive'}</td>
-            <td>${(t.credits?.balance_minutes ?? 0).toLocaleString()} min</td>
-            <td>${t.usage?.recent_7d_calls ?? 0}</td>
-            <td>${t.agent?.has_agent ? 'Yes' : 'No'}</td>
-          </tr>
-        `).join('');
+        const esc = window.SomoHtml?.escapeHtml || ((s) => String(s ?? ''));
+        body.innerHTML = tenants.map((t) => {
+          const statusLabel = t.is_active ? 'LIVE' : 'OFF';
+          const statusHtml = NP?.renderNameplate
+            ? NP.renderNameplate(statusLabel, { sm: true })
+            : statusLabel;
+          const agentLabel = t.agent?.has_agent ? 'CONFIGURED' : 'OFF';
+          const agentHtml = NP?.renderNameplate
+            ? NP.renderNameplate(agentLabel, { sm: true })
+            : agentLabel;
+          return `<tr>
+            <td><strong>${esc(t.name || t.clinic_id)}</strong></td>
+            <td>${statusHtml}</td>
+            <td class="sfd-mono">${(t.credits?.balance_minutes ?? 0).toLocaleString()} min</td>
+            <td class="sfd-mono">${t.usage?.recent_7d_calls ?? 0}</td>
+            <td>${agentHtml}</td>
+          </tr>`;
+        }).join('');
         state.classList.add('hidden');
         table.classList.remove('hidden');
       } catch (e) {
-        state.className = 'pp-state pp-state-error';
-        state.textContent = e.message || 'Failed to load tenants';
+        state.className = 'sfd-empty-state';
+        state.innerHTML = `<p>${esc(e.message || 'Failed to load tenants')}</p>`;
       }
     })();
   </script>

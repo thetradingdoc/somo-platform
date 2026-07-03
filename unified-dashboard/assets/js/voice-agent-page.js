@@ -35,6 +35,28 @@
     return json.success ? json.billing : null;
   }
 
+  async function fetchVoiceAgentStatus() {
+    const res = await fetch(`${API_BASE()}/api/voice-agent/status`, {
+      credentials: 'include',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Voice agent status unavailable');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Voice agent status failed');
+    return json;
+  }
+
+  async function fetchIntegrationsStatus() {
+    const res = await fetch(`${API_BASE()}/api/tenant/integrations/status`, {
+      credentials: 'include',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Integrations status unavailable');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Integrations status failed');
+    return json;
+  }
+
   async function toggleKelly(enabled) {
     const res = await fetch(`${API_BASE()}/api/kelly/toggle`, {
       method: 'PATCH',
@@ -230,6 +252,8 @@
   global.VoiceAgentPage = {
     API_BASE,
     fetchKellyStatus,
+    fetchVoiceAgentStatus,
+    fetchIntegrationsStatus,
     fetchBillingStatus,
     toggleKelly,
     fetchVoiceSettings,

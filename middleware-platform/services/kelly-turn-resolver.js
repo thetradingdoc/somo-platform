@@ -300,14 +300,22 @@ async function runKellyTurn(opts = {}) {
           clinicId,
           patientId: opts.patientId || null,
           callerPhone: opts.callerPhone || null,
-          channel
+          channel,
+          conversation_mode: opts.conversation_mode || null,
+          active_subrail: opts.active_subrail || null
         };
+        const { isToolAllowedForMode } = require('./conversation-mode/mode-tool-firewall');
         for (const tool of dispatchTools) {
           if (!tool?.name) continue;
+          const mode = toolContext.conversation_mode;
+          if (mode && !isToolAllowedForMode(mode, toolContext.active_subrail, tool.name)) {
+            throw new Error(`Tool ${tool.name} blocked by conversation mode firewall`);
+          }
           try {
             await KellyToolExecutor.execute(tool.name, tool.args || {}, toolContext);
           } catch (toolErr) {
-            console.warn(`[kelly-turn] scriptOnly tool ${tool.name} failed:`, toolErr.message);
+            console.error(`[kelly-turn] scriptOnly tool ${tool.name} failed:`, toolErr.message);
+            throw toolErr;
           }
         }
         const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);

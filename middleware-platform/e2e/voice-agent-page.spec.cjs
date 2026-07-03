@@ -83,13 +83,34 @@ test.describe('Voice agent page', () => {
         body: JSON.stringify({ success: true, prompt: 'test' })
       });
     });
+    await page.route('**/api/voice-agent/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          nameplate: 'LIVE',
+          label: 'LIVE',
+          enabled: true
+        })
+      });
+    });
+    await page.route('**/api/rcm/collection-queue**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, collection_queue: [] })
+      });
+    });
 
     try {
-      await page.goto('/unified-dashboard/business/agent.html');
+      await page.goto('/business/agent.html');
       await expect(page.locator('#vaPhone')).toBeVisible();
       await expect(page.locator('#vaToggle')).toBeVisible();
       await expect(page.locator('#vaKpiCalls')).toBeVisible();
-      await expect(page.locator('#vaGreeting')).toBeVisible();
+      await expect(page.locator('#vaStatusNameplate .sfd-nameplate')).toBeVisible({
+        timeout: 15_000
+      });
     } finally {
       await browser.close();
     }
@@ -99,7 +120,7 @@ test.describe('Voice agent page', () => {
     const { customer } = await ensureAuthenticatedCustomer(request);
     const { browser, page } = await browserContextWithCustomer(playwright, request, customer);
     try {
-      await page.goto('/unified-dashboard/business/voice-setup.html');
+      await page.goto('/business/voice-setup.html');
       await expect(page.locator('#setupTitle')).toContainText('greeting', { ignoreCase: true });
       await expect(page.locator('#setupGreeting')).toBeVisible();
     } finally {
@@ -111,7 +132,7 @@ test.describe('Voice agent page', () => {
     const { customer } = await ensureAuthenticatedCustomer(request);
     const { browser, page } = await browserContextWithCustomer(playwright, request, customer);
     try {
-      await page.goto('/unified-dashboard/business/trial-activation.html');
+      await page.goto('/business/trial-activation.html');
       const cta = page.locator('#activationAgent');
       await expect(cta).toBeVisible();
       await expect(cta).toHaveAttribute('href', /voice-setup\.html/);
@@ -138,7 +159,7 @@ test.describe('Voice agent page', () => {
           })
         });
       });
-      await page.goto('/unified-dashboard/business/agent.html');
+      await page.goto('/business/agent.html');
       await page.waitForURL(/voice-setup\.html/, { timeout: 15000 });
       await expect(page.locator('#setupTitle')).toContainText('practice', { ignoreCase: true });
     } finally {
@@ -146,7 +167,7 @@ test.describe('Voice agent page', () => {
     }
   });
 
-  test('voice-setup 5-step wizard completes to agent.html', async ({ playwright, request }) => {
+  test('voice-setup 6-step wizard completes to go-live checklist', async ({ playwright, request }) => {
     const { customer } = await ensureAuthenticatedCustomer(request);
     const { browser, page } = await browserContextWithCustomer(playwright, request, customer);
 
@@ -228,20 +249,25 @@ test.describe('Voice agent page', () => {
     });
 
     try {
-      await page.goto('/unified-dashboard/business/voice-setup.html');
+      await page.goto('/business/voice-setup.html');
       await expect(page.locator('#setupTitle')).toContainText('practice', { ignoreCase: true });
+      await page.locator('#setupPracticeName').fill('E2E Practice');
+      await page.locator('#setupTransferNumber').fill('+12025550100');
       await page.locator('#setupNext1').click();
+      await expect(page.locator('#setupTitle')).toContainText('calendar', { ignoreCase: true });
+      await page.locator('#setupUseSomoCal').click();
+      await page.locator('#setupNext2').click();
       await expect(page.locator('#setupTitle')).toContainText('greeting', { ignoreCase: true });
       await page.locator('#setupGreeting').fill('Hi, this is our E2E greeting.');
-      await page.locator('#setupNext2').click();
-      await expect(page.locator('#setupTitle')).toContainText('hours', { ignoreCase: true });
       await page.locator('#setupNext3').click();
-      await expect(page.locator('#setupTitle')).toContainText('outbound', { ignoreCase: true });
+      await expect(page.locator('#setupTitle')).toContainText('hours', { ignoreCase: true });
       await page.locator('#setupNext4').click();
+      await expect(page.locator('#setupTitle')).toContainText('outbound', { ignoreCase: true });
+      await page.locator('#setupNext5').click();
       await expect(page.locator('#setupTitle')).toContainText('test', { ignoreCase: true });
       await page.locator('#setupFinish').click();
-      await page.waitForURL(/agent\.html/, { timeout: 15000 });
-      await expect(page.locator('#vaGreeting')).toBeVisible();
+      await page.waitForURL(/today\.html.*go-live-checklist/, { timeout: 15000 });
+      await expect(page.locator('#go-live-checklist')).toBeVisible();
     } finally {
       await browser.close();
     }
@@ -303,6 +329,19 @@ test.describe('Voice agent page', () => {
       });
     });
 
+    await page.route('**/api/voice-agent/status**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          nameplate: toggleEnabled ? 'LIVE' : 'PAUSED',
+          label: toggleEnabled ? 'LIVE' : 'PAUSED',
+          enabled: toggleEnabled
+        })
+      });
+    });
+
     await page.route('**/api/customer/dashboard/agent/stats**', async (route) => {
       return route.fulfill({
         status: 200,
@@ -324,12 +363,12 @@ test.describe('Voice agent page', () => {
     });
 
     try {
-      await page.goto('/unified-dashboard/business/agent.html');
-      await expect(page.locator('#vaStatusBadge')).toHaveText('Active');
+      await page.goto('/business/agent.html');
+      await expect(page.locator('#vaStatusNameplate .sfd-nameplate--live')).toBeVisible();
       await page.locator('#vaToggle').click();
-      await expect(page.locator('#vaStatusBadge')).toHaveText('Paused');
+      await expect(page.locator('#vaStatusNameplate .sfd-nameplate--paused')).toBeVisible();
       await page.locator('#vaToggle').click();
-      await expect(page.locator('#vaStatusBadge')).toHaveText('Active');
+      await expect(page.locator('#vaStatusNameplate .sfd-nameplate--live')).toBeVisible();
     } finally {
       await browser.close();
     }
@@ -420,7 +459,7 @@ test.describe('Voice agent page', () => {
     });
 
     try {
-      await page.goto('/unified-dashboard/business/agent.html');
+      await page.goto('/business/agent.html');
       await expect(page.locator('#vaCallList')).toContainText('Maria Lopez');
       await expect(page.locator('.va-outcome-pa_flagged')).toContainText('PA flagged');
     } finally {
@@ -505,7 +544,7 @@ test.describe('Voice agent page', () => {
     });
 
     try {
-      await page.goto('/unified-dashboard/business/agent.html');
+      await page.goto('/business/agent.html');
       await expect(page.locator('#vaTestOutbound')).toBeVisible();
       await page.fill('#vaTestOutboundPhone', '+15559876543');
       await page.click('#vaTestOutbound');

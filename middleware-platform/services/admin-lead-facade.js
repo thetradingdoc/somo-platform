@@ -3,7 +3,7 @@
  */
 
 const db = require('../database');
-const { getDisplayWebsiteUrl } = require('./lead-ingestion');
+const { getDisplayWebsiteUrl, parseJobPostingUrl } = require('./lead-ingestion');
 const { isJobBoardUrl } = require('./contact-extractor');
 const { parseRequiredLanguages } = require('./lead-language-extractor');
 const {
@@ -95,6 +95,12 @@ function getContactStatus(lead, enrichingIds = new Set()) {
   return 'needs_phone';
 }
 
+function inferLeadPmsLabel(lead) {
+  const specialty = (lead?.specialty || '').toLowerCase();
+  if (specialty.includes('dental')) return 'Dentrix';
+  return 'Somo interim';
+}
+
 function formatLeadForApi(lead, enrichingIds = new Set()) {
   if (!lead) return null;
   const website_url = getDisplayWebsiteUrl(lead);
@@ -104,6 +110,8 @@ function formatLeadForApi(lead, enrichingIds = new Set()) {
     ...lead,
     source_url: safeSource,
     website_url,
+    job_posting_url: parseJobPostingUrl(lead.notes),
+    pms_label: inferLeadPmsLabel(lead),
     language_labels,
     preferred_language: lead.preferred_language || (language_labels.length ? null : 'en'),
     pipeline_stage: normalizeStage(lead.pipeline_stage),

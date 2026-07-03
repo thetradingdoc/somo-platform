@@ -4859,6 +4859,20 @@ function migratePhase5VoiceOverflow() {
   }
 }
 
+function migrateShadowWeekEnds() {
+  try {
+    require('./migrations/105_shadow_week_ends').up(db);
+    console.log('✅ Migration complete: shadow_week_ends_at (105)');
+  } catch (e) {
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+    if (isProduction) {
+      console.error('❌ CRITICAL: shadow_week_ends_at migration (105) failed:', e.message);
+      process.exit(1);
+    }
+    console.warn('⚠️  shadow_week_ends_at migration (105) failed:', e.message);
+  }
+}
+
 // ============================================
 // MIGRATION: idempotency_keys table (Section 22 - prevent double-billing)
 // ============================================
@@ -5842,6 +5856,7 @@ runStartupMigrations(
     migrateVoiceAgentLanguage,
     migrateAppointmentsPreferredLanguage,
     migratePhase5VoiceOverflow,
+    migrateShadowWeekEnds,
     migrateClinicMonthlyLlmCostTable,
     migrateClinicsMonthlyCostCap,
     migrateLongTermMemoryTables,

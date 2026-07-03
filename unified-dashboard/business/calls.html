@@ -13,14 +13,26 @@
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
   <script src="/assets/js/voice-agent-page.js"></script>
+  <script src="/assets/js/sfd-nameplate.js"></script>
+  <script src="/assets/js/call-timeline-ui.js"></script>
   <style>
-    .pp-call-row { display:grid; grid-template-columns:1fr auto auto auto; gap:8px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--border,#e5e7eb); cursor:pointer; }
-    .pp-call-row.is-active { background:rgba(22,166,55,.08); }
-    .pp-call-row-meta { font-size:12px; color:var(--muted,#64748b); }
-    .pp-call-pill { font-size:11px; padding:2px 8px; border-radius:999px; background:#f1f5f9; white-space:nowrap; }
-    .pp-call-pill--elig { background:#ecfdf3; color:#166534; }
-    .pp-call-pill--copay { background:#eff6ff; color:#1d4ed8; }
-    @media (max-width:720px) { .pp-call-row { grid-template-columns:1fr; } }
+    .sfd-call-card {
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      border: 1px solid var(--sfd-border, #e8e4dc);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .sfd-call-card.is-selected {
+      border-color: var(--primary, #16a637);
+      box-shadow: 0 0 0 1px rgba(22, 166, 55, 0.2);
+    }
+    .sfd-call-card-title { font-weight: 600; font-size: 0.92rem; }
+    .sfd-call-card-meta { font-size: 12px; color: var(--muted, #64748b); margin-top: 4px; }
+    .sfd-call-card-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .pp-call-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f1f5f9; white-space: nowrap; }
+    .pp-call-pill--elig { background: #ecfdf3; color: #166534; }
+    .pp-call-pill--copay { background: #eff6ff; color: #1d4ed8; }
   </style>
 </head>
 <body class="provider-portal provider-portal--scroll" data-page="calls">
@@ -43,7 +55,7 @@
 
     async function loadCalls() {
       const listEl = document.getElementById('ppCallsList');
-      listEl.innerHTML = '<div class="pp-skeleton"></div>';
+      listEl.innerHTML = '<div class="sfd-skeleton"><div class="sfd-skeleton-line"></div><div class="sfd-skeleton-line sfd-skeleton-line--short"></div></div>';
       try {
         const json = await (window.ppApi?.get('/api/customer/dashboard/calls?limit=50') ||
           fetch(`${API_BASE}/api/customer/dashboard/calls?limit=50`, { credentials: 'include' }).then(r => r.json()));
@@ -64,17 +76,13 @@
           const dispLabel = window.VoiceAgentPage?.dispositionLabel?.(disp) || disp;
           const elig = c.eligibility_status ? String(c.eligibility_status).replace(/_/g, ' ') : '';
           const copay = c.copay_quote != null ? `$${Number(c.copay_quote).toFixed(2)}` : '';
-          return `<div class="pp-call-row" data-session-id="${escapeHtml(sid)}" role="button" tabindex="0">
-            <div>
-              <div class="pp-call-row-title">${escapeHtml(c.direction || 'inbound')} · ${escapeHtml(c.status || 'completed')}</div>
-              <div class="pp-call-row-meta">${formatWhen(c.created_at)}</div>
-            </div>
-            ${pill(dispLabel)}
-            ${pill(elig, 'pp-call-pill--elig')}
-            ${pill(copay, 'pp-call-pill--copay')}
+          return `<div class="sfd-card sfd-call-card" data-session-id="${escapeHtml(sid)}" role="button" tabindex="0">
+            <div class="sfd-call-card-title">${escapeHtml(c.direction || 'inbound')} · ${escapeHtml(c.status || 'completed')}</div>
+            <div class="sfd-call-card-meta">${formatWhen(c.created_at)}</div>
+            <div class="sfd-call-card-pills">${pill(dispLabel)}${pill(elig, 'pp-call-pill--elig')}${pill(copay, 'pp-call-pill--copay')}</div>
           </div>`;
         }).join('');
-        listEl.querySelectorAll('.pp-call-row').forEach((row) => {
+        listEl.querySelectorAll('.sfd-call-card').forEach((row) => {
           row.addEventListener('click', () => selectCall(row.dataset.sessionId, row));
         });
         const deep = new URLSearchParams(location.search).get('session');
@@ -88,52 +96,26 @@
     }
 
     async function selectCall(sessionId, rowEl) {
-      document.querySelectorAll('.pp-call-row').forEach((r) => r.classList.remove('is-active'));
-      if (rowEl) rowEl.classList.add('is-active');
+      document.querySelectorAll('.sfd-call-card').forEach((r) => r.classList.remove('is-selected'));
+      if (rowEl) rowEl.classList.add('is-selected');
       const detail = document.getElementById('ppCallDetail');
-      detail.innerHTML = '<div class="pp-skeleton"></div>';
+      detail.innerHTML = '<div class="sfd-skeleton"><div class="sfd-skeleton-line"></div><div class="sfd-skeleton-line"></div></div>';
       try {
         const json = await (window.ppApi?.get(`/api/kelly/calls/${encodeURIComponent(sessionId)}`) ||
           fetch(`${API_BASE}/api/kelly/calls/${encodeURIComponent(sessionId)}`, { credentials: 'include' }).then(r => r.json()));
-        const summary = json.call_summary || {};
-        let html = `<div class="pp-call-detail" data-testid="pp-call-detail">
-          <p><strong>Session</strong> ${escapeHtml(sessionId)}</p>
-          <p><strong>Events</strong> ${json.event_count || 0}</p>`;
-        if (summary.disposition || summary.eligibility_status || summary.copay_quote_display) {
-          html += '<div class="pp-call-summary" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">';
-          if (summary.disposition) html += pill(window.VoiceAgentPage?.dispositionLabel?.(summary.disposition) || summary.disposition);
-          if (summary.eligibility_status) html += pill(summary.eligibility_status, 'pp-call-pill--elig');
-          if (summary.copay_quote_display) html += pill(`Copay ${summary.copay_quote_display}`, 'pp-call-pill--copay');
-          html += '</div>';
-        }
-        if (summary.conversation_mode || summary.final_lane) {
-          html += '<div class="pp-call-summary">';
-          if (summary.routing_world) {
-            html += `<span class="pp-status-pill pp-status-pill--world">${escapeHtml(summary.routing_world)}</span> `;
-          }
-          if (summary.conversation_mode) {
-            html += `<span class="pp-status-pill">${escapeHtml(summary.conversation_mode)}</span> `;
-          }
-          if (summary.final_lane) {
-            html += `<span class="pp-status-pill pp-status-pill--muted">Lane: ${escapeHtml(summary.final_lane)}</span>`;
-          }
-          html += '</div>';
+        const summary = json.call_summary || json.call || {};
+        const states = window.CallTimelineUi?.renderCallDetailStates(summary, json) || {};
+        let html = `<div class="pp-call-detail sfd-card" data-testid="pp-call-detail">`;
+        html += states.notice || '';
+        html += window.CallTimelineUi?.renderCallChips(summary, { transferOnly: states.transferOnly }) || '';
+        if (states.transferOnly) {
+          html += `<p class="sfd-muted">${escapeHtml(summary.caller_label || 'Caller')} · ${formatWhen(summary.created_at || json.created_at)}</p>`;
+        } else {
+          html += `<p><strong>Caller</strong> ${escapeHtml(summary.caller_label || '—')}</p>`;
+          html += window.CallTimelineUi?.renderTimelineTable(json.timeline || []) || '';
         }
         if (json.appointment) {
-          html += `<p><a class="pp-btn pp-btn-link" href="calendar.html?id=${encodeURIComponent(json.appointment.id)}">Open appointment</a></p>`;
-        }
-        if (json.tools?.length) {
-          html += '<h4>Tools</h4>' + json.tools.map((t) =>
-            `<div class="pp-event-line">${escapeHtml(t.tool || '—')} · ${escapeHtml(t.type)}${t.success === false ? ' (failed)' : ''}</div>`
-          ).join('');
-        }
-        if (json.booking_outcome) {
-          html += `<h4>Booking</h4><div class="pp-event-line">${escapeHtml(JSON.stringify(json.booking_outcome))}</div>`;
-        }
-        if (json.handoff_escalations?.length) {
-          html += '<h4>Handoff escalations</h4>' + json.handoff_escalations.map((h) =>
-            `<div class="pp-event-line">${escapeHtml(h.reason || 'handoff')} · ${escapeHtml(h.outcome || '—')}${h.pstn_target ? ' → ' + escapeHtml(h.pstn_target) : ''} · ${formatWhen(h.created_at)}</div>`
-          ).join('');
+          html += `<p style="margin-top:12px"><a class="sfd-btn sfd-btn-ghost" href="calendar.html?id=${encodeURIComponent(json.appointment.id)}">Open appointment</a></p>`;
         }
         html += '</div>';
         detail.innerHTML = html;

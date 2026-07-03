@@ -19,6 +19,13 @@ const steps = [
   ['pilot-prod-readiness', 'verify:pilot-prod-readiness']
 ];
 
+const prodGateSteps = [['prod-vendor-gates', 'verify:prod-gates']];
+
+function truthy(v) {
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes';
+}
+
 function main() {
   console.log('\n╔══════════════════════════════════════════════════╗');
   console.log('║  Front Desk Pilot Gate (verify:front-desk-pilot) ║');
@@ -31,6 +38,26 @@ function main() {
     if (r.status !== 0) {
       console.error(`❌ ${name} failed`);
       pass = false;
+    } else {
+      console.log(`✅ ${name}`);
+    }
+  }
+
+  const strictProd = truthy(process.env.PILOT_PROD_STRICT);
+  console.log(`\n── prod vendor gates (${strictProd ? 'strict' : 'informational'}) ──`);
+  for (const [name, script] of prodGateSteps) {
+    const r = spawnSync('npm', ['run', script], {
+      cwd: ROOT,
+      stdio: 'inherit',
+      env: { ...process.env, PILOT_PROD_STRICT: strictProd ? '1' : '0' }
+    });
+    if (r.status !== 0) {
+      if (strictProd) {
+        console.error(`❌ ${name} failed`);
+        pass = false;
+      } else {
+        console.warn(`⚠️  ${name} — informational only (set PILOT_PROD_STRICT=1 to fail)`);
+      }
     } else {
       console.log(`✅ ${name}`);
     }

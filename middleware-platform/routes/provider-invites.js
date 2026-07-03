@@ -6,8 +6,11 @@ const {
   createInvite,
   validateInvite,
   sendInviteEmail,
-  acceptInvite
+  acceptInvite,
+  resendInvite,
+  revokeInvite
 } = require('../services/provider-invite-service');
+const { convertLeadToCustomer } = require('../services/lead-convert-service');
 const { pilotRateLimit } = require('../middleware/pilot-rate-limit');
 const { requireAdminOrCapability } = require('../middleware/admin-auth');
 const { getSessionCookieOptions } = require('./lib/signup-shared');
@@ -70,10 +73,11 @@ adminRouter.get('/', (req, res) => {
     if (!db.db) return res.status(503).json({ success: false, error: 'db unavailable' });
     const rows = db.db
       .prepare(
-        `SELECT id, code, email, practice_name, status, expires_at, accepted_at, clinic_id, lead_id, created_at FROM provider_invites ORDER BY created_at DESC LIMIT 100`
+        `SELECT id, email, practice_name, status, expires_at, accepted_at, clinic_id, lead_id, created_at FROM provider_invites ORDER BY created_at DESC LIMIT 100`
       )
       .all();
-    return res.json({ success: true, invites: rows });
+    const invites = rows.map((r) => ({ ...r, code: '[redacted]' }));
+    return res.json({ success: true, invites });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
@@ -94,7 +98,14 @@ adminRouter.post('/', pilotRateLimit('invite_create'), async (req, res) => {
     }
     return res.json({ success: true, invite });
   } catch (e) {
-    return res.status(400).json({ success: false, error: e.message });
+    const status =
+      e.code === 'invite_email_taken' || e.code === 'invite_pending_exists' ? 409 : 400;
+    return res.status(status).json({
+      success: false,
+      error: e.message,
+      code: e.code || undefined,
+      field: e.field || undefined
+    });
   }
 });
 
@@ -144,6 +155,56 @@ adminRouter.post('/from-lead/:leadId', pilotRateLimit('invite_create'), async (r
     });
   } catch (e) {
     return res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+adminRouter.post('/:inviteId/resend', pilotRateLimit('invite_create'), async (req, res) => {
+  try {
+    const invite = resendInvite(req.params.inviteId);
+    if (req.body?.send_email !== false) {
+      await sendInviteEmail(invite, process.env.BASE_URL);
+    }
+    const base = String(process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    return res.json({
+      success: true,
+      invite,
+      invite_url: `${base}/invite.html?code=${encodeURIComponent(invite.code)}`
+    });
+  } catch (e) {
+    const status = e.code === 'invite_not_found' ? 404 : 400;
+    return res.status(status).json({ success: false, error: e.message, code: e.code });
+  }
+});
+
+adminRouter.post('/:inviteId/revoke', pilotRateLimit('invite_revoke'), (req, res) => {
+  try {
+    const invite = revokeInvite(req.params.inviteId);
+    return res.json({ success: true, invite });
+  } catch (e) {
+    const status = e.code === 'invite_not_found' ? 404 : 400;
+    return res.status(status).json({ success: false, error: e.message, code: e.code });
+  }
+});
+
+adminRouter.post('/convert-lead/:leadId', pilotRateLimit('invite_create'), async (req, res) => {
+  try {
+    const result = await convertLeadToCustomer(req.params.leadId, {
+      email: req.body?.email,
+      practice_name: req.body?.practice_name,
+      office_type: req.body?.office_type,
+      contact_name: req.body?.contact_name,
+      created_by: req.body?.created_by || 'admin',
+      send_email: req.body?.send_email !== false
+    });
+    return res.json({ success: true, ...result });
+  } catch (e) {
+    const status =
+      e.code === 'lead_not_found'
+        ? 404
+        : e.code === 'lead_already_converted' || e.code === 'invite_email_taken' || e.code === 'invite_pending_exists'
+          ? 409
+          : 400;
+    return res.status(status).json({ success: false, error: e.message, code: e.code });
   }
 });
 

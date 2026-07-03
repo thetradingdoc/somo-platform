@@ -5,35 +5,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Somo — Set up your AI front desk</title>
-  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css" />
-  <link rel="stylesheet" href="/unified-dashboard/assets/css/signup-somo.css" />
-  <link rel="stylesheet" href="/unified-dashboard/assets/css/voice-agent.css" />
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css" />
+  <link rel="stylesheet" href="/assets/css/signup-somo.css" />
+  <link rel="stylesheet" href="/assets/css/voice-agent.css" />
   <script src="/assets/js/config.js"></script>
-  <script src="/unified-dashboard/assets/js/provider-session.js"></script>
-  <script src="/unified-dashboard/assets/js/voice-hours-picker.js"></script>
-  <script src="/unified-dashboard/assets/js/voice-preview.js"></script>
+  <script src="/assets/js/provider-session.js"></script>
+  <script src="/assets/js/onboarding-api.js"></script>
+  <script src="/assets/js/voice-hours-picker.js"></script>
+  <script src="/assets/js/voice-preview.js"></script>
 </head>
 <body class="signup-wizard-body">
-  <div class="activation-wrap" style="max-width:520px">
+  <div class="activation-wrap sfd-device-card" style="max-width:520px">
     <a href="/" class="signup-logo-link" aria-label="Somo home">
-      <img class="signup-logo-img" src="/unified-dashboard/assets/brand/somo-logo.png" alt="Somo" width="160" height="54" />
+      <img class="signup-logo-img" src="/assets/brand/somo-logo.png" alt="Somo" width="160" height="54" />
     </a>
 
-    <p class="signup-eyebrow" style="margin-top:20px" id="setupEyebrow">Step 1 of 5</p>
+    <p class="signup-eyebrow" style="margin-top:20px" id="setupEyebrow">Step 1 of 7</p>
     <h1 class="signup-title" id="setupTitle">Your practice</h1>
     <p class="signup-sub" id="setupSub">Confirm how Kelly introduces your office.</p>
-    <div class="va-wizard-progress" id="setupProgress" aria-hidden="true"></div>
+    <div id="setupProgress" class="sfd-stepper" role="progressbar" aria-valuemin="1" aria-valuemax="7" aria-valuenow="2" aria-label="Setup progress"></div>
 
     <div id="step1" class="setup-step">
       <label class="va-field-label" for="setupPracticeName">Practice name</label>
       <input id="setupPracticeName" class="va-textarea" style="width:100%;padding:10px;margin-top:8px" />
-      <label class="va-field-label" style="margin-top:12px;display:block">Tone</label>
-      <select id="setupTone" class="va-textarea" style="width:100%;padding:10px">
-        <option value="warm">Warm</option>
-        <option value="warm_confident">Warm, confident &amp; unhurried</option>
-        <option value="professional">Professional</option>
-        <option value="concise">Concise</option>
-      </select>
       <label class="va-field-label" style="margin-top:12px;display:block" for="setupLanguageMode">Languages Kelly supports</label>
       <select id="setupLanguageMode" class="va-textarea" style="width:100%;padding:10px">
         <option value="en_only">English only</option>
@@ -43,10 +38,21 @@
       </select>
       <label class="va-field-label" style="margin-top:12px;display:block" for="setupTransferNumber">Warm transfer number</label>
       <input id="setupTransferNumber" class="va-textarea" style="width:100%;padding:10px" placeholder="+1… office line for live handoffs" required />
-      <label class="va-field-label" style="margin-top:12px;display:block" for="setupPracticeAddress">Practice address</label>
-      <input id="setupPracticeAddress" class="va-textarea" style="width:100%;padding:10px" placeholder="123 Main St, New York, NY" />
+      <label class="va-field-label" style="margin-top:12px;display:block">Practice address</label>
+      <div class="sfd-grid-2" style="gap:8px;margin-top:8px">
+        <input id="setupAddressStreet" class="va-textarea" style="padding:10px" placeholder="Street" />
+        <input id="setupAddressCity" class="va-textarea" style="padding:10px" placeholder="City" />
+        <input id="setupAddressState" class="va-textarea" style="padding:10px" placeholder="State" />
+        <input id="setupAddressZip" class="va-textarea" style="padding:10px" placeholder="ZIP" />
+      </div>
       <label class="va-field-label" style="margin-top:12px;display:block" for="setupNpi">NPI (optional for pilot)</label>
       <input id="setupNpi" class="va-textarea" style="width:100%;padding:10px" placeholder="10-digit NPI" />
+      <p class="sfd-muted" style="font-size:0.85rem;margin:4px 0 0">Required for insurance eligibility checks when you go live.</p>
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupCoverageMode">Coverage mode</label>
+      <select id="setupCoverageMode" class="va-textarea" style="width:100%;padding:10px">
+        <option value="scheduled">Scheduled hours — Kelly on during office hours only</option>
+        <option value="full_time">Full-time — Kelly answers whenever forwarded (hours still apply for copay)</option>
+      </select>
       <label class="va-field-label" style="margin-top:12px;display:block" for="setupPmsType">PMS type</label>
       <select id="setupPmsType" class="va-textarea" style="width:100%;padding:10px">
         <option value="somo">Somo calendar (E10 interim)</option>
@@ -60,50 +66,100 @@
     </div>
 
     <div id="step2" class="setup-step hidden">
-      <label class="va-field-label" for="setupGreeting">Inbound greeting</label>
-      <textarea id="setupGreeting" class="va-textarea" rows="4" style="width:100%;margin-top:8px" aria-describedby="setupPreview"></textarea>
-      <div id="setupPreview" style="margin-top:12px"></div>
-      <button type="button" class="signup-btn signup-btn-primary" id="setupNext2" style="margin-top:16px;width:100%">Continue</button>
+      <p class="sfd-muted" style="margin:0 0 16px;font-size:0.95rem;line-height:1.5">
+        Choose how Kelly manages appointment availability.
+      </p>
+      <div id="connectCalendarStatus" class="sfd-callout" hidden></div>
+      <div id="calendarPickerWrap" hidden style="margin-bottom:12px"></div>
+      <div class="sfd-grid-2" style="margin-bottom:12px">
+        <div class="sfd-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <h3 style="margin:0">Google Calendar</h3>
+            <span class="sfd-nameplate sfd-nameplate--connected sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>Recommended</span>
+          </div>
+          <p class="sfd-muted" style="font-size:0.88rem;margin:8px 0 0">Sync blocks and bookings with your existing calendar.</p>
+          <button type="button" class="sfd-btn sfd-btn-primary" id="setupConnectGoogle" style="margin-top:12px;width:100%">Connect Google</button>
+        </div>
+        <div class="sfd-card sfd-card--paper">
+          <h3>Somo calendar</h3>
+          <p class="sfd-muted" style="font-size:0.88rem;margin:0">Use Somo scheduling until your PMS API is ready.</p>
+          <button type="button" class="sfd-btn sfd-btn-secondary" id="setupUseSomoCal" style="margin-top:12px;width:100%">Use Somo calendar</button>
+        </div>
+      </div>
+      <div class="sfd-callout" style="margin-bottom:12px">
+        <b>Manual Dentrix interim:</b> Until Dentrix API Exchange is approved, Kelly books to Somo and emails a daily digest for your front desk to enter in Dentrix.
+      </div>
+      <div class="sfd-card sfd-card--flat" style="opacity:0.75;margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <h3 style="margin-bottom:4px">Dentrix Ascend</h3>
+            <p class="sfd-muted" style="font-size:0.88rem;margin:0">Two-way sync coming soon.</p>
+          </div>
+          <span class="sfd-nameplate sfd-nameplate--pending-invite sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>Pending API</span>
+        </div>
+      </div>
+      <button type="button" class="signup-btn signup-btn-ghost" id="setupSkipConnect" style="width:100%">Skip for now</button>
+      <button type="button" class="signup-btn signup-btn-primary hidden" id="setupNext2" style="margin-top:12px;width:100%">Continue</button>
     </div>
 
     <div id="step3" class="setup-step hidden">
-      <div id="setupHoursPicker" style="margin-top:12px"></div>
-      <label class="va-field-label" style="margin-top:12px;display:block" for="setupAfterHours">After-hours message</label>
-      <textarea id="setupAfterHours" class="va-textarea" rows="2" style="width:100%"></textarea>
+      <label class="va-field-label" for="setupGreeting">Inbound greeting</label>
+      <p class="sfd-muted" style="font-size:0.85rem;margin:4px 0 8px">AI disclosure and practice address are appended automatically on live calls.</p>
+      <textarea id="setupGreeting" class="va-textarea" rows="4" style="width:100%;margin-top:8px" aria-describedby="setupPreview"></textarea>
+      <div id="setupPreview" style="margin-top:12px"></div>
       <button type="button" class="signup-btn signup-btn-primary" id="setupNext3" style="margin-top:16px;width:100%">Continue</button>
     </div>
 
     <div id="step4" class="setup-step hidden">
-      <label class="va-field-label">
-        <input type="checkbox" id="setupOutboundEnabled" /> Enable outbound calls
-      </label>
-      <label class="va-field-label" style="margin-top:12px;display:block" for="setupOutboundOpener">Outbound opener</label>
-      <textarea id="setupOutboundOpener" class="va-textarea" rows="3" style="width:100%"></textarea>
-      <div id="setupOutboundPreview" style="margin-top:12px"></div>
+      <div id="setupHoursPicker" style="margin-top:12px"></div>
+      <label class="va-field-label" style="margin-top:12px;display:block" for="setupAfterHours">After-hours message</label>
+      <textarea id="setupAfterHours" class="va-textarea" rows="2" style="width:100%"></textarea>
       <button type="button" class="signup-btn signup-btn-primary" id="setupNext4" style="margin-top:16px;width:100%">Continue</button>
     </div>
 
     <div id="step5" class="setup-step hidden">
-      <div class="signup-reveal" style="margin-top:0;margin-bottom:16px;padding:14px 16px;background:var(--signup-surface,#f8fafc);border-radius:8px;border:1px solid var(--signup-border,#e2e8f0)">
-        <p class="signup-reveal-label" style="margin:0 0 6px">Forward your office line</p>
-        <p style="font-size:0.9rem;color:var(--signup-muted);margin:0 0 8px;line-height:1.45">
-          Point your main office phone's call forwarding to your Somo number below so patients reach Kelly.
-          When Kelly is paused, calls forward to your warm transfer number instead.
-        </p>
-        <a href="/docs/runbooks/CALL_FORWARDING_SETUP.md" target="_blank" rel="noopener" style="font-size:0.9rem">Call forwarding runbook →</a>
+      <label class="sfd-toggle-switch" style="margin-bottom:12px">
+        <input type="checkbox" id="setupOutboundEnabled" />
+        <span class="sfd-toggle-switch__track" aria-hidden="true"></span>
+        <span>Enable outbound calls</span>
+      </label>
+      <div id="setupOutboundEmpty" class="sfd-empty-state" style="padding:16px;margin-bottom:12px">
+        Outbound is off. You can enable Kelly outbound calls later from Settings.
       </div>
+      <div id="setupOutboundFields">
+        <label class="va-field-label" for="setupOutboundOpener">Outbound opener</label>
+        <textarea id="setupOutboundOpener" class="va-textarea" rows="3" style="width:100%"></textarea>
+        <div id="setupOutboundPreview" style="margin-top:12px"></div>
+      </div>
+      <button type="button" class="signup-btn signup-btn-primary" id="setupNext5" style="margin-top:16px;width:100%">Continue</button>
+    </div>
+
+    <div id="step6" class="setup-step hidden">
+      <table class="sfd-table" style="width:100%;font-size:0.9rem;margin-bottom:16px">
+        <thead><tr><th>Step</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Log into your phone carrier or VoIP admin portal</td></tr>
+          <tr><td>2</td><td>Set call forwarding to your Somo number below</td></tr>
+          <tr><td>3</td><td>Place a test call — Kelly answers with your greeting</td></tr>
+        </tbody>
+      </table>
+      <label class="va-field-label" style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <input type="checkbox" id="setupForwardAck" />
+        I've forwarded my main office line to Kelly
+      </label>
       <p style="font-size:0.95rem;color:var(--signup-muted);margin:12px 0">
-        Call your Somo number to hear the inbound greeting. Outbound can be tested from Voice Agent after setup.
+        Call your Somo number to hear the inbound greeting.
       </p>
       <div class="signup-reveal" style="margin-top:12px">
         <p class="signup-reveal-label">Your Somo number</p>
-        <p class="signup-reveal-number" id="setupPhone">Loading…</p>
+        <p class="signup-reveal-number sfd-mono" id="setupPhone" style="font-family:var(--font-mono, 'Martian Mono', monospace)">Loading…</p>
         <div class="signup-reveal-actions">
-          <a class="signup-btn signup-btn-primary" id="setupCall" href="#" aria-label="Test inbound call">Call my line</a>
+          <a class="sfd-btn sfd-btn-secondary" id="setupCall" href="#" aria-label="Test inbound call">Call to test Kelly</a>
           <button type="button" class="signup-btn signup-btn-ghost" id="setupCopy" aria-label="Copy phone number">Copy</button>
         </div>
       </div>
-      <button type="button" class="signup-btn signup-btn-primary" id="setupFinish" style="margin-top:20px;width:100%">Done — open voice agent</button>
+      <div id="testCallStatus" class="sfd-callout" hidden style="margin-top:12px"></div>
+      <button type="button" class="signup-btn signup-btn-primary" id="setupFinish" style="margin-top:20px;width:100%">Done — open go-live checklist</button>
       <button type="button" class="signup-btn signup-btn-ghost" id="setupSkip" style="margin-top:8px;width:100%">Skip for now</button>
     </div>
 
@@ -111,7 +167,28 @@
     <div class="signup-toast hidden" id="setupSuccess" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="/unified-dashboard/assets/js/voice-agent-page.js"></script>
-  <script src="/unified-dashboard/assets/js/voice-setup.js"></script>
+  <div class="sfd-modal-backdrop" id="skipCalendarModal" hidden>
+    <div class="sfd-modal" role="dialog" aria-modal="true" aria-labelledby="skipCalendarTitle">
+      <div class="sfd-modal__header">
+        <h3 id="skipCalendarTitle">Skip calendar connection?</h3>
+      </div>
+      <div class="sfd-modal__body">
+        <p style="margin:0 0 12px;line-height:1.5">Without Google Calendar, Kelly still books — but with tradeoffs:</p>
+        <ul class="sfd-checklist" style="margin:0 0 12px;padding-left:0;list-style:none">
+          <li class="sfd-checklist-item"><span class="sfd-check sfd-check--warn">!</span> No real-time block sync from Google</li>
+          <li class="sfd-checklist-item"><span class="sfd-check sfd-check--warn">!</span> Somo calendar holds appointments until Dentrix connects</li>
+          <li class="sfd-checklist-item"><span class="sfd-check sfd-check--done">✓</span> Kelly still answers, books, and sends daily digest</li>
+        </ul>
+      </div>
+      <div class="sfd-modal__footer sfd-modal__footer--split">
+        <button type="button" class="sfd-btn sfd-btn-ghost" id="skipCalendarCancel">Go back and connect</button>
+        <button type="button" class="sfd-btn sfd-btn-primary" id="skipCalendarConfirm">Skip anyway</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/js/sfd-stepper.js"></script>
+  <script src="/assets/js/voice-agent-page.js"></script>
+  <script src="/assets/js/voice-setup.js"></script>
 </body>
 </html>

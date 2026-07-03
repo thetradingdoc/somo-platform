@@ -94,8 +94,41 @@
     });
   }
 
+  function mountRevenueChrome() {
+    if (typeof window.mountProviderPage === 'function') {
+      window.mountProviderPage({
+        activeId: 'revenue',
+        eyebrow: 'Revenue',
+        title: 'Revenue hub',
+        subtitle: 'Pipeline, claims, patient pay, and work queue.',
+        topbarActions: '<a class="pp-btn pp-btn-outline pp-btn-sm" href="patients.html">Search patient</a>',
+      });
+      const topbar = document.querySelector('.pp-topbar');
+      if (topbar && !topbar.querySelector('.pp-revenue-tabs')) {
+        topbar.classList.add('pp-revenue-topbar');
+        topbar.insertAdjacentHTML(
+          'beforeend',
+          `<div class="pp-revenue-tabs" role="tablist" aria-label="Revenue sections">
+          <button type="button" class="pp-revenue-tab active" data-tab="pipeline" role="tab" aria-selected="true">Pipeline</button>
+          <button type="button" class="pp-revenue-tab" data-tab="claims" role="tab" aria-selected="false">
+            Claims <span class="pp-revenue-tab-badge" id="rev-tab-badge-claims" hidden></span>
+          </button>
+          <button type="button" class="pp-revenue-tab" data-tab="payments" data-testid="revenue-tab-payments" role="tab" aria-selected="false">
+            Patient pay <span class="pp-revenue-tab-badge" id="rev-tab-badge-payments" hidden></span>
+          </button>
+          <button type="button" class="pp-revenue-tab" data-tab="work" role="tab" aria-selected="false">
+            Work queue <span class="pp-revenue-tab-badge" id="rev-tab-badge-work" hidden></span>
+          </button>
+        </div>`
+        );
+      }
+    } else if (typeof window.initProviderShell === 'function') {
+      window.initProviderShell({ activeId: 'revenue', paymentPoll: true });
+    }
+  }
+
   function initRevenueHub() {
-    window.initProviderShell({ activeId: 'revenue', paymentPoll: true });
+    mountRevenueChrome();
     bindTabs();
     const tab = parseTabFromUrl();
     switchRevenueTab(tab, { syncUrl: false });

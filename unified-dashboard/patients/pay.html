@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Pay Balance · Somo</title>
   <link rel="stylesheet" href="../assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="../assets/css/somo-front-desk-components.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700&display=swap" />
   <script src="https://js.stripe.com/v3/"></script>
   <!-- config.js sets window.API_BASE; served from unified-dashboard/assets/js/ -->
@@ -656,7 +657,7 @@
     const usdcOk = data.rails.usdc?.available;
     const clinic = data.clinic || {};
     if (clinic.name) {
-      $('brand-name').textContent = clinic.name;
+      $('brand-name').textContent = clinic.name ? `${clinic.name} · via Somo` : 'Somo';
       document.title = `Pay ${fmtMoney(amt, cur)} · ${clinic.name}`;
     }
     const clinicLine = clinic.name

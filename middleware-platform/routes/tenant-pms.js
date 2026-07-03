@@ -141,6 +141,17 @@ router.get('/sync-status', async (req, res) => {
   }
 });
 
+router.get('/sync-errors', async (req, res) => {
+  try {
+    const { listPmsSyncErrors } = require('../services/integrations-status-service');
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const errors = listPmsSyncErrors(db, req.pmsClinicId, { limit });
+    return res.json({ success: true, errors, clinic_id: req.pmsClinicId });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 router.post('/digest', async (req, res) => {
   try {
     const { sendDigestEmail } = require('../services/e10-interim-service');

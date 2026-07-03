@@ -29,6 +29,8 @@
 
 Canonical CSS: [`unified-dashboard/assets/css/somo-tokens.css`](../../unified-dashboard/assets/css/somo-tokens.css)
 
+Front desk UI components: [`unified-dashboard/assets/css/somo-front-desk-components.css`](../../unified-dashboard/assets/css/somo-front-desk-components.css) — mock → Somo map: [`docs/design/SOMO_MOCK_TO_TOKEN_MAP.md`](../design/SOMO_MOCK_TO_TOKEN_MAP.md) — screen update spec (FD-001–418): [`docs/design/FRONT_DESK_SCREEN_UPDATE_SPEC.md`](../design/FRONT_DESK_SCREEN_UPDATE_SPEC.md)
+
 Legacy `skin-care-tokens.css` re-exports Somo tokens for backward-compatible imports.
 
 ### Palette (product / dark surfaces)

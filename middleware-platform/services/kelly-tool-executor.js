@@ -1475,8 +1475,66 @@ class KellyToolExecutor {
               message: paymentGate.holding_utterance || hardQuoteGate.holding_utterance
             };
           }
+
+          const sessionPatientId =
+            patientId || KellyToolExecutor._getSessionMeta(sessionId, 'resolved_patient_id') || null;
+          const resolvedPatientId = sessionPatientId;
+          if (args.patient_id && sessionPatientId && args.patient_id !== sessionPatientId) {
+            console.warn('[request_patient_payment] Ignoring LLM patient_id mismatch');
+          }
+
+          const identityVerified = KellyToolExecutor._getSessionMeta(sessionId, 'patient_identity_verified');
+          const dobLast4 = String(args.patient_dob_last4 || args.dob_last4 || '').replace(/\D/g, '').slice(-4);
+          if (!identityVerified) {
+            if (dobLast4.length === 4 && resolvedPatientId) {
+              try {
+                const fhir = db.getFHIRPatient(resolvedPatientId);
+                const stored = String(fhir?.birth_date || fhir?.date_of_birth || '').replace(/\D/g, '');
+                if (!stored.endsWith(dobLast4)) {
+                  return {
+                    success: false,
+                    error: 'IDENTITY_MISMATCH',
+                    error_code: 'IDENTITY_MISMATCH',
+                    message: 'Date of birth does not match our records. Please verify before sending a payment link.'
+                  };
+                }
+                KellyToolExecutor._setSessionMeta(sessionId, 'patient_identity_verified', true);
+              } catch (_) {
+                return {
+                  success: false,
+                  error: 'IDENTITY_REQUIRED',
+                  error_code: 'IDENTITY_REQUIRED',
+                  message: 'Please confirm the patient date of birth before sending a payment link.'
+                };
+              }
+            } else {
+              return {
+                success: false,
+                error: 'IDENTITY_REQUIRED',
+                error_code: 'IDENTITY_REQUIRED',
+                message: 'Please confirm the patient date of birth before sending a payment link.'
+              };
+            }
+          }
+
+          const { evaluateAndRecord } = require('./anti-sybil-service');
+          const antiSybil = evaluateAndRecord({
+            scope: 'kelly_pay_link',
+            identityKey: callerPhone || sessionId || clinicId,
+            ip: '',
+            userAgent: 'kelly-voice',
+            amountCents: Math.round(Number(args.amount || 0) * 100)
+          });
+          if (antiSybil.decision === 'block') {
+            return {
+              success: false,
+              error: 'ANTI_SYBIL_BLOCKED',
+              error_code: 'ANTI_SYBIL_BLOCKED',
+              message: 'Payment link cannot be sent at this time.'
+            };
+          }
+
           const paymentRequestService = require('./rcm-payment-request-service');
-          const resolvedPatientId = args.patient_id || patientId || null;
           const result = await paymentRequestService.createRcmPaymentRequest({
             clinicId,
             amount: args.amount,
@@ -1538,6 +1596,7 @@ class KellyToolExecutor {
               pay_token: result.pay_token,
               amount: result.amount,
               patient_name: args.patient_name || null,
+              caller_risk_score: antiSybil?.score ?? null,
             },
           });
           try {

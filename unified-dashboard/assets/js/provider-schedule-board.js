@@ -129,7 +129,7 @@
     html += `<span class="pp-schedule-board-range-label">${escapeHtml(formatRangeLabel(rangeStart))}</span>`;
     html += '</div>';
 
-    html += '<div class="pp-schedule-board-grid-wrap"><table class="pp-schedule-board-grid" role="grid">';
+    html += '<div class="pp-schedule-board-grid-wrap"><table class="pp-schedule-board-grid sfd-table" role="grid">';
     html += '<thead><tr><th class="pp-schedule-board-corner" scope="col">Provider</th>';
     days.forEach((d, i) => {
       const today = getLocalDateString(new Date()) === dayYmds[i];

@@ -4,9 +4,12 @@
 (function () {
   const NAV = [
     { id: 'board', href: '/admin/', label: 'Control board', group: 'workspace', icon: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>' },
-    { id: 'pipeline', href: '/admin/pipeline.html', label: 'Sales pipeline', group: 'workspace', badgeKey: 'pipeline', icon: '<path d="M4 6h16M4 12h16M4 18h10"/>' },
     { id: 'tenants', href: '/admin/tenants.html', label: 'Tenants', group: 'workspace', badgeKey: 'tenants', icon: '<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17" cy="8" r="2.6"/><path d="M16 14.2c2.8.6 5 2.7 5 5.8"/>' },
+    { id: 'pipeline', href: '/admin/pipeline.html', label: 'Pipeline', group: 'workspace', badgeKey: 'pipeline', icon: '<path d="M4 6h16M4 12h16M4 18h10"/>' },
+    { id: 'leads', href: '/admin/leads.html', label: 'Leads', group: 'workspace', icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
+    { id: 'feature-flags', href: '/admin/feature-flags.html', label: 'Feature flags', group: 'workspace', capability: 'platform.feature_flags', icon: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>' },
     { id: 'sales-agent', href: '/admin/sales-agent.html', label: 'Sales agent', group: 'workspace', icon: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M9 22h6"/>' },
+    { id: 'coding-reviews', href: '/admin/coding-reviews.html', label: 'Coding reviews', group: 'workspace', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>' },
     { id: 'provider', href: '/business/today.html', label: 'Provider portal ↗', group: 'shortcuts', external: true, icon: '<path d="M14 3h7v7M21 3l-9 9M5 5h6v0H5v14h14v-6"/>' },
   ];
 
@@ -253,7 +256,8 @@
         ? `<span class="admin-crm-nav-badge" data-nav-badge="${item.badgeKey}" style="display:none;"></span>`
         : '';
       const target = item.external ? ' target="_blank" rel="noopener"' : '';
-      return `<a href="${item.href}" class="admin-crm-nav${active}"${target}>
+      const capAttr = item.capability ? ` data-require-capability="${item.capability}"` : '';
+      return `<a href="${item.href}" class="admin-crm-nav${active}"${target}${capAttr}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${item.icon}</svg>
         <span>${esc(item.label)}</span>
         ${badge}

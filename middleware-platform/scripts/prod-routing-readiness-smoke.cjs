@@ -8,7 +8,7 @@
  * Verifies:
  * 1) UI domain does NOT serve HTML for /api endpoints
  * 2) API base returns JSON health
- * 3) Platform root redirects (somo-landing retired)
+ * 3) Platform root serves public marketing HTML (somo-landing SPA)
  * 4) landing-assistant turn endpoint returns JSON (not SPA HTML)
  */
 
@@ -43,15 +43,20 @@ function printCheck(ok, id, detail) {
   console.log(`${icon} ${id}${detail ? ` — ${detail}` : ''}`);
 }
 
-async function checkPlatformRootRedirect() {
+async function checkPlatformRootLanding() {
   try {
-    const res = await fetch(`${UI_BASE}/`, { redirect: 'manual' });
-    const ok = res.status >= 301 && res.status <= 308;
-    const location = res.headers.get('location') || '';
-    printCheck(ok, 'UI_ROOT_REDIRECT', `status=${res.status} location=${location}`);
+    const res = await fetch(`${UI_BASE}/`, { redirect: 'follow' });
+    const text = await res.text();
+    const ok =
+      res.status >= 200 &&
+      res.status < 400 &&
+      looksLikeHtml(text, res.headers.get('content-type') || '') &&
+      !/\/login/i.test(res.url) &&
+      (/never answer business calls again/i.test(text) || /somo-logo-img/i.test(text));
+    printCheck(ok, 'UI_ROOT_LANDING', `status=${res.status} url=${res.url}`);
     return ok;
   } catch (e) {
-    printCheck(false, 'UI_ROOT_REDIRECT', String(e?.message || e));
+    printCheck(false, 'UI_ROOT_LANDING', String(e?.message || e));
     return false;
   }
 }
@@ -96,7 +101,7 @@ async function main() {
     printCheck(false, 'API_BASE_HEALTH_JSON', String(e?.message || e));
   }
 
-  checks.push(await checkPlatformRootRedirect());
+  checks.push(await checkPlatformRootLanding());
 
   // API turn endpoint on API base (optional — Somo landing is marketing-only)
   if (process.env.SKIP_LANDING_TURN_SMOKE === '1') {

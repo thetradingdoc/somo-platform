@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#16a637">
   <title>Somo Provider — Leads</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
@@ -13,25 +14,41 @@
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
   <style>
-    .leads-frame { width: 100%; height: calc(100vh - 72px); border: 0; background: #0b0f19; }
-    .leads-denied { padding: 48px 24px; text-align: center; color: var(--muted, #8b94a7); }
+    .leads-frame {
+      width: 100%;
+      min-height: calc(100dvh - 140px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      border: 0;
+      border-radius: 12px;
+      background: var(--sfd-surface, #fff);
+    }
+    .leads-wrap { padding: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
   </style>
 </head>
-<body>
-  <div id="pp-app"></div>
-  <main id="pp-main" class="pp-main">
-    <div id="leadsDenied" class="leads-denied hidden">
-      <h1>Access denied</h1>
-      <p>Your account does not have platform leads access.</p>
-      <a href="today.html">Back to Today</a>
+<body class="provider-portal provider-portal--scroll" data-page="leads">
+  <main class="main-content pp-content" id="ppMainContent">
+    <div class="pp-page-shell leads-wrap">
+      <div id="leadsDenied" class="sfd-empty-state hidden">
+        <h2>Access denied</h2>
+        <p>Your account does not have platform leads access.</p>
+        <a class="pp-btn pp-btn-primary pp-btn-sm" href="today.html">Back to Today</a>
+      </div>
+      <!-- Trust boundary: same-origin admin CRM only; never embed third-party origins without sandbox + postMessage review. -->
+      <iframe id="leadsFrame" class="leads-frame hidden sfd-card" title="Leads CRM" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
     </div>
-    <iframe id="leadsFrame" class="leads-frame hidden" title="Leads CRM"></iframe>
   </main>
   <script>
     (async function () {
       if (typeof requireAuth === 'function') requireAuth('../login.html');
       if (typeof hydrateProviderSession === 'function') {
         await hydrateProviderSession(window.API_BASE || window.location.origin);
+      }
+      if (typeof mountProviderPage === 'function') {
+        mountProviderPage({
+          activeId: 'leads',
+          eyebrow: 'Platform',
+          title: 'Leads',
+          subtitle: 'Sales pipeline and onboarding queue',
+        });
       }
       const allowed = (typeof hasCapability === 'function' && hasCapability('platform.leads'))
         || (typeof isAdminUser === 'function' && isAdminUser());
@@ -43,7 +60,6 @@
       }
       frame.src = '/admin/pipeline.html';
       frame.classList.remove('hidden');
-      if (typeof mountProviderPage === 'function') mountProviderPage({ title: 'Leads', activeNav: 'leads' });
     })();
   </script>
 </body>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Somo — Lead detail</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
   <link rel="stylesheet" href="/assets/css/admin-portal.css">
   <script src="/assets/js/config.js"></script>
 </head>
@@ -37,7 +38,7 @@
         <div class="admin-crm-lead-actions">
           <div class="admin-crm-lead-score" id="leadScore">—</div>
           <button class="admin-crm-btn-outline admin-crm-btn-danger" id="deleteBtn" data-require-capability="platform.leads">Delete lead</button>
-          <button class="admin-crm-btn-outline" id="inviteBtn" data-require-capability="platform.leads">Send pilot invite</button>
+          <button class="admin-crm-btn-outline" id="inviteBtn" data-require-capability="platform.leads">Convert to customer</button>
           <button class="btn btn-primary" id="callBtn" data-require-capability="platform.leads">Call now</button>
         </div>
       </div>
@@ -51,6 +52,8 @@
             <div class="admin-crm-kv-row"><dt>Location</dt><dd id="iLocation">—</dd></div>
             <div class="admin-crm-kv-row"><dt>Specialty</dt><dd id="iSpecialty">—</dd></div>
             <div class="admin-crm-kv-row"><dt>Job title</dt><dd id="iTitle">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Job posting</dt><dd id="iJobPosting">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Posted</dt><dd id="iPostedAt">—</dd></div>
             <div class="admin-crm-kv-row"><dt>Languages</dt><dd id="iLanguages">—</dd></div>
             <div class="admin-crm-kv-row"><dt>Website</dt><dd id="iWebsite">—</dd></div>
             <div class="admin-crm-kv-row"><dt>Contact status</dt><dd id="iContactStatus">—</dd></div>
@@ -100,6 +103,8 @@
   </main>
 
   <script src="/admin/assets/js/admin-shell.js"></script>
+  <script src="/admin/assets/js/admin-onboarding.js"></script>
+  <script src="/admin/assets/js/admin-convert-modal.js"></script>
   <script>
     const { apiFetch, esc, init, showToast, callLead: shellCallLead, confirmAction } = AdminShell;
     let leadId, leadData;
@@ -124,7 +129,7 @@
       document.getElementById('btnEmail').onclick = sendEmail;
       document.getElementById('stageSelect').onchange = (e) => updateStage(e.target.value);
       document.getElementById('deleteBtn').onclick = deleteLead;
-      document.getElementById('inviteBtn').onclick = sendPilotInvite;
+      document.getElementById('inviteBtn').onclick = convertLeadToTenant;
       document.getElementById('btnAcceptSuggestion').onclick = acceptSuggestion;
       document.getElementById('btnDismissSuggestion').onclick = dismissSuggestion;
       loadLead();
@@ -159,6 +164,7 @@
       document.getElementById('leadName').textContent = lead.clinic_name || 'Unknown';
       document.getElementById('leadScore').textContent = lead.lead_score || '—';
       document.getElementById('leadMeta').innerHTML = [
+        (lead.pipeline_stage === 'won' || lead.pipeline_stage === 'closed_won') && '<span class="sfd-nameplate sfd-nameplate--live sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>WON</span>',
         lead.location && `<span class="admin-crm-chip">${esc(lead.location)}</span>`,
         lead.specialty && `<span class="admin-crm-chip">${esc(lead.specialty)}</span>`,
         lead.lead_source && `<span class="admin-crm-chip">Source: ${esc(String(lead.lead_source).split(':')[0])}</span>`,
@@ -170,6 +176,12 @@
       document.getElementById('iLocation').textContent = lead.location || '—';
       document.getElementById('iSpecialty').textContent = lead.specialty || '—';
       document.getElementById('iTitle').textContent = lead.title || '—';
+      document.getElementById('iJobPosting').innerHTML = lead.job_posting_url
+        ? `<a href="${esc(lead.job_posting_url)}" target="_blank" rel="noopener" style="color:var(--forest);font-weight:600;">View posting ↗</a>`
+        : '—';
+      document.getElementById('iPostedAt').textContent = lead.posted_at
+        ? new Date(lead.posted_at).toLocaleDateString()
+        : '—';
       document.getElementById('iLanguages').textContent = (lead.language_labels && lead.language_labels.length)
         ? `${lead.language_labels.join(', ')}${lead.preferred_language ? ` (agent: ${lead.preferred_language})` : ''}`
         : 'English';
@@ -182,6 +194,14 @@
         ? '<span class="admin-crm-pill admin-crm-pill-success">Verified</span>'
         : esc(status);
 
+      const inviteBtn = document.getElementById('inviteBtn');
+      if (lead.pipeline_stage === 'won' || lead.pipeline_stage === 'closed_won' || lead.status === 'converted') {
+        inviteBtn.textContent = 'View tenant portal';
+        inviteBtn.onclick = () => { window.open('/business/today.html', '_blank'); };
+      } else {
+        inviteBtn.textContent = 'Convert to customer';
+        inviteBtn.onclick = convertLeadToTenant;
+      }
       document.getElementById('stageSelect').value = lead.pipeline_stage || 'new';
       document.getElementById('stageMeta').textContent = [
         lead.call_count && `${lead.call_count} call(s)`,
@@ -255,29 +275,17 @@
       `).join('');
     }
 
-    async function sendPilotInvite() {
+    async function convertLeadToTenant() {
       if (!leadData?.clinic_email && !leadData?.email) {
-        return showToast('Add an email to this lead before sending an invite.', 'warning');
+        return showToast('Add an email to this lead before converting.', 'warning');
       }
-      const email = leadData.clinic_email || leadData.email;
-      if (!confirmAction(`Send pilot invite to ${email}? Lead will move to Won.`)) return;
-      const btn = document.getElementById('inviteBtn');
-      btn.disabled = true;
-      try {
-        const r = await apiFetch(`/api/admin/invites/from-lead/${leadId}`, {
-          method: 'POST',
-          body: JSON.stringify({ email, send_email: true, convert: true }),
-        });
-        showToast(`Invite sent — link copied to clipboard`, 'success');
-        if (r.invite_url && navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(r.invite_url).catch(() => {});
-        }
-        loadLead(true);
-      } catch (e) {
-        showToast(e.message, 'error');
-      } finally {
-        btn.disabled = false;
-      }
+      AdminConvertModal.open(leadId, leadData, {
+        onSuccess: () => loadLead(true)
+      });
+    }
+
+    async function sendPilotInvite() {
+      return convertLeadToTenant();
     }
 
     async function deleteLead() {

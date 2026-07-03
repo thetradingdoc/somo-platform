@@ -16,68 +16,20 @@
   <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
 </head>
 <body class="provider-portal provider-portal--patients" data-page="patients">
-  <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-  </button>
-  <div class="pp-app">
-    <aside class="pp-sidebar" id="ppSidebar">
-      <div class="pp-clinic-header">
-        <a class="pp-sb-brand pp-sb-brand--icon" href="today.html">
-          <img src="/assets/brand/somo-icon.png" alt="Somo" class="pp-sb-logo-img" width="36" height="36" />
-        </a>
-        <div class="pp-sb-clinic-meta">
-          <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
-          <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
-          <div class="pp-sb-av pp-sb-av--sm" id="ppClinicAv" aria-hidden="true">CL</div>
-        </div>
-      </div>
-      <a class="pp-kelly-live kelly-provisioning" id="ppKellyLive" href="agent.html">
-        <span class="pp-kelly-dot" aria-hidden="true"></span>
-        <div>
-          <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
-          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
-          <div class="pp-kelly-phone" id="ppKellyPhone"></div>
-        </div>
-        <button type="button" class="pp-kelly-toggle" id="ppKellyToggle">Activate</button>
-      </a>
-      <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
-      <div class="pp-sb-footer">
-        <a class="pp-sb-clinic" id="ppClinicCard" href="settings.html">
-          <div class="pp-sb-av">CL</div>
-          <div>
-            <div class="pp-sb-cn">Clinic profile</div>
-            <div class="pp-sb-cr">Manage provider details</div>
-          </div>
-        </a>
-      </div>
-    </aside>
-    <div class="pp-main">
-      <header class="pp-topbar pp-topbar--page">
-        <div class="pp-topbar-left">
-          <p class="pp-page-eyebrow">Patients</p>
-          <h1 class="pp-page-title">Patient roster</h1>
-          <p class="pp-page-sub">Patients, payers, and billing summary.</p>
-        </div>
-        <div class="pp-topbar-right">
-          <div class="pp-date-chip" id="ppDateChip"></div>
-          <button type="button" class="pp-btn pp-btn-outline pp-btn-sm" id="ppFocusSearchBtn">Search roster</button>
-        </div>
-      </header>
-      <main class="pp-content pp-content--patients" id="ppMainContent">
+  <main class="main-content pp-content pp-content--patients" id="ppMainContent">
         <div class="pp-page-shell">
         <div class="pp-alert-strip pp-alert-strip--compact" id="ppAlertStrip" hidden aria-live="polite"></div>
         <div id="patientsDebugStrip" class="pp-patients-debug" hidden aria-live="polite"></div>
         <div class="pp-kpi-row pp-kpi-row-4" id="patientsKpiRow">
-          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
-          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
-          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
-          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
+          <div class="pp-kpi-card"><div class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div></div>
+          <div class="pp-kpi-card"><div class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div></div>
+          <div class="pp-kpi-card"><div class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div></div>
+          <div class="pp-kpi-card"><div class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div></div>
         </div>
-        <section class="pp-panel pp-panel--primary">
+        <section class="pp-panel pp-panel--primary sfd-card">
           <div class="pp-panel-head">
             <div>
               <div class="pp-panel-title">Patient roster</div>
@@ -102,8 +54,8 @@
               <a class="pp-btn pp-btn-primary pp-btn-sm" href="patient-case.html">Open case</a>
             </div>
             <div class="pp-patients-grid" id="patientsRosterGrid" data-testid="pp-patients-list" data-roster-mount>
-              <div class="pp-patients-empty" id="patientsRosterLoading">
-                <div class="pp-patients-empty-title">Loading patients</div>
+              <div class="pp-patients-empty sfd-empty-state" id="patientsRosterLoading">
+                <div class="sfd-skeleton"><div class="sfd-skeleton-line"></div><div class="sfd-skeleton-line sfd-skeleton-line--short"></div></div>
                 <p>Fetching roster from your clinic…</p>
               </div>
             </div>
@@ -111,9 +63,7 @@
           </div>
         </section>
         </div>
-      </main>
-    </div>
-  </div>
+  </main>
   <script>
         const API_BASE = window.API_BASE || window.location.origin || 'http://localhost:4000';
         const MERCHANT_API = `${API_BASE}/api`;
@@ -392,7 +342,17 @@
                 return;
             }
             await new Promise((r) => setTimeout(r, 150));
-            window.initProviderShell({ activeId: 'patients', useGreeting: false });
+            if (typeof mountProviderPage === 'function') {
+                mountProviderPage({
+                    activeId: 'patients',
+                    eyebrow: 'Patients',
+                    title: 'Patient roster',
+                    subtitle: 'Patients, payers, and billing summary.',
+                    topbarActions: '<button type="button" class="pp-btn pp-btn-outline pp-btn-sm" id="ppFocusSearchBtn">Search roster</button>'
+                });
+            } else {
+                window.initProviderShell({ activeId: 'patients', useGreeting: false });
+            }
             scrubPatientsPanelDebris();
             ensureRosterMount();
             wirePatientsPage();

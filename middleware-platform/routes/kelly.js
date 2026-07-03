@@ -7,6 +7,7 @@ const TwilioPhoneService = require('../services/twilio-phone-service');
 const { updateAgentLifecycleState } = require('../services/agent-lifecycle');
 const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
 const { listActivityForClinic } = require('../services/kelly-activity-feed-service');
+const { customerOwnsCallSession } = require('../lib/tenant-call-scope');
 
 function normalizeLifecycle(customer) {
   const status = String(customer.kelly_status || customer.retell_agent_status || 'pending').toLowerCase();
@@ -108,6 +109,10 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'session_id is required' });
     }
 
+    if (!customerOwnsCallSession(db, req.customer.id, sessionId)) {
+      return res.status(404).json({ success: false, error: 'session_not_found' });
+    }
+
     const events = db.listKellyCallEvents
       ? db.listKellyCallEvents({ session_id: sessionId, limit: 200 })
       : [];
@@ -185,12 +190,15 @@ router.get('/calls/:sessionId', requireCustomerAuth, async (req, res) => {
     }
 
     const { lookupSessionEnrichment, formatCopayDisplay } = require('../services/dashboard-call-enrichment');
+    const { buildCallTimeline } = require('../services/call-timeline-service');
     const sessionEnrichment = lookupSessionEnrichment(db, sessionId);
+    const timeline = buildCallTimeline(events);
 
     return res.json({
       success: true,
       session_id: sessionId,
       event_count: events.length,
+      timeline,
       events: events.map((e) => ({
         id: e.id,
         event_type: e.event_type,

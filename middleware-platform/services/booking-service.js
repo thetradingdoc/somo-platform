@@ -588,6 +588,10 @@ class BookingService {
       try {
         await db.createAppointment(appointment);
         console.log('✅ Appointment saved to database');
+        try {
+          const { maybeTriggerDigestOnBooking } = require('./e10-interim-service');
+          if (appointment.clinic_id) maybeTriggerDigestOnBooking(appointment.clinic_id);
+        } catch (_) {}
       } catch (dbError) {
         // Task 9: Slot conflict - return alternative slots for retry
         if (dbError.message && dbError.message.includes('UNIQUE constraint')) {

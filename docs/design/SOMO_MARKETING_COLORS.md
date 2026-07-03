@@ -47,4 +47,4 @@ On the landing SPA, legacy aliases in `somo-landing/src/styles/somo.css` map `--
 
 ## Source of truth
 
-Defined in [`unified-dashboard/assets/css/somo-tokens.css`](../unified-dashboard/assets/css/somo-tokens.css) under the marketing block. Landing imports via [`somo-landing/src/styles/somo.css`](../business/trial-activation portal/src/styles/somo.css).
+Defined in [`unified-dashboard/assets/css/somo-tokens.css`](../../unified-dashboard/assets/css/somo-tokens.css) under the marketing block. Marketing landing: [`business/trial-activation.html`](../../unified-dashboard/business/trial-activation.html).

@@ -184,13 +184,15 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     }
     if (finalResolution.status === 'hard_number') {
       const quoteGate = journeyGates.checkQuoteGate({ resolution: finalResolution });
-      if (quoteGate.allowed) {
+      const spokenDelivery =
+        insResult.quote_delivered === true || args.spoken_quote === true || args.deliver_quote === true;
+      if (quoteGate.allowed && spokenDelivery) {
         KellyToolExecutor._setSessionMeta(sessionId, 'quote_delivered', '1');
         KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', 'hard_number');
         KellyToolExecutor._setSessionMeta(sessionId, 'last_copay_due', String(finalResolution.amount));
         KellyToolExecutor._setSessionMeta(sessionId, 'copay_amount', String(finalResolution.amount));
       } else {
-        KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', quoteGate.status);
+        KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', quoteGate.status || finalResolution.status);
         KellyToolExecutor._setSessionMeta(sessionId, 'quote_delivered', '0');
         finalResolution = {
           ...finalResolution,

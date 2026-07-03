@@ -22,6 +22,13 @@ function _maskPhone(phone) {
   return `(***) ***-${digits.slice(-4)}`;
 }
 
+/** Public admin session routes — register on app BEFORE requireAdminAuth middleware. */
+function registerAdminSessionRoutes(app) {
+  app.post('/api/admin/session', handleAdminLogin);
+  app.delete('/api/admin/session', handleAdminLogout);
+  app.get('/api/admin/session', adminSessionStatus);
+}
+
 function registerAdminPlatformRoutes(app, deps) {
   const {
     apiLimiter,
@@ -30,10 +37,6 @@ function registerAdminPlatformRoutes(app, deps) {
     requireAdminAuth,
     pricingRoutes,
   } = deps;
-
-app.post('/api/admin/session', handleAdminLogin);
-app.delete('/api/admin/session', handleAdminLogout);
-app.get('/api/admin/session', adminSessionStatus);
 
 // Seed test patients endpoint (S-4: SEED_ENABLED + block staging)
 app.post('/api/admin/patients/seed-test', async (req, res) => {
@@ -2157,8 +2160,15 @@ app.post('/api/admin/cache/clear', async (req, res) => {
 
 app.get('/api/admin/feature-flags', (req, res) => {
   try {
-    const ff = require('./config/feature-flags');
-    return res.json({ success: true, flags: ff.getAll() });
+    const ff = require('../config/feature-flags');
+    const merged = { ...ff.getAll() };
+    if (db.db) {
+      const rows = db.db.prepare('SELECT flag_name, enabled_globally FROM feature_flags').all();
+      for (const row of rows) {
+        merged[row.flag_name] = row.enabled_globally === 1;
+      }
+    }
+    return res.json({ success: true, flags: merged });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
@@ -2166,8 +2176,19 @@ app.get('/api/admin/feature-flags', (req, res) => {
 
 app.post('/api/admin/feature-flags', express.json(), async (req, res) => {
   try {
-    const { flag_name, enabled_globally, enabled_for_clinic_ids, rollout_pct } = req.body || {};
+    const body = req.body || {};
+    const flag_name = body.flag_name || body.flag;
+    const enabled_globally = body.enabled_globally ?? body.enabled;
+    const { enabled_for_clinic_ids, rollout_pct } = body;
     if (!flag_name) return res.status(400).json({ success: false, error: 'flag_name required' });
+    const ff = require('../config/feature-flags');
+    const allowed = new Set(Object.keys(ff.getAll()));
+    if (!allowed.has(flag_name)) {
+      return res.status(400).json({ success: false, error: 'unknown_flag', flag_name });
+    }
+    if (enabled_globally === undefined) {
+      return res.status(400).json({ success: false, error: 'enabled_globally or enabled required' });
+    }
     db.db.prepare(`
       INSERT INTO feature_flags (flag_name, enabled_globally, enabled_for_clinic_ids, rollout_pct, updated_at)
       VALUES (?, ?, ?, ?, datetime('now'))
@@ -2177,7 +2198,7 @@ app.post('/api/admin/feature-flags', express.json(), async (req, res) => {
         rollout_pct = COALESCE(excluded.rollout_pct, feature_flags.rollout_pct),
         updated_at = datetime('now')
     `).run(flag_name, enabled_globally ? 1 : 0, typeof enabled_for_clinic_ids === 'string' ? enabled_for_clinic_ids : JSON.stringify(enabled_for_clinic_ids || null), rollout_pct ?? 100);
-    return res.json({ success: true, flag_name });
+    return res.json({ success: true, flag_name, enabled_globally: !!enabled_globally });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
@@ -3712,4 +3733,4 @@ app.get('/api/admin/patients/:id/ehr-summary', async (req, res) => {
 });
 }
 
-module.exports = { registerAdminPlatformRoutes };
+module.exports = { registerAdminSessionRoutes, registerAdminPlatformRoutes };

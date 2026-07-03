@@ -158,11 +158,86 @@ function enrichTenantRow(clinic) {
   };
 }
 
+function getClinicPmsFields(clinic) {
+  return {
+    pms_type: clinic?.pms_type || 'somo',
+    pms_enabled: clinic?.pms_enabled === 1 || clinic?.pms_enabled === true,
+  };
+}
+
+function getPendingInviteForClinic(clinicId, customerId) {
+  if (!db.db || !clinicId) return false;
+  try {
+    const row = db.db.prepare(`
+      SELECT id FROM provider_invites
+      WHERE status = 'pending'
+        AND (clinic_id = ? OR (? IS NOT NULL AND customer_id = ?))
+      LIMIT 1
+    `).get(clinicId, customerId, customerId);
+    return !!row;
+  } catch {
+    return false;
+  }
+}
+
+function formatInvoiceSummary(invoice) {
+  if (!invoice) return null;
+  return {
+    billing_month: invoice.billing_month || null,
+    due_date: invoice.due_date || null,
+    sent_at: invoice.sent_at || null,
+    status: invoice.status || null,
+    total: invoice.total ?? null,
+    invoice_number: invoice.invoice_number || null,
+  };
+}
+
+function getLastInvoiceSummary(customerId) {
+  if (!customerId || typeof db.getCustomerInvoices !== 'function') return null;
+  const invoices = db.getCustomerInvoices(customerId) || [];
+  return formatInvoiceSummary(invoices[0] || null);
+}
+
+function getCustomerInvoiceHistory(customerId, limit = 6) {
+  if (!customerId || typeof db.getCustomerInvoices !== 'function') return [];
+  return (db.getCustomerInvoices(customerId) || [])
+    .slice(0, limit)
+    .map(formatInvoiceSummary)
+    .filter(Boolean);
+}
+
+function enrichTenantAdminFields(clinic, customerId) {
+  const pms = getClinicPmsFields(clinic);
+  return {
+    ...pms,
+    pending_invite: getPendingInviteForClinic(clinic.clinic_id, customerId),
+    last_invoice: getLastInvoiceSummary(customerId),
+  };
+}
+
+function buildBillingPayload(clinic, customerId) {
+  const billing = enrichTenantRow(clinic);
+  return {
+    plan_tier: billing.plan_tier,
+    subscription_status: billing.subscription_status,
+    trial_status: billing.trial_status,
+    minutes_remaining: billing.minutes_remaining,
+    last_invoice: getLastInvoiceSummary(customerId),
+    invoices: getCustomerInvoiceHistory(customerId, 6),
+  };
+}
+
 module.exports = {
   getAllTenantAlerts,
   getActiveClinics,
   ACTIVE_CLINIC_WHERE,
   enrichTenantRow,
+  enrichTenantAdminFields,
+  buildBillingPayload,
+  getClinicPmsFields,
+  getPendingInviteForClinic,
+  getLastInvoiceSummary,
+  formatInvoiceSummary,
   resolveTenantCustomerId,
   getCustomerBilling,
   getMinutesRemaining,

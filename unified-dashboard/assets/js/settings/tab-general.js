@@ -68,8 +68,8 @@ const SP = window.SettingsPage;
             });
             setupSettingsTabs();
             const tabParam = new URLSearchParams(window.location.search).get('tab');
-            if (tabParam === 'voice') {
-                setSettingsTab('voice');
+            if (tabParam === 'voice' || tabParam === 'kelly') {
+                setSettingsTab('kelly');
             } else if (tabParam === 'billing') {
                 setSettingsTab('billing');
             }
@@ -111,16 +111,24 @@ const SP = window.SettingsPage;
                 setSettingsTab('profile');
                 setTimeout(() => document.getElementById('pmsHelpPanel')?.scrollIntoView({ behavior: 'smooth' }), 200);
             } else if (hash === 'credentials') {
-                setSettingsTab('credentials');
-            } else if (hash === 'integrations' || hash === 'pms') {
-                setSettingsTab('integrations');
+                setSettingsTab('advanced');
+            } else if (hash === 'integrations' || hash === 'pms' || hash === 'connected' || hash === 'calendar') {
+                setSettingsTab('connected');
+            } else if (hash === 'voice' || hash === 'kelly') {
+                setSettingsTab('kelly');
             } else {
                 setSettingsTab(SP.activeSettingsTab);
             }
         }
 
         function setSettingsTab(tabName) {
-            SP.activeSettingsTab = tabName || 'profile';
+            const aliases = {
+              integrations: 'connected',
+              calendar: 'connected',
+              voice: 'kelly',
+              credentials: 'advanced'
+            };
+            SP.activeSettingsTab = aliases[tabName] || tabName || 'profile';
             document.querySelectorAll('[data-settings-tab]').forEach((btn) => {
                 const on = btn.dataset.settingsTab === SP.activeSettingsTab;
                 btn.classList.toggle('act', on);
@@ -130,7 +138,13 @@ const SP = window.SettingsPage;
             document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
                 panel.hidden = panel.dataset.settingsPanel !== SP.activeSettingsTab;
             });
-            if (SP.activeSettingsTab === 'credentials' && typeof loadCredentialsSettings === 'function') {
+            if (SP.activeSettingsTab === 'connected' && typeof loadConnectedAccounts === 'function') {
+                loadConnectedAccounts();
+            }
+            if (SP.activeSettingsTab === 'kelly' && typeof loadKellySettingsTab === 'function') {
+                loadKellySettingsTab();
+            }
+            if (SP.activeSettingsTab === 'advanced' && typeof loadCredentialsSettings === 'function') {
                 loadCredentialsSettings();
             }
         }
@@ -668,15 +682,20 @@ const SP = window.SettingsPage;
                 if (!list) return;
                 const rows = Array.isArray(json.sessions) ? json.sessions : [];
                 if (!rows.length) {
-                    list.innerHTML = 'No active sessions.';
+                    list.textContent = 'No active sessions.';
                     return;
                 }
+                const esc = window.SomoHtml?.escapeHtml || ((s) => String(s ?? ''));
+                const escAttr = window.SomoHtml?.escapeAttr || esc;
                 list.innerHTML = rows.map((s) => `
                     <div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #eef2f7;">
-                      <span>${s.is_current ? 'Current' : 'Session'} • ${s.ip_address || 'unknown ip'} • ${new Date(s.last_accessed_at || s.created_at).toLocaleString()}</span>
-                      ${s.is_current ? '' : `<button class="btn btn-secondary btn-sm" onclick="revokeSession('${s.id}')">Revoke</button>`}
+                      <span>${s.is_current ? 'Current' : 'Session'} • ${esc(s.ip_address || 'unknown ip')} • ${new Date(s.last_accessed_at || s.created_at).toLocaleString()}</span>
+                      ${s.is_current ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-revoke-session="${escAttr(s.id)}">Revoke</button>`}
                     </div>
                 `).join('');
+                list.querySelectorAll('[data-revoke-session]').forEach((btn) => {
+                    btn.addEventListener('click', () => revokeSession(btn.getAttribute('data-revoke-session')));
+                });
             } catch (e) {
                 alert(e.message || 'Failed to load sessions');
             }
@@ -785,8 +804,9 @@ async function loadTeamMembersPanel() {
     const customer = JSON.parse(sessionStorage.getItem('customer') || 'null');
     const ownerEmail = customer?.email || 'Owner';
     const ownerName = customer?.name || customer?.company_name || 'Account owner';
+    const esc = window.SomoHtml?.escapeHtml || ((s) => String(s ?? ''));
     list.innerHTML = `<div style="padding:10px 12px;border:1px solid var(--gray-200,#e5e7eb);border-radius:8px;margin-bottom:8px">
-      <strong>${ownerName}</strong> · ${ownerEmail} <span style="color:var(--gray-500,#64748b)">(owner)</span>
+      <strong>${esc(ownerName)}</strong> · ${esc(ownerEmail)} <span style="color:var(--gray-500,#64748b)">(owner)</span>
     </div>
     <p style="margin:0;font-size:0.85rem;color:var(--gray-600,#64748b)">Additional logins share the same clinic. Invited users get their own email sign-in.</p>`;
   } catch (_) {

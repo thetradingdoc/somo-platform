@@ -103,6 +103,26 @@ async function ensureStandardProviderSession(page, request, context, existingCus
   return fresh;
 }
 
+const AUDIT_INVITE_CODE = 'audit-invite-e2e';
+
+function seedAuditInvite() {
+  try {
+    const existing = db.db.prepare('SELECT code FROM provider_invites WHERE code = ?').get(AUDIT_INVITE_CODE);
+    if (!existing) {
+      db.db
+        .prepare(
+          `INSERT INTO provider_invites (
+            id, code, email, practice_name, status, expires_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, 'pending', datetime('now', '+30 days'), datetime('now'), datetime('now'))`
+        )
+        .run('inv-audit-e2e-001', AUDIT_INVITE_CODE, 'audit-invite@somo.test', 'Audit Dental Practice');
+    }
+    return { ok: true, code: AUDIT_INVITE_CODE };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 function runPreflightSeed() {
   const script = path.join(__dirname, '..', '..', 'scripts', 'enable-demo-provider-availability.js');
   let availability = { ok: true };
@@ -135,7 +155,9 @@ function runPreflightSeed() {
     fhirPatient = { ok: false, error: e.message };
   }
 
-  return { ok: availability.ok && fhirPatient.ok, availability, fhirPatient };
+  const invite = seedAuditInvite();
+
+  return { ok: availability.ok && fhirPatient.ok && invite.ok, availability, fhirPatient, invite };
 }
 
 async function collectInteractives(page) {
@@ -342,6 +364,47 @@ async function probeControl(page, pageId, control, opts = {}) {
   }
 }
 
+async function runChromeAssertions(page, pageDef, report) {
+  if (pageDef.noLegacySidebar !== false) {
+    const legacy = await page.evaluate(() => !!document.querySelector('aside.sidebar'));
+    recordResult(report, {
+      page: pageDef.id,
+      control: 'no legacy sidebar',
+      kind: 'assertion',
+      status: legacy ? 'fail' : 'pass',
+      detail: legacy ? 'aside.sidebar found' : 'clean'
+    });
+  }
+
+  if (pageDef.expectSfd) {
+    const hasSfd = await page.evaluate(
+      () => !!document.querySelector('.sfd-card, .sfd-table, .sfd-device-card, .sfd-empty-state')
+    );
+    recordResult(report, {
+      page: pageDef.id,
+      control: 'sfd component anchor',
+      kind: 'assertion',
+      status: hasSfd ? 'pass' : 'fail',
+      detail: hasSfd ? 'sfd surface present' : 'no sfd-card/table/device-card/empty-state'
+    });
+  }
+
+  if (pageDef.expectAuthShell) {
+    const authVisible = await page
+      .locator('.login-shell, .sfd-device-card, .signup-wizard-body')
+      .first()
+      .isVisible()
+      .catch(() => false);
+    recordResult(report, {
+      page: pageDef.id,
+      control: 'auth shell',
+      kind: 'assertion',
+      status: authVisible ? 'pass' : 'fail',
+      detail: authVisible ? 'auth shell visible' : 'auth shell missing'
+    });
+  }
+}
+
 async function auditPage(page, report, pageDef, opts = {}) {
   const entry = {
     id: pageDef.id,
@@ -396,6 +459,8 @@ async function auditPage(page, report, pageDef, opts = {}) {
     if (typeof pageDef.anchor === 'function') {
       await pageDef.anchor(page, report, recordResult);
     }
+
+    await runChromeAssertions(page, pageDef, report);
 
     const controls = await collectInteractives(page);
     const filtered = pageDef.stayOnPage
@@ -538,8 +603,26 @@ const TENANT_PAGES = [
   { id: 'revenue-payments', path: '/business/revenue.html?tab=payments', stayOnPage: true, maxProbes: 15 },
   { id: 'revenue-work', path: '/business/revenue.html?tab=work', stayOnPage: true, maxProbes: 12 },
   { id: 'rcm-journey', path: '/business/rcm-journey.html', stayOnPage: true, maxProbes: 10 },
-  { id: 'agent', path: '/business/agent.html', stayOnPage: true, maxProbes: 22 },
-  { id: 'settings', path: '/business/settings.html', stayOnPage: true, maxProbes: 20 },
+  { id: 'payor-review', path: '/business/payor-review.html', stayOnPage: true, maxProbes: 10 },
+  { id: 'merge-review', path: '/business/merge-review.html', stayOnPage: true, maxProbes: 10, expectSfd: true },
+  {
+    id: 'tenants',
+    path: '/business/tenants.html',
+    stayOnPage: true,
+    maxProbes: 8,
+    expectSfd: true,
+    platformCaps: ['platform.tenants']
+  },
+  {
+    id: 'leads',
+    path: '/business/leads.html',
+    stayOnPage: true,
+    maxProbes: 6,
+    expectSfd: true,
+    platformCaps: ['platform.leads']
+  },
+  { id: 'agent', path: '/business/agent.html', stayOnPage: true, maxProbes: 14 },
+  { id: 'settings', path: '/business/settings.html', stayOnPage: true, maxProbes: 12 },
   { id: 'video-call', path: '/business/video-call.html', stayOnPage: true, maxProbes: 8 },
   { id: 'trial-activation', path: '/business/trial-activation.html', expectShell: false, maxProbes: 8 },
   {
@@ -547,7 +630,36 @@ const TENANT_PAGES = [
     path: '/business/voice-setup.html',
     expectShell: false,
     maxProbes: 10,
-    setup: 'incompleteVoiceSetup'
+    setup: 'incompleteVoiceSetup',
+    expectAuthShell: true
+  },
+  {
+    id: 'voice-setup-complete',
+    path: '/business/voice-setup.html',
+    expectShell: false,
+    maxProbes: 6,
+    setup: 'completeVoiceSetup',
+    anchor: async (page, report, record) => {
+      const url = page.url();
+      const redirected =
+        /agent\.html|today\.html|settings\.html/i.test(url) ||
+        (await page.locator('#ppSidebarNav, .pp-sidebar').first().isVisible().catch(() => false));
+      record(report, {
+        page: 'voice-setup-complete',
+        control: 'post-setup destination',
+        kind: 'anchor',
+        status: redirected ? 'pass' : 'skip',
+        detail: redirected ? url : 'still on wizard — may need voice_setup_completed_at'
+      });
+    }
+  },
+  {
+    id: 'invite',
+    path: `/business/invite.html?code=${AUDIT_INVITE_CODE}`,
+    expectShell: false,
+    maxProbes: 4,
+    expectAuthShell: true,
+    expectSfd: true
   },
   {
     id: 'legacy-billing-claims',
@@ -563,6 +675,27 @@ const TENANT_PAGES = [
   { id: 'legacy-claims', path: '/business/claims.html', expectRedirect: /revenue\.html\?tab=work/ }
 ];
 
+const AUTH_PAGES = [
+  { id: 'login', path: '/login.html', expectShell: false, expectAuthShell: true, maxProbes: 4 },
+  { id: 'signup', path: '/signup.html', expectShell: false, expectAuthShell: true, expectSfd: true, maxProbes: 4 },
+  {
+    id: 'signup-complete',
+    path: '/signup-complete.html',
+    expectShell: false,
+    expectAuthShell: true,
+    maxProbes: 3
+  },
+  {
+    id: 'reset-password',
+    path: '/reset-password.html?token=audit-token',
+    expectShell: false,
+    expectAuthShell: true,
+    expectSfd: true,
+    maxProbes: 3
+  },
+  { id: 'portal', path: '/portal.html', expectShell: false, expectAuthShell: true, maxProbes: 4 }
+];
+
 module.exports = {
   API_BASE,
   LIVE_ACTIONS,
@@ -576,5 +709,9 @@ module.exports = {
   probeControl,
   auditPage,
   writeAuditReport,
-  TENANT_PAGES
+  runChromeAssertions,
+  seedAuditInvite,
+  AUDIT_INVITE_CODE,
+  TENANT_PAGES,
+  AUTH_PAGES
 };

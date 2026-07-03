@@ -5,77 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Somo — Accept invite</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css" />
-  <link rel="stylesheet" href="/unified-dashboard/assets/css/signup-somo.css" />
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css" />
+  <link rel="stylesheet" href="/assets/css/signup-somo.css" />
   <script src="/assets/js/config.js"></script>
 </head>
 <body class="signup-wizard-body">
-  <div class="activation-wrap" style="max-width:480px">
-    <img src="/unified-dashboard/assets/brand/somo-logo.png" alt="Somo" width="160" style="margin-bottom:20px" />
-    <h1 class="signup-title" id="inviteTitle">Set up your front desk</h1>
-    <p class="signup-sub" id="inviteSub">Create your account to configure Kelly.</p>
-    <div id="inviteError" class="signup-error" style="display:none;color:#b91c1c;margin:12px 0"></div>
-    <form id="inviteForm">
-      <label class="va-field-label" for="inviteName">Your name</label>
-      <input id="inviteName" class="va-textarea" style="width:100%;padding:10px;margin:8px 0" required />
-      <label class="va-field-label" for="inviteEmail">Email</label>
-      <input id="inviteEmail" type="email" class="va-textarea" style="width:100%;padding:10px;margin:8px 0" readonly />
-      <label class="va-field-label" for="invitePassword">Password</label>
-      <input id="invitePassword" type="password" class="va-textarea" style="width:100%;padding:10px;margin:8px 0" minlength="8" required />
-      <label style="display:flex;gap:8px;margin:12px 0;font-size:0.9rem">
-        <input type="checkbox" id="inviteBaa" required />
-        <span>I agree to the Business Associate Agreement and Terms of Service.</span>
-      </label>
-      <button type="submit" class="signup-btn signup-btn-primary" style="width:100%">Continue to voice setup</button>
-    </form>
+  <div class="activation-wrap" style="max-width:520px;padding:24px 16px">
+    <a href="/" class="signup-logo-link" aria-label="Somo home">
+      <img class="signup-logo-img" src="/assets/brand/somo-logo.png" alt="Somo" width="160" height="54" />
+    </a>
+
+    <div class="sfd-device-card" id="inviteCard" style="margin-top:24px">
+      <h1 class="signup-title" id="inviteTitle" style="font-size:1.5rem;margin:0 0 8px">Set up your front desk</h1>
+      <p class="signup-sub sfd-muted" id="inviteSub" style="margin:0 0 20px">Create your account to configure Kelly.</p>
+
+      <div id="inviteError" class="signup-error" hidden role="alert" style="color:#b91c1c;margin:0 0 16px;font-size:0.9rem"></div>
+
+      <form id="inviteForm" data-testid="invite-form">
+        <label class="va-field-label" for="invitePractice">Practice name</label>
+        <input id="invitePractice" class="va-textarea" style="width:100%;padding:10px;margin:8px 0 12px" disabled aria-readonly="true" />
+
+        <label class="va-field-label" for="inviteEmail">Email</label>
+        <input id="inviteEmail" type="email" class="va-textarea" style="width:100%;padding:10px;margin:8px 0 12px" readonly autocomplete="username" />
+
+        <label class="va-field-label" for="invitePassword">Password</label>
+        <input id="invitePassword" type="password" class="va-textarea" style="width:100%;padding:10px;margin:8px 0 4px" minlength="8" autocomplete="new-password" required />
+        <p id="invitePasswordErr" class="signup-error" hidden role="alert" style="color:#b91c1c;margin:0 0 12px;font-size:0.85rem"></p>
+
+        <label class="va-field-label" for="inviteConfirm">Confirm password</label>
+        <input id="inviteConfirm" type="password" class="va-textarea" style="width:100%;padding:10px;margin:8px 0 4px" minlength="8" autocomplete="new-password" required />
+        <p id="inviteConfirmErr" class="signup-error" hidden role="alert" style="color:#b91c1c;margin:0 0 12px;font-size:0.85rem"></p>
+
+        <label style="display:flex;gap:10px;margin:16px 0;font-size:0.9rem;line-height:1.45;align-items:flex-start">
+          <input type="checkbox" id="inviteBaa" style="margin-top:3px;flex-shrink:0" required />
+          <span>I agree to the <a href="/terms?customer_type=saas" target="_blank" rel="noopener">Business Associate Agreement</a> and <a href="/terms?customer_type=saas" target="_blank" rel="noopener">Terms of Service</a>.</span>
+        </label>
+
+        <button type="submit" class="signup-btn signup-btn-primary" id="inviteSubmit" style="width:100%" disabled>
+          Continue to voice setup
+        </button>
+      </form>
+    </div>
   </div>
-  <script>
-    (async function () {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code') || '';
-      const API = (window.API_BASE || window.location.origin).replace(/\/$/, '');
-      const errEl = document.getElementById('inviteError');
-      if (!code) {
-        errEl.style.display = 'block';
-        errEl.textContent = 'Missing invite code.';
-        return;
-      }
-      try {
-        const res = await fetch(`${API}/api/invites/${encodeURIComponent(code)}`);
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Invalid invite');
-        document.getElementById('inviteEmail').value = data.invite.email || '';
-        document.getElementById('inviteTitle').textContent = data.invite.practice_name
-          ? `Welcome, ${data.invite.practice_name}`
-          : 'Set up your front desk';
-      } catch (e) {
-        errEl.style.display = 'block';
-        errEl.textContent = e.message;
-        document.getElementById('inviteForm').style.display = 'none';
-        return;
-      }
-      document.getElementById('inviteForm').addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        errEl.style.display = 'none';
-        try {
-          const res = await fetch(`${API}/api/invites/${encodeURIComponent(code)}/accept`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              name: document.getElementById('inviteName').value.trim(),
-              password: document.getElementById('invitePassword').value,
-              baa_acknowledged: document.getElementById('inviteBaa').checked
-            })
-          });
-          const data = await res.json();
-          if (!data.success) throw new Error(data.error || 'Accept failed');
-          window.location.href = data.redirect || '/business/voice-setup.html';
-        } catch (e) {
-          errEl.style.display = 'block';
-          errEl.textContent = e.message;
-        }
-      });
-    })();
-  </script>
+  <script src="/assets/js/invite.js"></script>
 </body>
 </html>

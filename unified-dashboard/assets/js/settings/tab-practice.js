@@ -6,8 +6,11 @@ async function loadPracticeSettings() {
   if (!SP.API_BASE || !clinicId) return;
   try {
     const q = `?clinic_id=${encodeURIComponent(clinicId)}`;
-    const res = await fetch(`${SP.API_BASE}/api/tenant/clinic${q}`, { credentials: 'include' });
-    const data = await res.json();
+    const [clinicRes, voiceRes] = await Promise.all([
+      fetch(`${SP.API_BASE}/api/tenant/clinic${q}`, { credentials: 'include' }),
+      fetch(`${SP.API_BASE}/api/voice-agent/settings${q}`, { credentials: 'include' }).catch(() => null)
+    ]);
+    const data = await clinicRes.json();
     if (!data.success) return;
     const c = data.clinic || {};
     const set = (id, val) => {
@@ -19,6 +22,12 @@ async function loadPracticeSettings() {
     set('practiceTaxId', c.tax_id);
     set('practiceAddress', c.practice_address);
     set('practiceOfficeType', c.office_type || 'dental');
+    if (voiceRes?.ok) {
+      const voice = await voiceRes.json().catch(() => ({}));
+      if (voice.settings?.language_mode) {
+        set('practiceLanguageMode', voice.settings.language_mode);
+      }
+    }
     if (c.payer_list_json) {
       try {
         const payers = JSON.parse(c.payer_list_json);
@@ -54,6 +63,21 @@ async function savePracticeSettings() {
     body: JSON.stringify(body)
   });
   const data = await res.json();
+
+  const langMode = document.getElementById('practiceLanguageMode')?.value;
+  if (langMode && window.VoiceAgentPage?.saveVoiceSettings) {
+    try {
+      const existing = await VoiceAgentPage.fetchVoiceSettings();
+      await VoiceAgentPage.saveVoiceSettings({
+        enabled: existing?.enabled !== false,
+        clinic_id: clinicId,
+        language_mode: langMode,
+        retell_agent_id: existing?.retell_agent_id || null,
+        settings_version: existing?.settings_version ?? null
+      });
+    } catch (_) {}
+  }
+
   if (msg) {
     msg.style.display = 'block';
     msg.textContent = data.success ? 'Practice settings saved.' : data.error || 'Save failed';

@@ -113,6 +113,9 @@ function ensureKellyRcmTables() {
     'ALTER TABLE rcm_payments ADD COLUMN last_reminder_at DATETIME',
     'ALTER TABLE rcm_payments ADD COLUMN circle_transfer_id TEXT',
     'ALTER TABLE rcm_payments ADD COLUMN stripe_payment_intent_id TEXT',
+    'ALTER TABLE rcm_payments ADD COLUMN expires_at DATETIME',
+    'ALTER TABLE rcm_payments ADD COLUMN session_id TEXT',
+    'ALTER TABLE rcm_payments ADD COLUMN used_at DATETIME',
     'ALTER TABLE voice_call_log ADD COLUMN clinic_id TEXT',
   ];
   for (const sql of migrations) {

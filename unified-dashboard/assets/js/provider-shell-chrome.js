@@ -13,15 +13,18 @@
   window.ppKellyWidgetHtml = function ppKellyWidgetHtml() {
     const agentHref = resolveHref('agent.html');
     return `
-      <a class="pp-kelly-live kelly-provisioning" id="ppKellyLive" href="${agentHref}">
-        <span class="pp-kelly-dot" aria-hidden="true"></span>
-        <div>
-          <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
-          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
-          <div class="pp-kelly-phone" id="ppKellyPhone"></div>
-        </div>
+      <div class="pp-kelly-live kelly-provisioning" id="ppKellyLive">
+        <a class="pp-kelly-live-link" href="${agentHref}" aria-label="Open Kelly control center">
+          <span class="pp-kelly-dot" aria-hidden="true"></span>
+          <div>
+            <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
+            <div id="ppKellyNameplate" style="margin:4px 0"></div>
+            <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
+            <div class="pp-kelly-phone" id="ppKellyPhone"></div>
+          </div>
+        </a>
         <button type="button" class="pp-kelly-toggle" id="ppKellyToggle">Activate</button>
-      </a>`;
+      </div>`;
   };
 
   window.ppSidebarHeaderHtml = function ppSidebarHeaderHtml() {
@@ -56,6 +59,14 @@
       const kelly = wrap.firstElementChild;
       if (nav) sidebar.insertBefore(kelly, nav);
       else sidebar.appendChild(kelly);
+    } else if (!document.getElementById('ppKellyNameplate')) {
+      const label = document.getElementById('ppKellyLabel');
+      if (label && label.parentElement) {
+        const np = document.createElement('div');
+        np.id = 'ppKellyNameplate';
+        np.style.margin = '4px 0';
+        label.insertAdjacentElement('afterend', np);
+      }
     }
   };
 })();

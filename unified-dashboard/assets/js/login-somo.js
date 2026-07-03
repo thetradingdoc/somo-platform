@@ -39,7 +39,8 @@
   }
 
   function showToast(message, type) {
-    const el = document.getElementById('loginToast');
+    const onForgot = !document.getElementById('forgotPanel')?.classList.contains('hidden');
+    const el = document.getElementById(onForgot ? 'forgotToast' : 'loginToast');
     if (!el) return;
     el.textContent = message;
     el.className = `signup-toast ${type || 'error'}`;
@@ -48,6 +49,7 @@
 
   function hideToast() {
     document.getElementById('loginToast')?.classList.add('hidden');
+    document.getElementById('forgotToast')?.classList.add('hidden');
   }
 
   function showPanel(panel) {
@@ -72,9 +74,23 @@
     }
   }
 
-  function resolvePostLoginUrl(customer) {
-    const redirect = getSafeRedirect();
-    if (redirect) return redirect;
+  async function resolvePostLoginUrl(customer) {
+    const explicit = getSafeRedirect();
+    if (explicit) return explicit;
+
+    if (window.SomoOnboardingRedirect?.resolveProviderPostLoginUrl) {
+      const dest = await window.SomoOnboardingRedirect.resolveProviderPostLoginUrl(customer, {
+        explicitRedirect: null
+      });
+      if (dest) {
+        const host = window.location.hostname.toLowerCase();
+        const subdomain = customer?.subdomain;
+        if (subdomain && host !== 'localhost' && host !== '127.0.0.1' && !host.includes(`${subdomain}.callsomo.com`)) {
+          return `https://${subdomain}.callsomo.com${dest}`;
+        }
+        return dest;
+      }
+    }
 
     const host = window.location.hostname.toLowerCase();
     const subdomain = customer?.subdomain;
@@ -127,7 +143,8 @@
         }
       } catch (_) { /* non-fatal */ }
       persistCustomer(customer);
-      window.location.href = resolvePostLoginUrl(customer);
+      const destination = await resolvePostLoginUrl(customer);
+      window.location.href = destination;
     } catch (err) {
       showToast(err.message || 'Sign in failed', 'error');
       if (btn) {

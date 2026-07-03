@@ -1614,7 +1614,15 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 });
                 return;
             }
-        } catch (_) {}
+        } catch (fwErr) {
+            console.error('[retell] tool firewall error:', fwErr.message);
+            this.sendToRetell(connection.ws, {
+                type: 'function_call_response',
+                function_call_id: functionCall.id || functionCall.function_call_id,
+                result: { success: false, error: 'Tool execution blocked' }
+            });
+            return;
+        }
 
         console.log(`\n🔧 FUNCTION CALL: ${functionName}`);
         console.log('   Args:', JSON.stringify(functionArgs, null, 2));

@@ -1,11 +1,12 @@
 'use strict';
 
 const { displayName } = require('./kelly-rails/language');
+const { DEFAULT_KELLY_ASR_MIN_CONFIDENCE } = require('../config/voice-thresholds');
 
 function minAsrConfidence() {
   const raw = process.env.KELLY_ASR_MIN_CONFIDENCE;
-  if (raw === undefined || raw === '') return null;
-  const v = parseFloat(raw);
+  const value = raw === undefined || raw === '' ? String(DEFAULT_KELLY_ASR_MIN_CONFIDENCE) : raw;
+  const v = parseFloat(value);
   return Number.isFinite(v) ? v : null;
 }
 

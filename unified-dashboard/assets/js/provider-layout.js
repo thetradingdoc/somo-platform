@@ -55,6 +55,31 @@
     return 'today';
   }
 
+  function mountTopVoiceNameplate(hostId) {
+    const id = hostId || 'ppTopVoiceNameplate';
+    const right = document.querySelector('.pp-topbar-right');
+    if (!right || document.getElementById(id)) return;
+    const np = document.createElement('div');
+    np.id = id;
+    np.style.marginRight = '8px';
+    np.innerHTML = '<div class="sfd-skeleton" aria-hidden="true"><div class="sfd-skeleton-line sfd-skeleton-line--short"></div></div>';
+    right.insertBefore(np, right.firstChild);
+    if (window.VoiceAgentPage && window.SfdNameplate) {
+      window.VoiceAgentPage.fetchVoiceAgentStatus()
+        .then((status) => {
+          if (!status) {
+            np.innerHTML = '';
+            return;
+          }
+          np.innerHTML = '';
+          window.SfdNameplate.mountNameplate(np, status.nameplate || status.label || 'LIVE');
+        })
+        .catch(() => {
+          np.innerHTML = '';
+        });
+    }
+  }
+
   function mountProviderPage(options = {}) {
     const hasNav = document.getElementById('ppSidebarNav');
     if (!hasNav) {
@@ -160,8 +185,13 @@
       const right = document.querySelector('.pp-topbar-right');
       if (right) right.insertAdjacentHTML('beforeend', options.topbarActions);
     }
+
+    if (options.voiceNameplate) {
+      mountTopVoiceNameplate(options.voiceNameplateHost || 'ppTopVoiceNameplate');
+    }
   }
 
   window.mountProviderPage = mountProviderPage;
+  window.mountTopVoiceNameplate = mountTopVoiceNameplate;
   window.resolveProviderActiveId = resolveActiveIdFromUrl;
 })();

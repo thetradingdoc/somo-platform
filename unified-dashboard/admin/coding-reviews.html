@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Somo — Coding reviews</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
   <link rel="stylesheet" href="/assets/css/admin-portal.css">
   <script src="/assets/js/config.js"></script>
 </head>
@@ -18,15 +19,15 @@
       </div>
     </div>
 
-    <div class="admin-crm-card">
-      <div id="reviewTable"><div class="admin-crm-skeleton" style="height:120px;"></div></div>
+    <div class="admin-crm-card sfd-card">
+      <div id="reviewTable"><div class="admin-crm-skeleton" style="height:120px;margin:0 18px 18px;"></div></div>
     </div>
   </main>
 
   <script src="/admin/assets/js/admin-shell.js"></script>
   <script>
     const { apiFetch, esc, init, showToast } = AdminShell;
-    init('board');
+    init('coding-reviews');
 
     document.addEventListener('DOMContentLoaded', load);
 
@@ -36,14 +37,14 @@
         const data = await apiFetch('/api/admin/coding-reviews?status=pending');
         const reviews = data.reviews || [];
         if (!reviews.length) {
-          el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No pending reviews</p>';
+          el.innerHTML = '<div class="sfd-empty-state" style="margin:18px;text-align:center;padding:24px;"><p style="margin:0;color:var(--muted);">No pending reviews</p></div>';
           return;
         }
         el.innerHTML = `
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <table class="sfd-table admin-crm-data-table">
             <thead>
-              <tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;">
-                <th style="padding:8px 0;">Session</th>
+              <tr>
+                <th>Session</th>
                 <th>ICD-10</th>
                 <th>CPT</th>
                 <th>Confidence</th>
@@ -53,15 +54,15 @@
             </thead>
             <tbody>
               ${reviews.map((r) => `
-                <tr style="border-top:1px solid var(--border);">
-                  <td style="padding:10px 0;">${esc(r.call_id || r.id)}</td>
+                <tr>
+                  <td>${esc(r.call_id || r.id)}</td>
                   <td>${esc(r.proposed_icd10 || '')}</td>
                   <td>${esc(r.proposed_cpt || '')}</td>
                   <td>${esc(String(r.confidence_score ?? ''))}</td>
                   <td>${esc(r.sla_deadline || '')}</td>
                   <td>
-                    <button class="admin-crm-btn-outline btn-sm" data-id="${r.id}" data-action="approve">Approve</button>
-                    <button class="admin-crm-btn-outline btn-sm" data-id="${r.id}" data-action="reject">Reject</button>
+                    <button class="admin-crm-btn-outline admin-crm-btn-sm" data-id="${esc(r.id)}" data-action="approve">Approve</button>
+                    <button class="admin-crm-btn-outline admin-crm-btn-sm" data-id="${esc(r.id)}" data-action="reject">Reject</button>
                   </td>
                 </tr>
               `).join('')}
@@ -71,7 +72,7 @@
           btn.onclick = () => resolveReview(btn.dataset.id, btn.dataset.action);
         });
       } catch (e) {
-        el.innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
+        el.innerHTML = `<p style="color:var(--muted);padding:0 18px 18px;">${esc(e.message)}</p>`;
       }
     }
 

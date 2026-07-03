@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Feature flags</title>
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
+  <link rel="stylesheet" href="/assets/css/admin-portal.css">
+  <script src="/assets/js/config.js"></script>
+</head>
+<body>
+  <aside id="admin-sidebar"></aside>
+  <main class="admin-crm-main">
+    <div class="admin-crm-header">
+      <div>
+        <h1 class="admin-crm-title">Feature flags</h1>
+        <p class="admin-crm-subtitle">Environment toggles for patient journey features</p>
+      </div>
+    </div>
+
+    <div class="admin-crm-card">
+      <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Flags</h3></div>
+      <div id="flagsTable"><div class="admin-crm-skeleton" style="height:120px;margin:0 18px 18px;"></div></div>
+    </div>
+  </main>
+
+  <script src="/admin/assets/js/admin-shell.js"></script>
+  <script>
+    const { apiFetch, esc, init, showToast } = AdminShell;
+    init('feature-flags');
+
+    document.addEventListener('DOMContentLoaded', loadFlags);
+
+    async function loadFlags() {
+      const el = document.getElementById('flagsTable');
+      try {
+        const data = await apiFetch('/api/admin/feature-flags');
+        const flags = data.flags || {};
+        const names = Object.keys(flags).sort();
+        if (!names.length) {
+          el.innerHTML = '<p style="color:var(--muted);padding:0 18px 18px;">No flags defined</p>';
+          return;
+        }
+        el.innerHTML = `
+          <table class="admin-crm-data-table">
+            <thead><tr><th>Flag</th><th>Status</th><th>Toggle</th></tr></thead>
+            <tbody>
+              ${names.map((name) => {
+                const on = !!flags[name];
+                return `<tr>
+                  <td style="font-weight:600;">${esc(name)}</td>
+                  <td>${on ? '<span class="admin-crm-pill admin-crm-pill-success">Enabled</span>' : '<span class="admin-crm-badge admin-crm-badge-muted">Disabled</span>'}</td>
+                  <td>
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                      <input type="checkbox" data-flag="${esc(name)}" ${on ? 'checked' : ''} />
+                      ${on ? 'On' : 'Off'}
+                    </label>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`;
+        el.querySelectorAll('input[type=checkbox]').forEach((input) => {
+          input.addEventListener('change', () => onToggleFlag(input));
+        });
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--muted);padding:0 18px 18px;">${esc(e.message)}</p>`;
+      }
+    }
+
+    async function onToggleFlag(input) {
+      const flag = input.dataset.flag;
+      const enabled = input.checked;
+      input.disabled = true;
+      try {
+        await apiFetch('/api/admin/feature-flags', {
+          method: 'POST',
+          body: JSON.stringify({ flag, enabled }),
+        });
+        showToast(`${flag} ${enabled ? 'enabled' : 'disabled'}`, 'success');
+        await loadFlags();
+      } catch (e) {
+        showToast(e.message, 'error');
+        input.checked = !enabled;
+      } finally {
+        input.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

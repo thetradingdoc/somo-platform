@@ -12,6 +12,10 @@ Kelly is the **AI front desk receptionist** for NYC dental and medical offices o
 | Phase 2 copay / Stedi sandbox | [`phase2-pilot-checklist.md`](./phase2-pilot-checklist.md) |
 | PMS connect | [`phase3-pilot-checklist.md`](./phase3-pilot-checklist.md) |
 | Operator invite onboarding | [`phase4-pilot-checklist.md`](./phase4-pilot-checklist.md) |
+| Onboarding stepper canon (FD-034) | [`onboarding-stepper-delta.md`](./onboarding-stepper-delta.md) |
+| `onboarding_meta_json` contract (FD-035) | [`onboarding-meta-contract.md`](./onboarding-meta-contract.md) |
+| Google OAuth onboarding (FD-093–095) | [`google-oauth-onboarding.md`](./google-oauth-onboarding.md) |
+| Preview/live parity QA (FD-108) | [`onboarding-preview-parity-qa.md`](./onboarding-preview-parity-qa.md) |
 | Architecture | [`../architecture/LIVE.md`](../architecture/LIVE.md), [`../architecture/PMS_CONNECT_ARCHITECTURE.md`](../architecture/PMS_CONNECT_ARCHITECTURE.md) |
 | UX contract | [`../product/KELLY_FRONT_DESK_UX.md`](../product/KELLY_FRONT_DESK_UX.md) |
 
@@ -20,7 +24,10 @@ Kelly is the **AI front desk receptionist** for NYC dental and medical offices o
 ```bash
 cd middleware-platform
 npm run verify:unblocked-phases
+npm run verify:prod-gates
 ```
+
+`verify:prod-gates` — vendor-blocked Stedi/Dentrix todos; see [`PROD_VENDOR_GATES.md`](./PROD_VENDOR_GATES.md).
 
 ## Runtime paths (front desk)
 

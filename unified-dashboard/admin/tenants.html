@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Somo — Tenants</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
   <link rel="stylesheet" href="/assets/css/admin-portal.css">
   <script src="/assets/js/config.js"></script>
 </head>
 <body>
   <aside id="admin-sidebar"></aside>
-  <main class="admin-crm-main">
+  <main class="admin-crm-main" data-testid="admin-tenants-main">
     <div class="admin-crm-header">
       <div>
         <h1 class="admin-crm-title">Tenants</h1>
@@ -18,8 +19,12 @@
       </div>
       <div class="admin-crm-search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input type="text" id="tenantSearch" placeholder="Search tenants…">
+        <input type="text" id="tenantSearch" placeholder="Search tenants…" data-testid="admin-tenant-search">
       </div>
+      <label class="admin-crm-btn-outline admin-crm-btn-sm" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="stuckFilter" style="margin:0" /> Onboarding stuck
+      </label>
+      <button type="button" class="btn btn-primary admin-crm-btn-sm" id="btnInviteOffice" data-testid="admin-invite-office-btn">+ Invite office</button>
     </div>
 
     <div class="admin-crm-metrics admin-crm-metrics--3">
@@ -48,32 +53,199 @@
     </div>
 
     <div class="admin-crm-card">
+      <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">Pending invites</h3></div>
+      <div id="pendingInvites"><div class="admin-crm-skeleton" style="height:80px;margin:0 18px 18px;"></div></div>
+    </div>
+
+    <div class="admin-crm-card">
       <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">All tenants</h3></div>
-      <div id="tenantTable"><div class="admin-crm-skeleton" style="height:240px;margin:0 18px 18px;"></div></div>
+      <div id="tenantTable" data-testid="admin-tenant-table"><div class="admin-crm-skeleton" style="height:240px;margin:0 18px 18px;"></div></div>
     </div>
   </main>
 
+  <div class="sfd-modal-backdrop" id="inviteOfficeModal" hidden>
+    <div class="sfd-modal" role="dialog" aria-modal="true">
+      <div class="sfd-modal__header"><h3>Invite office</h3></div>
+      <div class="sfd-modal__body">
+        <label class="admin-crm-kv-row" style="display:block;margin-bottom:10px">Email <input class="admin-crm-text-input" id="invEmail" type="email" style="width:100%;margin-top:4px"></label>
+        <p id="invEmailErr" style="color:var(--danger);font-size:12px;display:none;margin:-6px 0 10px"></p>
+        <label class="admin-crm-kv-row" style="display:block;margin-bottom:10px">Practice name <input class="admin-crm-text-input" id="invPractice" style="width:100%;margin-top:4px"></label>
+        <label class="admin-crm-kv-row" style="display:block;margin-bottom:10px">Specialty <input class="admin-crm-text-input" id="invSpecialty" value="Dental" disabled style="width:100%;margin-top:4px"></label>
+        <label class="admin-crm-kv-row" style="display:block;margin-bottom:10px">PMS (optional) <select class="admin-crm-text-input" id="invPms" style="width:100%;margin-top:4px"><option value="somo">Somo interim</option><option value="dentrix">Dentrix</option></select></label>
+        <p id="invError" style="color:var(--danger);font-size:12px;display:none"></p>
+      </div>
+      <div class="sfd-modal__footer sfd-modal__footer--split">
+        <button type="button" class="sfd-btn sfd-btn-ghost" id="invCancel">Cancel</button>
+        <button type="button" class="sfd-btn sfd-btn-primary" id="invSend">Send invite</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/admin/assets/js/admin-shell.js"></script>
+  <script src="/admin/assets/js/admin-onboarding.js"></script>
   <script>
     const { apiFetch, esc, init, showToast, confirmAction } = AdminShell;
     let allTenants = [];
+    let stuckCustomerIds = new Set();
+    let pendingInvites = [];
 
     init('tenants');
 
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('tenantSearch').oninput = () => renderTable();
+      document.getElementById('stuckFilter')?.addEventListener('change', () => renderTable());
+      document.getElementById('btnInviteOffice')?.addEventListener('click', () => {
+        document.getElementById('inviteOfficeModal').hidden = false;
+      });
+      document.getElementById('invCancel')?.addEventListener('click', () => {
+        document.getElementById('inviteOfficeModal').hidden = true;
+      });
+      document.getElementById('invSend')?.addEventListener('click', sendOfficeInvite);
+      bindTenantActions();
       loadAll();
     });
 
+    function bindTenantActions() {
+      document.getElementById('alertsList')?.addEventListener('click', (e) => {
+        const row = e.target.closest('[data-tenant-detail]');
+        if (row) showDetail(row.dataset.tenantDetail);
+      });
+      document.getElementById('pendingInvites')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const id = btn.dataset.inviteId;
+        if (btn.dataset.action === 'resend-pending') resendPending(id);
+        if (btn.dataset.action === 'revoke-pending') revokePending(id);
+      });
+      document.getElementById('tenantTable')?.addEventListener('click', (e) => {
+        const inviteBtn = e.target.closest('[data-action="open-invite-modal"]');
+        if (inviteBtn) {
+          document.getElementById('btnInviteOffice')?.click();
+          return;
+        }
+        const checklist = e.target.closest('[data-action="view-checklist"]');
+        if (checklist) {
+          e.preventDefault();
+          showDetail(checklist.dataset.clinicId, { scrollChecklist: true });
+          return;
+        }
+        const viewBtn = e.target.closest('[data-action="view-tenant"]');
+        if (viewBtn) {
+          e.stopPropagation();
+          showDetail(viewBtn.dataset.clinicId);
+          return;
+        }
+        const row = e.target.closest('[data-tenant-detail]');
+        if (row) showDetail(row.dataset.tenantDetail);
+      });
+      document.getElementById('detailPanel')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const clinicId = btn.dataset.clinicId;
+        const customerId = btn.dataset.customerId;
+        if (btn.dataset.action === 'reset-onboarding') resetTenantOnboarding(customerId, clinicId);
+        if (btn.dataset.action === 'compare-opener') compareTenantOpener(customerId);
+        if (btn.dataset.action === 'set-pms-somo') setTenantPmsSomo(clinicId);
+        if (btn.dataset.action === 'set-pms-athena') setTenantPmsAthena(clinicId);
+        if (btn.dataset.action === 'allocate-credits') allocateCredits(clinicId);
+      });
+    }
+
+    async function loadStuckIds() {
+      try {
+        const r = await AdminOnboarding.fetchStuckOnboarding(7);
+        stuckCustomerIds = new Set((r.customers || []).map((c) => c.customer_id));
+      } catch (_) {
+        stuckCustomerIds = new Set();
+      }
+    }
+
+    async function loadPendingInvites() {
+      try {
+        pendingInvites = await AdminOnboarding.listInvites();
+        const pending = pendingInvites.filter((i) => i.status === 'pending');
+        const el = document.getElementById('pendingInvites');
+        if (!pending.length) {
+          el.innerHTML = '<p style="color:var(--muted);padding:0 18px 18px;">No pending invites</p>';
+          return;
+        }
+        el.innerHTML = `<table class="admin-crm-data-table"><thead><tr><th>Practice</th><th>Email</th><th>Expires</th><th></th></tr></thead><tbody>
+          ${pending.map((i) => `<tr>
+            <td>${esc(i.practice_name || '—')}</td>
+            <td>${esc(i.email)}</td>
+            <td>${esc(i.expires_at || '—')}</td>
+            <td style="white-space:nowrap">
+              <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="resend-pending" data-invite-id="${esc(i.id)}">Resend</button>
+              <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="revoke-pending" data-invite-id="${esc(i.id)}">Revoke</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+      } catch (e) {
+        document.getElementById('pendingInvites').innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
+      }
+    }
+    window.resendPending = async (id) => {
+      try {
+        await AdminOnboarding.resendInvite(id);
+        showToast('Invite resent', 'success');
+        loadPendingInvites();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+    window.revokePending = async (id) => {
+      if (!confirmAction('Revoke this invite?')) return;
+      try {
+        await AdminOnboarding.revokeInvite(id);
+        showToast('Invite revoked', 'success');
+        loadPendingInvites();
+      } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    async function sendOfficeInvite() {
+      const err = document.getElementById('invError');
+      const emailErr = document.getElementById('invEmailErr');
+      err.style.display = 'none';
+      if (emailErr) emailErr.style.display = 'none';
+      const email = document.getElementById('invEmail').value.trim();
+      const practice_name = document.getElementById('invPractice').value.trim();
+      if (!email || !practice_name) {
+        err.textContent = 'Email and practice name are required.';
+        err.style.display = 'block';
+        return;
+      }
+      try {
+        await AdminOnboarding.createInvite({
+          email,
+          practice_name,
+          office_type: 'dental',
+          use_case: 'dental',
+          send_email: true
+        });
+        showToast('Invite sent', 'success');
+        document.getElementById('inviteOfficeModal').hidden = true;
+        loadPendingInvites();
+      } catch (e) {
+        if (
+          emailErr &&
+          (e.code === 'invite_email_taken' || e.code === 'invite_pending_exists' || e.field === 'email')
+        ) {
+          emailErr.textContent = e.message;
+          emailErr.style.display = 'block';
+        } else {
+          err.textContent = e.message;
+          err.style.display = 'block';
+        }
+      }
+    }
+
     async function loadAll() {
-      await Promise.all([loadAlerts(), loadTenants()]);
+      await Promise.all([loadAlerts(), loadTenants(), loadStuckIds(), loadPendingInvites()]);
     }
 
     function renderGroupedAlertRow(g) {
       const sev = g.severity || 'warning';
       const reasons = g.reasons || (g.reason ? [g.reason] : []);
       return `
-        <div class="admin-crm-alert-row" onclick="showDetail('${g.clinic_id}')">
+        <div class="admin-crm-alert-row" data-tenant-detail="${esc(g.clinic_id)}" role="button" tabindex="0">
           <div>
             <div class="admin-crm-alert-name">${esc(g.company_name)}</div>
             <div class="admin-crm-alert-reason">${reasons.length} issue${reasons.length === 1 ? '' : 's'}</div>
@@ -123,34 +295,91 @@
       }
     }
 
+    function tenantStatusPlate(t) {
+      return AdminOnboarding.tenantNameplateHtml(t);
+    }
+
+    function formatPmsLabel(pmsType) {
+      if (!pmsType || pmsType === 'somo') return 'Somo interim';
+      if (pmsType === 'dentrix') return 'Dentrix';
+      if (pmsType === 'athena') return 'Athena';
+      return pmsType;
+    }
+
+    function renderUsageTable(usage) {
+      const periods = usage?.by_period || {};
+      const rows = [
+        { label: 'Last 24h', data: periods.last_24h },
+        { label: 'Last 7d', data: periods.last_7d },
+        { label: 'Last 30d', data: periods.last_30d },
+      ];
+      return `
+        <table class="admin-crm-data-table" style="margin:0 18px 12px">
+          <thead><tr><th>Period</th><th>Calls</th><th>Minutes</th></tr></thead>
+          <tbody>
+            ${rows.map((r) => `<tr><td>${r.label}</td><td>${r.data?.calls ?? '—'}</td><td>${r.data?.minutes ?? '—'}</td></tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    function renderBillingTable(billing) {
+      if (!billing) return '<p style="color:var(--muted);padding:0 18px 12px;">No billing data</p>';
+      const invRows = (billing.invoices || []).length
+        ? billing.invoices.map((inv) => `
+            <tr>
+              <td>${esc(inv.billing_month || '—')}</td>
+              <td>${inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '—'}</td>
+              <td>${esc(inv.status || '—')}</td>
+              <td>${inv.total != null ? '$' + Number(inv.total).toFixed(2) : '—'}</td>
+            </tr>`).join('')
+        : `<tr><td colspan="4" style="color:var(--muted)">No invoices yet</td></tr>`;
+      return `
+        <dl class="admin-crm-kv">
+          <div class="admin-crm-kv-row"><dt>Plan</dt><dd>${esc(billing.plan_tier || '—')}</dd></div>
+          <div class="admin-crm-kv-row"><dt>Minutes remaining</dt><dd>${billing.minutes_remaining ?? '—'}</dd></div>
+          <div class="admin-crm-kv-row"><dt>Subscription</dt><dd>${esc(billing.subscription_status || '—')}</dd></div>
+        </dl>
+        <table class="admin-crm-data-table" style="margin:0 18px 18px">
+          <thead><tr><th>Billing month</th><th>Invoice date</th><th>Status</th><th>Total</th></tr></thead>
+          <tbody>${invRows}</tbody>
+        </table>`;
+    }
+
     function renderTable() {
       const q = document.getElementById('tenantSearch').value.trim().toLowerCase();
-      const filtered = allTenants.filter((t) => !q || (t.name || '').toLowerCase().includes(q));
+      const stuckOnly = document.getElementById('stuckFilter')?.checked;
+      let filtered = allTenants.filter((t) => !q || (t.name || '').toLowerCase().includes(q));
+      if (stuckOnly) {
+        filtered = filtered.filter((t) => stuckCustomerIds.has(t.customer_id));
+      }
       const el = document.getElementById('tenantTable');
       if (!filtered.length) {
-        el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px;">No tenants found</p>';
+        el.innerHTML = stuckOnly
+          ? '<p style="color:var(--muted);text-align:center;padding:24px;">No stuck onboarding tenants</p>'
+          : '<div class="admin-crm-empty"><p>No offices yet — <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="open-invite-modal">Invite office</button></p></div>';
         return;
       }
       el.innerHTML = `
         <table class="admin-crm-data-table">
           <thead>
-            <tr><th>Name</th><th>Minutes</th><th>Subscription</th><th>Trial</th><th>Agent</th></tr>
+            <tr><th>Practice</th><th>PMS</th><th>Status</th><th>Onboarding</th><th>Minutes</th><th>Actions</th></tr>
           </thead>
           <tbody>
             ${filtered.map((t) => `
-              <tr class="clickable" onclick="showDetail('${t.clinic_id}')">
+              <tr class="clickable" data-tenant-detail="${esc(t.clinic_id)}">
                 <td style="font-weight:600;">${esc(t.name)}</td>
+                <td>${esc(formatPmsLabel(t.pms_type))}</td>
+                <td>${tenantStatusPlate(t)}</td>
+                <td><a href="#" data-action="view-checklist" data-clinic-id="${esc(t.clinic_id)}" style="font-size:12px">${esc(t.onboarding_state || '—')}</a></td>
                 <td>${t.minutes_remaining ?? t.credits?.balance_minutes ?? '—'}</td>
-                <td>${esc(t.subscription_status || '—')}</td>
-                <td>${esc(t.trial_status || '—')}</td>
-                <td>${t.agent?.has_agent ? '<span class="admin-crm-yn-badge admin-crm-yn-yes">Yes</span>' : '<span class="admin-crm-yn-badge admin-crm-yn-no">No</span>'}</td>
+                <td><button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="view-tenant" data-clinic-id="${esc(t.clinic_id)}">View</button></td>
               </tr>
             `).join('')}
           </tbody>
         </table>`;
     }
 
-    async function showDetail(clinicId) {
+    async function showDetail(clinicId, opts = {}) {
       const panel = document.getElementById('detailPanel');
       panel.innerHTML = '<div class="admin-crm-card-title">Loading...</div>';
       try {
@@ -161,20 +390,40 @@
         const t = r.tenant;
         const credits = r.credits || {};
         const pms = pmsRes?.success ? pmsRes : null;
-        const pmsType = pms?.pms_type || '—';
-        const pmsEnabled = pms?.pms_enabled ? 'Yes' : 'No';
+        const pmsType = pms?.pms_type || t.pms_type || '—';
+        const pmsEnabled = (pms?.pms_enabled ?? t.pms_enabled) ? 'Yes' : 'No';
         const pmsLastSync = pms?.pms_last_sync_at ? new Date(pms.pms_last_sync_at).toLocaleString() : '—';
         const pmsLastError = pms?.pms_last_error || '—';
         const pmsFailures = pms?.failures_24h ?? '—';
+        const hasAgent = !!(t.retell_agent_id);
+        let onboardingBlock = '';
+        if (r.tenant?.customer_id) {
+          try {
+            const ob = await AdminOnboarding.fetchTenantOnboarding(r.tenant.customer_id);
+            const checklist = ob.destination?.checklist || [];
+            onboardingBlock = `
+              <h4 id="onboarding-checklist" style="margin:16px 18px 8px;font-size:13px;color:var(--muted);">Onboarding checklist</h4>
+              <ul style="margin:0 18px 12px;padding:0;list-style:none">
+                ${checklist.map((item) => `<li style="font-size:13px;margin:4px 0">${item.done ? '✓' : '○'} ${esc(item.label)}</li>`).join('') || '<li style="color:var(--muted)">No checklist items</li>'}
+              </ul>
+              <div class="admin-crm-input-row">
+                <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="reset-onboarding" data-customer-id="${esc(r.tenant.customer_id)}" data-clinic-id="${esc(clinicId)}">Reset onboarding</button>
+                <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="compare-opener" data-customer-id="${esc(r.tenant.customer_id)}">Compare opener</button>
+              </div>`;
+          } catch (_) {}
+        }
         panel.innerHTML = `
           <div class="admin-crm-card-head"><h3 class="admin-crm-card-title">${esc(t.name)}${t.archived_at ? ' <span class="admin-crm-badge admin-crm-badge-muted">archived</span>' : ''}</h3></div>
           <dl class="admin-crm-kv">
             <div class="admin-crm-kv-row"><dt>Name</dt><dd>${esc(t.name)}</dd></div>
             <div class="admin-crm-kv-row"><dt>Minutes</dt><dd>${t.minutes_remaining ?? credits.balance_minutes ?? 0} remaining</dd></div>
             <div class="admin-crm-kv-row"><dt>Subscription</dt><dd>${esc(t.subscription_status || '—')}</dd></div>
-            <div class="admin-crm-kv-row"><dt>Voice agent</dt><dd>${t.agent?.has_agent ? '<span class="admin-crm-yn-badge admin-crm-yn-yes">Configured</span>' : '<span class="admin-crm-yn-badge admin-crm-yn-no">Not configured</span>'}</dd></div>
-            <div class="admin-crm-kv-row"><dt>Calls (30d)</dt><dd>${r.usage?.by_period?.last_30d?.calls ?? '—'}</dd></div>
+            <div class="admin-crm-kv-row"><dt>Voice agent</dt><dd>${hasAgent ? '<span class="admin-crm-yn-badge admin-crm-yn-yes">Configured</span>' : '<span class="admin-crm-yn-badge admin-crm-yn-no">Not configured</span>'}</dd></div>
           </dl>
+          <h4 style="margin:16px 18px 8px;font-size:13px;color:var(--muted);">Usage</h4>
+          ${renderUsageTable(r.usage)}
+          <h4 style="margin:16px 18px 8px;font-size:13px;color:var(--muted);">Billing</h4>
+          ${renderBillingTable(r.billing)}
           <h4 style="margin:16px 18px 8px;font-size:13px;color:var(--muted);">PMS</h4>
           <dl class="admin-crm-kv">
             <div class="admin-crm-kv-row"><dt>Type</dt><dd>${esc(pmsType)}</dd></div>
@@ -184,12 +433,13 @@
             <div class="admin-crm-kv-row"><dt>Failures (24h)</dt><dd>${pmsFailures}</dd></div>
           </dl>
           <div class="admin-crm-input-row">
-            <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="setTenantPmsSomo('${clinicId}')">Set Somo PMS</button>
-            <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="setTenantPmsAthena('${clinicId}')">Set Athena PMS</button>
+            <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="set-pms-somo" data-clinic-id="${esc(clinicId)}">Set Somo PMS</button>
+            <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="set-pms-athena" data-clinic-id="${esc(clinicId)}">Set Athena PMS</button>
           </div>
+          ${onboardingBlock}
           <div class="admin-crm-input-row">
             <input type="number" class="admin-crm-text-input" id="creditAmount" min="1" value="60" style="max-width:90px;">
-            <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="allocateCredits('${clinicId}')">Allocate free minutes</button>
+            <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="allocate-credits" data-clinic-id="${esc(clinicId)}">Allocate free minutes</button>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 18px 18px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap;gap:8px;">
             <a href="/business/today.html" style="font-size:12px;font-weight:600;color:var(--forest);">Open provider portal →</a>
@@ -207,6 +457,9 @@
             btn.dataset.name
           );
         });
+        if (opts.scrollChecklist) {
+          document.getElementById('onboarding-checklist')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       } catch (e) {
         panel.innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
       }
@@ -302,6 +555,25 @@
       }
     }
     window.deleteTenant = deleteTenant;
+
+    async function resetTenantOnboarding(customerId, clinicId) {
+      if (!confirmAction('Reset onboarding to voice setup step 1?')) return;
+      try {
+        await AdminOnboarding.resetOnboarding(customerId);
+        showToast('Onboarding reset', 'success');
+        showDetail(clinicId);
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+    window.resetTenantOnboarding = resetTenantOnboarding;
+
+    async function compareTenantOpener(customerId) {
+      try {
+        const r = await AdminOnboarding.compareOpener(customerId);
+        const match = r.match === true ? 'Match' : r.match === false ? 'Mismatch' : 'Unknown';
+        showToast(`Opener compare: ${match}`, r.match === false ? 'warning' : 'success');
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+    window.compareTenantOpener = compareTenantOpener;
   </script>
 </body>
 </html>

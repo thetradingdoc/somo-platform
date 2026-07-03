@@ -1,5 +1,6 @@
 /* Somo Provider Portal — design system */
 @import url('./somo-tokens.css');
+@import url('./somo-front-desk-components.css');
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap');
 
 :root {
@@ -184,6 +185,8 @@ body.provider-portal.provider-portal--scroll .pp-app {
   margin-left: auto;
 }
 
+.hidden { display: none !important; }
+
 .pp-kelly-live {
   margin: 10px 10px 10px;
   background: #f8fafc;
@@ -193,16 +196,28 @@ body.provider-portal.provider-portal--scroll .pp-app {
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
-  text-decoration: none;
   position: relative;
   z-index: 1;
   transition: var(--transition);
 }
-.pp-kelly-live > div:nth-child(2) { flex: 1; min-width: 0; }
+.pp-kelly-live-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.pp-kelly-live-link > div { flex: 1; min-width: 0; }
 .pp-kelly-live.kelly-paused { background: rgba(148, 163, 184, 0.14); border-color: rgba(148, 163, 184, 0.28); }
 .pp-kelly-live.kelly-provisioning { background: rgba(139, 92, 246, 0.12); border-color: rgba(139, 92, 246, 0.24); }
 .pp-kelly-live.kelly-error { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.24); }
+
+.pp-kelly-live-link:hover {
+  color: inherit;
+}
 
 .pp-kelly-live:hover {
   background: #eff6ff;
@@ -2590,6 +2605,7 @@ body.billing--sidebar-nav #billingSectionTabs {
 
 .pp-table-header {
   background: var(--bg2);
+  font-family: var(--sfd-mono, var(--mono));
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -3045,4 +3061,96 @@ body.billing--sidebar-nav #billingSectionTabs {
   background: var(--surface-2, #f8fafc);
   margin-bottom: 4px;
   font-size: 12px;
+}
+
+/* FD-219–220: sfd bridge for doctor portal */
+.va-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 9px;
+  border-radius: var(--sfd-radius-sm, 7px);
+  font-family: var(--sfd-mono, var(--mono));
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+.va-badge-active { background: linear-gradient(180deg, #eaf3ec, #dcebe0); color: #14532d; border-color: #bfdcc7; }
+.va-badge-paused { background: linear-gradient(180deg, #f3efe7, #eae4d6); color: #6b5a34; border-color: var(--sfd-border, #e8e4dc); }
+
+.pp-kelly-live .sfd-nameplate { margin-top: 4px; }
+
+.sfd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sfd-table th {
+  font-family: var(--sfd-mono, var(--mono));
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sfd-muted, var(--muted));
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--sfd-border, var(--border));
+}
+.sfd-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border2, #f1f5f9);
+  vertical-align: top;
+}
+.sfd-timeline-time { white-space: nowrap; width: 5rem; color: var(--muted); }
+
+.va-kelly-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 768px) {
+  .va-kelly-grid { grid-template-columns: 1fr; }
+}
+
+.pp-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 640px) {
+  .pp-kpi-row { grid-template-columns: 1fr; }
+}
+.pp-kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--pp-card-radius, 16px);
+  padding: 16px;
+}
+.pp-kpi-value {
+  font-family: var(--mono);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.pp-kpi-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.pp-calls-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr);
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .pp-calls-layout { grid-template-columns: 1fr; }
+}
+.pp-call-row.sfd-card-selected,
+.pp-call-row.is-active {
+  outline: 2px solid var(--somo-green, #16a637);
+  outline-offset: -2px;
 }

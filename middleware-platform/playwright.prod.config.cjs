@@ -24,6 +24,12 @@ module.exports = defineConfig({
       testMatch: '**/somo-prod-smoke.spec.cjs'
     },
     {
+      name: 'prod-homepage',
+      testDir: './e2e',
+      testMatch: '**/callsomo-homepage.spec.cjs',
+      use: { browserName: 'chromium' }
+    },
+    {
       name: 'prod-smoke-browser',
       testDir: './e2e',
       testMatch: '**/somo-landing.spec.cjs',

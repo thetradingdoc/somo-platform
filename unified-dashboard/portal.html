@@ -1,144 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Choose Portal - Somo</title>
-  <link rel="stylesheet" href="./assets/css/global.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>Somo — Choose portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-front-desk-components.css">
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/auth-somo.css">
   <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      background: linear-gradient(135deg, #16a637 0%, #16a637 100%);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    .card {
-      width: 100%;
-      max-width: 520px;
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      padding: 28px;
-    }
-    .logo {
-      text-align: center;
-      margin-bottom: 16px;
-    }
-    .logo .brand {
-      font-size: 44px;
-      font-weight: 800;
-      color: #16a637;
-      letter-spacing: -2px;
-      font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      line-height: 1;
-    }
-    .logo .sub {
-      margin-top: 8px;
-      color: var(--gray-600);
-      font-size: 13px;
-    }
-    h1 {
-      margin: 16px 0 6px 0;
-      font-size: 22px;
-      color: var(--gray-900);
-      text-align: center;
-    }
-    p {
-      margin: 0 0 18px 0;
-      color: var(--gray-600);
-      font-size: 14px;
-      text-align: center;
-      line-height: 1.5;
-    }
-    .grid {
-      display: grid;
-      gap: 12px;
-      margin-top: 14px;
-    }
-    a.choice {
+    .portal-grid { display: grid; gap: 12px; margin-top: 16px; }
+    a.portal-choice {
       display: block;
       text-decoration: none;
-      border: 2px solid var(--gray-200);
+      border: 1px solid var(--sfd-border, #e8e4dc);
       border-radius: 14px;
       padding: 16px;
       color: inherit;
-      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-      background: #ffffff;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      background: #fff;
     }
-    a.choice:hover {
-      transform: translateY(-1px);
-      border-color: #16a637;
-      box-shadow: 0 12px 24px rgba(30, 64, 175, 0.16);
-    }
-    .choice-title {
-      font-weight: 800;
-      color: var(--gray-900);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .choice-desc {
-      margin-top: 6px;
-      color: var(--gray-600);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .pill {
-      display: inline-block;
-      font-size: 12px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      background: rgba(30, 64, 175, 0.08);
-      color: #16a637;
-      font-weight: 700;
-    }
-    .secondary-link {
-      display: inline-block;
-      margin-top: 10px;
-      font-size: 13px;
-      font-weight: 700;
-      color: #16a637;
-      text-decoration: none;
-    }
-    .secondary-link:hover {
-      text-decoration: underline;
-    }
+    a.portal-choice:hover { border-color: var(--somo-green, #16a637); box-shadow: 0 8px 20px rgba(22, 166, 55, 0.12); }
+    .portal-choice-title { font-weight: 700; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .portal-choice-desc { margin-top: 6px; color: var(--sfd-muted, #64748b); font-size: 14px; line-height: 1.5; }
+    .portal-secondary-link { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--somo-green, #16a637); }
   </style>
 </head>
-<body>
-  <div class="card">
-    <div class="logo">
-      <div class="brand">Somo</div>
-      <div class="sub">Healthcare at your home</div>
-    </div>
-    <h1>Sign in or create an account</h1>
-    <p>Choose your portal to continue.</p>
-
-    <div class="grid">
-      <a class="choice" href="./patients/patient-login.html">
-        <div class="choice-title">
-          <span class="pill">Patient Portal</span>
-          <span>Sign in / Create account</span>
-        </div>
-        <div class="choice-desc">Email → secure 6-digit code → appointments, payments, records.</div>
+<body class="signup-wizard-body">
+  <div class="login-shell">
+    <div class="login-main sfd-device-card">
+      <a href="/" class="signup-logo-link" aria-label="Somo home">
+        <img class="signup-logo-img" src="/unified-dashboard/assets/brand/somo-logo.png" alt="Somo" width="199" height="68" />
       </a>
+      <p class="signup-eyebrow">Welcome</p>
+      <h1 class="signup-title">Sign in or create an account</h1>
+      <p class="signup-sub">Choose your portal to continue.</p>
 
-      <a class="choice" href="/login">
-        <div class="choice-title">
-          <span class="pill">Provider Portal</span>
-          <span>Sign in</span>
-        </div>
-        <div class="choice-desc">Licensed providers. Email + password.</div>
-        <div class="choice-desc">
-          <a class="secondary-link" href="/signup">Create provider account →</a>
-        </div>
-      </a>
+      <div class="portal-grid">
+        <a class="portal-choice" href="./patients/patient-login.html">
+          <div class="portal-choice-title">
+            <span class="sfd-nameplate sfd-nameplate--connected sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>Patient</span>
+            <span>Sign in / Create account</span>
+          </div>
+          <div class="portal-choice-desc">Email → secure 6-digit code → appointments, payments, records.</div>
+        </a>
+
+        <a class="portal-choice" href="/login">
+          <div class="portal-choice-title">
+            <span class="sfd-nameplate sfd-nameplate--live sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>Provider</span>
+            <span>Sign in</span>
+          </div>
+          <div class="portal-choice-desc">Licensed providers. Email + password.</div>
+          <div class="portal-choice-desc">
+            <span class="portal-secondary-link">Create provider account →</span>
+          </div>
+        </a>
+      </div>
     </div>
   </div>
 </body>
 </html>
-

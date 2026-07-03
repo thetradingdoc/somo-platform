@@ -16,6 +16,7 @@
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/voice-agent-page.js"></script>
+  <script src="/assets/js/sfd-nameplate.js"></script>
 </head>
 <body class="provider-portal provider-portal--today" data-page="today">
   <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">
@@ -40,7 +41,8 @@
         <span class="pp-kelly-dot" aria-hidden="true"></span>
         <div>
           <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
-          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
+          <div id="ppKellyNameplate" style="margin:4px 0"></div>
+          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · copay</div>
           <div class="pp-kelly-phone" id="ppKellyPhone"></div>
         </div>
         <button type="button" class="pp-kelly-toggle" id="ppKellyToggle">Activate</button>
@@ -65,6 +67,7 @@
           <p class="pp-page-sub" id="ppHeroSubtitle">Welcome back — here's what needs attention today.</p>
         </div>
         <div class="pp-topbar-right">
+          <div id="ppTodayNameplate" style="margin-right:8px"></div>
           <div class="pp-date-chip" id="ppDateChip"></div>
           <a class="pp-btn pp-btn-outline pp-btn-sm pp-topbar-search" href="patients.html" id="ppSearchBtn">
             <span class="pp-inline-icon" aria-hidden="true"></span>
@@ -81,20 +84,40 @@
         <div class="pp-page-shell">
         <div class="pp-alert-strip pp-alert-strip--compact" id="ppAlertStrip" hidden aria-live="polite"></div>
 
-        <section class="pp-panel pp-panel--compact" id="ppOnboardingChecklist" data-testid="pp-onboarding-checklist" hidden>
-          <div class="pp-panel-head pp-panel-head--compact">
+        <section class="pp-panel pp-panel--compact sfd-card" id="go-live-checklist" data-testid="pp-onboarding-checklist" hidden>
+          <div class="pp-panel-head pp-panel-head--compact" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+            <div>
             <div class="pp-panel-title">Go-live checklist</div>
             <p class="pp-panel-sub" id="ppOnboardingChecklistSub">Complete these steps before speaking copay quotes on live calls.</p>
+            </div>
+            <button type="button" class="sfd-btn sfd-btn-ghost" id="ppOnboardingChecklistDismiss" style="flex-shrink:0;font-size:0.85rem" hidden>Dismiss</button>
           </div>
           <div class="pp-panel-body pp-panel-body--compact" id="ppOnboardingChecklistBody"></div>
+          <div class="pp-panel-body pp-panel-body--compact hidden" id="ppOnboardingChecklistCelebrate" hidden></div>
         </section>
 
         <div class="pp-kpi-row pp-kpi-row-4" id="kpiRow">
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
           <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
-          <div class="pp-kpi"><div class="pp-skeleton" style="height:60px;margin:0"></div></div>
         </div>
+
+        <section class="sfd-card" id="ppSyncCard" style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div>
+              <h3 style="margin:0">Practice system sync</h3>
+              <p class="sfd-muted" style="margin:6px 0 0">Kelly books to Somo until your PMS API connects. Your team receives a daily digest to enter appointments in Dentrix.</p>
+            </div>
+            <span id="ppSyncNameplate"></span>
+          </div>
+        </section>
+
+        <section class="sfd-card" id="ppRecentCallsTable" style="margin-bottom:16px" hidden>
+          <div class="pp-panel-head pp-panel-head--compact" style="padding:0 0 12px">
+            <div class="pp-panel-title">Recent calls today</div>
+          </div>
+          <div id="ppRecentCallsTableBody"></div>
+        </section>
 
         <div class="pp-dashboard-grid" id="ppDashboardBody">
           <div class="pp-dashboard-main">
@@ -102,7 +125,7 @@
               <div class="pp-panel-head pp-panel-head--compact">
                 <div>
                   <div class="pp-panel-title">Needs action</div>
-                  <div class="pp-panel-sub" id="journeyStripSub">Open RCM journeys</div>
+                  <div class="pp-panel-sub" id="journeyStripSub">Open payment follow-ups</div>
                 </div>
                 <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline">Pipeline</a>
               </div>
@@ -142,7 +165,7 @@
 
             <section class="pp-panel pp-panel--rail pp-panel--comms" id="ppRoiPanel" data-testid="pp-roi-panel">
               <div class="pp-panel-head pp-panel-head--compact">
-                <div class="pp-panel-title">Front desk ROI</div>
+                <div class="pp-panel-title">Office impact</div>
               </div>
               <div class="pp-panel-body pp-panel-body--compact" id="ppRoiBody">
                 <div class="pp-skeleton"></div>
@@ -285,9 +308,8 @@
       const el = document.getElementById('scheduleList');
       const sub = document.getElementById('scheduleSub');
       const list = activeAppointmentList();
-      const teleCount = list.filter(isTelehealth).length;
       const label = scheduleFilter === 'today' ? 'today' : scheduleFilter;
-      sub.textContent = `${list.length} appointment${list.length === 1 ? '' : 's'} · ${teleCount} telehealth · ${label}`;
+      sub.textContent = `${list.length} appointment${list.length === 1 ? '' : 's'} · ${label}`;
 
       if (!list.length) {
         el.innerHTML = '<div class="pp-empty">No appointments for this list.</div>';
@@ -440,32 +462,72 @@
     }
 
     function renderKpis(appts, metrics, messageCount, weekStats) {
-      const confirmed = appts.filter((a) => ['confirmed', 'arrived', 'in_room'].includes((a.status || '').toLowerCase())).length;
-      const upcoming = Math.max(appts.length - confirmed, 0);
-      const calls = appts.filter(isTelehealth).length;
-      const ws = weekStats || {};
+      const voice = metrics?.voice || {};
+      const callsToday = voice.calls_today ?? 0;
+      const insurance = voice.insurance_checks_today ?? 0;
+      const copays = voice.copays_collected_today ?? 0;
 
       document.getElementById('kpiRow').innerHTML = `
-        <div class="pp-kpi pp-kpi--flat">
-          <div class="pp-kpi-eyebrow">Upcoming appointments</div>
-          <div class="pp-kpi-val">${upcoming}</div>
-          ${trendHtml(computeTrendPercent(ws.upcomingThis, ws.upcomingLast))}
+        <div class="pp-kpi-card">
+          <div class="pp-kpi-value">${callsToday}</div>
+          <div class="pp-kpi-label">Calls today</div>
         </div>
-        <div class="pp-kpi pp-kpi--flat">
-          <div class="pp-kpi-eyebrow">Appointments</div>
-          <div class="pp-kpi-val">${appts.length}</div>
-          ${trendHtml(computeTrendPercent(ws.apptsThis, ws.apptsLast))}
+        <div class="pp-kpi-card">
+          <div class="pp-kpi-value">${insurance}</div>
+          <div class="pp-kpi-label">Insurance checks</div>
         </div>
-        <div class="pp-kpi pp-kpi--flat">
-          <div class="pp-kpi-eyebrow">Telehealth</div>
-          <div class="pp-kpi-val">${calls}</div>
-          ${trendHtml(computeTrendPercent(ws.callsThis, ws.callsLast))}
-        </div>
-        <div class="pp-kpi pp-kpi--flat">
-          <div class="pp-kpi-eyebrow">Messages</div>
-          <div class="pp-kpi-val">${messageCount}</div>
-          ${trendHtml(computeTrendPercent(ws.messagesThis, ws.messagesLast))}
+        <div class="pp-kpi-card">
+          <div class="pp-kpi-value">${copays}</div>
+          <div class="pp-kpi-label">Copays collected</div>
         </div>`;
+
+      const tableWrap = document.getElementById('ppRecentCallsTable');
+      const tableBody = document.getElementById('ppRecentCallsTableBody');
+      const recent = voice.recent_calls || [];
+      if (tableWrap && tableBody) {
+        if (!callsToday) {
+          tableWrap.hidden = true;
+        } else {
+          tableWrap.hidden = false;
+          if (!recent.length) {
+            tableBody.innerHTML = '<div class="sfd-empty-state"><p>No calls yet today — Kelly is ready when your line rings.</p></div>';
+          } else {
+            tableBody.innerHTML = `<table class="sfd-table"><thead><tr><th>Time</th><th>Caller</th><th>Outcome</th></tr></thead><tbody>${recent
+              .map((c) => {
+                const t = c.created_at ? new Date(c.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
+                const label = c.caller_label || 'Caller';
+                const out = window.VoiceAgentPage?.dispositionLabel?.(c.disposition || c.outcome) || c.outcome || '—';
+                return `<tr><td class="sfd-mono">${escapeHtml(t)}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(out)}</td></tr>`;
+              })
+              .join('')}</tbody></table>`;
+          }
+        }
+      }
+    }
+
+    async function loadVoiceDashboardMetrics() {
+      try {
+        const data = await VoiceAgentPage.fetchAgentStats();
+        return { voice: { ...(data.stats || {}), recent_calls: data.recent_calls || [] } };
+      } catch (_) {
+        return { voice: {} };
+      }
+    }
+
+    async function loadTodayNameplateAndSync() {
+      try {
+        const [status, integrations] = await Promise.all([
+          VoiceAgentPage.fetchVoiceAgentStatus().catch(() => null),
+          VoiceAgentPage.fetchIntegrationsStatus().catch(() => null)
+        ]);
+        if (status && window.SfdNameplate) {
+          SfdNameplate.mountNameplate(document.getElementById('ppTodayNameplate'), status.nameplate || status.label || 'LIVE');
+        }
+        const dentrix = integrations?.dentrix?.nameplate || 'MANUAL SYNC';
+        if (window.SfdNameplate) {
+          SfdNameplate.mountNameplate(document.getElementById('ppSyncNameplate'), dentrix);
+        }
+      } catch (_) {}
     }
 
     function renderPaymentAlerts(recentPayments, kellyActivity) {
@@ -708,7 +770,7 @@
         ? window.ppFetchRecentPayments(5)
         : Promise.resolve([]);
 
-      const [apptsTodayRes, apptsUpcomingRes, apptsThisRes, apptsLastRes, exceptionsRes, recentPayRes, railRes] = await Promise.allSettled([
+      const [apptsTodayRes, apptsUpcomingRes, apptsThisRes, apptsLastRes, exceptionsRes, recentPayRes, railRes, voiceMetricsRes] = await Promise.allSettled([
         window.ppFetchAppointmentsToday(),
         typeof window.ppFetchAppointmentsUpcoming === 'function' ? window.ppFetchAppointmentsUpcoming(25) : [],
         typeof window.ppFetchAppointmentsRange === 'function'
@@ -719,7 +781,8 @@
           : [],
         window.ppFetchRcmExceptions(),
         fetchRecentPayments,
-        loadRightRail()
+        loadRightRail(),
+        loadVoiceDashboardMetrics()
       ]);
 
       apptsToday = apptsTodayRes.status === 'fulfilled' ? apptsTodayRes.value : [];
@@ -731,7 +794,10 @@
       const rail = railRes.status === 'fulfilled' ? railRes.value : { calls: [], messages: [], kellyActivity: [] };
       const kellyActivity = rail.kellyActivity || [];
 
+      const voiceMetrics = voiceMetricsRes.status === 'fulfilled' ? voiceMetricsRes.value : { voice: {} };
+
       await loadJourneyStrip();
+      loadTodayNameplateAndSync();
 
       if (typeof window.ppFetchAppointmentsRecent === 'function') {
         try {
@@ -760,7 +826,7 @@
       renderPaymentAlerts(recentPayments, kellyActivity);
       renderExceptionAlerts(exceptions);
       if (typeof window.ppFlushAlertStrip === 'function') window.ppFlushAlertStrip();
-      renderKpis(apptsToday, {}, (rail.messages || []).length, weekStats);
+      renderKpis(apptsToday, voiceMetrics, (rail.messages || []).length, weekStats);
       renderSchedule();
       fetchRoiStats().then(renderRoi).catch(() => renderRoi(null));
 
@@ -810,49 +876,157 @@
       }
     }
 
+    function onboardingDismissKey(customerId) {
+      return `onboarding_checklist_dismissed_${customerId || 'unknown'}`;
+    }
+
     async function loadOnboardingChecklist() {
-      const panel = document.getElementById('ppOnboardingChecklist');
+      const panel = document.getElementById('go-live-checklist');
       const body = document.getElementById('ppOnboardingChecklistBody');
+      const celebrate = document.getElementById('ppOnboardingChecklistCelebrate');
+      const dismissBtn = document.getElementById('ppOnboardingChecklistDismiss');
       if (!panel || !body) return;
       try {
         const API_BASE = (window.API_BASE || window.location.origin).replace(/\/$/, '');
         const clinicId = localStorage.getItem('clinic_id');
         const clinicQ = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : '';
-        const [agentRes, dashRes, clinicRes, onboardRes] = await Promise.all([
+        const customer = (() => {
+          try {
+            return JSON.parse(sessionStorage.getItem('customer') || 'null');
+          } catch (_) {
+            return null;
+          }
+        })();
+        const customerEmail = customer?.email || '';
+        const customerId = customer?.id || '';
+        const [agentRes, dashRes, clinicRes, onboardRes, syncRes, calRes] = await Promise.all([
           fetch(`${API_BASE}/api/voice-agent/status`, { credentials: 'include' }).catch(() => null),
           fetch(`${API_BASE}/api/customer/dashboard`, { credentials: 'include' }).catch(() => null),
           fetch(`${API_BASE}/api/tenant/clinic${clinicQ}`, { credentials: 'include' }).catch(() => null),
           fetch(`${API_BASE}/api/voice-agent/onboarding`, { credentials: 'include' }).catch(() => null),
+          fetch(`${API_BASE}/api/tenant/pms/sync-status${clinicQ}`, { credentials: 'include' }).catch(() => null),
+          customerEmail
+            ? fetch(`${API_BASE}/api/calendar/status?email=${encodeURIComponent(customerEmail)}`, { credentials: 'include' }).catch(() => null)
+            : Promise.resolve(null),
         ]);
         const agent = agentRes?.ok ? await agentRes.json().catch(() => ({})) : {};
         const dash = dashRes?.ok ? await dashRes.json().catch(() => ({})) : {};
         const clinicData = clinicRes?.ok ? await clinicRes.json().catch(() => ({})) : {};
         const onboard = onboardRes?.ok ? await onboardRes.json().catch(() => ({})) : {};
+        const sync = syncRes?.ok ? await syncRes.json().catch(() => ({})) : {};
+        const cal = calRes?.ok ? await calRes.json().catch(() => ({})) : {};
+        const blockers = onboard.destination?.blockers || [];
+        const apiChecklist = onboard.destination?.checklist || [];
         const clinic = clinicData.clinic || {};
-        const kellyOn = !!(agent.enabled ?? agent.voice_agent_enabled);
-        const hasCalls = Number(dash.calls_this_week ?? dash.recent_calls?.length ?? 0) > 0;
-        const voiceSetupDone =
-          onboard.onboarding_state === 'voice_setup_complete' ||
-          onboard.onboarding_state === 'live' ||
-          !!clinic.pilot_live_at;
-        const transferSet = !!(clinic.transfer_number && String(clinic.transfer_number).replace(/\D/g, '').length >= 10);
-        const shadowStarted = !!clinic.shadow_week_active;
-        const isLive = !!clinic.pilot_live_at;
-        const items = [
-          { id: 'voice-setup', label: 'Complete Kelly voice setup (greeting, hours, transfer #)', done: voiceSetupDone, href: 'voice-setup.html' },
-          { id: 'forward-line', label: 'Forward your main office line to Kelly', done: transferSet && hasCalls, href: 'settings.html#practice' },
-          { id: 'test-call', label: 'Place a test call to your Kelly line', done: hasCalls, href: 'agent.html' },
-          { id: 'shadow-week', label: 'Run shadow week (copay logged, not spoken)', done: shadowStarted || isLive, href: 'settings.html#practice' },
-          { id: 'kelly-on', label: 'Turn Kelly on for live calls', done: kellyOn && isLive, href: 'agent.html' },
-        ];
+        const meta = onboard.onboarding_meta || {};
+
+        let items = apiChecklist.length
+          ? apiChecklist.map((item) => ({
+              id: item.id,
+              label: item.label,
+              done: !!item.done,
+              href: (item.href || '').replace(/^\/business\//, ''),
+              warn: item.severity === 'info' && !item.done
+            }))
+          : [];
+
+        if (!items.length) {
+          const kellyOn = !!(agent.enabled ?? agent.voice_agent_enabled);
+          const hasCalls = Number(dash.calls_this_week ?? dash.recent_calls?.length ?? 0) > 0;
+          const voiceSetupDone =
+            onboard.onboarding_state === 'voice_setup_complete' ||
+            onboard.onboarding_state === 'live' ||
+            !!clinic.pilot_live_at;
+          const transferSet = !!(clinic.transfer_number && String(clinic.transfer_number).replace(/\D/g, '').length >= 10);
+          const shadowStarted = !!clinic.shadow_week_active;
+          const isLive = !!clinic.pilot_live_at;
+          const calendarConnected = !!cal.connected;
+          const pmsManual =
+            !sync.pms_enabled &&
+            (sync.office_type === 'dental' || sync.pms_type === 'dentrix' || sync.pms_type === 'somo');
+          items = [
+            { id: 'voice-setup', label: 'Complete Kelly voice setup (greeting, hours, transfer #)', done: voiceSetupDone, href: 'voice-setup.html' },
+            { id: 'calendar', label: 'Connect Google Calendar or confirm Somo scheduling', done: calendarConnected || pmsManual, href: 'settings.html#connected' },
+            { id: 'forward-line', label: 'Forward your main office line to Kelly', done: !!meta.forward_line_ack || (transferSet && hasCalls), href: 'settings.html#profile' },
+            { id: 'test-call', label: 'Place a test call to your Kelly line', done: hasCalls, href: 'agent.html' },
+            { id: 'shadow-week', label: 'Run shadow week (copay logged, not spoken)', done: shadowStarted || isLive, href: 'settings.html#profile' },
+            { id: 'pms-manual', label: 'PMS manual sync — daily digest until Dentrix connects', done: sync.pms_enabled || !pmsManual, href: 'settings.html#connected', warn: pmsManual && !sync.pms_enabled },
+            { id: 'kelly-on', label: 'Turn Kelly on for live calls', done: kellyOn && isLive, href: 'agent.html' }
+          ];
+        }
+        if (blockers.includes('missing_dedicated_line')) {
+          items.unshift({
+            id: 'dedicated-line',
+            label: 'Dedicated Kelly line is provisioning — check back shortly',
+            done: false,
+            href: 'agent.html',
+            warn: true
+          });
+        }
         const pending = items.filter((i) => !i.done);
-        const forceShow = new URLSearchParams(window.location.search).get('onboarding');
+        const forceShow =
+          new URLSearchParams(window.location.search).get('onboarding') ||
+          window.location.hash === '#go-live-checklist';
+        const dismissed =
+          customerId && localStorage.getItem(onboardingDismissKey(customerId)) === '1';
+        if (dismissed && blockers.length === 0 && !forceShow) {
+          panel.hidden = true;
+          return;
+        }
+        const agentLabel = String(agent.nameplate || agent.label || '').toUpperCase();
+        const kellyLive = agentLabel === 'LIVE';
+        const noBlockers = blockers.length === 0;
         if (pending.length === 0 && !forceShow) {
+          if (celebrate && kellyLive && noBlockers) {
+            panel.hidden = false;
+            body.hidden = true;
+            celebrate.hidden = false;
+            celebrate.classList.remove('hidden');
+            celebrate.innerHTML = `
+              <div class="sfd-callout" style="margin:0">
+                <b>You're ready for live calls.</b> Kelly is live — monitor today's appointments and recent calls below.
+              </div>`;
+            if (dismissBtn) {
+              dismissBtn.hidden = false;
+              dismissBtn.onclick = () => {
+                if (customerId) localStorage.setItem(onboardingDismissKey(customerId), '1');
+                panel.hidden = true;
+              };
+            }
+            return;
+          }
           panel.hidden = true;
           return;
         }
         panel.hidden = false;
-        if (forceShow === 'checkout') {
+        if (dismissBtn) {
+          dismissBtn.hidden = false;
+          dismissBtn.onclick = () => {
+            if (customerId) localStorage.setItem(onboardingDismissKey(customerId), '1');
+            panel.hidden = true;
+          };
+        }
+        if (pending.length === 0) {
+          body.hidden = true;
+          if (celebrate && kellyLive && noBlockers) {
+            celebrate.hidden = false;
+            celebrate.classList.remove('hidden');
+            celebrate.innerHTML = `
+              <div class="sfd-callout" style="margin:0">
+                <b>You're ready for live calls.</b> Kelly is live — monitor today's appointments and recent calls below.
+              </div>`;
+          } else if (celebrate) {
+            celebrate.hidden = true;
+            celebrate.classList.add('hidden');
+          }
+        } else {
+          body.hidden = false;
+          if (celebrate) {
+            celebrate.hidden = true;
+            celebrate.classList.add('hidden');
+          }
+        }
+        if (new URLSearchParams(window.location.search).get('onboarding') === 'checkout') {
           const sub = document.getElementById('ppOnboardingChecklistSub');
           if (sub) sub.textContent = 'Subscription active — finish these steps to go live with Kelly.';
           if (typeof window.ppPushAlert === 'function') {
@@ -861,7 +1035,7 @@
               type: 'success',
               icon: 'check',
               message: 'Payment received. Complete the go-live checklist below.',
-              href: '#ppOnboardingChecklist',
+              href: '#go-live-checklist',
               ctaLabel: 'View checklist'
             });
             window.ppFlushAlertStrip();
@@ -870,11 +1044,18 @@
           url.searchParams.delete('onboarding');
           window.history.replaceState({}, document.title, url.pathname + url.search);
         }
-        body.innerHTML = items.map((item) => `
-          <div class="pp-onboard-row${item.done ? ' is-done' : ''}" data-testid="onboard-${item.id}">
-            <span class="pp-onboard-check">${item.done ? '✓' : '○'}</span>
+        body.innerHTML = items.map((item) => {
+          const checkCls = item.done ? 'sfd-check sfd-check--done' : item.warn ? 'sfd-check sfd-check--warn' : 'sfd-check';
+          const mark = item.done ? '✓' : item.warn ? '!' : '';
+          return `
+          <div class="sfd-checklist-item${item.done ? ' is-done' : ''}" data-testid="onboard-${item.id}">
+            <span class="${checkCls}">${mark}</span>
             <a href="${item.href}" class="pp-onboard-label">${escapeHtml(item.label)}</a>
-          </div>`).join('');
+          </div>`;
+        }).join('');
+        if (window.location.hash === '#go-live-checklist') {
+          requestAnimationFrame(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }
       } catch (_) {
         panel.hidden = true;
       }

@@ -81,13 +81,15 @@ async function createRcmPaymentRequest({
 
   const id = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const payToken = crypto.randomBytes(24).toString('hex');
+  const ttlHours = Number(process.env.RCM_PAY_TOKEN_TTL_HOURS || 24);
+  const expiresAt = new Date(Date.now() + ttlHours * 3600000).toISOString();
 
   db.db
     .prepare(
-      `INSERT INTO rcm_payments (id, clinic_id, journey_id, patient_id, amount, method, pay_token)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO rcm_payments (id, clinic_id, journey_id, patient_id, amount, method, pay_token, expires_at, session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(id, clinic, journeyId, patientId, amt, method, payToken);
+    .run(id, clinic, journeyId, patientId, amt, method, payToken, expiresAt, sessionId);
 
   db.db
     .prepare(
