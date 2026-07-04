@@ -79,10 +79,19 @@ function buildAiDisclosureLine(locale = 'en') {
 
 function prependAiDisclosure(text, { enabled = true, locale = 'en' } = {}) {
   if (!enabled) return String(text || '').trim();
-  const body = String(text || '').trim();
-  const line = buildAiDisclosureLine(locale);
+  const loc = String(locale || 'en').slice(0, 2);
+  let body = String(text || '').trim();
+  const line = buildAiDisclosureLine(loc);
+  body = body
+    .replace(/^This call may be recorded[^.]*\.\s*/i, '')
+    .replace(/^Esta llamada puede ser grabada[^.]*\.\s*/i, '')
+    .replace(/^Этот звонок может записываться[^.]*\.\s*/iu, '')
+    .trim();
   if (!body) return line;
-  if (body.toLowerCase().includes('automated assistant') || body.toLowerCase().includes('may be recorded')) {
+  if (
+    loc === 'en' &&
+    (body.toLowerCase().includes('automated assistant') || body.toLowerCase().includes('may be recorded'))
+  ) {
     return body;
   }
   return `${line} ${body}`;
@@ -171,6 +180,7 @@ function resolveCallOpeners(params = {}) {
     practiceName = null,
     callType = null,
     direction = null,
+    locale = null,
     now = new Date()
   } = params;
 
@@ -206,7 +216,10 @@ function resolveCallOpeners(params = {}) {
   const disclosureOn =
     settings?.ai_disclosure_enabled !== 0 && settings?.ai_disclosure_enabled !== false;
   if (inboundSource === 'default' && withinHours && disclosureOn) {
-    inboundText = prependAiDisclosure(inboundText, { enabled: true });
+    inboundText = prependAiDisclosure(inboundText, {
+      enabled: true,
+      locale: locale || settings.default_locale || customer?.default_locale || 'en'
+    });
   }
   // Name-first only applies when the opener actually asks for the caller's name.
   // Our defaults always do; a custom tenant greeting only counts if it asks.

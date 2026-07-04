@@ -15,6 +15,12 @@ const {
 } = require('../services/call-opener-resolver');
 
 describe('call-opener-resolver', () => {
+  test('prependAiDisclosure uses Russian line for ru locale', () => {
+    const out = prependAiDisclosure("Hi, I'm Kelly.", { enabled: true, locale: 'ru' });
+    expect(out).toMatch(/автоматическим помощником/i);
+    expect(out).not.toMatch(/automated assistant/i);
+  });
+
   test('prependAiDisclosure adds NY-style recording line', () => {
     const out = prependAiDisclosure('Hi, I am Kelly.', { enabled: true });
     expect(out).toMatch(/recorded/i);

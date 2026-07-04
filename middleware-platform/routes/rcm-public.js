@@ -4,8 +4,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const settlement = require('../services/rcm-payment-settlement');
+const { pilotRateLimit } = require('../middleware/pilot-rate-limit');
 
-router.get('/pay/:token', async (req, res) => {
+router.get('/pay/:token', pilotRateLimit('pay_link_lookup'), async (req, res) => {
   try {
     const ctx = await settlement.getPaymentContext(req.params.token);
     if (!ctx.success) {
@@ -42,7 +43,7 @@ router.get('/pay/:token', async (req, res) => {
   }
 });
 
-router.post('/pay/:token/create-intent', async (req, res) => {
+router.post('/pay/:token/create-intent', pilotRateLimit('pay_link_lookup'), async (req, res) => {
   try {
     const { requireSmsConsentForPayment, recordRcmSmsConsent } = require('../services/tcpa-consent-service');
     const row = db.db?.prepare('SELECT * FROM rcm_payments WHERE pay_token = ?').get(req.params.token);

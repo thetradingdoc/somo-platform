@@ -85,7 +85,50 @@ function seedE2eBookableProvider(clinicId, opts = {}) {
       provider_profile: JSON.stringify({ specialty }),
     });
   }
-  const profile = ProviderService.ensureProviderProfileForEmail(email, clinicId);
+  let profile = ProviderService.ensureProviderProfileForEmail(email, clinicId);
+  if (!profile?.id && dbModule.db) {
+    let customerId = customer?.id;
+    if (!customerId && dbModule.createCustomer) {
+      try {
+        const createdId = `cust_e2e_${crypto.randomBytes(6).toString('hex')}`;
+        dbModule.createCustomer({
+          id: createdId,
+          name: 'E2E Provider',
+          email,
+          provider_profile: { specialty },
+          status: 'active',
+          email_verified: true,
+          email_verified_at: new Date().toISOString()
+        });
+        customerId = createdId;
+      } catch (_) {}
+    }
+    if (!customerId) {
+      customerId = `cust_e2e_${crypto.randomBytes(6).toString('hex')}`;
+      try {
+        dbModule.db
+          .prepare(
+            `INSERT OR IGNORE INTO customers (id, name, email, customer_type, provider_profile, status, created_at)
+             VALUES (?, 'E2E Provider', ?, 'saas', ?, 'active', datetime('now'))`
+          )
+          .run(customerId, email, JSON.stringify({ specialty }));
+      } catch (_) {}
+    }
+    const providerId = `prov_e2e_${crypto.randomBytes(6).toString('hex')}`;
+    try {
+      dbModule.db
+        .prepare(
+          `INSERT OR REPLACE INTO provider_profiles (
+            id, clinic_id, user_id, display_name, email, specialty, languages,
+            license_states, credentials, supported_lanes, review_capacity,
+            min_rate, price_tier, accepts_urgent, accepts_emergency_triage, is_active,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, 'E2E Provider', ?, ?, '["en"]', '[]', '[]', '["sync","async"]', 5, 0, 2, 1, 0, 1, datetime('now'), datetime('now'))`
+        )
+        .run(providerId, clinicId, customerId, email, JSON.stringify([specialty]));
+      profile = ProviderService.getProviderProfileByEmail(email);
+    } catch (_) {}
+  }
   if (profile?.id) {
     try {
       dbModule.db
@@ -276,8 +319,8 @@ function seedBookingReady(sessionId, patientId, clinicId, opts = {}) {
     session_id: sessionId,
     patient_id: patientId || null,
     rag_result_id: ragId,
-    quality: opts.quality || 'itchy rash on arm',
-    onset: opts.onset || '1 week ago',
+    quality: opts.quality !== undefined ? opts.quality : 'itchy rash on arm',
+    onset: opts.onset !== undefined ? opts.onset : '1 week ago',
     severity: opts.severity ?? 3,
     provocation: opts.provocation || 'scratching',
     region: opts.region || 'arm',
@@ -1200,6 +1243,229 @@ function seedTenantPolicyJson(clinicId, policyJson = {}, opts = {}) {
   return { profileId: id, policy_json: json };
 }
 
+/**
+ * Dental front-desk session seed — prompt profile, triage disabled, conversation mode.
+ * Mirror dental-pstn-scenarios seedDentalSession + e2e-kelly-dental-copay seedDentalProfile.
+ */
+function seedDentalFrontDeskSession(sessionId, clinicId, scenario = {}) {
+  const { dbModule } = loadDb();
+  const { TriagePolicy } = require(path.join(__dirname, '..', '..', 'services', 'conversation-mode', 'tenant-policy'));
+  const KellyToolExecutor = getKellyToolExecutor();
+  const resolvedClinicId = clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
+
+  if (dbModule.db) {
+    const profileId = `prof_dental_e2e_${resolvedClinicId}`;
+    dbModule.db
+      .prepare(
+        `INSERT OR REPLACE INTO prompt_profiles (
+          id, clinic_id, name, specialty, system_prompt, allowed_tools, status, use_case, policy_json, updated_at
+        ) VALUES (?, ?, 'Dental E2E', 'Dental', 'dental e2e', ?, 'active', 'dental', ?, datetime('now'))`
+      )
+      .run(
+        profileId,
+        resolvedClinicId,
+        JSON.stringify([
+          'collect_insurance',
+          'request_patient_payment',
+          'schedule_appointment',
+          'transfer_call',
+          'cancel_appointment',
+          'search_appointments',
+          'reschedule_appointment',
+          'get_available_slots'
+        ]),
+        JSON.stringify({ triage_policy: TriagePolicy.DISABLED })
+      );
+  }
+
+  if (scenario.seedProvider !== false) {
+    try {
+      seedE2eBookableProvider(resolvedClinicId, { specialty: 'Dental', targetSpecialty: 'Dental' });
+    } catch (e) {
+      if (!scenario.allowProviderSeedFailure) throw e;
+    }
+  }
+
+  KellyToolExecutor._setSessionMeta(sessionId, 'kelly_e2e_skip_triage', '1');
+  KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '1');
+  KellyToolExecutor._setSessionMeta(sessionId, 'clinic_id', resolvedClinicId);
+  KellyToolExecutor._setSessionMeta(sessionId, 'visit_reason', scenario.visit_reason || 'cleaning');
+  KellyToolExecutor._setSessionMeta(sessionId, 'target_specialty', 'Dental');
+  if (scenario.family_caller) KellyToolExecutor._setSessionMeta(sessionId, 'family_caller', '1');
+  if (scenario.after_hours) KellyToolExecutor._setSessionMeta(sessionId, 'after_hours', '1');
+  if (scenario.stedi_timeout || scenario.thinEligibility) {
+    KellyToolExecutor._setSessionMeta(sessionId, 'stedi_simulate_timeout', '1');
+  }
+
+  try {
+    const { seedModeAtCallStart } = require(path.join(__dirname, '..', '..', 'services', 'conversation-mode', 'conversation-mode-session'));
+    seedModeAtCallStart({
+      sessionId,
+      clinicId: resolvedClinicId,
+      call_type: 'tenant',
+      direction: 'inbound',
+      firstUtterance: scenario.utterances?.[0] || '',
+      tenantResolved: true,
+      tenantPolicy: { triage_policy: TriagePolicy.DISABLED, billing_enabled: true }
+    });
+  } catch (_) {}
+
+  return { clinicId: resolvedClinicId, profileId: `prof_dental_e2e_${resolvedClinicId}` };
+}
+
+/**
+ * Set tenant language_mode for multilang eval (clinics.language_pack + voice_agent_settings).
+ */
+function seedMultilangSession({ clinicId, language_mode = 'en_only', customerId } = {}) {
+  const { dbModule } = loadDb();
+  const { normalizeLanguageConfig } = require(path.join(__dirname, '..', '..', 'services', 'tenant-language-config'));
+  const resolvedClinicId = clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
+  const cfg = normalizeLanguageConfig({ language_mode });
+  if (!dbModule.db) return cfg;
+
+  try {
+    const merchantId = `merchant-e2e-${resolvedClinicId.replace(/[^a-z0-9]/gi, '').slice(-16)}`;
+    const clinicRow = dbModule.db
+      .prepare('SELECT clinic_id FROM clinics WHERE clinic_id = ?')
+      .get(resolvedClinicId);
+    if (!clinicRow) {
+      const slug = `e2e-${resolvedClinicId.replace(/[^a-z0-9]/gi, '').slice(-12).toLowerCase()}`;
+      dbModule.db
+        .prepare(
+          `INSERT INTO clinics (clinic_id, merchant_id, name, slug, language_pack, updated_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))`
+        )
+        .run(resolvedClinicId, merchantId, 'E2E Dental Clinic', slug, cfg.language_mode);
+    } else {
+      dbModule.db
+        .prepare(`UPDATE clinics SET language_pack = ?, updated_at = datetime('now') WHERE clinic_id = ?`)
+        .run(cfg.language_mode, resolvedClinicId);
+    }
+  } catch (_) {}
+
+  try {
+    const merchantId = `merchant-e2e-${resolvedClinicId.replace(/[^a-z0-9]/gi, '').slice(-16)}`;
+    const existing = dbModule.db
+      .prepare(`SELECT id FROM voice_agent_settings WHERE clinic_id = ? LIMIT 1`)
+      .get(resolvedClinicId);
+    const supportedJson = JSON.stringify(cfg.supported_languages);
+    if (existing?.id) {
+      dbModule.db
+        .prepare(
+          `UPDATE voice_agent_settings
+           SET language_mode = ?, supported_languages = ?, merchant_id = COALESCE(merchant_id, ?), updated_at = datetime('now')
+           WHERE id = ?`
+        )
+        .run(cfg.language_mode, supportedJson, merchantId, existing.id);
+    } else {
+      const vasId = `${merchantId}:${resolvedClinicId}`;
+      dbModule.db
+        .prepare(
+          `INSERT INTO voice_agent_settings (id, merchant_id, clinic_id, language_mode, supported_languages, updated_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))`
+        )
+        .run(vasId, merchantId, resolvedClinicId, cfg.language_mode, supportedJson);
+    }
+  } catch (_) {}
+
+  const resolvedCustomerId =
+    customerId || dbModule.getCustomerIdForClinic?.(resolvedClinicId) || null;
+  if (resolvedCustomerId && dbModule.upsertVoiceAgentSettings) {
+    try {
+      dbModule.upsertVoiceAgentSettings(
+        null,
+        {
+          language_mode: cfg.language_mode,
+          supported_languages: cfg.supported_languages
+        },
+        resolvedCustomerId,
+        { clinicId: resolvedClinicId }
+      );
+    } catch (_) {}
+  }
+
+  return cfg;
+}
+
+/**
+ * Pre-seed appointment for cancellation/reschedule scenarios.
+ */
+async function seedAppointmentForPatient({ patientId, clinicId, patientName, patientPhone, patientEmail, when } = {}) {
+  const { dbModule } = loadDb();
+  const resolvedClinicId = clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
+  if (!patientId) {
+    throw new Error('seedAppointmentForPatient: patientId required');
+  }
+
+  seedE2eBookableProvider(resolvedClinicId, { specialty: 'Dental', targetSpecialty: 'Dental' });
+
+  const resolvedPhone =
+    patientPhone || require('./e2e-phone.cjs').e2eTestPhoneE164();
+  const rid = String(patientId).replace(/^Patient\//, '');
+  const resourceId = patientId.startsWith('Patient/') ? patientId : rid;
+  let fhirPatient = dbModule.getFHIRPatient?.(resourceId) || dbModule.getFHIRPatient?.(rid);
+  if (!fhirPatient && dbModule.db) {
+    dbModule.db
+      .prepare(
+        `INSERT OR IGNORE INTO fhir_patients (resource_id, resource_data, phone, name, is_deleted)
+         VALUES (?, ?, ?, ?, 0)`
+      )
+      .run(
+        resourceId,
+        JSON.stringify({
+          resourceType: 'Patient',
+          id: rid,
+          name: [{ family: 'E2E', given: [String(patientName || 'Dental').split(/\s+/)[0] || 'E2E'] }],
+          birthDate: '1990-01-15'
+        }),
+        resolvedPhone,
+        patientName || 'E2E Dental Patient'
+      );
+    fhirPatient = dbModule.getFHIRPatient?.(resourceId) || dbModule.getFHIRPatient?.(rid);
+  }
+  const apptPatientId = fhirPatient?.resource_id || resourceId;
+
+  const slot = when || tomorrowAtNoonLocal();
+  const apptId = `appt_dental_e2e_${crypto.randomBytes(6).toString('hex')}`;
+  await dbModule.createAppointment({
+    id: apptId,
+    clinic_id: resolvedClinicId,
+    patient_id: apptPatientId,
+    patient_name: patientName || 'E2E Dental Patient',
+    patient_email: patientEmail || 'e2e-dental@somo.test',
+    patient_phone: resolvedPhone,
+    appointment_type: 'Dental Cleaning',
+    date: slot.dateStr,
+    time: slot.time || '12:00',
+    start_time: slot.startDatetime,
+    end_time: slot.endDatetime,
+    duration_minutes: 30,
+    provider: process.env.RCM_E2E_PROVIDER_EMAIL || 'provider@callsomo.com',
+    status: 'scheduled',
+    visit_mode: 'in_person'
+  });
+
+  const KellyToolExecutor = getKellyToolExecutor();
+  return { appointmentId: apptId, date: slot.dateStr, time: slot.time, patientId: apptPatientId };
+}
+
+/**
+ * Per-scenario teardown — session meta + optional appointment rows for shared clinic isolation.
+ */
+function teardownMultilangScenario({ sessionId, appointmentId, patientId } = {}) {
+  if (sessionId) teardownKellySession(sessionId);
+  const { dbModule } = loadDb();
+  if (!dbModule.db) return;
+  try {
+    if (appointmentId) {
+      dbModule.db.prepare('DELETE FROM appointments WHERE id = ?').run(appointmentId);
+    }
+    if (patientId) {
+      dbModule.db.prepare('DELETE FROM appointments WHERE patient_id = ?').run(patientId);
+    }
+  } catch (_) {}
+}
+
 module.exports = {
   newE2eSessionId,
   loadDb,
@@ -1208,6 +1474,10 @@ module.exports = {
   seedTriageComplete,
   seedBookingReady,
   seedPayReady,
+  seedDentalFrontDeskSession,
+  seedMultilangSession,
+  seedAppointmentForPatient,
+  teardownMultilangScenario,
   verifyBookingFixtureGates,
   assertClinicVisitPath,
   assertKellyState,

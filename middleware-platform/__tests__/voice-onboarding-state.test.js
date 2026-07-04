@@ -50,6 +50,21 @@ describe('voice-onboarding-state', () => {
     expect(dest.wizard_step).toBe(2);
   });
 
+  test('resolveOnboardingDestination includes blockers when db provided', () => {
+    const mockDb = {
+      db: { prepare: () => ({ get: () => ({ c: 0 }) }) },
+      getVoiceAgentSettingsForProvider: () => ({ greeting: 'Hi', enabled: 0 }),
+      getUserCalendarSettingsByEmail: () => null
+    };
+    db.customers.c1.onboarding_state = 'voice_setup_incomplete';
+    db.customers.c1.onboarding_meta_json = JSON.stringify({ wizard_step: 2 });
+    const dest = resolveOnboardingDestination(db.customers.c1, mockDb);
+    expect(dest.path).toContain('voice-setup.html');
+    expect(dest.wizard_step).toBe(2);
+    expect(Array.isArray(dest.blockers)).toBe(true);
+    expect(Array.isArray(dest.checklist)).toBe(true);
+  });
+
   test('resolveOnboardingDestination sends complete tenants to agent', () => {
     db.customers.c1.onboarding_state = 'live';
     const dest = resolveOnboardingDestination(db.customers.c1);

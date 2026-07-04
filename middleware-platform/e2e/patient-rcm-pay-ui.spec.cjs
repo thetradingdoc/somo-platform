@@ -855,3 +855,40 @@ test.describe('RCM public pay API — contract tests', () => {
   });
 
 });
+
+/* ------------------------------------------------------------------ */
+/*  Ring 3 — money path live Stripe (extends existing pay UI coverage)   */
+/* ------------------------------------------------------------------ */
+test.describe('Ring 3 — RCM money path pay link', () => {
+  test('requested status + amount display for Kelly-created payment', async ({ page, request: apiCtx }) => {
+    const KellyToolExecutor = require('../services/kelly-tool-executor');
+    const sessionId = `ring3_${Date.now()}`;
+    const clinicId = CLINIC;
+    const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
+    const patientId = `pat_ring3_${Date.now()}`;
+    fixtures.seedDentalFrontDeskSession(sessionId, clinicId, {});
+    fixtures.seedPayReady(sessionId, patientId, clinicId, { targetSpecialty: 'Dental', copayAmount: 25 });
+    KellyToolExecutor._setSessionMeta(sessionId, 'quote_delivered', '1');
+    KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', 'hard_number');
+    KellyToolExecutor._setSessionMeta(sessionId, 'patient_identity_verified', '1');
+    KellyToolExecutor._setSessionMeta(sessionId, 'resolved_patient_id', patientId);
+
+    const pay = await KellyToolExecutor.execute(
+      'request_patient_payment',
+      { amount: 25, delivery: 'sms' },
+      { sessionId, clinicId, patientId, callerPhone: '+15551112233', channel: 'voice' }
+    );
+    expect(pay.success).not.toBe(false);
+    expect(pay.pay_token).toBeTruthy();
+
+    const ctxRes = await apiCtx.get(`${BASE}/api/public/rcm/pay/${pay.pay_token}`);
+    expect(ctxRes.ok()).toBeTruthy();
+    const body = await ctxRes.json();
+    expect(body.payment.status).toBe('requested');
+    expect(body.payment.amount).toBe(25);
+
+    await page.goto(`${BASE}/patients/pay.html?token=${pay.pay_token}`);
+    await expect(page.locator('#amount-display')).toContainText('$25');
+    await expect(page.locator('#btn-pay-card')).toBeVisible();
+  });
+});

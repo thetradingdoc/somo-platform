@@ -9,7 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-front-desk-components.css" />
   <link rel="stylesheet" href="/unified-dashboard/assets/css/signup-somo.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/auth-somo.css" />
   <style>
     /* Critical: works even if a stylesheet request fails */
     [data-signup-step].hidden { display: none !important; }
@@ -23,7 +25,7 @@
       <button type="button" class="signup-back" id="signupBack" aria-label="Go back">←</button>
     </header>
 
-    <div class="signup-wizard" data-testid="signup-wizard">
+    <div class="signup-wizard login-main sfd-device-card" data-testid="signup-wizard">
     <a href="/" class="signup-logo-link" aria-label="Somo home">
       <img
         class="signup-logo-img"

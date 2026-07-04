@@ -103,11 +103,35 @@ function languagesFromProviderProfile(customer) {
 }
 
 function getTenantVoiceLanguageConfig(db, { clinicId, customerId, merchantId } = {}) {
-  if (!db?.getVoiceAgentSettingsForProvider) {
-    return normalizeLanguageConfig({});
+  if (!db) return normalizeLanguageConfig({});
+
+  if (clinicId && db.db) {
+    try {
+      const row = db.db
+        .prepare(
+          `SELECT language_mode, supported_languages FROM voice_agent_settings
+           WHERE clinic_id = ? LIMIT 1`
+        )
+        .get(clinicId);
+      if (row?.language_mode) return normalizeLanguageConfig(row);
+    } catch (_) {}
   }
-  const row = db.getVoiceAgentSettingsForProvider({ clinicId, customerId, merchantId });
-  return normalizeLanguageConfig(row || {});
+
+  if (clinicId && db.getClinic) {
+    try {
+      const clinic = db.getClinic(clinicId);
+      if (clinic?.language_pack) {
+        return normalizeLanguageConfig({ language_mode: clinic.language_pack });
+      }
+    } catch (_) {}
+  }
+
+  if (db.getVoiceAgentSettingsForProvider) {
+    const row = db.getVoiceAgentSettingsForProvider({ clinicId, customerId, merchantId });
+    if (row?.language_mode) return normalizeLanguageConfig(row);
+  }
+
+  return normalizeLanguageConfig({});
 }
 
 module.exports = {

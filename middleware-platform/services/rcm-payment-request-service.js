@@ -81,13 +81,15 @@ async function createRcmPaymentRequest({
 
   const id = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const payToken = crypto.randomBytes(24).toString('hex');
+  const ttlHours = Number(process.env.RCM_PAY_TOKEN_TTL_HOURS || 24);
+  const expiresAt = new Date(Date.now() + ttlHours * 3600000).toISOString();
 
   db.db
     .prepare(
-      `INSERT INTO rcm_payments (id, clinic_id, journey_id, patient_id, amount, method, pay_token)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO rcm_payments (id, clinic_id, journey_id, patient_id, amount, method, pay_token, expires_at, session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(id, clinic, journeyId, patientId, amt, method, payToken);
+    .run(id, clinic, journeyId, patientId, amt, method, payToken, expiresAt, sessionId);
 
   db.db
     .prepare(
@@ -146,6 +148,18 @@ async function createRcmPaymentRequest({
   };
 }
 
+async function resolveClinicDisplayName(clinicId) {
+  if (!clinicId) return process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
+  try {
+    const row = db.db
+      ?.prepare(`SELECT name FROM clinics WHERE clinic_id = ? LIMIT 1`)
+      .get(clinicId);
+    return row?.name || process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
+  } catch (_) {
+    return process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
+  }
+}
+
 async function notifyPatientPaymentLink({
   payUrl,
   amount,
@@ -153,13 +167,17 @@ async function notifyPatientPaymentLink({
   patientPhone,
   delivery = 'both',
   clinicId = null,
+  locale = 'en',
+  messageKind = 'copay',
 }) {
+  const clinicName = await resolveClinicDisplayName(clinicId);
   const order = {
     product_name: 'Copay / balance due',
     amount: Number(amount) || 0,
+    merchant_name: clinicName,
   };
   const mode = String(delivery || 'both').toLowerCase();
-  const results = { email: null, sms: null };
+  const results = { email: null, sms: null, sms_body: null, sms_locale: null };
 
   if ((mode === 'email' || mode === 'both') && patientEmail) {
     try {
@@ -173,13 +191,19 @@ async function notifyPatientPaymentLink({
   if ((mode === 'sms' || mode === 'both') && patientPhone) {
     try {
       const SMSService = require('./sms-service');
-      results.sms = await SMSService.sendPaymentLink(
-        patientPhone,
-        payUrl,
-        order,
-        null,
-        clinicId
-      );
+      if (messageKind === 'copay') {
+        results.sms = await SMSService.sendCopayPaymentLink(
+          patientPhone,
+          payUrl,
+          { locale, clinicName, amount: order.amount },
+          null,
+          clinicId
+        );
+      } else {
+        results.sms = await SMSService.sendPaymentLink(patientPhone, payUrl, order, null, clinicId);
+      }
+      results.sms_body = results.sms?.sms_body || null;
+      results.sms_locale = results.sms?.sms_locale || String(locale || 'en').slice(0, 2);
     } catch (err) {
       results.sms = { success: false, error: err.message };
     }

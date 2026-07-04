@@ -39,3 +39,50 @@ jobs:
       - name: Voice routing matrix smoke
         working-directory: ./middleware-platform
         run: npm run smoke:voice-routing-matrix
+
+      - name: Install Playwright browsers
+        working-directory: ./middleware-platform
+        run: PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers npx playwright install chromium --with-deps
+
+      - name: Prepare E2E database
+        working-directory: ./middleware-platform
+        run: |
+          mkdir -p var/db
+          DB_PATH=var/db/middleware-dev.db npm run migrate
+          ALLOW_DEMO_SEED=1 DB_PATH=var/db/middleware-dev.db npm run seed:demo || true
+
+      - name: Start middleware for E2E
+        working-directory: ./middleware-platform
+        env:
+          DB_PATH: var/db/middleware-dev.db
+          ADMIN_PORTAL_SECRET: ci-test-admin-secret
+          DEV_LIGHT_START: '1'
+          CATALOG_MASTER_SYNC_ENABLED: '0'
+          EHR_SYNC_ENABLED: '0'
+          NOTIFICATION_QUEUE_ENABLED: '0'
+          PORT: '4000'
+        run: |
+          node server.js &
+          echo $! > /tmp/middleware-e2e.pid
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4000/health && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:4000/health
+
+      - name: Playwright E2E (onboarding, doctor-portal, tenant-audit strict)
+        working-directory: ./middleware-platform
+        env:
+          DB_PATH: var/db/middleware-dev.db
+          PW_SKIP_LANDING: '1'
+          ADMIN_PORTAL_SECRET: ci-test-admin-secret
+          TENANT_AUDIT_STRICT: '1'
+          PLAYWRIGHT_BROWSERS_PATH: .playwright-browsers
+        run: |
+          npm run test:e2e:onboarding
+          npm run test:e2e:doctor-portal
+          npm run test:e2e:tenant-audit:strict
+
+      - name: Stop middleware
+        if: always()
+        run: kill "$(cat /tmp/middleware-e2e.pid)" 2>/dev/null || true

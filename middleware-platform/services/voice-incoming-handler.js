@@ -794,6 +794,12 @@ function createVoiceIncomingHandler(deps) {
               status: 'active',
               direction: metadata.direction || callDirection
             });
+            if (resolvedCustomerId) {
+              try {
+                const { setServerOnboardingMeta } = require('./voice-onboarding-state');
+                setServerOnboardingMeta(db, resolvedCustomerId, { forward_line_ack: true });
+              } catch (_) {}
+            }
             if (typeof db.upsertCallState === 'function') {
               db.upsertCallState(callId, {
                 customer_id: resolvedCustomerId,

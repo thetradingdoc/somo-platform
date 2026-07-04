@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-front-desk-components.css" />
   <link rel="stylesheet" href="/unified-dashboard/assets/css/signup-somo.css" />
   <style>
     .activation-wrap {
@@ -63,10 +64,10 @@
 
     <div class="signup-reveal" id="activationReveal" style="margin-top: 20px;">
       <p class="signup-reveal-label">Your Somo number</p>
-      <p class="signup-reveal-number" id="activationNumber" data-testid="activation-number">Loading…</p>
+      <p class="signup-reveal-number sfd-mono" id="activationNumber" data-testid="activation-number" style="font-family:var(--font-mono, 'Martian Mono', monospace)">Loading…</p>
       <p class="signup-reveal-trial" id="activationTrialMeta">60 free minutes · 7-day trial</p>
       <div class="signup-reveal-actions">
-        <a class="signup-btn signup-btn-primary" id="activationCall" href="#">Call my Somo line</a>
+        <a class="sfd-btn sfd-btn-secondary" id="activationCall" href="#">Call to test Kelly</a>
         <button type="button" class="signup-btn signup-btn-ghost" id="activationCopy">Copy number</button>
       </div>
     </div>
@@ -126,7 +127,7 @@
         }
 
         if (!customer?.id) {
-          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+          window.location.href = '/signup?redirect=' + encodeURIComponent(window.location.pathname);
           return;
         }
 

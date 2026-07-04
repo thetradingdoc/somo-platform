@@ -74,6 +74,13 @@ async function runDeterministicFrontDeskIntake(state, ctx) {
     state.flags.basic_intake_complete = true;
     state.flags.front_desk_intake_complete = true;
     state.active_lane = state.active_lane || KELLY_LANE.BASIC_INTAKE;
+    try {
+      const { primaryIntent } = require('../../conversation-mode/intent-detector');
+      const { UserIntent } = require('../../conversation-mode/conversation-mode-types');
+      if (primaryIntent(msg).intent === UserIntent.PAY_COPAY) {
+        return null;
+      }
+    } catch (_) {}
     return {
       reply:
         locale === 'es'

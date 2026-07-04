@@ -8,6 +8,8 @@
 | Signup / trial | `trial-lifecycle.test.js`, `billing-access-gate.test.js` | Staging: `test:e2e:staging-signup` |
 | Checkout / commerce | `stripe-webhook-canceled.test.js`, repo `verify-agentic-checkout.cjs` | Staging-dependent HTTP gates documented as norm |
 | RCM / Kelly | `rcm-tenant-isolation.test.js`, `rcm-payment-idempotency.test.js`, `e2e/kelly-rcm-golden-path.spec.cjs` | Conversation E2E: `test:e2e:rcm:conversation` |
+| RCM money path (Ring 3) | `rcm/money-path-gates.test.js`, `resolve-amount-due.test.js`, `rcm/payment-settlement.test.js` | `npm run test:rcm:money-path`; promotion gate `npm run verify:rcm-money-path` (Jest + dental-copay + structural dental-pstn). Strict: `RCM_MONEY_STRICT=1` only — not used by multilang eval. |
+| Multilang conversation eval | `scripts/kelly-multilang-conversation-eval.cjs` | `test:eval:multilang:smoke` (PR); full matrix nightly with `CONVERSATION_EVAL_STRICT=1`. Human sign-off: `verify:multilang-human-review`. |
 | Payor | `payor-*.test.js` suites | HTTP smoke optional with `RUN_PAYOR_HTTP_SMOKE=1` |
 | Reasoning | `reasoning-pipeline.test.js`, `reasoning-gates-fsm.test.js`, `result-summary-contract-guards.test.js` | CI: `npm run test:reasoning-regression` + `eval:reasoning:harness` |
 

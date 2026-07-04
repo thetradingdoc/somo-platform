@@ -10,8 +10,14 @@ const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent')
 const {
   getOnboardingState,
   transitionState,
-  resolveOnboardingDestination
+  resolveOnboardingDestination,
+  setServerOnboardingMeta
 } = require('../services/voice-onboarding-state');
+const {
+  buildOnboardingResponse,
+  resolveOnboardingBlockers
+} = require('../services/onboarding-blockers-service');
+const { resolveVoiceAgentStatus } = require('../services/nameplate-status-service');
 const {
   resolveCallOpeners,
   resolvePracticeDisplayName
@@ -107,6 +113,7 @@ function enrichSettingsRow(row, { customerId, clinicId } = {}) {
     out.porting_status = out.porting_status || 'not_started';
     out.clinic_id = clinic?.clinic_id || out.clinic_id || null;
     out.clinic_email = clinic?.email || null;
+    out.npi = clinic?.npi || null;
     return out;
 }
 
@@ -154,15 +161,45 @@ router.get('/onboarding', optionalCustomerAuth, requireVoiceSettingsAccess, asyn
         if (!customer) {
             return res.status(401).json({ success: false, error: 'Authentication required' });
         }
-        const destination = resolveOnboardingDestination(customer);
-        return res.json({
-            success: true,
-            onboarding_state: getOnboardingState(customer),
-            destination,
-            voice_setup_completed_at: customer.voice_setup_completed_at || null
-        });
+        return res.json({ success: true, ...buildOnboardingResponse(db, customer) });
     } catch (error) {
         console.error('Voice onboarding GET error:', error);
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+router.get('/onboarding/blockers', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const customer = getSessionCustomer(req);
+        if (!customer) {
+            return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
+        const { blockers, checklist } = resolveOnboardingBlockers(db, customer);
+        return res.json({ success: true, blockers, checklist });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+router.post('/onboarding/connect', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const customer = getSessionCustomer(req);
+        if (!customer) {
+            return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
+        const body = req.body || {};
+        const metaPatch = {};
+        if (body.pms_selection) metaPatch.pms_selection = String(body.pms_selection);
+        if (body.wizard_step != null) metaPatch.wizard_step = parseInt(body.wizard_step, 10) || 1;
+
+        const state = getOnboardingState(customer);
+        transitionState(db, customer.id, state === 'signup_started' ? 'voice_setup_incomplete' : state, metaPatch);
+        if (body.pms_selection === 'somo') {
+            setServerOnboardingMeta(db, customer.id, { calendar_connection: 'somo' });
+        }
+        const refreshed = db.getCustomer(customer.id);
+        return res.json({ success: true, ...buildOnboardingResponse(db, refreshed) });
+    } catch (error) {
         return res.status(500).json({ success: false, error: 'server_error', message: error.message });
     }
 });
@@ -181,7 +218,7 @@ router.post('/onboarding/activation-shown', optionalCustomerAuth, requireVoiceSe
         return res.json({
             success: true,
             onboarding_state: getOnboardingState(refreshed),
-            destination: resolveOnboardingDestination(refreshed)
+            destination: resolveOnboardingDestination(refreshed, db)
         });
     } catch (error) {
         return res.status(500).json({ success: false, error: 'server_error', message: error.message });
@@ -195,12 +232,16 @@ router.post('/onboarding/wizard-started', optionalCustomerAuth, requireVoiceSett
             return res.status(401).json({ success: false, error: 'Authentication required' });
         }
         const step = parseInt(req.body?.wizard_step, 10) || 1;
-        transitionState(db, customer.id, 'voice_setup_incomplete', { wizard_step: step });
+        const metaPatch = { wizard_step: step };
+        if (req.body?.pms_selection) metaPatch.pms_selection = String(req.body.pms_selection);
+        transitionState(db, customer.id, 'voice_setup_incomplete', metaPatch);
+        if (req.body?.pms_selection === 'somo') {
+            setServerOnboardingMeta(db, customer.id, { calendar_connection: 'somo' });
+        }
         const refreshed = db.getCustomer(customer.id);
         return res.json({
             success: true,
-            onboarding_state: getOnboardingState(refreshed),
-            destination: resolveOnboardingDestination(refreshed)
+            ...buildOnboardingResponse(db, refreshed)
         });
     } catch (error) {
         return res.status(500).json({ success: false, error: 'server_error', message: error.message });
@@ -359,7 +400,8 @@ async function handleSettingsSave(req, res) {
         coverage_hours = null,
         after_hours_action = null,
         ai_disclosure_enabled = undefined,
-        voice_reply_suppress_enabled = undefined
+        voice_reply_suppress_enabled = undefined,
+        npi = null
     } = body;
 
     const safeEnabled = !!enabled;
@@ -438,6 +480,12 @@ async function handleSettingsSave(req, res) {
     }
     if (clinic_email !== null && clinic?.clinic_id) {
         db.updateClinic(clinic.clinic_id, { email: String(clinic_email).trim() || null });
+    }
+    if (npi !== null && clinic?.clinic_id) {
+        const npiDigits = String(npi).replace(/\D/g, '').slice(0, 10);
+        if (npiDigits.length === 10) {
+            db.updateClinic(clinic.clinic_id, { npi: npiDigits });
+        }
     }
     if (normalizedHours && clinic?.clinic_id) {
         syncVoiceHoursToClinic(db, clinic.clinic_id, normalizedHours);
@@ -584,6 +632,78 @@ router.get('/config-status', optionalCustomerAuth, requireVoiceSettingsAccess, a
         });
     } catch (error) {
         console.error('Voice config-status error:', error);
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+function parseEventPayload(raw) {
+    if (!raw) return {};
+    try {
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (_) {
+        return {};
+    }
+}
+
+function buildTranscriptExcerpt(dbModule, callId) {
+    if (!callId || !dbModule?.listKellyCallEvents) return null;
+    const events = dbModule.listKellyCallEvents({ session_id: callId, limit: 100 });
+    const parts = [];
+    for (const ev of events) {
+        const payload = parseEventPayload(ev.payload_json);
+        const text = payload.user_text || payload.transcript || payload.assistant_text || payload.text;
+        if (text) parts.push(String(text).trim());
+    }
+    if (!parts.length) return null;
+    return parts.join(' ').slice(0, 500);
+}
+
+router.get('/status', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const customer = getSessionCustomer(req);
+        if (!customer) {
+            return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
+        const status = resolveVoiceAgentStatus(db, customer);
+        return res.json({ success: true, ...status });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+router.get('/test-call/latest', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const customer = getSessionCustomer(req);
+        if (!customer) {
+            return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
+        let call = null;
+        if (db.db) {
+            call = db.db
+                .prepare(
+                    `SELECT * FROM voice_call_log WHERE customer_id = ? ORDER BY datetime(created_at) DESC LIMIT 1`
+                )
+                .get(customer.id);
+        }
+        if (!call) {
+            return res.json({
+                success: false,
+                transcript_excerpt: null,
+                call_at: null,
+                duration_ms: null
+            });
+        }
+        const durationMs = call.call_duration_seconds
+            ? Math.round(Number(call.call_duration_seconds) * 1000)
+            : null;
+        return res.json({
+            success: true,
+            call_id: call.call_id,
+            transcript_excerpt: buildTranscriptExcerpt(db, call.call_id),
+            call_at: call.created_at,
+            duration_ms: durationMs
+        });
+    } catch (error) {
         return res.status(500).json({ success: false, error: 'server_error', message: error.message });
     }
 });

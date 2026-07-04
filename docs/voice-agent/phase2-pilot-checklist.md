@@ -15,7 +15,7 @@ Evidence: `middleware-platform/var/evidence/phase2/sandbox-acceptance.json`
 
 ## Deferred until paying customers (production)
 
-Plan todos: `fd2-prod-stedi`, `fd2-stedi-baa-enrollment` in [provider portal plan](/Users/ojrichard/.cursor/plans/provider_portal_production_20d1693f.plan.md).
+Plan todos: `fd2-prod-stedi`, `fd2-stedi-baa-enrollment` — see [PROD_VENDOR_GATES.md](./PROD_VENDOR_GATES.md).
 
 Code/scripts ready (run on prod when enrolled):
 
@@ -38,6 +38,8 @@ Manual ops still required:
 
 - [ ] Stedi **production** API key + real NPI enrolled per pilot tenant
 - [ ] `STEDI_TEST_MODE=0` on production voice
+- [ ] Vendor gates runbook: [PROD_VENDOR_GATES.md](./PROD_VENDOR_GATES.md)
+- [ ] Visual QA matrices: [PHASE5_VISUAL_QA_MATRIX.md](../design/PHASE5_VISUAL_QA_MATRIX.md), [INVENTORY_COMPLETION_MATRIX.md](../design/INVENTORY_COMPLETION_MATRIX.md)
 - [ ] Stripe **live** Connect (`STRIPE_BILLING_MODE=live`) — deferred until first paying customer
 - [ ] Shadow week on real calls — compare desk quotes vs `amount_resolution_log`
 - [ ] Enable copay speak + go live — `npm run setup:pilot-live -- --clinic-id <id>`

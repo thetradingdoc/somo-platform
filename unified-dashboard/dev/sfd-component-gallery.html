@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Somo — Front desk components</title>
+  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@600;700&family=Plus+Jakarta+Sans:wght@400;600&family=Martian+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-front-desk-components.css" />
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--sfd-paper); color: var(--sfd-ink); margin: 0; padding: 32px; }
+    h1 { font-family: 'League Spartan', sans-serif; }
+    section { max-width: 720px; margin-bottom: 40px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <h1>Front desk components (sfd-*)</h1>
+  <p class="sfd-muted">Visual QA for Phase 0 — Somo tokens only.</p>
+
+  <section>
+    <h2>Buttons</h2>
+    <div class="row">
+      <button type="button" class="sfd-btn sfd-btn-primary">Primary</button>
+      <button type="button" class="sfd-btn sfd-btn-secondary">Secondary</button>
+      <button type="button" class="sfd-btn sfd-btn-ghost">Ghost</button>
+      <button type="button" class="sfd-btn sfd-btn-danger-outline">Danger</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Nameplates</h2>
+    <div class="row">
+      <span class="sfd-nameplate sfd-nameplate--live"><span class="sfd-nameplate__led"></span>LIVE</span>
+      <span class="sfd-nameplate sfd-nameplate--paused"><span class="sfd-nameplate__led"></span>PAUSED</span>
+      <span class="sfd-nameplate sfd-nameplate--off"><span class="sfd-nameplate__led"></span>OFF</span>
+      <span class="sfd-nameplate sfd-nameplate--shadow"><span class="sfd-nameplate__led"></span>SHADOW</span>
+      <span class="sfd-nameplate sfd-nameplate--manual-sync"><span class="sfd-nameplate__led"></span>MANUAL SYNC</span>
+      <span class="sfd-nameplate sfd-nameplate--pending-invite sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>PENDING INVITE</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Stepper</h2>
+    <div id="demoStepper"></div>
+  </section>
+
+  <section>
+    <h2>Checklist</h2>
+    <div class="sfd-card">
+      <div class="sfd-checklist-item"><span class="sfd-check sfd-check--done">✓</span>Practice profile complete</div>
+      <div class="sfd-checklist-item"><span class="sfd-check"></span>Main line forwarded</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Callout</h2>
+    <div class="sfd-callout"><b>In the meantime:</b> Kelly books to your calendar and emails a daily digest until Dentrix connects.</div>
+  </section>
+
+  <section>
+    <h2>Fields</h2>
+    <div class="sfd-card" style="padding:16px">
+      <label class="sfd-field">
+        <span class="sfd-field-label">Work email</span>
+        <input class="sfd-input" type="email" placeholder="you@clinic.com" />
+      </label>
+      <label class="sfd-field" style="margin-top:12px">
+        <span class="sfd-field-label">Notes</span>
+        <textarea class="sfd-input" rows="3" placeholder="Optional context"></textarea>
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pill tabs</h2>
+    <div class="sfd-pill-tabs" role="tablist">
+      <button type="button" class="sfd-pill-tab active" role="tab" aria-selected="true">All</button>
+      <button type="button" class="sfd-pill-tab" role="tab" aria-selected="false">Scheduled</button>
+      <button type="button" class="sfd-pill-tab" role="tab" aria-selected="false">Cancelled</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Empty state &amp; skeleton</h2>
+    <div class="sfd-empty-state sfd-card" style="margin-bottom:16px"><p>No appointments yet — Kelly is ready when your line rings.</p></div>
+    <div class="sfd-card" style="padding:16px">
+      <div class="sfd-skeleton"><div class="sfd-skeleton-line"></div><div class="sfd-skeleton-line sfd-skeleton-line--short"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Table</h2>
+    <div class="sfd-card" style="padding:0;overflow:hidden">
+      <table class="sfd-table">
+        <thead><tr><th scope="col">Time</th><th scope="col">Caller</th><th scope="col">Outcome</th></tr></thead>
+        <tbody>
+          <tr><td class="sfd-mono">9:04 AM</td><td>Jane Doe</td><td>Booked</td></tr>
+          <tr><td class="sfd-mono">9:18 AM</td><td>Unknown</td><td>Transferred</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Modal</h2>
+    <button type="button" class="sfd-btn sfd-btn-primary" id="openDemoModal">Open modal</button>
+    <div class="sfd-modal-backdrop hidden" id="demoModalBackdrop" aria-hidden="true"></div>
+    <div class="sfd-modal hidden" id="demoModal" role="dialog" aria-modal="true" aria-labelledby="demoModalTitle">
+      <div class="sfd-modal-card">
+        <h3 id="demoModalTitle">Confirm action</h3>
+        <p class="sfd-muted">Kelly will pause and transfer new calls to your office line.</p>
+        <div class="row" style="margin-top:16px">
+          <button type="button" class="sfd-btn sfd-btn-primary" id="closeDemoModal">Got it</button>
+          <button type="button" class="sfd-btn sfd-btn-ghost" id="cancelDemoModal">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script src="/unified-dashboard/assets/js/sfd-stepper.js"></script>
+  <script>
+    window.SfdStepper.renderStepper(document.getElementById('demoStepper'), { current: 'connect', completedThrough: 2 });
+    const backdrop = document.getElementById('demoModalBackdrop');
+    const modal = document.getElementById('demoModal');
+    function setModal(open) {
+      backdrop?.classList.toggle('hidden', !open);
+      modal?.classList.toggle('hidden', !open);
+      if (backdrop) backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
+    document.getElementById('openDemoModal')?.addEventListener('click', () => setModal(true));
+    document.getElementById('closeDemoModal')?.addEventListener('click', () => setModal(false));
+    document.getElementById('cancelDemoModal')?.addEventListener('click', () => setModal(false));
+    backdrop?.addEventListener('click', () => setModal(false));
+  </script>
+</body>
+</html>

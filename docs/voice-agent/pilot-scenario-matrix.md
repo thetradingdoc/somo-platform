@@ -13,6 +13,27 @@ node scripts/dental-pstn-scenarios.cjs --scenario DENTAL-003 --json
 
 Env for replay: `VOICE_ELIGIBILITY_SIMULATE=1`, `KELLY_RAILS_V2=1`, `KELLY_RAILS_ROLLOUT_PCT=1`.
 
+## Ring 3 money-path gates
+
+```bash
+npm run test:rcm:money-path          # Jest gates (quote, identity, settlement)
+npm run verify:rcm-money-path          # Jest + dental-copay + dental-pstn scenarios
+npm run test:eval:multilang:smoke      # EN-1 conversation smoke (LLM)
+```
+
+### Run cadence and cost guardrails
+
+| Tier | When | Command | Approx. LLM cost |
+|------|------|---------|------------------|
+| PR / fast | Every push | `test:rcm:money-path` + structural PSTN (`DENTAL_PSTN_STRUCTURAL=1`) + `test:eval:multilang:smoke` | ~1 scenario |
+| Nightly | Scheduled | `CONVERSATION_EVAL_STRICT=1 npm run test:eval:multilang` (13 scenarios) | ~13+ calls |
+| Local iterative | Dev only | `--scenario=`, `--lang=`, `--intent=copay` | Subset only |
+| Pre-ticket evidence | Before product tickets | `MULTILANG_EVAL_RUNS=3 npm run test:eval:multilang` | Bounded retries; 2/3 majority |
+
+`RCM_MONEY_STRICT=1` gates money-path Jest only. `CONVERSATION_EVAL_STRICT=1` gates multilang harness (tools + disclosure + disposition + PHI). Do not conflate the two flags.
+
+Scenario registry: `e2e/scenario-registry/dental-front-desk.cjs` (DENTAL-001–011 + multilang EN/ES/RU/ZH).
+
 ## Scenario map
 
 | Craigslist intent | Scenario ID | Title | Expected tools | Live PSTN proof |

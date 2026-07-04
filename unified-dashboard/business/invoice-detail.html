@@ -414,32 +414,6 @@
 </head>
 
 <body class="provider-portal provider-portal--scroll">
-    <div class="layout">
-        <!-- Legacy sidebar removed at runtime by mountProviderPage() -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-subtitle" id="sidebarSubtitle">Healthcare at your home</div>
-            </div>
-
-            <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Populated by tenant config -->
-            </nav>
-
-            <div class="sidebar-footer">
-                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
-                    <div class="user-avatar" id="userAvatar">HP</div>
-                    <div class="user-details">
-                        <div class="user-name" id="userName">Healthcare Provider</div>
-                        <div class="user-role" id="userRole">Provider</div>
-                    </div>
-                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
-                        🚪
-                    </button>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Content -->
         <main class="main-content">
             <button class="back-btn" id="invoiceBackBtn" type="button">← Back to Invoices</button>
 
@@ -450,7 +424,6 @@
                 </div>
             </div>
         </main>
-    </div>
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
@@ -465,21 +438,6 @@
         document.getElementById('invoiceBackBtn')?.addEventListener('click', () => {
             window.location.href = invoiceBackHref();
         });
-
-        // Check authentication
-        if (sessionStorage.getItem('authenticated') !== 'true') {
-            window.location.href = '../login.html';
-        }
-
-        // User info handled by provider shell
-
-        // Logout function
-        function logout() {
-            sessionStorage.removeItem('authenticated');
-            sessionStorage.removeItem('userName');
-            sessionStorage.removeItem('userRole');
-            window.location.href = '../login.html';
-        }
 
         function startInvoiceDetailPage() {
             mountProviderPage({
@@ -505,6 +463,10 @@
                     credentials: 'include'
                 });
 
+                if (response.status === 401) {
+                    window.location.href = '../login.html';
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -581,6 +543,7 @@
             }
 
             container.innerHTML = `
+                <div class="sfd-card invoice-container-inner">
                 <div class="invoice-header">
                     <div>
                         <h1 class="invoice-title">Invoice ${invoice.invoice_number}</h1>
@@ -643,7 +606,7 @@
                 ${items.length > 0 ? `
                     <div class="items-section">
                         <h2 class="section-title">Line Items</h2>
-                        <table class="items-table">
+                        <table class="items-table sfd-table">
                             <thead>
                                 <tr>
                                     <th>Service Date</th>
@@ -679,7 +642,7 @@
                 <div class="payments-section">
                     <h2 class="section-title">Payment History</h2>
                     ${payments.length > 0 ? `
-                        <table class="payments-table">
+                        <table class="payments-table sfd-table">
                             <thead>
                                 <tr>
                                     <th>Payment Date</th>
@@ -702,8 +665,7 @@
                             </tbody>
                         </table>
                     ` : `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">💰</div>
+                        <div class="sfd-empty-state">
                             <p>No payments recorded yet</p>
                         </div>
                     `}
@@ -715,6 +677,7 @@
                         <div style="color: var(--gray-700); white-space: pre-wrap;">${invoice.notes}</div>
                     </div>
                 ` : ''}
+                </div>
             `;
             loadRcmPaymentsForInvoice(invoice);
         }

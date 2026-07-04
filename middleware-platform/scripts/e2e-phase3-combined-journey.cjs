@@ -25,15 +25,15 @@ function weekdayDate(daysAhead) {
 }
 
 function fallbackTimes(seed) {
-  const base = 10 + (seed % 5);
-  const min = (seed * 11) % 45 + 15;
+  const base = 8 + (seed % 8);
+  const min = ((seed * 13) % 4) * 15 + 15;
   const h12 = base > 12 ? base - 12 : base;
   const ampm = base >= 12 ? 'PM' : 'AM';
   return [`${h12}:${String(min).padStart(2, '0')} ${ampm}`];
 }
 
 async function bookWithRetries(sessionKey, uniqueName, phone) {
-  for (let dayOffset = 21; dayOffset <= 35; dayOffset++) {
+  for (let dayOffset = 14; dayOffset <= 60; dayOffset++) {
     const date = weekdayDate(dayOffset);
     const slots = await PmsBooking.getAvailableSlots(
       date,

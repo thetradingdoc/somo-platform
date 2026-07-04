@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Somo — Sales pipeline</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
   <link rel="stylesheet" href="/assets/css/admin-portal.css">
   <script src="/assets/js/config.js"></script>
 </head>
 <body>
   <aside id="admin-sidebar"></aside>
-  <main class="admin-crm-main">
+  <main class="admin-crm-main" data-testid="admin-pipeline-main">
     <div class="admin-crm-header admin-crm-header--pipeline">
       <h1 class="admin-crm-title">Sales pipeline</h1>
       <div class="admin-crm-header-actions">
@@ -49,7 +50,7 @@
     <div class="admin-crm-status-banner admin-crm-status-banner--warning" id="capWarn" style="display:none;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9L2.6 17.5A1.9 1.9 0 0 0 4.3 20.5h15.4a1.9 1.9 0 0 0 1.7-3L13.7 3.9a1.9 1.9 0 0 0-3.4 0z"/></svg>
       <span id="capWarnText"></span>
-      <button type="button" class="admin-crm-banner-close" onclick="this.parentElement.style.display='none'" aria-label="Dismiss">✕</button>
+      <button type="button" class="admin-crm-banner-close" data-action="dismiss-banner" aria-label="Dismiss">✕</button>
     </div>
 
     <div class="admin-crm-card" id="needs-phone">
@@ -64,7 +65,7 @@
         </div>
       </div>
       <p class="admin-crm-helper-text">Saved from scrape but missing a callable phone number. <strong>Enrich</strong> retries automatic contact lookup; <strong>Open</strong> lets you paste a website or phone manually. Nothing here is deleted automatically.</p>
-      <div id="needsPhoneList"><div class="admin-crm-skeleton" style="height:120px;margin:0 18px 18px;"></div></div>
+      <div id="needsPhoneList" data-testid="admin-needs-phone-list"><div class="admin-crm-skeleton" style="height:120px;margin:0 18px 18px;"></div></div>
       <div class="admin-crm-card-footer" id="needsPhoneFooter" style="display:none;justify-content:center;">
         <a href="#" class="admin-crm-card-footer-link" id="needsPhoneShowMore">Show more →</a>
       </div>
@@ -82,7 +83,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         <input type="text" id="queueSearch" placeholder="Search by clinic name, city, or specialty…">
       </div>
-      <div id="queueList"><div class="admin-crm-skeleton" style="height:200px;margin:0 18px 18px;"></div></div>
+      <div id="queueList" data-testid="admin-queue-list"><div class="admin-crm-skeleton" style="height:200px;margin:0 18px 18px;"></div></div>
       <div class="admin-crm-pagination" id="queuePagination"></div>
     </div>
 
@@ -94,7 +95,7 @@
         </div>
       </div>
       <div class="admin-crm-kanban-scroll">
-        <div class="admin-crm-kanban" id="kanbanBoard">
+        <div class="admin-crm-kanban" id="kanbanBoard" data-testid="admin-kanban-board">
           <div class="admin-crm-skeleton" style="height:300px;width:100%;margin:0 18px 18px;"></div>
         </div>
       </div>
@@ -102,6 +103,8 @@
   </main>
 
   <script src="/admin/assets/js/admin-shell.js"></script>
+  <script src="/admin/assets/js/admin-onboarding.js"></script>
+  <script src="/admin/assets/js/admin-convert-modal.js"></script>
   <script src="/admin/assets/js/admin-job-modal.js"></script>
   <script>
     const { apiFetch, esc, init, showToast, callLead: shellCallLead, confirmAction } = AdminShell;
@@ -170,6 +173,7 @@
         needsPhoneOffset += NEEDS_PHONE_PAGE;
         loadNeedsPhone(true);
       };
+      bindPipelineActions();
       loadLocationFilter();
       loadCapStatus();
       refreshAll();
@@ -177,6 +181,58 @@
         document.getElementById('needs-phone')?.scrollIntoView({ behavior: 'smooth' });
       }
     });
+
+    function bindPipelineActions() {
+      document.querySelector('[data-action="dismiss-banner"]')?.addEventListener('click', (e) => {
+        e.currentTarget.closest('.admin-crm-status-banner')?.style.setProperty('display', 'none');
+      });
+      document.getElementById('needsPhoneList')?.addEventListener('click', (e) => {
+        const enrichBtn = e.target.closest('[data-action="enrich-lead"]');
+        if (enrichBtn) {
+          e.stopPropagation();
+          enrichOne(enrichBtn.dataset.leadId);
+          return;
+        }
+        const openTarget = e.target.closest('[data-action="open-lead"]');
+        if (openTarget && !e.target.closest('input[type="checkbox"]')) {
+          location.href = `/admin/lead.html?id=${openTarget.dataset.leadId}`;
+        }
+      });
+      document.getElementById('needsPhoneList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('.admin-crm-lead-check');
+        if (cb) toggleNeedsPhoneSelect(cb.dataset.leadId, cb.checked);
+      });
+      document.getElementById('queueList')?.addEventListener('click', (e) => {
+        const callBtn = e.target.closest('[data-action="call-lead"]');
+        if (callBtn) {
+          e.stopPropagation();
+          doCall(callBtn.dataset.leadId, callBtn.dataset.leadName, callBtn);
+          return;
+        }
+        const convertBtn = e.target.closest('[data-action="convert-lead"]');
+        if (convertBtn) {
+          e.stopPropagation();
+          doConvert(convertBtn.dataset.leadId, convertBtn);
+          return;
+        }
+        const row = e.target.closest('[data-action="open-lead"]');
+        if (row) location.href = `/admin/lead.html?id=${row.dataset.leadId}`;
+      });
+      document.getElementById('queuePagination')?.addEventListener('click', (e) => {
+        const pageBtn = e.target.closest('[data-action="load-queue-page"]');
+        if (pageBtn) loadQueue(Number(pageBtn.dataset.page));
+      });
+      document.getElementById('kanbanBoard')?.addEventListener('click', (e) => {
+        const convertBtn = e.target.closest('[data-action="convert-lead"]');
+        if (convertBtn) {
+          e.stopPropagation();
+          doConvert(convertBtn.dataset.leadId, convertBtn);
+          return;
+        }
+        const card = e.target.closest('[data-action="open-lead"]');
+        if (card) location.href = `/admin/lead.html?id=${card.dataset.leadId}`;
+      });
+    }
 
     function locationQueryParams() {
       const params = {};
@@ -384,16 +440,16 @@
         }
         const html = leads.map((l) => `
           <div class="admin-crm-lead-row">
-            <label style="display:flex;align-items:center;gap:12px;flex:1;cursor:pointer;min-width:0;" onclick="event.stopPropagation()">
-              <input type="checkbox" class="admin-crm-lead-check" data-lead-id="${l.id}" ${selectedNeedsPhone.has(String(l.id)) ? 'checked' : ''} onchange="toggleNeedsPhoneSelect('${l.id}', this.checked)">
-              <div class="admin-crm-lead-info" style="min-width:0;" onclick="location.href='/admin/lead.html?id=${l.id}'">
+            <label style="display:flex;align-items:center;gap:12px;flex:1;cursor:pointer;min-width:0;">
+              <input type="checkbox" class="admin-crm-lead-check" data-lead-id="${esc(l.id)}" ${selectedNeedsPhone.has(String(l.id)) ? 'checked' : ''}>
+              <div class="admin-crm-lead-info" style="min-width:0;" data-action="open-lead" data-lead-id="${esc(l.id)}" role="link" tabindex="0">
                 <div class="admin-crm-lead-name">${esc(l.clinic_name)}</div>
                 <div class="admin-crm-lead-meta">${esc(l.location || '')} · ${esc(l.clinic_email || 'no email on file')}</div>
               </div>
             </label>
             <div class="admin-crm-lead-actions">
-              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();enrichOne('${l.id}')">Enrich</button>
-              <button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();location.href='/admin/lead.html?id=${l.id}'">Open</button>
+              <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="enrich-lead" data-lead-id="${esc(l.id)}">Enrich</button>
+              <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="open-lead" data-lead-id="${esc(l.id)}">Open</button>
             </div>
           </div>`).join('');
         if (append) container.insertAdjacentHTML('beforeend', html);
@@ -466,7 +522,7 @@
         container.innerHTML = verified.map((l) => renderRow(l)).join('');
         const pages = Math.ceil((r.total || 0) / 15);
         document.getElementById('queuePagination').innerHTML = pages <= 1 ? '' : Array.from({ length: Math.min(pages, 7) }, (_, i) =>
-          `<button class="admin-crm-page-btn${i === page ? ' active' : ''}" onclick="loadQueue(${i})">${i + 1}</button>`
+          `<button type="button" class="admin-crm-page-btn${i === page ? ' active' : ''}" data-action="load-queue-page" data-page="${i}">${i + 1}</button>`
         ).join('');
       } catch (e) {
         document.getElementById('queueList').innerHTML = `<p style="color:var(--muted);">Failed: ${esc(e.message)}</p>`;
@@ -474,22 +530,35 @@
     }
     window.loadQueue = loadQueue;
 
+    function leadPmsLabel(l) {
+      return l.pms_label || ((l.specialty || '').toLowerCase().includes('dental') ? 'Dentrix' : 'Somo interim');
+    }
+
+    function leadMetaLine(l) {
+      const parts = [
+        l.location,
+        leadPmsLabel(l),
+        (l.language_labels && l.language_labels.length) ? l.language_labels.join(', ') : null,
+      ].filter(Boolean);
+      return parts.map((p) => esc(p)).join(' · ');
+    }
+
     function renderRow(l) {
       const scoreCls = l.lead_score >= 70 ? ' high' : '';
       const canCall = isCallableLead(l);
       return `
-        <div class="admin-crm-lead-row" onclick="location.href='/admin/lead.html?id=${l.id}'">
+        <div class="admin-crm-lead-row" data-action="open-lead" data-lead-id="${esc(l.id)}" role="link" tabindex="0">
           <div class="admin-crm-lead-info" style="flex:1;min-width:0;">
             <div class="admin-crm-lead-name">${esc(l.clinic_name)}</div>
-            <div class="admin-crm-lead-meta">${esc(l.location)} · ${esc(l.specialty || '')}${(l.language_labels && l.language_labels.length) ? ` · ${esc(l.language_labels.join(', '))}` : ''}</div>
+            <div class="admin-crm-lead-meta">${leadMetaLine(l)}</div>
           </div>
           <div class="admin-crm-lead-actions">
             <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
             ${canCall
-              ? `<button class="btn btn-primary admin-crm-btn-sm" onclick="event.stopPropagation();doCall(${l.id},'${esc(l.clinic_name)}', this)">Call</button>`
+              ? `<button type="button" class="btn btn-primary admin-crm-btn-sm" data-action="call-lead" data-lead-id="${esc(l.id)}" data-lead-name="${esc(l.clinic_name)}">Call</button>`
               : `<span class="admin-crm-badge admin-crm-badge-muted">No phone</span>`}
             ${l.clinic_email
-              ? `<button class="admin-crm-btn-outline admin-crm-btn-sm" onclick="event.stopPropagation();doInvite('${l.id}', this)" title="Send pilot invite">Invite</button>`
+              ? `<button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" data-action="convert-lead" data-lead-id="${esc(l.id)}" title="Provision tenant immediately">Convert</button>`
               : ''}
           </div>
         </div>`;
@@ -500,24 +569,26 @@
     }
     window.doCall = doCall;
 
-    async function doInvite(id, btn) {
-      if (!confirmAction('Send pilot invite and move lead to Won?')) return;
+    async function doConvert(id, btn) {
       if (btn) btn.disabled = true;
       try {
-        const r = await apiFetch(`/api/admin/invites/from-lead/${id}`, {
-          method: 'POST',
-          body: JSON.stringify({ send_email: true, convert: true }),
+        await AdminConvertModal.openFromLeadId(id, {
+          onSuccess: () => refreshAll(),
+          fetchLead: async (leadId) => {
+            const r = await apiFetch(`/api/admin/leads/${leadId}`);
+            return r.lead || r;
+          }
         });
-        showToast('Pilot invite sent', 'success');
-        if (r.invite_url && navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(r.invite_url).catch(() => {});
-        }
-        refreshAll();
       } catch (e) {
         showToast(e.message, 'error');
       } finally {
         if (btn) btn.disabled = false;
       }
+    }
+    window.doConvert = doConvert;
+
+    async function doInvite(id, btn) {
+      return doConvert(id, btn);
     }
     window.doInvite = doInvite;
 
@@ -541,9 +612,10 @@
             <div class="admin-crm-kanban-col">
               <div class="admin-crm-kanban-col-head">${s.label} <span class="admin-crm-badge-count">${cards.length}</span></div>
               ${cards.map((l) => `
-                <div class="admin-crm-kanban-card" onclick="location.href='/admin/lead.html?id=${l.id}'">
-                  <div class="admin-crm-kanban-card-name">${esc(l.clinic_name)}</div>
-                  <div class="admin-crm-kanban-card-loc">${esc(l.location || '')}</div>
+                <div class="admin-crm-kanban-card" data-action="open-lead" data-lead-id="${esc(l.id)}" role="link" tabindex="0">
+                  <div class="admin-crm-kanban-card-name">${esc(l.clinic_name)}${s.key === 'won' ? ' <span class="sfd-nameplate sfd-nameplate--live sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>WON</span>' : ''}</div>
+                  <div class="admin-crm-kanban-card-loc">${leadMetaLine(l)}</div>
+                  ${s.key === 'won' && l.clinic_email ? `<button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" style="margin-top:8px" data-action="convert-lead" data-lead-id="${esc(l.id)}">Convert to customer</button>` : ''}
                 </div>
               `).join('')}
               ${!cards.length ? '<div class="admin-crm-kanban-empty">empty</div>' : ''}

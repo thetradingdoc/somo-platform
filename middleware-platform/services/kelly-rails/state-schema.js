@@ -35,8 +35,25 @@ const PAYMENT_SIGNALS = [
   'secure payment',
   'pay before',
   'send me a link',
+  'send me the link',
+  'send the link',
+  'text me',
+  'by text',
   'pay $',
   'copay now',
+  'how much',
+  'cost me',
+  'out of pocket',
+  'coverage',
+  'copago',
+  'cuánto',
+  'cuanto',
+  'pagar',
+  'seguro',
+  'сколько',
+  'страховка',
+  'оплат',
+  'before i book',
   '付款',
   '支付',
   '付款链接',
@@ -256,7 +273,7 @@ function routeOrchestratorLane(state = {}) {
   const db = require('../../database');
   const sessionRow = state.session_id && db.getTriageSession ? db.getTriageSession(state.session_id) : null;
   const { guardClinicalRoute } = require('./enter-clinical-lane');
-  const { isAdminBookingPhrase } = require('../conversation-mode/intent-detector');
+  const { isAdminBookingPhrase, isCostOrCopayInquiry } = require('../conversation-mode/intent-detector');
 
   function finalizeRoute(route) {
     return guardClinicalRoute(route, {
@@ -330,7 +347,7 @@ function routeOrchestratorLane(state = {}) {
     }
     return { lane: KELLY_LANE.BASIC_INTAKE, step: 'reason' };
   }
-  if (triageDisabled && !clinicalHit && /book|schedule|appointment|new patient|reschedule/i.test(msg)) {
+  if (triageDisabled && !clinicalHit && !isCostOrCopayInquiry(msg) && /book|schedule|appointment|new patient|reschedule/i.test(msg)) {
     return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
   }
 
@@ -364,12 +381,13 @@ function routeOrchestratorLane(state = {}) {
 
   if (
     opqrstOk &&
+    !isCostOrCopayInquiry(msg) &&
     /book|schedule|appointment|slot|tomorrow|noon|12:00|12 pm|available/i.test(msg)
   ) {
     return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
   }
 
-  if (flags.has_rag && flags.triage_complete && /book|schedule|appointment|slot/i.test(msg)) {
+  if (flags.has_rag && flags.triage_complete && !isCostOrCopayInquiry(msg) && /book|schedule|appointment|slot/i.test(msg)) {
     return { lane: KELLY_LANE.BOOKING, step: LANE_FIRST_STEP[KELLY_LANE.BOOKING] };
   }
 
@@ -395,7 +413,15 @@ function routeOrchestratorLane(state = {}) {
 }
 
 function paymentGateOpen(flags = {}) {
-  return !!(flags.appointment_id && flags.copay_amount != null);
+  const hasCopay = flags.copay_amount != null && Number.isFinite(Number(flags.copay_amount));
+  if (!hasCopay) return false;
+  const quoted =
+    flags.quote_delivered === true ||
+    flags.quote_delivered === '1' ||
+    flags.quote_delivered === 1 ||
+    flags.last_quote_status === 'hard_number';
+  if (quoted) return true;
+  return !!flags.appointment_id;
 }
 
 module.exports = {

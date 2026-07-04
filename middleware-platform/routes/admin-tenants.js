@@ -102,11 +102,17 @@ router.get('/', requireTenantsAccess, async (req, res) => {
             const phoneNumbers = db.getClinicPhoneNumbers(clinicId) || [];
 
             const billing = tenantHealth.enrichTenantRow(clinic);
+            const adminFields = tenantHealth.enrichTenantAdminFields(clinic, customerId);
 
             return {
                 clinic_id: clinicId,
+                customer_id: customerId || null,
                 name: clinic.name,
                 company_name: billing.company_name,
+                pms_type: adminFields.pms_type,
+                pms_enabled: adminFields.pms_enabled,
+                pending_invite: adminFields.pending_invite,
+                last_invoice: adminFields.last_invoice,
                 slug: clinic.slug,
                 email: clinic.email,
                 phone_number: clinic.phone_number,
@@ -121,6 +127,8 @@ router.get('/', requireTenantsAccess, async (req, res) => {
                 trial_status: billing.trial_status,
                 trial_expires_at: billing.trial_expires_at,
                 onboarding_state: billing.onboarding_state,
+                shadow_week_active: clinic.shadow_week_active === 1,
+                pilot_live_at: clinic.pilot_live_at || null,
                 plan_tier: billing.plan_tier,
                 minutes_remaining: billing.minutes_remaining,
                 credits: {
@@ -416,6 +424,8 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
         const phoneNumbers = db.getClinicPhoneNumbers(clinicId) || [];
 
         const billing = tenantHealth.enrichTenantRow(clinic);
+        const adminFields = tenantHealth.enrichTenantAdminFields(clinic, customerId);
+        const billingPayload = tenantHealth.buildBillingPayload(clinic, customerId);
         const deleteOptions = tenantDelete.getDeleteOptions(clinic);
         let eligibilityUsage = { checks_today: 0, checks_month: 0, daily_cap: 50 };
         let eligibilityAlert = null;
@@ -444,15 +454,22 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
             delete_options: deleteOptions,
             tenant: {
                 clinic_id: clinic.clinic_id,
+                customer_id: customerId || null,
                 name: clinic.name,
                 company_name: billing.company_name,
                 slug: clinic.slug,
                 email: clinic.email,
                 phone_number: clinic.phone_number,
+                pms_type: adminFields.pms_type,
+                pms_enabled: adminFields.pms_enabled,
+                pending_invite: adminFields.pending_invite,
+                last_invoice: adminFields.last_invoice,
                 subscription_status: billing.subscription_status,
                 trial_status: billing.trial_status,
                 trial_expires_at: billing.trial_expires_at,
                 onboarding_state: billing.onboarding_state,
+                shadow_week_active: clinic.shadow_week_active === 1,
+                pilot_live_at: clinic.pilot_live_at || null,
                 plan_tier: billing.plan_tier,
                 minutes_remaining: billing.minutes_remaining,
                 phone_numbers: phoneNumbers.map(p => ({
@@ -476,6 +493,7 @@ router.get('/:clinicId', requireTenantsAccess, async (req, res) => {
                 paid_remaining: Math.max(0, (credits.paid_credits_purchased || 0) - (credits.paid_credits_used || 0)),
                 expires_at: credits.free_credits_expires_at || null
             },
+            billing: billingPayload,
             usage: {
                 total_calls: calls.length,
                 total_minutes: Math.round(totalMinutes * 100) / 100,

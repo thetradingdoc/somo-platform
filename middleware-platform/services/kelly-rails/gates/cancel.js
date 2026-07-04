@@ -12,7 +12,7 @@ const {
 async function runDeterministicCancel(state, ctx) {
   if (state.active_lane !== KELLY_LANE.RESCHEDULE || state.step !== 'move_or_cancel') return null;
   if (!state.flags?.cancel_pending && !state.flags?.cancel_confirmed) return null;
-  if (state.flags?.reschedule_pending && !state.flags?.cancel_pending) return null;
+  if (state.flags?.reschedule_pending) return null;
 
   const locale = state.locale || 'en';
   const { appointmentId, toolsUsed: lookupTools } = await resolvePatientAppointment(state, ctx);

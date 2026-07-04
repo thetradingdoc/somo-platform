@@ -168,6 +168,17 @@
         row.querySelectorAll('input[type=time]').forEach((inp) => {
           inp.disabled = !enabled;
         });
+        let badge = row.querySelector('.sfd-nameplate--off');
+        if (!enabled) {
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'sfd-nameplate sfd-nameplate--off sfd-nameplate--sm';
+            badge.innerHTML = '<span class="sfd-nameplate__led"></span>OFF';
+            row.appendChild(badge);
+          }
+        } else if (badge) {
+          badge.remove();
+        }
       });
     }
 
@@ -183,6 +194,8 @@
       }
       emitChange();
     });
+
+    syncDisabled();
 
     return {
       getValue: () => getValue(container),

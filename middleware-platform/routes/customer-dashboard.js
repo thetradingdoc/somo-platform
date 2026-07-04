@@ -408,6 +408,15 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
         const VoiceAgentRuntime = require('../services/voice-agent-runtime');
         const { enrichCallRow, formatCopayDisplay } = require('../services/dashboard-call-enrichment');
 
+        let insuranceChecksToday = 0;
+        let copaysCollectedToday = 0;
+        for (const call of callsToday) {
+            const enriched = enrichCallRow(db, call);
+            const elig = String(enriched.eligibility_status || '').toLowerCase();
+            if (elig && elig !== 'pending' && elig !== 'unknown') insuranceChecksToday += 1;
+            if (enriched.copay_spoken || enriched.copay_collected) copaysCollectedToday += 1;
+        }
+
         const recentCalls = calls.slice(0, 10).map(call => {
             const enriched = enrichCallRow(db, call);
             let outcome = hasOutcomeCol ? call.outcome : null;
@@ -474,6 +483,8 @@ router.get('/agent/stats', authLimiter, async (req, res) => {
                 total_cost: calls.reduce((sum, c) => sum + (c.total_cost_usd || 0), 0),
                 cost_today: callsToday.reduce((sum, c) => sum + (c.total_cost_usd || 0), 0),
                 staff_minutes_saved_today: staffMinutesSaved,
+                insurance_checks_today: insuranceChecksToday,
+                copays_collected_today: copaysCollectedToday,
                 avg_assistant_latency_ms: avgAssistantLatencyMs,
                 voice_latency_slo_ms: VOICE_LATENCY_SLO_MS,
                 voice_latency_slo_met:

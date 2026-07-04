@@ -35,13 +35,15 @@ router.get('/', (req, res) => {
         payer_list_json: clinic.payer_list_json || null,
         office_type: clinic.office_type || null,
         shadow_week_active: clinic.shadow_week_active === 1,
+        shadow_week_ends_at: clinic.shadow_week_ends_at || null,
         pilot_live_at: clinic.pilot_live_at || null,
         copay_quote_speak_enabled: voiceCfg?.copay_quote_speak_enabled === true,
         eligibility_configured: Boolean(process.env.STEDI_API_KEY || process.env.STEDI_TEST_API_KEY)
       }
     });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    console.error('[tenant-clinic] GET failed:', e.message);
+    return res.status(500).json({ success: false, error: 'server_error' });
   }
 });
 
@@ -49,6 +51,17 @@ router.patch('/', (req, res) => {
   try {
     const clinicId = req.pmsClinicId;
     const body = req.body || {};
+    if (
+      body.pilot_live_at !== undefined
+      || body.shadow_week_active !== undefined
+      || body.shadow_week_ends_at !== undefined
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: 'forbidden',
+        message: 'Go-live and shadow week fields are admin-only.'
+      });
+    }
     const patch = {};
     for (const key of [
       'transfer_number',
@@ -58,9 +71,7 @@ router.patch('/', (req, res) => {
       'payer_list_json',
       'name',
       'email',
-      'phone_number',
-      'shadow_week_active',
-      'pilot_live_at'
+      'phone_number'
     ]) {
       if (body[key] !== undefined) patch[key] = body[key];
     }
@@ -86,7 +97,8 @@ router.patch('/', (req, res) => {
     const clinic = db.getClinicById(clinicId);
     return res.json({ success: true, clinic, flags });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    console.error('[tenant-clinic] PATCH failed:', e.message);
+    return res.status(500).json({ success: false, error: 'server_error' });
   }
 });
 

@@ -10,11 +10,11 @@ describe('kelly-asr-gate', () => {
     else process.env.KELLY_ASR_MIN_CONFIDENCE = prev;
   });
 
-  test('gate disabled when env unset', () => {
+  test('gate uses config default when env unset', () => {
     delete process.env.KELLY_ASR_MIN_CONFIDENCE;
-    expect(minAsrConfidence()).toBeNull();
+    expect(minAsrConfidence()).toBe(0.75);
     const r = evaluateAsr('hola', { confidence: 0.1 });
-    expect(r.allow).toBe(true);
+    expect(r.allow).toBe(false);
   });
 
   test('blocks below threshold', () => {

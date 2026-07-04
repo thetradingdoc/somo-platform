@@ -87,7 +87,7 @@ case "$cmd" in
       echo "ERROR: Kelly Rails env verification failed — fix Cloud Run env before accepting deploy."
       exit 1
     }
-    CLOUDRUN_PROFILE=production CONVERSATION_MODE_ROUTING=enforce KELLY_ALLOW_HYBRID_GRAPH=0 \
+    CLOUDRUN_PROFILE=production CONVERSATION_MODE_ROUTING=enforce KELLY_ALLOW_HYBRID_GRAPH=0 CLOUDRUN_VERIFY=1 \
       npm run verify:env-gates --prefix "$ROOT/middleware-platform" || {
       echo "ERROR: verify:env-gates failed — production profile must not use shadow routing."
       exit 1

@@ -2,6 +2,7 @@
 
 const db = require('../database');
 const { getClinicPmsSettings } = require('./pms/pms-store');
+const { escapeHtml } = require('../lib/somo-email-layout');
 
 function getSyncStatus(clinicId) {
   const settings = getClinicPmsSettings(clinicId);
@@ -81,6 +82,47 @@ function buildDigestCsv(clinicId, sinceIso) {
   return lines.join('\n');
 }
 
+function buildDigestHtml(clinic, status, appointments) {
+  const practice = escapeHtml(clinic?.name || 'Your practice');
+  const rows = (appointments || [])
+    .map(
+      (a) =>
+        `<tr><td>${escapeHtml(a.patient_name || '—')}</td><td>${escapeHtml(a.date || '')}</td><td>${escapeHtml(a.time || '')}</td><td>${escapeHtml(a.status || '')}</td><td>${escapeHtml(a.pms_sync_status || 'pending')}</td></tr>`
+    )
+    .join('');
+  const pending = Number(status?.pending_pms_writes || 0) + Number(status?.pending_sync_queue || 0);
+  const settingsUrl = escapeHtml(
+    `${String(process.env.BASE_URL || 'https://app.somo.health').replace(/\/$/, '')}/business/settings.html#connected`
+  );
+  return `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;color:#1a1a1a;max-width:640px;margin:0 auto;padding:24px;">
+  <h1 style="font-size:20px;margin-bottom:8px;">Somo appointment digest</h1>
+  <p style="color:#555;">${practice} — manual PMS sync mode</p>
+  <p><strong>${pending}</strong> appointment(s) pending PMS entry.</p>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;" cellpadding="8">
+    <thead><tr style="background:#f4f4f5;text-align:left;">
+      <th>Patient</th><th>Date</th><th>Time</th><th>Status</th><th>PMS sync</th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="5">No recent appointments</td></tr>'}</tbody>
+  </table>
+  <p style="margin-top:24px;"><a href="${settingsUrl}">Open Settings → Connected systems</a></p>
+</body></html>`;
+}
+
+function listRecentAppointments(clinicId, sinceIso) {
+  if (!db.db) return [];
+  const since = sinceIso || new Date(Date.now() - 7 * 86400000).toISOString();
+  return db.db
+    .prepare(
+      `SELECT id, patient_name, date, time, status, pms_sync_status, appointment_type, created_at
+       FROM appointments
+       WHERE clinic_id = ? AND datetime(created_at) >= datetime(?)
+       ORDER BY created_at DESC
+       LIMIT 50`
+    )
+    .all(clinicId, since);
+}
+
 async function sendDigestEmail(clinicId, { to, sinceIso } = {}) {
   const clinic = db.db?.prepare('SELECT name, email FROM clinics WHERE clinic_id = ?').get(clinicId);
   const recipient = to || clinic?.email;
@@ -89,12 +131,14 @@ async function sendDigestEmail(clinicId, { to, sinceIso } = {}) {
   }
   const csv = buildDigestCsv(clinicId, sinceIso);
   const status = getSyncStatus(clinicId);
-  const subject = `[Somo] Weekly appointment digest — ${clinic?.name || clinicId}`;
-  const body = `PMS sync status (E10 interim):\n\n${JSON.stringify(status, null, 2)}\n\nAppointments CSV attached inline:\n\n${csv}`;
+  const appointments = listRecentAppointments(clinicId, sinceIso);
+  const subject = `[Somo] Daily appointment digest — ${clinic?.name || clinicId}`;
+  const html = buildDigestHtml(clinic, status, appointments);
+  const text = `PMS sync status (E10 interim):\n\n${JSON.stringify(status, null, 2)}\n\nAppointments CSV:\n\n${csv}`;
   try {
     const EmailService = require('./email-service');
     if (typeof EmailService.sendEmail === 'function') {
-      await EmailService.sendEmail({ to: recipient, subject, text: body });
+      await EmailService.sendEmail({ to: recipient, subject, text, html });
     } else {
       console.log(JSON.stringify({ component: 'e10_digest', clinic_id: clinicId, to: recipient, subject }));
     }
@@ -105,4 +149,24 @@ async function sendDigestEmail(clinicId, { to, sinceIso } = {}) {
   }
 }
 
-module.exports = { getSyncStatus, buildDigestCsv, sendDigestEmail };
+function maybeTriggerDigestOnBooking(clinicId) {
+  if (String(process.env.E10_DIGEST_ON_BOOKING || '') !== '1') return;
+  const sync = getSyncStatus(clinicId);
+  if (!sync) return;
+  if (sync.pms_enabled && sync.pms_type !== 'somo') return;
+
+  const row = db.db?.prepare('SELECT e10_digest_last_sent_at FROM clinics WHERE clinic_id = ?').get(clinicId);
+  if (row?.e10_digest_last_sent_at) {
+    const last = new Date(row.e10_digest_last_sent_at);
+    const now = new Date();
+    if (last.toDateString() === now.toDateString()) return;
+  }
+
+  setImmediate(() => {
+    sendDigestEmail(clinicId).catch((err) => {
+      console.warn('[e10_digest] booking trigger failed:', err.message);
+    });
+  });
+}
+
+module.exports = { getSyncStatus, buildDigestCsv, sendDigestEmail, maybeTriggerDigestOnBooking };

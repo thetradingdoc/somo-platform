@@ -8,8 +8,47 @@ function generateInviteCode() {
   return crypto.randomBytes(16).toString('hex');
 }
 
+function assertInviteEmailAvailable(email, { excludeInviteId = null } = {}) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) {
+    const err = new Error('email required');
+    err.code = 'invite_email_required';
+    throw err;
+  }
+  if (!db.db) throw new Error('Database unavailable');
+
+  const existingCustomer = db.getCustomerByEmail?.(normalized);
+  const existingByLower =
+    !existingCustomer && db.db
+      ? db.db.prepare(`SELECT id FROM customers WHERE lower(email) = ? LIMIT 1`).get(normalized)
+      : null;
+  if (existingCustomer || existingByLower) {
+    const err = new Error('An account with this email already exists.');
+    err.code = 'invite_email_taken';
+    err.field = 'email';
+    throw err;
+  }
+
+  const pending = db.db
+    .prepare(
+      `SELECT id FROM provider_invites
+       WHERE lower(email) = ? AND status = 'pending' AND datetime(expires_at) > datetime('now')
+       ${excludeInviteId ? 'AND id != ?' : ''}
+       LIMIT 1`
+    )
+    .get(...(excludeInviteId ? [normalized, excludeInviteId] : [normalized]));
+  if (pending) {
+    const err = new Error('A pending invite already exists for this email.');
+    err.code = 'invite_pending_exists';
+    err.field = 'email';
+    throw err;
+  }
+
+  return normalized;
+}
+
 function createInvite({ email, practiceName, officeType, useCase, leadId, createdBy, ttlDays = 14 } = {}) {
-  if (!email) throw new Error('email required');
+  const normalizedEmail = assertInviteEmailAvailable(email);
   if (!db.db) throw new Error('Database unavailable');
   const id = `inv_${uuidv4()}`;
   const code = generateInviteCode();
@@ -25,7 +64,7 @@ function createInvite({ email, practiceName, officeType, useCase, leadId, create
     .run(
       id,
       code,
-      String(email).trim().toLowerCase(),
+      normalizedEmail,
       practiceName || null,
       officeType || 'dental',
       useCase || 'dental',
@@ -41,9 +80,55 @@ function getInviteByCode(code) {
   return db.db.prepare(`SELECT * FROM provider_invites WHERE code = ? LIMIT 1`).get(String(code).trim());
 }
 
+function getInviteById(inviteId) {
+  if (!inviteId || !db.db) return null;
+  return db.db.prepare(`SELECT * FROM provider_invites WHERE id = ? LIMIT 1`).get(String(inviteId).trim());
+}
+
+function resendInvite(inviteId, { ttlDays = 14 } = {}) {
+  const row = getInviteById(inviteId);
+  if (!row) {
+    const err = new Error('invite_not_found');
+    err.code = 'invite_not_found';
+    throw err;
+  }
+  if (row.status === 'accepted') {
+    const err = new Error('invite_already_accepted');
+    err.code = 'invite_already_accepted';
+    throw err;
+  }
+  if (row.status === 'revoked') {
+    const err = new Error('invite_revoked');
+    err.code = 'invite_revoked';
+    throw err;
+  }
+  const code = generateInviteCode();
+  const expires = new Date(Date.now() + ttlDays * 86400000).toISOString();
+  db.db
+    .prepare(
+      `UPDATE provider_invites SET code = ?, status = 'pending', expires_at = ?, updated_at = datetime('now') WHERE id = ?`
+    )
+    .run(code, expires, inviteId);
+  return getInviteByCode(code);
+}
+
+function revokeInvite(inviteId) {
+  const row = getInviteById(inviteId);
+  if (!row) {
+    const err = new Error('invite_not_found');
+    err.code = 'invite_not_found';
+    throw err;
+  }
+  db.db
+    .prepare(`UPDATE provider_invites SET status = 'revoked', updated_at = datetime('now') WHERE id = ?`)
+    .run(inviteId);
+  return getInviteById(inviteId);
+}
+
 function validateInvite(code) {
   const row = getInviteByCode(code);
   if (!row) return { valid: false, error: 'invite_not_found' };
+  if (row.status === 'revoked') return { valid: false, error: 'invite_revoked', invite: row };
   if (row.status !== 'pending') return { valid: false, error: 'invite_already_used', invite: row };
   if (row.expires_at && new Date(row.expires_at) < new Date()) {
     return { valid: false, error: 'invite_expired', invite: row };
@@ -120,6 +205,7 @@ async function acceptInvite(code, { password, name, baaAcknowledged, ip, userAge
     throw new Error('BAA acknowledgment required');
   }
   const invite = validation.invite;
+  assertInviteEmailAvailable(invite.email, { excludeInviteId: invite.id });
   const bcrypt = require('bcryptjs');
   const passwordHash = await bcrypt.hash(String(password), 10);
   const customerId = `cust_${uuidv4()}`;
@@ -130,6 +216,7 @@ async function acceptInvite(code, { password, name, baaAcknowledged, ip, userAge
     company_name: invite.practice_name || 'Dental Practice',
     customer_type: 'saas',
     plan_tier: 'practice',
+    status: 'active',
     email_verified: 1,
     email_verified_at: new Date().toISOString()
   });
@@ -149,6 +236,7 @@ async function acceptInvite(code, { password, name, baaAcknowledged, ip, userAge
       .prepare(`UPDATE clinics SET office_type = ?, updated_at = datetime('now') WHERE clinic_id = ?`)
       .run(invite.office_type, provisioned.clinicId);
   }
+  db.db?.prepare(`UPDATE customers SET password_hash = ? WHERE id = ?`).run(passwordHash, customerId);
   db.db
     .prepare(
       `
@@ -172,7 +260,11 @@ async function acceptInvite(code, { password, name, baaAcknowledged, ip, userAge
 
 module.exports = {
   createInvite,
+  assertInviteEmailAvailable,
   getInviteByCode,
+  getInviteById,
+  resendInvite,
+  revokeInvite,
   validateInvite,
   sendInviteEmail,
   acceptInvite,

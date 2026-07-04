@@ -12,14 +12,20 @@
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <link rel="stylesheet" href="/assets/css/provider-settings.css?v=1">
+  <script src="/assets/js/html-escape.js"></script>
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
   <script src="/assets/js/voice-hours-picker.js"></script>
+  <script src="/assets/js/voice-agent-page.js"></script>
+  <script src="/assets/js/voice-preview.js"></script>
+  <script src="/assets/js/sfd-nameplate.js"></script>
   <script src="/assets/js/settings/tab-general.js"></script>
   <script src="/assets/js/settings/tab-voice.js"></script>
+  <script src="/assets/js/settings/tab-kelly.js"></script>
+  <script src="/assets/js/settings/tab-connected.js"></script>
   <script src="/assets/js/settings/tab-calendar.js"></script>
   <script src="/assets/js/settings/tab-pms.js"></script>
   <script src="/assets/js/settings/tab-practice.js"></script>
@@ -28,41 +34,14 @@
 </head>
 
 <body class="provider-portal provider-portal--settings" data-page="settings">
-    <div class="layout">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-subtitle">Business</div>
-            </div>
-
-            <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Nav from provider-shell.js -->
-            </nav>
-
-            <div class="sidebar-footer">
-                <div class="user-info" onclick="navigateToBusinessPage('settings.html')" style="cursor:pointer;">
-                    <div class="user-avatar" id="userAvatar">VC</div>
-                    <div class="user-details">
-                        <div class="user-name" id="userName">Business Owner</div>
-                        <div class="user-role">Owner</div>
-                    </div>
-                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
-                        🚪
-                    </button>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="main-content pp-content pp-content--settings" id="ppMainContent">
+        <main class="pp-content pp-content--settings" id="ppMainContent">
             <div class="pp-page-shell">
             <div class="settings-tabs" role="tablist" aria-label="Settings sections">
                 <button type="button" class="pp-ptab act settings-tab-btn" role="tab" aria-selected="true" aria-controls="settings-panel-profile" id="settings-tab-profile" data-settings-tab="profile">Profile</button>
-                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-integrations" id="settings-tab-integrations" data-settings-tab="integrations">Integrations</button>
-                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-voice" id="settings-tab-voice" data-settings-tab="voice">Voice Agent</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-connected" id="settings-tab-connected" data-settings-tab="connected">Connected Accounts</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-kelly" id="settings-tab-kelly" data-settings-tab="kelly">Kelly</button>
                 <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-billing" id="settings-tab-billing" data-settings-tab="billing">Billing</button>
-                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-credentials" id="settings-tab-credentials" data-settings-tab="credentials">Credentials</button>
-                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-advanced" id="settings-tab-advanced" data-settings-tab="advanced">Advanced</button>
+                <button type="button" class="pp-ptab settings-tab-btn" role="tab" aria-selected="false" aria-controls="settings-panel-advanced" id="settings-tab-advanced" data-settings-tab="advanced" style="margin-left:auto;font-size:0.85rem">Advanced</button>
             </div>
 
             <!-- Business Information -->
@@ -131,8 +110,24 @@
                 </div>
             </div>
 
-            <!-- Connected Services -->
-            <div class="settings-section settings-panel" data-settings-panel="integrations">
+            <!-- Connected Accounts (FD-194) -->
+            <div class="settings-section settings-panel" data-settings-panel="connected" hidden>
+                <h3>Connected Accounts</h3>
+                <p class="setting-description">Calendar, PMS, and billing integrations Kelly uses.</p>
+                <div id="connectedAccountsMount"></div>
+            </div>
+
+            <!-- Kelly voice config (FD-204) -->
+            <div class="settings-section settings-panel" data-settings-panel="kelly" hidden>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+                    <h3 style="margin:0">Kelly</h3>
+                    <span id="kellyTabStatus"></span>
+                </div>
+                <div id="kellySettingsMount"></div>
+            </div>
+
+            <!-- Legacy integrations (hidden — migrated to Connected Accounts) -->
+            <div class="settings-section settings-panel" data-settings-panel="integrations" hidden aria-hidden="true">
                 <h3>🔌 Connected Services</h3>
 
                 <div class="service-card">
@@ -247,8 +242,8 @@
                 </div>
             </div>
 
-            <!-- Voice Agent (managed on agent.html) -->
-            <div class="settings-section settings-panel" data-settings-panel="voice">
+            <!-- Legacy voice summary (hidden — migrated to Kelly tab) -->
+            <div class="settings-section settings-panel" data-settings-panel="voice" hidden aria-hidden="true">
                 <div class="voice-agent-intro">
                     <div>
                         <h3>🎤 Voice Agent</h3>
@@ -431,6 +426,13 @@
                         <input id="practiceNpi" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0;text-align:left" />
                         <label class="setting-description" for="practiceAddress">Practice address</label>
                         <input id="practiceAddress" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0;text-align:left" />
+                        <label class="setting-description" for="practiceLanguageMode">Languages Kelly supports</label>
+                        <select id="practiceLanguageMode" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0">
+                            <option value="en_only">English only</option>
+                            <option value="en_es">English + Spanish</option>
+                            <option value="en_ru">English + Russian</option>
+                            <option value="en_zh">English + Mandarin (Chinese)</option>
+                        </select>
                         <label class="setting-description" for="practiceOfficeType">Office type</label>
                         <select id="practiceOfficeType" class="btn btn-secondary btn-sm" style="width:100%;margin:6px 0">
                             <option value="dental">Dental</option>
@@ -451,7 +453,7 @@
                               <p><strong>Dentrix Ascend (cloud)</strong> — Requires Henry Schein API Exchange approval. Once approved, connect under Integrations → PMS. Kelly writes appointments back automatically.</p>
                               <p><strong>On-prem Dentrix / Eaglesoft</strong> — Use <em>E10 interim mode</em>: Somo calendar + nightly CSV digest until live write-back. Import roster CSV above; compare sync status on Today.</p>
                               <p><strong>Need help?</strong> Email <a href="mailto:support@callsomo.com">support@callsomo.com</a> with your PMS type and NPI. Include whether you are shadow week or live.</p>
-                              <p><a href="settings.html" onclick="setTimeout(()=>document.querySelector('[data-settings-tab=integrations]')?.click(),0)">Open PMS integrations →</a></p>
+                              <p><a href="settings.html#connected" onclick="setTimeout(()=>setSettingsTab('connected'),0);return false">Open Connected Accounts →</a></p>
                             </div>
                         </details>
                     </div>
@@ -513,7 +515,7 @@
                 </div>
             </div>
 
-            <div class="settings-section settings-panel" data-settings-panel="credentials" hidden>
+            <div class="settings-section settings-panel" data-settings-panel="advanced" hidden>
                 <h3>Provider credentials</h3>
                 <p class="setting-description">License and NPI documentation for pilot compliance. Stored on your account profile.</p>
                 <label class="setting-description" for="credLicenseNumber">License number</label>
@@ -662,7 +664,6 @@
             </div>
             </div>
         </main>
-    </div>
     <!-- Settings tab scripts loaded in <head> -->
 </body>
 

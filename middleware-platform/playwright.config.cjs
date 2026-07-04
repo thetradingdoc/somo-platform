@@ -3,8 +3,11 @@ const { defineConfig } = require('@playwright/test');
 
 const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'somo-landing', 'build');
 const serveScript = path.join(__dirname, 'scripts', 'serve-cra-build.cjs');
+const devDbPath = path.join(__dirname, 'var', 'db', 'middleware-dev.db');
+const auditDbPath = path.join(__dirname, 'middleware-audit.db');
 
-const headed = process.env.HEADED === '1';
+const skipLanding = process.env.PW_SKIP_LANDING === '1';
+const headed = process.argv.includes('--headed') || process.env.PW_HEADED === '1';
 const tenantAuditOnly = process.argv.some((a) => a.includes('tenant-audit') || a.includes('tenant-front-desk-audit'));
 
 /** Static server port (Playwright webServer + baseURL). Override if 5199 is busy: `PW_LANDING_PORT=5200 npx playwright test …` */
@@ -65,7 +68,7 @@ module.exports = defineConfig({
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
       },
       env: {
-        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+        DB_PATH: devDbPath,
       },
     },
     {
@@ -78,7 +81,7 @@ module.exports = defineConfig({
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
       },
       env: {
-        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+        DB_PATH: devDbPath,
       },
     },
     {
@@ -91,7 +94,7 @@ module.exports = defineConfig({
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
       },
       env: {
-        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+        DB_PATH: devDbPath,
         KELLY_RAILS_V2: '1',
         KELLY_RAILS_ROLLOUT_PCT: '1',
         LANGGRAPH_KELLY_ROLLOUT_PCT: '0',
@@ -126,6 +129,66 @@ module.exports = defineConfig({
       },
     },
     {
+      name: 'doctor-portal',
+      testDir: './e2e/provider',
+      testMatch: ['**/doctor-portal-journey.spec.cjs'],
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+        serviceWorkers: 'block'
+      },
+      env: {
+        DB_PATH: devDbPath,
+        PW_SKIP_LANDING: '1'
+      }
+    },
+    {
+      name: 'admin',
+      testDir: './e2e/admin',
+      testMatch: ['**/admin-portal-journey.spec.cjs'],
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+        serviceWorkers: 'block'
+      },
+      env: {
+        DB_PATH: devDbPath,
+        PW_SKIP_LANDING: '1'
+      }
+    },
+    {
+      name: 'admin-integration',
+      testDir: './e2e/admin',
+      testMatch: ['**/admin-portal-integration.spec.cjs'],
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+        serviceWorkers: 'block'
+      },
+      env: {
+        DB_PATH: devDbPath,
+        PW_SKIP_LANDING: '1'
+      }
+    },
+    {
+      name: 'onboarding',
+      testDir: './e2e/provider',
+      testMatch: ['**/onboarding-journey.spec.cjs', '**/onboarding-mobile.spec.cjs'],
+      timeout: 120_000,
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+        serviceWorkers: 'block',
+      },
+      env: {
+        DB_PATH: devDbPath,
+        PW_SKIP_LANDING: '1',
+      },
+    },
+    {
       name: 'provider-journey',
       testDir: './e2e/provider',
       testMatch: ['**/*.spec.cjs'],
@@ -136,7 +199,7 @@ module.exports = defineConfig({
         serviceWorkers: 'block',
       },
       env: {
-        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+        DB_PATH: devDbPath,
       },
     },
     {
@@ -177,21 +240,21 @@ module.exports = defineConfig({
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
       },
       env: {
-        DB_PATH: path.join(__dirname, 'middleware-dev.db'),
+        DB_PATH: devDbPath,
       },
     },
     {
       name: 'tenant-audit',
       testDir: './e2e',
       testMatch: '**/tenant-front-desk-audit.spec.cjs',
-      timeout: 180_000,
+      timeout: 300_000,
       use: {
         browserName: 'chromium',
         baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4001').replace(/\/$/, ''),
         serviceWorkers: 'block',
       },
       env: {
-        DB_PATH: path.join(__dirname, 'middleware-audit.db'),
+        DB_PATH: auditDbPath,
         PW_API_BASE_URL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4001').replace(/\/$/, ''),
       },
     },
@@ -205,7 +268,7 @@ module.exports = defineConfig({
       },
     },
   ],
-  webServer: tenantAuditOnly
+  webServer: tenantAuditOnly || skipLanding
     ? undefined
     : {
         command: `node "${serveScript}" "${landingBuild}" ${landingPort}`,

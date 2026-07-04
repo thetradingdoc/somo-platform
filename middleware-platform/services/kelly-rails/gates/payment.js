@@ -10,9 +10,15 @@ async function runDeterministicPayment(state, ctx) {
 
   const { sessionId, clinicId, patientId, callerPhone, channel, message } = ctx;
   const msg = String(message || '').toLowerCase();
-  if (!PAYMENT_SIGNALS.some((s) => msg.includes(s)) && state.step !== 'pay_invoice') {
-    return null;
-  }
+  const quoteDelivered =
+    state.flags.quote_delivered === true ||
+    state.flags.quote_delivered === '1' ||
+    state.flags.last_quote_status === 'hard_number' ||
+    KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered') === '1';
+  const onPayStep = state.step === 'pay_invoice';
+  const paySignal = PAYMENT_SIGNALS.some((s) => msg.includes(s));
+  if (!paySignal && !onPayStep) return null;
+  if (!onPayStep && paySignal && !quoteDelivered) return null;
 
   let amount = state.flags.copay_amount;
   if (amount == null || !Number.isFinite(Number(amount))) {

@@ -15,6 +15,7 @@
   <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
   <script src="/assets/js/revenue/revenue-ui.js"></script>
   <script src="/assets/js/revenue/tab-pipeline.js"></script>
   <script src="/assets/js/revenue/tab-claims.js"></script>
@@ -23,82 +24,14 @@
   <script src="/assets/js/revenue/revenue-shell.js"></script>
 </head>
 <body class="provider-portal provider-portal--scroll" data-page="revenue">
-  <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-  </button>
-
-  <div class="pp-app">
-    <aside class="pp-sidebar" id="ppSidebar">
-      <div class="pp-clinic-header">
-        <a class="pp-sb-brand pp-sb-brand--icon" href="today.html">
-          <img src="/assets/brand/somo-icon.png" alt="Somo" class="pp-sb-logo-img" width="36" height="36" />
-        </a>
-        <div class="pp-sb-clinic-meta">
-          <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
-          <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
-          <div class="pp-sb-av pp-sb-av--sm" id="ppClinicAv" aria-hidden="true">CL</div>
-        </div>
-      </div>
-      <a class="pp-kelly-live kelly-provisioning" id="ppKellyLive" href="agent.html">
-        <span class="pp-kelly-dot" aria-hidden="true"></span>
-        <div>
-          <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
-          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
-          <div class="pp-kelly-phone" id="ppKellyPhone"></div>
-        </div>
-        <button type="button" class="pp-kelly-toggle" id="ppKellyToggle">Activate</button>
-      </a>
-      <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
-      <div class="pp-sb-footer">
-        <a class="pp-sb-clinic" id="ppClinicCard" href="settings.html">
-          <div class="pp-sb-av">CL</div>
-          <div>
-            <div class="pp-sb-cn">Clinic profile</div>
-            <div class="pp-sb-cr">Manage provider details</div>
-          </div>
-        </a>
-      </div>
-    </aside>
-
-    <div class="pp-main">
-      <header class="pp-topbar pp-topbar--page pp-revenue-topbar">
-        <div class="pp-topbar-head-row">
-          <div class="pp-topbar-left">
-            <p class="pp-page-eyebrow">Revenue</p>
-            <h1 class="pp-page-title">Revenue hub</h1>
-            <p class="pp-page-sub">Pipeline, claims, patient pay, and work queue.</p>
-          </div>
-          <div class="pp-topbar-right">
-            <div class="pp-date-chip" id="ppDateChip"></div>
-            <a class="pp-btn pp-btn-outline pp-btn-sm" href="patients.html">Search patient</a>
-          </div>
-        </div>
-        <div class="pp-revenue-tabs" role="tablist" aria-label="Revenue sections">
-          <button type="button" class="pp-revenue-tab active" data-tab="pipeline" role="tab" aria-selected="true">Pipeline</button>
-          <button type="button" class="pp-revenue-tab" data-tab="claims" role="tab" aria-selected="false">
-            Claims <span class="pp-revenue-tab-badge" id="rev-tab-badge-claims" hidden></span>
-          </button>
-          <button type="button" class="pp-revenue-tab" data-tab="payments" data-testid="revenue-tab-payments" role="tab" aria-selected="false">
-            Patient pay <span class="pp-revenue-tab-badge" id="rev-tab-badge-payments" hidden></span>
-          </button>
-          <button type="button" class="pp-revenue-tab" data-tab="work" role="tab" aria-selected="false">
-            Work queue <span class="pp-revenue-tab-badge" id="rev-tab-badge-work" hidden></span>
-          </button>
-        </div>
-      </header>
-
-      <main class="pp-content pp-content--revenue" id="ppMainContent">
-        <div class="pp-page-shell">
-        <div class="pp-alert-strip pp-alert-strip--compact" id="ppAlertStrip" hidden aria-live="polite"></div>
-        <div class="pp-revenue-panel" id="ppRevenuePanel-pipeline" role="tabpanel"></div>
-        <div class="pp-revenue-panel" id="ppRevenuePanel-claims" role="tabpanel" hidden></div>
-        <div class="pp-revenue-panel" id="ppRevenuePanel-payments" role="tabpanel" hidden></div>
-        <div class="pp-revenue-panel" id="ppRevenuePanel-work" role="tabpanel" hidden></div>
-        </div>
-      </main>
+  <main class="main-content pp-content pp-content--revenue" id="ppMainContent">
+    <div class="pp-page-shell">
+      <div class="pp-alert-strip pp-alert-strip--compact" id="ppAlertStrip" hidden aria-live="polite"></div>
+      <div class="pp-revenue-panel" id="ppRevenuePanel-pipeline" role="tabpanel"></div>
+      <div class="pp-revenue-panel" id="ppRevenuePanel-claims" role="tabpanel" hidden></div>
+      <div class="pp-revenue-panel" id="ppRevenuePanel-payments" role="tabpanel" hidden></div>
+      <div class="pp-revenue-panel" id="ppRevenuePanel-work" role="tabpanel" hidden></div>
     </div>
-  </div>
+  </main>
 </body>
 </html>

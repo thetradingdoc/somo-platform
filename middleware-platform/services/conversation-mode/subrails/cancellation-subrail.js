@@ -74,7 +74,11 @@ async function handleCancellationSubrail(ctx = {}) {
     };
   }
 
-  if (/reschedule instead|reschedule my|move my appointment|reprogramar|cambiar mi cita/.test(msg)) {
+  if (
+    /reschedule instead|reschedule my|move my appointment|move it to|move to next week|next week instead|reprogramar|cambiar mi cita/i.test(
+      msg
+    )
+  ) {
     return {
       reply: 'No problem — let me help you reschedule instead.',
       active_subrail: 'cancellation',
@@ -84,7 +88,9 @@ async function handleCancellationSubrail(ctx = {}) {
         active_subrail_step: 'find_booking',
         cancellation_context: ctx.cancellation_context || null,
         pivot_reason: 'cancel_to_reschedule',
-        reschedule_pending: true
+        reschedule_pending: true,
+        cancel_pending: false,
+        cancel_confirmed: false
       },
       handoff: Handoff.KELLY_REQUIRED,
       kelly_lane_hint: 'reschedule'
@@ -92,7 +98,9 @@ async function handleCancellationSubrail(ctx = {}) {
   }
 
   const wantsCancel =
-    /cancel|yes|correct|yeah|yep|go ahead|please cancel/.test(msg) && !/don't cancel|do not cancel/.test(msg);
+    (/cancel|yes|correct|yeah|yep|go ahead|please cancel|отмен/i.test(msg) &&
+      !/don't cancel|do not cancel/.test(msg)) ||
+    /нужно отменить|отменить приём|отменить прием/i.test(msg);
 
   if (lookupOnly && step === 'find_booking') {
     return {
@@ -116,12 +124,11 @@ async function handleCancellationSubrail(ctx = {}) {
         reply: null,
         endCall: false,
         active_subrail: 'cancellation',
-        active_subrail_step: 'cancel_execute',
+        active_subrail_step: 'find_booking',
         state_updates: {
           ...stateUpdates,
-          active_subrail_step: 'cancel_execute',
-          cancel_confirmed: true,
-          cancel_pending: true
+          active_subrail_step: 'find_booking',
+          cancel_find_pending: true
         },
         handoff: Handoff.KELLY_REQUIRED,
         kelly_lane_hint: 'reschedule'

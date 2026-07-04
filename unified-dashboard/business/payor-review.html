@@ -4,9 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#16a637">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <title>Somo Provider - Payor Review</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
   <link rel="stylesheet" href="/assets/css/provider-portal.css">
@@ -15,48 +12,15 @@
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
+  <style>
+    .payor-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; }
+    @media (max-width: 900px) { .payor-grid { grid-template-columns: 1fr; } }
+    .payor-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .q-item { width: 100%; text-align: left; cursor: pointer; margin-bottom: 8px; }
+  </style>
 </head>
-<body class="provider-portal provider-portal--scroll">
-  <div class="layout">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-subtitle">Admin Console</div>
-      </div>
-      <nav class="sidebar-nav">
-        <a href="today.html" class="nav-item">
-          <span class="nav-icon">📊</span><span>Dashboard</span>
-        </a>
-        <a href="payor-review.html" class="nav-item active">
-          <span class="nav-icon">🩺</span><span>Payor Review</span>
-        </a>
-      </nav>
-    </aside>
-    <main class="main-content">
-      <h1 style="margin-bottom: 12px;">Payor Review Queue</h1>
-      <p style="margin-bottom: 16px; color: var(--gray-600);">
-        Review ambiguous payor matches and capture human merge/separate decisions with rationale.
-      </p>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-        <button id="syncBtn" style="padding:6px 10px;border:none;border-radius:999px;background:#111827;color:#fff;cursor:pointer;">Sync from Step 5</button>
-        <label style="font-size:13px;color:var(--gray-600);">
-          Policy:
-          <input id="policyInput" type="text" value="v2_tuned" style="margin-left:6px;padding:5px 8px;border:1px solid var(--gray-300);border-radius:8px;" />
-        </label>
-        <span id="statusMsg" style="font-size:12px;color:var(--gray-600);"></span>
-      </div>
-      <div style="display:grid;grid-template-columns: 1fr 1.4fr; gap: 12px;">
-        <div class="card" style="padding:12px;">
-          <h3 style="margin-bottom:8px;">Pending</h3>
-          <div id="queueList">Loading...</div>
-        </div>
-        <div class="card" style="padding:12px;">
-          <h3 style="margin-bottom:8px;">Candidate Evidence</h3>
-          <div id="queueDetails" style="font-size:14px;color:var(--gray-600);">Select a queue item.</div>
-        </div>
-      </div>
-    </main>
-  </div>
-
+<body class="provider-portal provider-portal--scroll" data-page="payor-review">
+  <div class="pp-app" id="ppAppMount"></div>
   <script>
     const API_BASE = window.API_BASE || window.location.origin;
     const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
@@ -70,44 +34,40 @@
       const policy = document.getElementById('policyInput').value.trim() || null;
       document.getElementById('statusMsg').textContent = 'Syncing...';
       const res = await fetch(`${API_BASE}/api/admin/payor-review-queue/sync`, {
-        method: 'POST',
-        headers: ADMIN_HEADERS,
+        method: 'POST', headers: ADMIN_HEADERS,
         body: JSON.stringify({ policy_version: policy, limit: 2000 })
       });
       const data = await res.json();
-      if (!data.success) {
-        document.getElementById('statusMsg').textContent = `Sync failed: ${data.error || 'unknown error'}`;
-        return;
-      }
-      document.getElementById('statusMsg').textContent = `Synced ${data.inserted} new queue rows`;
-      await loadQueue();
+      document.getElementById('statusMsg').textContent = data.success
+        ? `Synced ${data.inserted} new queue rows`
+        : `Sync failed: ${data.error || 'unknown error'}`;
+      if (data.success) await loadQueue();
     }
 
     async function loadQueue() {
       const list = document.getElementById('queueList');
-      list.innerHTML = 'Loading...';
+      list.innerHTML = '<div class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div>';
       const res = await fetch(`${API_BASE}/api/admin/payor-review-queue?status=pending&limit=200`, { headers: ADMIN_HEADERS });
       const data = await res.json();
       if (!data.success) {
-        list.innerHTML = `<p style="color:#b91c1c;">Failed: ${esc(data.error || 'unknown')}</p>`;
+        list.innerHTML = `<p class="sfd-muted">${esc(data.error || 'unknown')}</p>`;
         return;
       }
       const items = data.items || [];
       if (!items.length) {
-        list.innerHTML = '<p>No pending queue items.</p>';
+        list.innerHTML = '<div class="sfd-empty-state"><p>No pending queue items.</p></div>';
         return;
       }
       list.innerHTML = items.map((q) => `
-        <button data-id="${esc(q.id)}" class="q-item" style="width:100%;text-align:left;border:1px solid var(--gray-200);background:#fff;border-radius:8px;padding:8px;margin-bottom:8px;cursor:pointer;">
+        <button type="button" data-id="${esc(q.id)}" class="sfd-card q-item">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <strong>${esc(q.model_decision)}</strong>
-            <span style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:999px;">p${esc(q.priority)}</span>
+            <span class="admin-crm-badge admin-crm-badge-muted">p${esc(q.priority)}</span>
           </div>
-          <div style="font-size:12px;color:var(--gray-600);margin-top:4px;">
-            score=${Number(q.final_score || 0).toFixed(3)} | ${esc(q.policy_version)}
+          <div class="sfd-muted" style="font-size:12px;margin-top:4px;">
+            score=${Number(q.final_score || 0).toFixed(3)} · ${esc(q.policy_version)}
           </div>
-        </button>
-      `).join('');
+        </button>`).join('');
       list.querySelectorAll('.q-item').forEach((el) => el.addEventListener('click', () => loadDetails(el.dataset.id)));
     }
 
@@ -115,83 +75,66 @@
       if (!selectedQueueId) return;
       const rationale = window.prompt(`Optional rationale for "${action}":`, '') || '';
       const res = await fetch(`${API_BASE}/api/admin/payor-review-queue/${selectedQueueId}/decision`, {
-        method: 'POST',
-        headers: ADMIN_HEADERS,
+        method: 'POST', headers: ADMIN_HEADERS,
         body: JSON.stringify({ action, rationale })
       });
       const data = await res.json();
-      if (!data.success) {
-        alert(`Failed to submit decision: ${data.error || 'unknown error'}`);
-        return;
-      }
+      if (!data.success) { alert(data.error || 'Decision failed'); return; }
       selectedQueueId = null;
-      document.getElementById('queueDetails').innerHTML = '<p>Decision submitted.</p>';
+      document.getElementById('queueDetails').innerHTML = '<p class="sfd-muted">Select a queue item.</p>';
       await loadQueue();
     }
 
-    async function loadDetails(queueId) {
-      selectedQueueId = queueId;
-      const panel = document.getElementById('queueDetails');
-      panel.innerHTML = 'Loading details...';
-      const res = await fetch(`${API_BASE}/api/admin/payor-review-queue/${queueId}`, { headers: ADMIN_HEADERS });
+    async function loadDetails(id) {
+      selectedQueueId = id;
+      const el = document.getElementById('queueDetails');
+      el.innerHTML = '<div class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div>';
+      const res = await fetch(`${API_BASE}/api/admin/payor-review-queue/${id}`, { headers: ADMIN_HEADERS });
       const data = await res.json();
-      if (!data.success) {
-        panel.innerHTML = `<p style="color:#b91c1c;">Failed: ${esc(data.error || 'unknown')}</p>`;
-        return;
-      }
-      const x = data.item;
-      const reasons = (() => {
-        try { return JSON.parse(x.reason_codes_json || '[]').join(', '); } catch (_) { return x.reason_codes_json || ''; }
-      })();
-      panel.innerHTML = `
-        <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px;">
-          queue=${esc(x.queue_id)} | score=${Number(x.final_score || 0).toFixed(3)} | policy=${esc(x.policy_version)}
-        </div>
-        <div style="margin-bottom:10px;"><strong>Reason codes:</strong> ${esc(reasons || 'n/a')}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div style="border:1px solid var(--gray-200);border-radius:8px;padding:8px;">
-            <h4 style="margin:0 0 6px 0;">Left (${esc(x.left_source)})</h4>
-            <div><strong>Name:</strong> ${esc(x.left_raw_name)}</div>
-            <div><strong>Payer ID:</strong> ${esc(x.left_raw_payer_id)}</div>
-            <div><strong>NPI:</strong> ${esc(x.left_raw_npi)}</div>
-            <div><strong>EIN:</strong> ${esc(x.left_raw_ein)}</div>
-            <div><strong>State:</strong> ${esc(x.left_raw_state_hint)}</div>
-          </div>
-          <div style="border:1px solid var(--gray-200);border-radius:8px;padding:8px;">
-            <h4 style="margin:0 0 6px 0;">Right (${esc(x.right_source)})</h4>
-            <div><strong>Name:</strong> ${esc(x.right_raw_name)}</div>
-            <div><strong>Payer ID:</strong> ${esc(x.right_raw_payer_id)}</div>
-            <div><strong>NPI:</strong> ${esc(x.right_raw_npi)}</div>
-            <div><strong>EIN:</strong> ${esc(x.right_raw_ein)}</div>
-            <div><strong>State:</strong> ${esc(x.right_raw_state_hint)}</div>
-          </div>
-        </div>
-        <div style="margin:10px 0;font-size:13px;color:var(--gray-700);">
-          Similarity: JW=${Number(x.jaro_winkler || 0).toFixed(3)},
-          TSR=${Number(x.token_sort_ratio || 0).toFixed(3)},
-          TSeR=${Number(x.token_set_ratio || 0).toFixed(3)}
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button id="btnMerge" style="padding:6px 10px;border:none;border-radius:999px;background:#065f46;color:#fff;cursor:pointer;">Merge</button>
-          <button id="btnSeparate" style="padding:6px 10px;border:none;border-radius:999px;background:#991b1b;color:#fff;cursor:pointer;">Separate</button>
-          <button id="btnRelated" style="padding:6px 10px;border:none;border-radius:999px;background:#1d4ed8;color:#fff;cursor:pointer;">Related subsidiary</button>
-        </div>
-      `;
-      document.getElementById('btnMerge').addEventListener('click', () => submitDecision('merge'));
-      document.getElementById('btnSeparate').addEventListener('click', () => submitDecision('separate'));
-      document.getElementById('btnRelated').addEventListener('click', () => submitDecision('related_subsidiary'));
+      if (!data.success) { el.innerHTML = `<p>${esc(data.error)}</p>`; return; }
+      const q = data.item;
+      const cands = (q.candidates || []).slice(0, 8);
+      el.innerHTML = `
+        <p><strong>Decision:</strong> ${esc(q.model_decision)} · score ${Number(q.final_score || 0).toFixed(3)}</p>
+        <table class="sfd-table" style="margin:12px 0">
+          <thead><tr><th>Candidate</th><th>JW</th><th>TSR</th><th>TSeR</th></tr></thead>
+          <tbody>${cands.map((x) => `
+            <tr><td>${esc(x.label || x.id)}</td>
+            <td>${Number(x.jaro_winkler || 0).toFixed(3)}</td>
+            <td>${Number(x.token_sort_ratio || 0).toFixed(3)}</td>
+            <td>${Number(x.token_set_ratio || 0).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="4">No candidates</td></tr>'}
+          </tbody>
+        </table>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="sfd-btn sfd-btn-primary" id="btnMerge">Merge</button>
+          <button type="button" class="sfd-btn sfd-btn-ghost" id="btnSeparate">Separate</button>
+          <button type="button" class="sfd-btn sfd-btn-ghost" id="btnRelated">Related subsidiary</button>
+        </div>`;
+      document.getElementById('btnMerge').onclick = () => submitDecision('merge');
+      document.getElementById('btnSeparate').onclick = () => submitDecision('separate');
+      document.getElementById('btnRelated').onclick = () => submitDecision('related_subsidiary');
     }
 
-    document.getElementById('syncBtn').addEventListener('click', syncQueue);
     document.addEventListener('DOMContentLoaded', () => {
-      mountProviderPage({
-        activeId: 'payor-review',
-        eyebrow: 'Admin',
-        title: 'Payor review queue'
-      });
+      mountProviderPage({ activeId: 'payor-review', eyebrow: 'Admin', title: 'Payor review queue',
+        subtitle: 'Review ambiguous payor matches and capture merge/separate decisions' });
+      document.getElementById('ppMainContent').innerHTML = `
+        <div class="pp-page-shell">
+          <div class="payor-toolbar">
+            <button type="button" class="sfd-btn sfd-btn-primary" id="syncBtn">Sync from Step 5</button>
+            <label class="sfd-muted" style="font-size:13px;">Policy:
+              <input id="policyInput" type="text" value="v2_tuned" class="admin-crm-text-input" style="margin-left:6px;max-width:120px;" />
+            </label>
+            <span id="statusMsg" class="sfd-muted" style="font-size:12px;"></span>
+          </div>
+          <div class="payor-grid">
+            <section class="sfd-card" style="padding:12px;"><h3 style="margin:0 0 8px;">Pending</h3><div id="queueList"></div></section>
+            <section class="sfd-card" style="padding:12px;"><h3 style="margin:0 0 8px;">Candidate evidence</h3><div id="queueDetails"><p class="sfd-muted">Select a queue item.</p></div></section>
+          </div>
+        </div>`;
+      document.getElementById('syncBtn').addEventListener('click', syncQueue);
       loadQueue();
     });
   </script>
 </body>
 </html>
-

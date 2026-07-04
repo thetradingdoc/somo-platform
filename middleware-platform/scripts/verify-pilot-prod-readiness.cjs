@@ -85,6 +85,31 @@ function main() {
   const retellKey = (process.env.RETELL_API_KEY || '').trim();
   check(report, 'RETELL_API_KEY set', Boolean(retellKey), retellKey ? 'configured' : 'missing', 'fd-prod-retell-sync');
 
+  const dentrixId = (process.env.DENTRIX_CLIENT_ID || '').trim();
+  const dentrixSecret = (process.env.DENTRIX_CLIENT_SECRET || '').trim();
+  check(
+    report,
+    'DENTRIX_CLIENT_ID + SECRET (sandbox)',
+    Boolean(dentrixId && dentrixSecret),
+    dentrixId ? 'client_id set' : 'missing — Henry Schein vendor gate',
+    'fd3-dentrix-e2e-sandbox'
+  );
+  check(
+    report,
+    'HENRY_SCHEIN_APPLICATION_SUBMITTED',
+    truthy(process.env.HENRY_SCHEIN_APPLICATION_SUBMITTED),
+    process.env.HENRY_SCHEIN_APPLICATION_SUBMITTED || 'unset (manual Legal/Vendor step)',
+    'fd3-henry-schein'
+  );
+  const dxcPct = process.env.DXC_FALLBACK_TRIGGER_PCT;
+  check(
+    report,
+    'DXC_FALLBACK_TRIGGER_PCT',
+    Boolean(dxcPct),
+    dxcPct ? `pct=${dxcPct}` : 'default 20% in payer-gateway-fallback.js',
+    'fd2-dxc-fallback-live'
+  );
+
   const encKey = (process.env.API_KEY_ENCRYPTION_KEY || '').trim();
   check(
     report,

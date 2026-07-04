@@ -54,7 +54,8 @@ function l2BookingPhaseToL4Step(phase, flags = {}) {
   const p = String(phase || '').toLowerCase();
   const hasBookableSlot =
     !!(flags.current_booking_slot?.date && flags.current_booking_slot?.time) ||
-    !!flags._slot_selected_time;
+    !!flags._slot_selected_time ||
+    !!flags.slots_offered;
   if (['contact_confirm', 'schedule', 'confirm'].includes(p) && hasBookableSlot && !flags.no_provider_availability) {
     return L4_BOOKING_STEP.CONFIRM_VISIT;
   }

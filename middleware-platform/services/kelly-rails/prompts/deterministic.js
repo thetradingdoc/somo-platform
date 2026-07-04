@@ -34,7 +34,16 @@ const EN = {
   records_failed:
     'I was not able to retrieve those records right now. I can connect you with our front desk for help.',
   post_payment_confirmed:
-    "You're all set — your {specialty} appointment is confirmed{when}.{paid_note} You'll receive details by email or text if we have them on file. If you need to change anything, say reschedule or call the clinic."
+    "You're all set — your {specialty} appointment is confirmed{when}.{paid_note} You'll receive details by email or text if we have them on file. If you need to change anything, say reschedule or call the clinic.",
+  insurance_verified: 'Thanks — I verified your coverage.',
+  insurance_quote: 'Based on your plan, your estimated copay for this visit is ${amount}.',
+  insurance_need_dob: 'I need your date of birth to verify insurance with your plan.',
+  insurance_pending: 'I could not verify coverage yet. Our team can follow up with a quote.',
+  payment_defer: 'I need to confirm your copay amount before I can send a payment link.',
+  slots_preview:
+    'Here are the next available {specialty} times:\n{slots}\nWhich works best for you?',
+  slot_confirm_contact:
+    'I can book that time. Can you confirm your name and the best email or phone to reach you?'
 };
 
 const ES = {
@@ -71,7 +80,16 @@ const ES = {
   records_failed:
     'No pude recuperar esos registros en este momento. Puedo conectarle con recepción para ayudarle.',
   post_payment_confirmed:
-    'Todo listo — su cita de {specialty} está confirmada{when}.{paid_note} Recibirá los detalles por correo o mensaje si los tenemos. Si necesita cambiar algo, diga reprogramar o llame a la clínica.'
+    'Todo listo — su cita de {specialty} está confirmada{when}.{paid_note} Recibirá los detalles por correo o mensaje si los tenemos. Si necesita cambiar algo, diga reprogramar o llame a la clínica.',
+  insurance_verified: 'Gracias — verifiqué su cobertura.',
+  insurance_quote: 'Según su plan, el copago estimado para esta visita es ${amount}.',
+  insurance_need_dob: 'Necesito su fecha de nacimiento para verificar el seguro con su plan.',
+  insurance_pending: 'Aún no pude verificar la cobertura. Nuestro equipo puede darle una cotización.',
+  payment_defer: 'Necesito confirmar el monto del copago antes de enviar un enlace de pago.',
+  slots_preview:
+    'Estos son los próximos horarios disponibles para {specialty}:\n{slots}\n¿Cuál le funciona mejor?',
+  slot_confirm_contact:
+    'Puedo reservar ese horario. ¿Puede confirmar su nombre y el mejor correo o teléfono para contactarle?'
 };
 
 const ZH = {
@@ -137,7 +155,16 @@ const RU = {
   post_payment_confirmed:
     'Готово — ваша запись {specialty} подтверждена{when}.{paid_note} Детали придут по email или SMS, если они у нас есть. Для изменений скажите «перенести» или позвоните в клинику.',
   handoff_connecting:
-    'Сейчас соединю вас с нашей командой на стойке регистрации. Пожалуйста, оставайтесь на линии.'
+    'Сейчас соединю вас с нашей командой на стойке регистрации. Пожалуйста, оставайтесь на линии.',
+  insurance_verified: 'Спасибо — я проверил ваше страховое покрытие.',
+  insurance_quote: 'По вашему плану ориентировочная доплата за визит составляет ${amount}.',
+  insurance_need_dob: 'Мне нужна дата рождения, чтобы проверить страховку по вашему плану.',
+  insurance_pending: 'Пока не удалось проверить покрытие. Наша команда может уточнить стоимость.',
+  payment_defer: 'Мне нужно подтвердить сумму доплаты, прежде чем отправить ссылку на оплату.',
+  slots_preview:
+    'Вот ближайшие доступные окна для {specialty}:\n{slots}\nКакое время вам подходит?',
+  slot_confirm_contact:
+    'Я могу записать на это время. Подтвердите, пожалуйста, имя и лучший email или телефон для связи.'
 };
 
 const TABLES = { en: EN, es: ES, zh: ZH, ru: RU };

@@ -14,6 +14,33 @@ const ONBOARDING_STATES = [
 
 const TERMINAL_AGENT_STATES = new Set(['voice_setup_complete', 'live']);
 
+/** Meta keys tenants may PATCH via onboarding API. Verification flags are server-only. */
+const TENANT_WRITABLE_META_KEYS = new Set(['wizard_step', 'pms_selection']);
+
+function filterTenantMetaPatch(metaPatch = {}) {
+  const filtered = {};
+  for (const [key, value] of Object.entries(metaPatch)) {
+    if (TENANT_WRITABLE_META_KEYS.has(key)) filtered[key] = value;
+  }
+  return filtered;
+}
+
+/**
+ * Set server-verified onboarding meta (calendar, forward ack, etc.).
+ * @param {object} db
+ * @param {string} customerId
+ * @param {object} metaPatch
+ */
+function setServerOnboardingMeta(db, customerId, metaPatch = {}) {
+  const customer = db.getCustomer(customerId);
+  if (!customer) return null;
+  const meta = { ...parseMeta(customer), ...metaPatch };
+  db.updateCustomer(customerId, {
+    onboarding_meta_json: JSON.stringify(meta)
+  });
+  return meta;
+}
+
 function parseMeta(customer) {
   try {
     return customer?.onboarding_meta_json ? JSON.parse(customer.onboarding_meta_json) : {};
@@ -56,14 +83,15 @@ function deriveStateFromLegacy(customer) {
  * @param {string} nextState
  * @param {object} [metaPatch]
  */
-function transitionState(db, customerId, nextState, metaPatch = {}) {
+function transitionState(db, customerId, nextState, metaPatch = {}, options = {}) {
   if (!ONBOARDING_STATES.includes(nextState)) {
     throw new Error(`Invalid onboarding state: ${nextState}`);
   }
   const customer = db.getCustomer(customerId);
   if (!customer) throw new Error('Customer not found');
 
-  const meta = { ...parseMeta(customer), ...metaPatch, [`${nextState}_at`]: new Date().toISOString() };
+  const patch = options.serverSide ? metaPatch : filterTenantMetaPatch(metaPatch);
+  const meta = { ...parseMeta(customer), ...patch, [`${nextState}_at`]: new Date().toISOString() };
   const updates = {
     onboarding_state: nextState,
     onboarding_state_updated_at: new Date().toISOString(),
@@ -91,12 +119,24 @@ function logOnboardingEvent(customerId, state, meta = {}) {
   );
 }
 
-function resolveOnboardingDestination(customer) {
+function resolveOnboardingDestination(customer, dbModule = null) {
   const state = getOnboardingState(customer);
   const meta = parseMeta(customer);
-  const blockers = [];
+  let blockers = [];
+  let checklist = [];
 
-  if (!customer?.twilio_phone_number && state !== 'signup_started' && state !== 'provisioning_failed') {
+  if (dbModule && customer) {
+    try {
+      const { resolveOnboardingBlockers } = require('./onboarding-blockers-service');
+      const resolved = resolveOnboardingBlockers(dbModule, customer);
+      blockers = resolved.blockers;
+      checklist = resolved.checklist;
+    } catch (_) {
+      if (!customer?.twilio_phone_number && state !== 'signup_started' && state !== 'provisioning_failed') {
+        blockers.push('missing_dedicated_line');
+      }
+    }
+  } else if (!customer?.twilio_phone_number && state !== 'signup_started' && state !== 'provisioning_failed') {
     blockers.push('missing_dedicated_line');
   }
 
@@ -137,7 +177,7 @@ function resolveOnboardingDestination(customer) {
       break;
   }
 
-  return { state, path, reason, blockers, wizard_step: meta.wizard_step || 1 };
+  return { state, path, reason, blockers, checklist, wizard_step: meta.wizard_step || 1 };
 }
 
 function shouldAllowLegacyRedirectToAgent(customer) {
@@ -148,10 +188,13 @@ function shouldAllowLegacyRedirectToAgent(customer) {
 module.exports = {
   ONBOARDING_STATES,
   TERMINAL_AGENT_STATES,
+  TENANT_WRITABLE_META_KEYS,
   parseMeta,
   getOnboardingState,
   deriveStateFromLegacy,
   transitionState,
+  filterTenantMetaPatch,
+  setServerOnboardingMeta,
   resolveOnboardingDestination,
   shouldAllowLegacyRedirectToAgent,
   logOnboardingEvent

@@ -1,30 +1,23 @@
 'use strict';
 
-const {
-  normalizeLanguageConfig,
-  isLanguageSupported,
-  LANGUAGE_PRESETS
-} = require('../services/tenant-language-config');
-const zh = require('../services/kelly-rails/prompts/zh');
-const ru = require('../services/kelly-rails/prompts/ru');
-const { PROMPT_MODULES } = require('../services/kelly-rails/prompts');
+const { getTenantVoiceLanguageConfig, isLanguageSupported } = require('../services/tenant-language-config');
 
-describe('tenant language config', () => {
-  test('en_zh preset includes mandarin', () => {
-    expect(LANGUAGE_PRESETS.en_zh).toEqual(['en', 'zh']);
-    const cfg = normalizeLanguageConfig({ language_mode: 'en_zh' });
-    expect(cfg.supported_languages).toEqual(['en', 'zh']);
-  });
-
-  test('unsupported language fails allowlist', () => {
-    expect(isLanguageSupported('ru', ['en', 'es'])).toBe(false);
-    expect(isLanguageSupported('es', ['en', 'es'])).toBe(true);
-  });
-
-  test('zh and ru prompt modules export laneSystemPrompt', () => {
-    expect(typeof zh.laneSystemPrompt).toBe('function');
-    expect(typeof ru.laneSystemPrompt).toBe('function');
-    expect(PROMPT_MODULES.zh).toBe(zh);
-    expect(PROMPT_MODULES.ru).toBe(ru);
+describe('tenant-language-config clinic resolution', () => {
+  test('getTenantVoiceLanguageConfig reads clinic-scoped voice_agent_settings', () => {
+    const db = {
+      db: {
+        prepare: () => ({
+          get: () => ({
+            language_mode: 'en_es',
+            supported_languages: '["en","es"]'
+          })
+        })
+      },
+      getClinic: () => null,
+      getVoiceAgentSettingsForProvider: () => null
+    };
+    const cfg = getTenantVoiceLanguageConfig(db, { clinicId: 'clinic-1' });
+    expect(cfg.language_mode).toBe('en_es');
+    expect(isLanguageSupported('es', cfg.supported_languages)).toBe(true);
   });
 });

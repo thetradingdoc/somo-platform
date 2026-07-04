@@ -23,6 +23,8 @@
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
   <script src="/assets/js/provider-layout.js"></script>
+  <script src="/assets/js/voice-agent-page.js"></script>
+  <script src="/assets/js/sfd-nameplate.js"></script>
   <script src="/assets/js/provider-calendar-core.js"></script>
   <script src="/assets/js/provider-schedule-board.js"></script>
 </head>
@@ -1516,6 +1518,8 @@
         eyebrow: 'Schedule',
         title: 'Appointments calendar',
         subtitle: 'View and manage bookings from the AI front desk',
+        voiceNameplate: true,
+        voiceNameplateHost: 'ppCalendarNameplate',
         topbarActions: '<button type="button" class="pp-btn pp-btn-primary pp-btn-sm" id="ppTopCreateAppt">+ New appointment</button>'
       });
       const topCreate = document.getElementById('ppTopCreateAppt');

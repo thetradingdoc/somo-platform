@@ -23,18 +23,19 @@ function buildGateRegistry(runners) {
       owns: (r) => !!r
     },
     { id: 'payment', priority: 98, run: runners.runDeterministicPayment, owns: (r) => r && !!r.reply },
-    { id: 'records', priority: 97, run: runners.runDeterministicRecords, owns: (r) => r && !!r.reply },
+    { id: 'insurance', priority: 97, run: runners.runDeterministicInsurance, owns: (r) => r && !!r.reply },
+    { id: 'records', priority: 96, run: runners.runDeterministicRecords, owns: (r) => r && !!r.reply },
     {
       id: 'lookup',
-      priority: 96,
+      priority: 95,
       run: runners.runDeterministicApptLookup,
       owns: (r) => r && !!r.reply
     },
-    { id: 'reschedule', priority: 95, run: runners.runDeterministicReschedule, owns: (r) => !!r },
-    { id: 'cancel', priority: 94, run: runners.runDeterministicCancel, owns: (r) => r && !!r.reply },
+    { id: 'reschedule', priority: 94, run: runners.runDeterministicReschedule, owns: (r) => !!r },
+    { id: 'cancel', priority: 93, run: runners.runDeterministicCancel, owns: (r) => r && !!r.reply },
     {
       id: 'clinical_intro',
-      priority: 93,
+      priority: 92,
       run: runners.runDeterministicClinicalIntro,
       owns: (r) => r && !!r.reply
     },
@@ -77,6 +78,7 @@ async function runPreBookingGates(registry, state, ctx, advanceAfterStep) {
     'safety',
     'post_payment',
     'payment',
+    'insurance',
     'records',
     'lookup',
     'reschedule',

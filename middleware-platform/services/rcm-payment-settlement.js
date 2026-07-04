@@ -94,6 +94,25 @@ async function getPaymentContext(token) {
       status: 410
     };
   }
+  if (row.expires_at && new Date(row.expires_at) < new Date()) {
+    try {
+      db.db.prepare(`UPDATE rcm_payments SET status = 'expired' WHERE pay_token = ?`).run(token);
+    } catch (_) {}
+    return {
+      success: false,
+      error: 'This payment link has expired. Please contact your provider for a new link.',
+      code: 'payment_link_expired',
+      status: 410
+    };
+  }
+  if (row.used_at && row.status !== 'paid') {
+    return {
+      success: false,
+      error: 'This payment link has already been used.',
+      code: 'payment_link_used',
+      status: 410
+    };
+  }
   if (row.status === 'paid') {
     return {
       success: true,
@@ -474,6 +493,52 @@ async function createStripeIntent(token) {
     return { success: false, error: 'Invalid payment amount', status: 400 };
   }
 
+  const publishableKey = (() => {
+    try {
+      return stripeConfig.getStripePublishableKey();
+    } catch (_) {
+      return null;
+    }
+  })();
+
+  if (row.stripe_payment_intent_id) {
+    try {
+      const existing = await withCircleTimeout(
+        stripe.paymentIntents.retrieve(row.stripe_payment_intent_id),
+        'Stripe PaymentIntent retrieve'
+      );
+      const reusable = ['requires_payment_method', 'requires_confirmation', 'requires_action'];
+      if (reusable.includes(existing.status)) {
+        return {
+          success: true,
+          payment_intent_id: existing.id,
+          client_secret: existing.client_secret,
+          publishable_key: publishableKey,
+          reused: true
+        };
+      }
+      if (existing.status === 'succeeded') {
+        return { success: false, error: 'Payment already completed', status: 409 };
+      }
+      if (existing.status === 'canceled') {
+        // Allow new PI below with fresh idempotency
+      } else {
+        return {
+          success: false,
+          error: 'Unable to verify existing payment intent',
+          status: 503
+        };
+      }
+    } catch (retrieveErr) {
+      console.error('[rcm-payment-settlement] Stripe PI retrieve failed:', retrieveErr.message);
+      return {
+        success: false,
+        error: 'Unable to verify existing payment intent',
+        status: 503
+      };
+    }
+  }
+
   const paymentIntent = await withCircleTimeout(
     stripe.paymentIntents.create({
       amount: amountCents,
@@ -498,13 +563,8 @@ async function createStripeIntent(token) {
     success: true,
     payment_intent_id: paymentIntent.id,
     client_secret: paymentIntent.client_secret,
-    publishable_key: (() => {
-      try {
-        return stripeConfig.getStripePublishableKey();
-      } catch (_) {
-        return null;
-      }
-    })(),
+    publishable_key: publishableKey,
+    reused: false
   };
 }
 

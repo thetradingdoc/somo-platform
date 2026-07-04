@@ -28,6 +28,14 @@ const STEP_PROMPTS = {
 const KELLY_BOOKING_STEPS = new Set(['slot_lookup', 'slot_select', 'contact_confirm', 'schedule', 'confirm']);
 
 /** Advance L2 step only on intent or L4 gate outcomes — not blindly every turn. */
+function hasOfferedSlots(flags = {}) {
+  return !!(
+    flags.slots_offered ||
+    (flags.current_booking_slot?.date && flags.current_booking_slot?.time) ||
+    flags.last_slot_bundles?.length
+  );
+}
+
 function resolveNextBookingStep(step, ctx, bookingIntents) {
   const flags = ctx.flags || {};
   const msg = String(ctx.message || '').toLowerCase();
@@ -37,6 +45,17 @@ function resolveNextBookingStep(step, ctx, bookingIntents) {
   }
   if (flags.booking_conflict || flags.provider_mismatch) {
     if (step === 'slot_lookup' || step === 'slot_select') return 'slot_select';
+  }
+
+  if (step === 'slot_lookup' && hasOfferedSlots(flags)) {
+    return 'slot_select';
+  }
+  if (
+    step === 'slot_select' &&
+    bookingIntents.some((i) => i.type === BookingIntentType.CONFIRM_BOOK) &&
+    hasOfferedSlots(flags)
+  ) {
+    return 'contact_confirm';
   }
 
   if (KELLY_BOOKING_STEPS.has(step)) {

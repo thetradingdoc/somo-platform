@@ -55,7 +55,7 @@ function detectBookingIntents(message, step) {
     intents.push({ type: BookingIntentType.CONFIRM_BOOK });
   }
 
-  if (/available|what times|openings|horarios|disponib/.test(lower)) {
+  if (/available|what times|openings|horarios|disponib|какое время|свободн/i.test(lower)) {
     intents.push({ type: BookingIntentType.ASK_AVAILABILITY });
   }
 
@@ -69,7 +69,7 @@ function detectBookingIntents(message, step) {
 function detectCancelIntents(message, step) {
   const intents = [];
   const lower = String(message || '').toLowerCase();
-  if (/cancel|cancellation|no longer need|can't make|cannot make|no puedo/.test(lower)) {
+  if (/cancel|cancellation|no longer need|can't make|cannot make|no puedo|отмен|нужно отменить/.test(lower)) {
     intents.push({ type: CancelIntentType.CANCEL_REQUESTED });
   }
   if (
@@ -85,7 +85,7 @@ function detectRescheduleIntents(message, step) {
   const intents = [];
   const msg = String(message || '');
   const lower = msg.toLowerCase();
-  if (/reschedule|move my appointment|change my appointment|different time|reprogramar/.test(lower)) {
+  if (/reschedule|move my appointment|change my appointment|different time|reprogramar|move it|move to|instead|next week|another time|próxima semana|cambiarla|la próxima|перенести|на следующ/i.test(lower)) {
     intents.push({ type: RescheduleIntentType.RESCHEDULE_REQUESTED });
   }
   const time = parseSlotTimeFromMessage(msg);
@@ -143,6 +143,8 @@ function applyRescheduleIntentsToFlags(flags = {}, intents = []) {
   flags.reschedule_intents = intents;
   if (intents.some((i) => i.type === RescheduleIntentType.RESCHEDULE_REQUESTED)) {
     flags.reschedule_pending = true;
+    flags.cancel_pending = false;
+    flags.cancel_confirmed = false;
   }
   for (const intent of intents) {
     if (intent.type === RescheduleIntentType.SLOT_SELECTED && intent.time) {
@@ -158,14 +160,26 @@ function applyRecordsIntentsToFlags(flags = {}, intents = []) {
   return flags;
 }
 
-function planTurnOwner({ subrail, flags = {}, intents = [], step = null }) {
+function planTurnOwner({ subrail, flags = {}, intents = [], step = null, message = '' }) {
   if (subrail === 'booking') {
     const hasConfirm = intents.some((i) => i.type === BookingIntentType.CONFIRM_BOOK);
     const hasSlot = intents.some((i) => i.type === BookingIntentType.SLOT_SELECTED);
     const hasBooked =
       flags.schedule_appointment_success || flags.last_appointment_id || flags.appointment_id;
+    const msg = String(message || '');
+    const { parseNameFromMessage } = require('./gates/shared');
+    const slotsReady =
+      flags.slots_offered ||
+      !!(flags.current_booking_slot?.date && flags.current_booking_slot?.time);
+    const nameGiven = !!parseNameFromMessage(msg) || /\bmy name is\b/i.test(msg);
+    const insuranceGiven =
+      /\b(cigna|aetna|delta|ppo|insurance|seguro|metlife|humana|anthem)\b/i.test(msg);
 
-    if (hasConfirm && (hasSlot || flags._slot_selected_time || flags.current_booking_slot?.time)) {
+    if (slotsReady && (nameGiven || insuranceGiven) && !hasConfirm) {
+      return { owner: 'gate', gateId: 'schedule' };
+    }
+
+    if (hasConfirm && (hasSlot || flags._slot_selected_time || flags.current_booking_slot?.time || flags.slots_offered)) {
       return { owner: 'gate', gateId: 'schedule' };
     }
     if (hasSlot || flags._slot_selected_time) {
@@ -218,7 +232,9 @@ function planTurnOwner({ subrail, flags = {}, intents = [], step = null }) {
   }
 
   if (subrail === 'copay_link') {
-    return { owner: 'gate', gateId: 'payment' };
+    const needsInsurance =
+      flags.copay_amount == null && !flags.insurance_collected && !flags.insurance_verified;
+    return { owner: 'gate', gateId: needsInsurance ? 'insurance' : 'payment' };
   }
 
   return { owner: 'llm' };

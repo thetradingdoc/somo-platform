@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css" />
+  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-front-desk-components.css" />
   <link rel="stylesheet" href="/unified-dashboard/assets/css/signup-somo.css" />
   <link rel="stylesheet" href="/unified-dashboard/assets/css/auth-somo.css" />
   <style>
@@ -47,7 +48,7 @@
 
 <body class="signup-wizard-body">
   <div class="login-shell">
-    <div class="login-main">
+    <div class="login-main sfd-device-card">
       <a href="/" class="signup-logo-link" aria-label="Somo home">
         <img
           class="signup-logo-img"
@@ -66,7 +67,7 @@
 
         <div class="signup-toast error hidden" id="loginToast" role="alert"></div>
 
-        <form id="loginForm">
+        <form id="loginForm" data-testid="login-form">
           <label class="signup-field">
             <span>Work email</span>
             <input type="email" id="loginEmail" required autocomplete="email" placeholder="you@yourbusiness.com" />
@@ -131,12 +132,14 @@
         <p class="login-footer-link">
           <a href="#" id="forgotBackLink">← Back to sign in</a>
         </p>
+        <div class="signup-toast hidden" id="forgotToast" role="status"></div>
       </div>
     </div>
   </div>
 
   <script src="/assets/js/api-base.js"></script>
   <script src="/unified-dashboard/assets/js/provider-session.js"></script>
+  <script src="/unified-dashboard/assets/js/onboarding-redirect.js"></script>
   <script src="/unified-dashboard/assets/js/login-somo.js"></script>
 </body>
 

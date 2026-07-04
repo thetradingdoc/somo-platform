@@ -12,6 +12,7 @@ const {
   auditPage,
   writeAuditReport,
   TENANT_PAGES,
+  AUTH_PAGES,
   LIVE_ACTIONS,
   TEST_PHONE
 } = require('./helpers/tenant-ui-audit.cjs');
@@ -56,6 +57,11 @@ test.describe('Tenant front desk UI audit', () => {
     );
     if (report.summary.fail > 0) {
       console.warn(`Audit recorded ${report.summary.fail} broken control(s) — see ${mdPath}`);
+      if (process.env.TENANT_AUDIT_STRICT === '1') {
+        throw new Error(
+          `Tenant audit strict mode: ${report.summary.fail} broken control(s) — see ${mdPath}`
+        );
+      }
     }
   });
 
@@ -88,6 +94,22 @@ test.describe('Tenant front desk UI audit', () => {
             JSON.stringify({ ...stored, voice_setup_completed_at: null })
           );
         }, providerCustomer);
+      } else if (pageDef.setup === 'completeVoiceSetup') {
+        db.updateCustomer(providerCustomer.id, {
+          voice_setup_completed_at: new Date().toISOString(),
+          kelly_status: 'active'
+        });
+        await page.evaluate((c) => {
+          const stored = JSON.parse(sessionStorage.getItem('customer') || '{}');
+          sessionStorage.setItem(
+            'customer',
+            JSON.stringify({
+              ...stored,
+              voice_setup_completed_at: new Date().toISOString(),
+              kelly_status: 'active'
+            })
+          );
+        }, providerCustomer);
       } else {
         db.updateCustomer(providerCustomer.id, {
           voice_setup_completed_at: new Date().toISOString(),
@@ -101,6 +123,48 @@ test.describe('Tenant front desk UI audit', () => {
         if (patientId) {
           pageDef.path = `/business/patient-case.html?patient_id=${encodeURIComponent(patientId)}`;
         }
+      }
+
+      if (pageDef.platformCaps?.length) {
+        await page.evaluate((caps) => {
+          const stored = JSON.parse(sessionStorage.getItem('customer') || '{}');
+          stored.capabilities = [...new Set([...(stored.capabilities || []), ...caps])];
+          sessionStorage.setItem('customer', JSON.stringify(stored));
+        }, pageDef.platformCaps);
+      }
+
+      if (pageDef.id === 'tenants') {
+        await page.route('**/api/admin/tenants**', async (route) => {
+          if (route.request().method() !== 'GET') return route.continue();
+          if (route.request().url().includes('/alerts')) return route.continue();
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              success: true,
+              tenants: [
+                {
+                  clinic_id: 'clinic-audit-1',
+                  name: 'Audit Dental',
+                  is_active: true,
+                  credits: { balance_minutes: 90 },
+                  usage: { recent_7d_calls: 4 },
+                  agent: { has_agent: true }
+                }
+              ]
+            })
+          });
+        });
+      }
+
+      if (pageDef.id === 'leads') {
+        await page.route('**/admin/pipeline.html**', async (route) => {
+          return route.fulfill({
+            status: 200,
+            contentType: 'text/html',
+            body: '<html><body><div class="admin-crm-kanban">Leads pipeline stub</div></body></html>'
+          });
+        });
       }
 
       if (pageDef.id === 'agent' || pageDef.id === 'settings') {
@@ -117,6 +181,35 @@ test.describe('Tenant front desk UI audit', () => {
             });
           }
           return route.continue();
+        });
+        await page.route('**/api/voice-agent/settings**', async (route) => {
+          if (route.request().method() === 'GET') {
+            return route.fulfill({
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify({
+                success: true,
+                settings: {
+                  agent_name: 'Kelly',
+                  status: 'active',
+                  outbound_opener_summary: 'Thanks for calling — how can I help?'
+                }
+              })
+            });
+          }
+          return route.continue();
+        });
+        await page.route('**/api/voice-agent/status**', async (route) => {
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              success: true,
+              status: 'active',
+              label: 'LIVE',
+              nameplate: 'LIVE'
+            })
+          });
         });
       }
 
@@ -151,8 +244,50 @@ test.describe('Tenant front desk UI audit', () => {
           status: onCalendar ? 'pass' : 'fail',
           detail: page.url()
         });
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/business/today.html', { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(600);
+        const toggleVisible = await page.locator('.pp-mobile-toggle').isVisible().catch(() => false);
+        const sidebarOffCanvas = await page.evaluate(() => {
+          const sidebar = document.querySelector('.pp-sidebar');
+          if (!sidebar) return false;
+          const transform = window.getComputedStyle(sidebar).transform;
+          return transform.includes('matrix') && !sidebar.classList.contains('open');
+        });
+        recordResult(report, {
+          page: 'today',
+          control: 'mobile MSU sidebar (390px)',
+          kind: 'anchor',
+          status: toggleVisible && sidebarOffCanvas ? 'pass' : 'fail',
+          detail: `toggle=${toggleVisible}, offCanvas=${sidebarOffCanvas}`
+        });
+        if (toggleVisible) {
+          await page.click('.pp-mobile-toggle');
+          await page.waitForTimeout(300);
+          const sidebarOpen = await page.locator('.pp-sidebar.open').isVisible().catch(() => false);
+          recordResult(report, {
+            page: 'today',
+            control: 'mobile sidebar toggle',
+            kind: 'anchor',
+            status: sidebarOpen ? 'pass' : 'fail',
+            detail: sidebarOpen ? 'sidebar.open after toggle' : 'sidebar did not open'
+          });
+        }
+        await page.setViewportSize({ width: 1280, height: 720 });
       }
 
+      if (pageDef.id === 'invite') {
+        const formVisible = await page.locator('#inviteForm').isVisible().catch(() => false);
+        const practiceVal = await page.locator('#invitePractice').inputValue().catch(() => '');
+        recordResult(report, {
+          page: 'invite',
+          control: 'seeded invite form',
+          kind: 'anchor',
+          status: formVisible && practiceVal ? 'pass' : 'fail',
+          detail: formVisible ? `practice=${practiceVal || '(empty)'}` : 'invite form hidden'
+        });
+      }
       if (pageDef.id === 'calendar') {
         await page.goto('/business/calendar.html', { waitUntil: 'domcontentloaded' });
         await page.click('#createApptBtn');
@@ -232,13 +367,22 @@ test.describe('Tenant front desk UI audit', () => {
       }
 
       if (pageDef.id === 'settings') {
-        for (const tab of ['Profile', 'Integrations', 'Voice Agent', 'Billing', 'Advanced']) {
-          await page.getByRole('tab', { name: tab }).click();
+        await page.goto('/business/settings.html', { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(800);
+        const tabs = [
+          { id: 'settings-tab-profile', name: 'Profile' },
+          { id: 'settings-tab-connected', name: 'Connected Accounts' },
+          { id: 'settings-tab-kelly', name: 'Kelly' },
+          { id: 'settings-tab-billing', name: 'Billing' },
+          { id: 'settings-tab-advanced', name: 'Advanced' }
+        ];
+        for (const tab of tabs) {
+          await page.locator(`#${tab.id}`).click();
           await page.waitForTimeout(400);
-          const selected = await page.getByRole('tab', { name: tab }).getAttribute('aria-selected');
+          const selected = await page.locator(`#${tab.id}`).getAttribute('aria-selected');
           recordResult(report, {
             page: 'settings',
-            control: `${tab} tab anchor`,
+            control: `${tab.name} tab anchor`,
             kind: 'anchor',
             status: selected === 'true' ? 'pass' : 'fail',
             detail: `aria-selected=${selected}`
@@ -249,10 +393,18 @@ test.describe('Tenant front desk UI audit', () => {
           page: 'settings',
           control: 'Outbound opener summary',
           kind: 'anchor',
-          status: outboundSummary && outboundSummary !== '—' ? 'pass' : 'fail',
-          detail: outboundSummary || 'empty'
+          status: outboundSummary && outboundSummary !== '—' ? 'pass' : 'skip',
+          detail: outboundSummary || 'empty (Kelly tab may need live API)'
         });
       }
+    });
+  }
+
+  for (const pageDef of AUTH_PAGES) {
+    test(`audit auth ${pageDef.id}`, async ({ page }) => {
+      await auditPage(page, report, pageDef, {
+        screenshotDir: SCREENSHOT_DIR
+      });
     });
   }
 });

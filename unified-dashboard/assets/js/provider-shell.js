@@ -7,14 +7,13 @@
   const PORTAL_NAV_BASE = [
     { section: 'Workspace' },
     { id: 'today', label: 'Today', icon: 'home', href: 'today.html', badgeKey: 'today' },
-    { id: 'calendar', label: 'Schedule', icon: 'calendar-days', href: 'calendar.html' },
     { id: 'calls', label: 'Calls', icon: 'phone', href: 'calls.html' },
+    { id: 'calendar', label: 'Schedule', icon: 'calendar-days', href: 'calendar.html' },
     { id: 'patients', label: 'Patients', icon: 'user-group', href: 'patients.html' },
+    { id: 'agent', label: 'Kelly', icon: 'microphone', href: 'agent.html', accent: true },
+    { id: 'profile', label: 'Settings', icon: 'user', href: 'settings.html', accent: true },
     { section: 'Revenue' },
-    { id: 'revenue', label: 'Revenue', icon: 'chart-bar', href: 'revenue.html', badgeKey: 'revenue' },
-    { section: 'AI Ops' },
-    { id: 'agent', label: 'Voice Agent', icon: 'microphone', href: 'agent.html', accent: true },
-    { id: 'profile', label: 'Settings', icon: 'user', href: 'settings.html', accent: true }
+    { id: 'revenue', label: 'Revenue', icon: 'chart-bar', href: 'revenue.html', badgeKey: 'revenue' }
   ];
 
   const STAGE_CTA_HREF = {
@@ -380,7 +379,7 @@
     const agentSub = document.getElementById('ppKellySub');
     const agentLbl = document.getElementById('ppKellyLabel');
     if (agentLbl) agentLbl.textContent = `${agentLabel()} is live`;
-    if (agentSub) agentSub.textContent = 'Voice · scheduling · RCM';
+    if (agentSub) agentSub.textContent = 'Voice · scheduling · copay';
   }
 
   function renderKellyStatus(status, billing) {
@@ -414,13 +413,18 @@
     toggle.textContent = active ? 'Pause' : 'Activate';
     toggle.dataset.enabled = active ? '1' : '0';
 
+    const npHost = document.getElementById('ppKellyNameplate');
+    if (window.SfdNameplate && npHost) {
+      const plateLabel =
+        state === 'active' ? 'LIVE'
+          : state === 'paused' ? 'PAUSED'
+            : provisioning === 'failed' || state === 'error' ? 'ERROR'
+              : 'OFF';
+      npHost.innerHTML = SfdNameplate.renderNameplate(plateLabel, { sm: true });
+    }
+
     shellCard.classList.remove('kelly-active', 'kelly-paused', 'kelly-provisioning', 'kelly-error');
-    shellCard.classList.add(
-      state === 'active' ? 'kelly-active'
-        : state === 'paused' ? 'kelly-paused'
-          : provisioning === 'failed' || state === 'error' ? 'kelly-error'
-            : 'kelly-provisioning'
-    );
+    shellCard.classList.add('pp-kelly-live');
     if (dot) dot.classList.toggle('paused', !active);
   }
 
@@ -781,6 +785,7 @@
     }
     const activeId = options.activeId || 'today';
     document.body.classList.add('provider-portal');
+    document.body.classList.add('provider-portal--front-desk');
 
     if (typeof window.ensureProviderSidebarChrome === 'function') {
       window.ensureProviderSidebarChrome();
@@ -854,9 +859,9 @@
       });
     }
 
-    const kelly = document.getElementById('ppKellyLive');
-    if (kelly && !kelly.href) {
-      kelly.href = resolveHref('agent.html');
+    const kellyLink = document.querySelector('#ppKellyLive .pp-kelly-live-link, #ppKellyLive[href]');
+    if (kellyLink && !kellyLink.getAttribute('href')) {
+      kellyLink.setAttribute('href', resolveHref('agent.html'));
     }
     const kellyToggle = document.getElementById('ppKellyToggle');
     if (kellyToggle && !kellyToggle.dataset.bound) {

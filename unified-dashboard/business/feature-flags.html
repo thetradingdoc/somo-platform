@@ -1,115 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#16a637" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <title>Somo Provider - Feature Flags</title>
-  <link rel="stylesheet" href="/assets/css/somo-tokens.css" />
-  <link rel="stylesheet" href="/assets/css/provider-portal.css" />
-  <script src="/assets/js/config.js"></script>
-  <script src="/assets/js/auth-utils.js"></script>
-  <script src="/assets/js/provider-shell.js"></script>
-  <script src="/assets/js/provider-shell-chrome.js"></script>
-  <script src="/assets/js/provider-layout.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Somo — Feature flags</title>
+  <meta http-equiv="refresh" content="0;url=/admin/feature-flags.html">
+  <script>window.location.replace('/admin/feature-flags.html');</script>
 </head>
-<body class="provider-portal provider-portal--scroll">
-  <div class="layout">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-subtitle">Admin Console</div>
-      </div>
-      <nav class="sidebar-nav">
-        <a href="today.html" class="nav-item">
-          <span class="nav-icon">📊</span><span>Dashboard</span>
-        </a>
-        <a href="feature-flags.html" class="nav-item active">
-          <span class="nav-icon">🚩</span><span>Feature Flags</span>
-        </a>
-      </nav>
-    </aside>
-    <main class="main-content">
-      <h1 style="margin-bottom: 16px;">Feature Flags</h1>
-      <p style="margin-bottom: 24px; color: var(--gray-600);">
-        Toggle patient journey features for this environment. Changes affect all tenants unless DB overrides are used.
-      </p>
-      <div id="flagsContainer" class="card" style="padding: 16px;"></div>
-    </main>
-  </div>
-  <script>
-    const API_BASE = window.API_BASE || (window.location.origin + '/middleware-platform');
-    const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
-
-    async function loadFlags() {
-      const container = document.getElementById('flagsContainer');
-      container.innerHTML = '<p>Loading flags...</p>';
-      try {
-        const res = await fetch(`${API_BASE}/api/admin/feature-flags`, { headers: ADMIN_HEADERS });
-        const data = await res.json();
-        if (!data.success) {
-          container.innerHTML = '<p style="color:#b91c1c;">Failed to load flags.</p>';
-          return;
-        }
-        const flags = data.flags || {};
-        const html = Object.keys(flags).sort().map(name => {
-          const val = !!flags[name];
-          const checked = val ? 'checked' : '';
-          return `
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--gray-200);">
-              <div>
-                <div style="font-weight:600;">${name}</div>
-                <div style="font-size:12px;color:var(--gray-500);">${val ? 'Enabled' : 'Disabled'}</div>
-              </div>
-              <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-                <span>${val ? 'On' : 'Off'}</span>
-                <input type="checkbox" data-flag="${name}" ${checked} />
-              </label>
-            </div>
-          `;
-        }).join('');
-        container.innerHTML = html || '<p>No flags defined.</p>';
-        container.querySelectorAll('input[type=checkbox]').forEach(input => {
-          input.addEventListener('change', onToggleFlag);
-        });
-      } catch (e) {
-        container.innerHTML = '<p style="color:#b91c1c;">Error loading flags.</p>';
-      }
-    }
-
-    async function onToggleFlag(e) {
-      const name = e.target.getAttribute('data-flag');
-      const enabled = e.target.checked;
-      try {
-        const res = await fetch(`${API_BASE}/api/admin/feature-flags`, {
-          method: 'POST',
-          headers: ADMIN_HEADERS,
-          body: JSON.stringify({ flag: name, enabled })
-        });
-        const data = await res.json();
-        if (!data.success) {
-          showPatientAlert && showPatientAlert({ type: 'error', message: data.error || 'Failed to update flag' });
-          e.target.checked = !enabled;
-        } else {
-          loadFlags();
-        }
-      } catch (err) {
-        showPatientAlert && showPatientAlert({ type: 'error', message: 'Network error updating flag' });
-        e.target.checked = !enabled;
-      }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      mountProviderPage({
-        activeId: 'feature-flags',
-        eyebrow: 'Admin',
-        title: 'Feature flags'
-      });
-      loadFlags();
-    });
-  </script>
+<body>
+  <p>Feature flags moved to <a href="/admin/feature-flags.html">Admin portal</a>.</p>
 </body>
 </html>
-

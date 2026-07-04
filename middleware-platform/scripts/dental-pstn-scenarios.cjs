@@ -41,115 +41,9 @@ const DEFAULT_CLINIC_ID =
   process.env.TEST_CLINIC_ID ||
   'clinic-da8523ab-ab4b-4da8-b9c0-4694850a3f34';
 
-/** @type {import('./dental-pstn-scenarios.cjs').DentalScenario[]} */
-const scenarios = [
-  {
-    id: 'DENTAL-001',
-    title: 'New patient — cleaning (D1110)',
-    locale: 'en-US',
-    utterances: [
-      "Hi, I'm a new patient and I need a cleaning.",
-      'Yes, sometime next week in the morning works.'
-    ],
-    expectedTools: ['schedule_appointment'],
-    assertions: ['FRONT_DESK_INTAKE', 'BOOKING_OFFER']
-  },
-  {
-    id: 'DENTAL-002',
-    title: 'Returning patient — Delta Dental member ID',
-    locale: 'en-US',
-    utterances: [
-      "I'm a returning patient. Do you take Delta Dental?",
-      'My member ID is DD123456789.'
-    ],
-    expectedTools: ['collect_insurance'],
-    assertions: ['PAYER_COLLECT', 'NO_PHI_LEAK']
-  },
-  {
-    id: 'DENTAL-003',
-    title: 'Copay quote + SMS pay link',
-    locale: 'en-US',
-    utterances: ["What's my copay for a cleaning?", 'Yes, send me the payment link by text.'],
-    expectedTools: ['collect_insurance', 'request_patient_payment'],
-    assertions: ['COPAY_QUOTE', 'PAYMENT_LINK']
-  },
-  {
-    id: 'DENTAL-004',
-    title: 'Self-pay fallback — no insurance',
-    locale: 'en-US',
-    utterances: ["I don't have insurance. How much is a cleaning out of pocket?"],
-    expectedTools: ['request_patient_payment'],
-    assertions: ['SELF_PAY_RAIL']
-  },
-  {
-    id: 'DENTAL-005',
-    title: 'Russian bilingual greeting',
-    locale: 'ru-RU',
-    utterances: ['Здравствуйте, мне нужна запись на чистку зубов.'],
-    expectedTools: ['schedule_appointment'],
-    assertions: ['BILINGUAL_GREETING']
-  },
-  {
-    id: 'DENTAL-006',
-    title: 'After-hours — coverage mode',
-    locale: 'en-US',
-    after_hours: true,
-    utterances: ['I know you are closed but can I leave a message for tomorrow?'],
-    expectedTools: ['transfer_call'],
-    assertions: ['AFTER_HOURS_HANDOFF']
-  },
-  {
-    id: 'DENTAL-007',
-    title: 'Wrong office — polite boundary',
-    locale: 'en-US',
-    utterances: ['Is this Dr. Patel orthopedic office on Lexington?'],
-    expectedTools: [],
-    assertions: ['POLITE_BOUNDARY', 'NO_PHI_LEAK']
-  },
-  {
-    id: 'DENTAL-008',
-    title: 'Family caller — booking for spouse',
-    locale: 'en-US',
-    family_caller: true,
-    utterances: [
-      "I'm calling for my husband — he needs a cleaning.",
-      'His name is Michael Chen, date of birth March 12 1985.'
-    ],
-    expectedTools: ['schedule_appointment'],
-    assertions: ['FAMILY_CALLER', 'NAME_DISAMBIGUATION']
-  },
-  {
-    id: 'DENTAL-009',
-    title: 'Stedi timeout — desk callback offer',
-    locale: 'en-US',
-    stedi_timeout: true,
-    utterances: [
-      'Can you check my Delta Dental benefits?',
-      'Member ID is DD987654321.'
-    ],
-    expectedTools: ['collect_insurance'],
-    assertions: ['STEDI_DOWN_HANDOFF']
-  },
-  {
-    id: 'DENTAL-010',
-    title: 'Transfer to front desk',
-    locale: 'en-US',
-    utterances: ['Can I speak to someone at the front desk please?'],
-    expectedTools: ['transfer_call'],
-    assertions: ['WARM_TRANSFER']
-  },
-  {
-    id: 'DENTAL-011',
-    title: 'Spanish bilingual — cleaning request',
-    locale: 'es-US',
-    utterances: [
-      'Hola, necesito una cita para una limpieza.',
-      'Sí, la próxima semana por la mañana está bien.'
-    ],
-    expectedTools: ['schedule_appointment'],
-    assertions: ['BILINGUAL_GREETING', 'BOOKING_OFFER']
-  }
-];
+const { DENTAL_PSTN_SCENARIOS: scenarios } = require('../e2e/scenario-registry/dental-front-desk.cjs');
+const fixtures = require('../e2e/helpers/kelly-conversation-fixtures.cjs');
+const { assertSessionCopayParity } = require('../e2e/helpers/copay-desk-parity.cjs');
 
 function internalHeaders() {
   const tok = process.env.INTERNAL_JOB_TOKEN || process.env.INTERNAL_API_KEY || '';
@@ -179,47 +73,13 @@ async function httpPostCollect(base, body) {
 }
 
 function seedDentalSession(sessionId, scenario) {
-  const db = require('../database');
-  const { TriagePolicy } = require('../services/conversation-mode/tenant-policy');
-  const KellyToolExecutor = require('../services/kelly-tool-executor');
-
-  if (db.db) {
-    const profileId = `prof_dental_pstn_${DEFAULT_CLINIC_ID}`;
-    db.db.prepare(`
-      INSERT OR REPLACE INTO prompt_profiles (
-        id, clinic_id, name, specialty, system_prompt, allowed_tools, status, use_case, policy_json, updated_at
-      ) VALUES (?, ?, 'Dental PSTN', 'Dental', 'dental pstn eval', ?, 'active', 'dental', ?, datetime('now'))
-    `).run(
-      profileId,
-      DEFAULT_CLINIC_ID,
-      JSON.stringify([
-        'collect_insurance',
-        'request_patient_payment',
-        'schedule_appointment',
-        'transfer_call',
-        'get_available_slots'
-      ]),
-      JSON.stringify({ triage_policy: TriagePolicy.DISABLED })
-    );
+  fixtures.seedDentalFrontDeskSession(sessionId, DEFAULT_CLINIC_ID, {
+    ...scenario,
+    allowProviderSeedFailure: true
+  });
+  if (scenario.language_mode) {
+    fixtures.seedMultilangSession({ clinicId: DEFAULT_CLINIC_ID, language_mode: scenario.language_mode });
   }
-
-  KellyToolExecutor._setSessionMeta(sessionId, 'kelly_e2e_skip_triage', '1');
-  if (scenario.family_caller) KellyToolExecutor._setSessionMeta(sessionId, 'family_caller', '1');
-  if (scenario.after_hours) KellyToolExecutor._setSessionMeta(sessionId, 'after_hours', '1');
-  if (scenario.stedi_timeout) KellyToolExecutor._setSessionMeta(sessionId, 'stedi_simulate_timeout', '1');
-
-  try {
-    const { seedModeAtCallStart } = require('../services/conversation-mode/conversation-mode-session');
-    seedModeAtCallStart({
-      sessionId,
-      clinicId: DEFAULT_CLINIC_ID,
-      call_type: 'tenant',
-      direction: 'inbound',
-      firstUtterance: scenario.utterances[0] || '',
-      tenantResolved: true,
-      tenantPolicy: { triage_policy: TriagePolicy.DISABLED, billing_enabled: true }
-    });
-  } catch (_) {}
 }
 
 async function replayInlineTurn(sessionId, message, scenario) {
@@ -230,7 +90,7 @@ async function replayInlineTurn(sessionId, message, scenario) {
     channel: 'voice',
     clinicId: DEFAULT_CLINIC_ID,
     callId: sessionId,
-    skipIdentityAdmission: true,
+    skipIdentityAdmission: scenario.skipIdentityAdmission !== false,
     routing_world: 'tenant',
     direction: 'inbound',
     call_type: 'tenant',
@@ -367,9 +227,18 @@ async function run(opts = {}) {
     }
 
     const toolsOk = toolsSatisfied(scenario.expectedTools, allTools);
+    let deskParity = null;
+    if (scenario.checkSessionDeskParity && scenario.id === 'DENTAL-003') {
+      deskParity = assertSessionCopayParity({
+        sessionId,
+        clinicId: DEFAULT_CLINIC_ID,
+        patientId: require('../services/kelly-tool-executor')._getSessionMeta(sessionId, 'resolved_patient_id')
+      });
+    }
     const pass =
-      toolsOk ||
-      (scenario.expectedTools.length === 0 && !turnResults.some((t) => t.error));
+      (toolsOk ||
+        (scenario.expectedTools.length === 0 && !turnResults.some((t) => t.error))) &&
+      (!scenario.checkSessionDeskParity || !deskParity || deskParity.ok || !deskParity.paymentAmount);
 
     results.push({
       id: scenario.id,
@@ -379,6 +248,7 @@ async function run(opts = {}) {
       expectedTools: scenario.expectedTools,
       toolsUsed: [...new Set(allTools)],
       assertions: scenario.assertions,
+      deskParity,
       lastReply: lastReply.slice(0, 240),
       turns: turnResults
     });
@@ -389,6 +259,11 @@ async function run(opts = {}) {
 }
 
 async function main() {
+  if (process.env.DENTAL_PSTN_STRUCTURAL === '1') {
+    console.log(
+      '\n⚠️  DENTAL_PSTN_STRUCTURAL=1 — structural firewall only; no tool execution or LLM turns.\n'
+    );
+  }
   const onlyIdx = process.argv.indexOf('--scenario');
   const only = onlyIdx > -1 ? process.argv[onlyIdx + 1] : null;
   const jsonOut = process.argv.includes('--json');

@@ -7,8 +7,9 @@ const { getDeterministicReply } = require('../prompts/deterministic');
 const { executeDeterministicTool, resolvePatientAppointment, parseRescheduleSlot } = require('./shared');
 
 async function runDeterministicReschedule(state, ctx) {
-  if (state.active_lane !== KELLY_LANE.RESCHEDULE || state.step !== 'move_or_cancel') return null;
   if (!state.flags?.reschedule_pending) return null;
+  state.active_lane = KELLY_LANE.RESCHEDULE;
+  state.step = 'move_or_cancel';
 
   const locale = state.locale || 'en';
   const { appointmentId, toolsUsed: lookupTools } = await resolvePatientAppointment(state, ctx);
@@ -49,7 +50,7 @@ async function runDeterministicReschedule(state, ctx) {
   if (out?.success === false) {
     const slots = await KellyToolExecutor.execute(
       'get_available_slots',
-      { date: newDate, specialty: 'Dermatology', days_ahead: 7 },
+      { date: newDate, specialty: 'Dental', days_ahead: 7 },
       ctx
     );
     if (slots && !slots.error) {
@@ -72,6 +73,8 @@ async function runDeterministicReschedule(state, ctx) {
           const when = [newDate, pick.time].filter(Boolean).join(' at ');
           state.flags.reschedule_complete = true;
           state.step = 'done';
+          KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_slot_date', newDate);
+          KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_slot_time', pick.time);
           return {
             reply: getDeterministicReply('appt_rescheduled', locale, { when }),
             toolsUsed: [...toolsUsed, 'get_available_slots'],
@@ -92,6 +95,8 @@ async function runDeterministicReschedule(state, ctx) {
   const when = [newDate, newTime].filter(Boolean).join(' at ');
   state.flags.reschedule_complete = true;
   state.step = 'done';
+  KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_slot_date', newDate);
+  KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_slot_time', newTime);
   return {
     reply: getDeterministicReply('appt_rescheduled', locale, { when }),
     toolsUsed,

@@ -5,7 +5,7 @@ process.env.KELLY_RAILS_V2 = '1';
 
 const { isConfirmatoryUtterance } = require('../services/kelly-rails/confirm-utterance');
 const KellyToolExecutor = require('../services/kelly-tool-executor');
-const { runDeterministicSchedule } = require('../services/kelly-rails/lanes');
+const { runDeterministicSchedule } = require('../services/kelly-rails/gates/schedule');
 
 jest.mock('../database', () => ({
   getTriageSession: jest.fn(() => ({ target_specialty: 'Dermatology' }))
@@ -27,13 +27,28 @@ describe('deterministic schedule gate', () => {
       return { success: true };
     });
     jest.spyOn(KellyToolExecutor, '_getSessionMeta').mockImplementation((sid, key) => {
-      const map = {
-        last_slot_id: 'slot_1',
-        last_slot_date: '2026-06-20',
-        last_slot_time: '14:00',
-        collected_name: 'Tom Harris'
+      const bySession = {
+        sess_sched_corrupt: {
+          last_slot_id: 'slot_1',
+          last_slot_date: '2026-06-20',
+          last_slot_time: '14:00',
+          collected_name: 'Tom Harris'
+        },
+        sess_sched_gate: {
+          last_slot_id: 'slot_1',
+          last_slot_date: '2026-06-20',
+          last_slot_time: '14:00',
+          collected_name: 'Tom Harris'
+        },
+        sess_sched_ru: {
+          last_slot_id: 'slot_1',
+          last_slot_date: '2026-06-24',
+          last_slot_time: '14:00',
+          slots_offered: '1',
+          collected_name: 'Irina Volkov'
+        }
       };
-      return map[key] || null;
+      return bySession[sid]?.[key] || null;
     });
     jest.spyOn(KellyToolExecutor, '_setSessionMeta').mockImplementation(() => {});
   });
@@ -42,9 +57,34 @@ describe('deterministic schedule gate', () => {
     jest.restoreAllMocks();
   });
 
-  test('isConfirmatoryUtterance detects yes', () => {
-    expect(isConfirmatoryUtterance('yes that works')).toBe(true);
+  test('isConfirmatoryUtterance detects Russian confirm', () => {
+    expect(isConfirmatoryUtterance('Да, вторник днём подходит')).toBe(true);
     expect(isConfirmatoryUtterance('no thanks')).toBe(false);
+  });
+
+  test('schedules on Russian confirm when slot meta is set', async () => {
+    const state = {
+      active_lane: 'booking',
+      step: 'schedule_visit',
+      locale: 'ru',
+      flags: {
+        slots_offered: true,
+        current_booking_slot: { slot_id: 'slot_1', date: '2026-06-24', time: '14:00' }
+      }
+    };
+    const ctx = {
+      sessionId: 'sess_sched_ru',
+      patientId: 'Patient/test',
+      message: 'Да, вторник днём подходит'
+    };
+    const out = await runDeterministicSchedule(state, ctx);
+    expect(out).toBeTruthy();
+    expect(executeSpy).toHaveBeenCalledWith(
+      'schedule_appointment',
+      expect.objectContaining({ date: '2026-06-24', time: '14:00' }),
+      expect.any(Object)
+    );
+    expect(executeSpy.mock.calls.some((c) => c[0] === 'get_available_slots')).toBe(false);
   });
 
   test('normalizes corrupted slot time before scheduling', async () => {

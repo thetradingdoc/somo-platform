@@ -83,10 +83,11 @@ const {
   isSomoMarketingHostname,
   isLocalDevRootHost,
 } = require('./lib/static-hosting-paths');
-const { registerEarlySomoLandingStatic } = require('./bootstrap/static-hosting');
+const { registerEarlySomoLandingStatic, serveMarketingLandingRoot } = require('./bootstrap/static-hosting');
 const { registerHealthUi } = require('./bootstrap/health-ui');
 const { mountHealthSpine, mountCommerceLegacy } = require('./routes/index');
 const { isCommerceLegacyEnabled } = require('./lib/commerce-legacy-flag');
+const { isLegacySurfacesEnabled } = require('./lib/legacy-surfaces-flag');
 // Node 18+ has global fetch; fallback to axios where needed
 // Initialize Stripe with proper configuration and validation
 const stripeConfig = require('./utils/stripe-config');
@@ -2120,7 +2121,7 @@ function getUnifiedDashboardPath(...subPaths) {
 }
 
 function redirectMarketingRoot(res) {
-  return res.redirect(302, '/business/trial-activation.html');
+  return serveMarketingLandingRoot(res, __dirname);
 }
 
 function getHealthVideoSpaDir() {
@@ -2139,13 +2140,13 @@ function redirectHealthVideoEntry(res) {
   return res.redirect(302, '/health-video.html');
 }
 
-/** Legacy /index.html — health dev root or B2B trial (replaces undefined LittleLab handler). */
+/** Legacy /index.html — health dev root or B2B marketing landing. */
 function trySendHealthOrB2BLanding(res) {
   if (process.env.LOCAL_DEV_ROOT === 'health') {
     redirectHealthVideoEntry(res);
     return true;
   }
-  res.redirect(302, '/business/trial-activation.html');
+  serveMarketingLandingRoot(res, __dirname);
   return true;
 }
 
@@ -2693,6 +2694,8 @@ const tenantPatientsRoutes = require('./routes/tenant-patients');
 app.use('/api/tenant/patients', tenantPatientsRoutes);
 const tenantClinicRoutes = require('./routes/tenant-clinic');
 app.use('/api/tenant/clinic', tenantClinicRoutes);
+const tenantIntegrationsRoutes = require('./routes/tenant-integrations');
+app.use('/api/tenant/integrations', tenantIntegrationsRoutes);
 const { publicRouter: providerInvitesPublic, adminRouter: providerInvitesAdmin } = require('./routes/provider-invites');
 app.use('/api/invites', providerInvitesPublic);
 app.use('/api/admin/invites', providerInvitesAdmin);
@@ -2713,21 +2716,28 @@ app.use('/api/rag', ragSearchRoutes);
 mountHealthSpine(app);
 
 const { registerFaceReadPublicRoute } = require('./routes/public-face-read');
-registerFaceReadPublicRoute(app, { apiLimiter });
+if (isLegacySurfacesEnabled()) {
+  registerFaceReadPublicRoute(app, { apiLimiter });
+}
 
 const { registerPublicRoutineRoutes } = require('./routes/public-routines');
-registerPublicRoutineRoutes(app, { apiLimiter });
+if (isLegacySurfacesEnabled()) {
+  registerPublicRoutineRoutes(app, { apiLimiter });
+}
 
 const { registerPublicFunnelMatchRoutes } = require('./routes/public-funnel-match');
-registerPublicFunnelMatchRoutes(app, { apiLimiter });
 const { registerPublicFunnelIntakeRoutes } = require('./routes/public-funnel-intake');
-registerPublicFunnelIntakeRoutes(app, { apiLimiter });
-
 const { registerPublicFunnelSpecialistRoutes } = require('./routes/public-funnel-specialists');
-registerPublicFunnelSpecialistRoutes(app, { apiLimiter });
+if (isLegacySurfacesEnabled()) {
+  registerPublicFunnelMatchRoutes(app, { apiLimiter });
+  registerPublicFunnelIntakeRoutes(app, { apiLimiter });
+  registerPublicFunnelSpecialistRoutes(app, { apiLimiter });
+}
 
 const { registerPatientFunnelBridgeRoutes } = require('./routes/patient-funnel-bridge');
-registerPatientFunnelBridgeRoutes(app, { apiLimiter, requirePatientSession, recordPatientPortalEvent });
+if (isLegacySurfacesEnabled()) {
+  registerPatientFunnelBridgeRoutes(app, { apiLimiter, requirePatientSession, recordPatientPortalEvent });
+}
 
 // Legacy consumer paths — redirect to health entry or B2B trial (LittleLab funnel retired)
 app.get(/^\/consumer(\/.*)?$/, (req, res) => {
@@ -2738,7 +2748,7 @@ app.get(/^\/consumer(\/.*)?$/, (req, res) => {
   if (process.env.LOCAL_DEV_ROOT === 'health') {
     return redirectHealthVideoEntry(res);
   }
-  return res.redirect(302, '/business/trial-activation.html');
+  return serveMarketingLandingRoot(res, __dirname);
 });
 
 const { registerPatientCareProgramBillingRoutes } = require('./routes/patient-care-program-billing');
@@ -4589,6 +4599,16 @@ app.get('/auth/google/calendar/callback', async (req, res) => {
       scopes: tokens.scope || oauthClient.credentials.scope || null
     });
 
+    try {
+      const { setServerOnboardingMeta } = require('./services/voice-onboarding-state');
+      const customer = db.getCustomerByEmail(email);
+      if (customer?.id) {
+        setServerOnboardingMeta(db, customer.id, { calendar_connection: 'google' });
+      }
+    } catch (metaErr) {
+      console.warn('Calendar onboarding meta update failed:', metaErr.message);
+    }
+
     res.redirect(`${returnUrl}?calendar=connected`);
   } catch (oauthError) {
     console.error('❌ Google Calendar callback error:', oauthError);
@@ -4863,7 +4883,9 @@ app.post('/api/calendar/disconnect', async (req, res) => {
 
 
 
-const { registerAdminPlatformRoutes } = require('./routes/admin-platform');
+const { registerAdminSessionRoutes, registerAdminPlatformRoutes } = require('./routes/admin-platform');
+registerAdminSessionRoutes(app);
+app.use('/api/admin', requireAdminAuth);
 registerAdminPlatformRoutes(app, {
   apiLimiter,
   express,
@@ -4871,7 +4893,6 @@ registerAdminPlatformRoutes(app, {
   requireAdminAuth,
   pricingRoutes,
 });
-app.use('/api/admin', requireAdminAuth);
 const impactAdminRoutes = require('./routes/impact-admin');
 app.use('/api/admin/impact', impactAdminRoutes);
 
@@ -4883,6 +4904,9 @@ app.use('/api/admin/kelly', adminKellyCallsRoutes);
 
 const adminVoiceOnboardingRoutes = require('./routes/admin-voice-onboarding');
 app.use('/api/admin/voice-onboarding', adminVoiceOnboardingRoutes);
+
+const adminWallboardRoutes = require('./routes/admin-wallboard');
+app.use('/api/admin/wallboard', adminWallboardRoutes);
 
 // Visit pricing admin (Task 16)
 
@@ -7874,20 +7898,24 @@ Object.assign(patientRouteDeps, {
   otpSendLimiter,
   otpConfirmLimiter,
 });
-registerPatientRoutineRoutes(app, patientRouteDeps);
-registerPatientShelfRoutes(app, patientRouteDeps);
-registerPatientProductsRoutes(app, patientRouteDeps);
+if (isLegacySurfacesEnabled()) {
+  registerPatientRoutineRoutes(app, patientRouteDeps);
+  registerPatientShelfRoutes(app, patientRouteDeps);
+  registerPatientProductsRoutes(app, patientRouteDeps);
+}
 registerPatientBillingPortalRoutes(app, patientRouteDeps);
 registerPatientBookingRoutes(app, patientRouteDeps);
-registerPublicLandingAssistantRoutes(app, {
-  apiLimiter,
-  express,
-  validatePatientTriageBody,
-  db,
-  upsertCustomerProductScan,
-  antiSybilGuard,
-  requireAdminAuth,
-});
+if (isLegacySurfacesEnabled()) {
+  registerPublicLandingAssistantRoutes(app, {
+    apiLimiter,
+    express,
+    validatePatientTriageBody,
+    db,
+    upsertCustomerProductScan,
+    antiSybilGuard,
+    requireAdminAuth,
+  });
+}
 
 const patientPortalDeps = {
   ...patientRouteDeps,
@@ -9324,6 +9352,11 @@ function onServerListening() {
     isCommerceLegacyEnabled()
       ? '🛒 COMMERCE_LEGACY_ENABLED=true — public commerce + checkout-chat routes mounted'
       : '🏥 COMMERCE_LEGACY_ENABLED=false — health session is default; commerce routes not mounted'
+  );
+  console.log(
+    isLegacySurfacesEnabled()
+      ? '🧴 LEGACY_SURFACES_ENABLED=true — derm/funnel/shelf legacy routes mounted'
+      : '🏢 LEGACY_SURFACES_ENABLED=false — front-desk default; derm legacy routes not mounted'
   );
 
   if (process.env.DEV_LIGHT_START === '1') {

@@ -3,6 +3,7 @@
 const { runDeterministicSafety } = require('./safety');
 const { runDeterministicPostPaymentConfirmation } = require('./post-payment');
 const { runDeterministicPayment } = require('./payment');
+const { runDeterministicInsurance } = require('./insurance');
 const { runDeterministicSchedule } = require('./schedule');
 const { runDeterministicClinicalIntro } = require('./clinical');
 const { runDeterministicOpqrst } = require('./opqrst');
@@ -17,6 +18,7 @@ module.exports = {
   runDeterministicSafety,
   runDeterministicPostPaymentConfirmation,
   runDeterministicPayment,
+  runDeterministicInsurance,
   runDeterministicSchedule,
   runDeterministicClinicalIntro,
   runDeterministicOpqrst,

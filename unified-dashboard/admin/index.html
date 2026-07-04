@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Somo — Control board</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
   <link rel="stylesheet" href="/assets/css/admin-portal.css">
   <script src="/assets/js/config.js"></script>
 </head>
@@ -34,7 +35,7 @@
 
     <div class="admin-crm-status-card" id="scrapeStatus">
       <div class="admin-crm-status-left">
-        <span class="admin-crm-status-dot" id="statusDot"></span>
+        <span id="statusNameplate"></span>
         <div>
           <div class="admin-crm-status-text" id="statusText">Loading job status...</div>
           <div class="admin-crm-status-meta" id="statusMeta"></div>
@@ -59,6 +60,16 @@
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Needs phone</div><div class="admin-crm-metric-value" id="mNeedsPhone">—</div><div class="admin-crm-metric-sub"><a href="/admin/pipeline.html#needs-phone">Open queue →</a></div></div>
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Calls this month</div><div class="admin-crm-metric-value" id="mCalls">—</div><div class="admin-crm-metric-sub" id="mCallsCap">of 250 cap</div></div>
       <div class="admin-crm-metric"><div class="admin-crm-metric-label">Tenant alerts</div><div class="admin-crm-metric-value admin-crm-metric-danger" id="mAlerts">—</div><div class="admin-crm-metric-sub">Clinics need attention</div></div>
+    </div>
+
+    <div class="admin-crm-card">
+      <div class="admin-crm-card-head">
+        <h3 class="admin-crm-card-title">Office status</h3>
+        <a href="/admin/tenants.html" style="font-size:12.5px;font-weight:600;color:var(--forest);">All tenants →</a>
+      </div>
+      <div id="officeGrid" class="admin-crm-metrics admin-crm-metrics--3" style="padding:0 18px 18px;">
+        <div class="admin-crm-skeleton" style="height:80px;grid-column:1/-1;"></div>
+      </div>
     </div>
 
     <div class="admin-crm-two-col">
@@ -90,6 +101,7 @@
   </main>
 
   <script src="/admin/assets/js/admin-shell.js"></script>
+  <script src="/admin/assets/js/admin-onboarding.js"></script>
   <script src="/admin/assets/js/admin-job-modal.js"></script>
   <script>
     const { apiFetch, esc, init, showToast, callLead: shellCallLead, hasCapability } = AdminShell;
@@ -128,7 +140,31 @@
     });
 
     async function loadAll() {
-      await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline()]);
+      await Promise.all([loadStatus(), loadAlerts(), loadCallReady(), loadPipeline(), loadOffices()]);
+    }
+
+    async function loadOffices() {
+      const el = document.getElementById('officeGrid');
+      if (!hasCapability('platform.tenants')) {
+        el.innerHTML = '<p style="color:var(--muted);grid-column:1/-1;">Tenant access required</p>';
+        return;
+      }
+      try {
+        const r = await apiFetch('/api/admin/tenants');
+        const tenants = (r.tenants || []).slice(0, 6);
+        if (!tenants.length) {
+          el.innerHTML = '<p style="color:var(--muted);grid-column:1/-1;">No offices yet</p>';
+          return;
+        }
+        el.innerHTML = tenants.map((t) => `
+          <a href="/admin/tenants.html?id=${encodeURIComponent(t.clinic_id)}" class="admin-crm-metric" style="text-decoration:none;color:inherit;">
+            <div class="admin-crm-metric-label">${esc(t.name)}</div>
+            <div style="margin:6px 0;">${AdminOnboarding.tenantNameplateHtml(t)}</div>
+            <div class="admin-crm-metric-sub">${t.minutes_remaining ?? t.credits?.balance_minutes ?? 0} min · ${esc(t.pms_type || 'somo')}</div>
+          </a>`).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--muted);grid-column:1/-1;">${esc(e.message)}</p>`;
+      }
     }
 
     function setDatelineRefreshed() {
@@ -182,8 +218,12 @@
       }
     }
 
+    function adminNameplate(label, variant) {
+      return `<span class="sfd-nameplate sfd-nameplate--${variant} sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>${label}</span>`;
+    }
+
     function renderLastRunBanner(r) {
-      const dot = document.getElementById('statusDot');
+      const plate = document.getElementById('statusNameplate');
       const text = document.getElementById('statusText');
       const configWarn = document.getElementById('scrapeConfigWarn');
 
@@ -191,7 +231,7 @@
         configWarn.style.display = 'flex';
         document.getElementById('scrapeConfigText').textContent =
           r.setup_hint || 'Set JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY on the API server.';
-        dot.className = 'admin-crm-status-dot';
+        if (plate) plate.innerHTML = adminNameplate('ERROR', 'error');
         text.textContent = 'Scrape disabled — job search API not configured';
         document.getElementById('statusMeta').textContent = '';
         document.getElementById('statusStats').innerHTML = '';
@@ -202,10 +242,10 @@
       renderStatusMeta(r);
 
       if (r.scheduler?.is_running) {
-        dot.className = 'admin-crm-status-dot running';
+        if (plate) plate.innerHTML = adminNameplate('RUNNING', 'live');
         text.textContent = 'Scrape job running…';
       } else {
-        dot.className = 'admin-crm-status-dot';
+        if (plate) plate.innerHTML = adminNameplate('READY', 'off');
         text.textContent = 'Ready to scrape';
       }
     }
@@ -234,6 +274,8 @@
       } catch (e) {
         console.error(e);
         const text = document.getElementById('statusText');
+        const plate = document.getElementById('statusNameplate');
+        if (plate) plate.innerHTML = adminNameplate('ERROR', 'error');
         if (text?.textContent === 'Loading job status...') {
           text.textContent = e.message?.includes('Authentication')
             ? 'Sign in required to load job status'

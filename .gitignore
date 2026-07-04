@@ -21,6 +21,7 @@ local/*.db_.gstmp
 .env.local
 .env.*.local
 .env.bak
+.env.bak*
 *.env.bak
 .env.bak2
 *.env.bak2
@@ -93,9 +94,11 @@ e2e-debug-*.png
 # Playwright & test artifacts (repo root and packages)
 /test-results/
 middleware-platform/test-results/
+middleware-platform/playwright-report/
 unified-dashboard/littlelab-landing/test-results/
 unified-dashboard/littlelab-landing/playwright-report/
 playwright-report/
+middleware-platform/tmp/commerce-pstn-run-*.json
 
 # Build outputs
 dist/
@@ -144,7 +147,7 @@ scripts/tmp-retention.cjs
 /data/
 /docs/solution-design/
 /docs/archive/
-/docs/design/
+# docs/design/ — tracked (front-desk spec + QA matrices)
 /docs/START_HERE_CLINICIAN.md
 /docs/architecture/SURFACE_STATUS.md
 /docs/architecture/assets/

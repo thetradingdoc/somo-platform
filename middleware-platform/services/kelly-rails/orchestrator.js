@@ -41,6 +41,7 @@ async function handleTurn(opts = {}) {
       endCall: false,
       toolsUsed: [],
       language,
+      forceLanguageHandoff: true,
       kelly_rails: { active_lane: 'support', step: 'handoff', flags: { language_handoff: true } }
     };
   }

@@ -17,6 +17,32 @@ function handoffCopy(locale) {
 }
 
 /**
+ * Inbound tenant resolved when customer_id is known or clinic maps to a tenant row.
+ */
+function isTenantIdentityResolved(opts = {}) {
+  const customerId = opts.customerId || opts.customer_id || null;
+  if (customerId && String(customerId).trim()) return true;
+
+  const clinicId = opts.clinicId || opts.clinic_id || null;
+  if (!clinicId) return false;
+
+  const db = opts.db;
+  if (db?.getCustomerIdForClinic) {
+    try {
+      const mapped = db.getCustomerIdForClinic(clinicId);
+      if (mapped) return true;
+    } catch (_) {}
+  }
+  if (db?.getClinic) {
+    try {
+      const clinic = db.getClinic(clinicId);
+      if (clinic?.clinic_id) return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
+/**
  * @returns {{ admitted: boolean, reason?: string, reply?: string, locale?: string }}
  */
 function evaluateIdentityAdmission(opts = {}) {
@@ -24,8 +50,11 @@ function evaluateIdentityAdmission(opts = {}) {
   const direction = String(opts.direction || '').trim();
   const clinicId = opts.clinicId || opts.clinic_id || null;
   const customerId = opts.customerId || opts.customer_id || null;
-  const tenantResolved = opts.tenantResolved !== false;
   const locale = resolveLocaleHint(opts);
+
+  const tenantResolved =
+    opts.tenantResolved === true ||
+    (opts.tenantResolved !== false && isTenantIdentityResolved({ ...opts, clinicId, customerId }));
 
   const isOutbound =
     callType === 'sales_outbound' ||
@@ -102,5 +131,6 @@ module.exports = {
   evaluateIdentityAdmission,
   emitIdentityInvalid,
   handoffCopy,
+  isTenantIdentityResolved,
   IDENTITY_HANDOFF_COPY
 };

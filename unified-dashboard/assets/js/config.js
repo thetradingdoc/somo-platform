@@ -91,7 +91,7 @@
     { id: 'claims', label: 'Claims & RCM', icon: 'clipboard-document-list', href: 'billing.html?section=overview' },
     { id: 'prior-auth', label: 'Prior Auth', icon: 'document-text', href: 'billing.html?section=prior-auth' },
     { id: 'billing', label: 'Invoices', icon: 'banknotes', href: 'billing.html?section=invoices' },
-    { id: 'agent', label: 'Voice Agent', icon: 'microphone', href: 'agent.html' },
+    { id: 'agent', label: 'Kelly', icon: 'microphone', href: 'agent.html' },
     { id: 'exceptions', label: 'Exceptions', icon: 'clipboard-document-list', href: 'claims.html' },
     { id: 'profile', label: 'Settings', icon: 'user', href: 'settings.html' }
   ];
@@ -289,11 +289,17 @@
     el.style.color = isError ? '#b91c1c' : '#1d4ed8';
     el.style.border = isError ? '1px solid #fecaca' : '1px solid #bfdbfe';
 
-    const btnHtml = retry
-      ? `<button style="margin-left:12px;padding:4px 10px;font-size:12px;border-radius:999px;border:none;cursor:pointer;background:#111827;color:#f9fafb;">Try again</button>`
-      : '';
-
-    el.innerHTML = `<span>${message}</span>${btnHtml}`;
+    el.textContent = '';
+    const msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    el.appendChild(msgSpan);
+    if (retry) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'Try again';
+      btn.style.cssText = 'margin-left:12px;padding:4px 10px;font-size:12px;border-radius:999px;border:none;cursor:pointer;background:#111827;color:#f9fafb;';
+      el.appendChild(btn);
+    }
     el.style.display = 'flex';
     el.style.alignItems = 'center';
     el.style.justifyContent = 'space-between';

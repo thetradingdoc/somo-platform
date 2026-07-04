@@ -51,9 +51,9 @@
       const colClass = cols === 3 ? 'pp-kpi-row-3' : 'pp-kpi-row-4';
       return `<div class="pp-kpi-row ${colClass}">${(items || [])
         .map(
-          (k) => `<div class="pp-kpi">
-          <div class="pp-kpi-eyebrow">${escapeHtml(k.label)}</div>
-          <div class="pp-kpi-val${k.tone ? ` pp-kpi-val--${k.tone}` : ''}">${escapeHtml(k.value)}</div>
+          (k) => `<div class="pp-kpi-card">
+          <div class="pp-kpi-value${k.tone ? ` pp-kpi-val--${k.tone}` : ''}">${escapeHtml(k.value)}</div>
+          <div class="pp-kpi-label">${escapeHtml(k.label)}</div>
         </div>`
         )
         .join('')}</div>`;
@@ -97,16 +97,14 @@
     },
 
     renderTable({ colsClass, columns, rows }) {
-      const head = `<div class="pp-table-header ${colsClass}">${columns
-        .map((c) => `<span>${escapeHtml(c)}</span>`)
-        .join('')}</div>`;
-      const body = (rows || [])
+      return `<div class="pp-table-wrap sfd-table-wrap"><table class="sfd-table pp-revenue-table"><thead><tr>${columns
+        .map((c) => `<th scope="col">${escapeHtml(c)}</th>`)
+        .join('')}</tr></thead><tbody>${(rows || [])
         .map(
           (cells) =>
-            `<div class="pp-table-row ${colsClass}">${cells.join('')}</div>`
+            `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`
         )
-        .join('');
-      return `<div class="pp-table-wrap">${head}${body || `<div class="pp-table-row ${colsClass}"><span style="grid-column:1/-1;color:var(--muted)">No rows</span></div>`}</div>`;
+        .join('') || '<tr><td colspan="' + columns.length + '" class="sfd-muted">No rows</td></tr>'}</tbody></table></div>`;
     },
 
     btnPrimary(label, attrs) {

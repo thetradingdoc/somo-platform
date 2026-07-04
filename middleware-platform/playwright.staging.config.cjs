@@ -45,6 +45,12 @@ module.exports = defineConfig({
       use: { browserName: 'chromium' }
     },
     {
+      name: 'staging-homepage',
+      testDir: './e2e',
+      testMatch: '**/callsomo-homepage.spec.cjs',
+      use: { browserName: 'chromium' }
+    },
+    {
       name: 'staging-landing-mobile',
       testDir: './e2e',
       testMatch: '**/somo-landing.spec.cjs',

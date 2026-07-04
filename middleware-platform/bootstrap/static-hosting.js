@@ -55,6 +55,26 @@ function registerStaticHosting(app, { express, rootDir }) {
   return { getUnifiedDashboardPath };
 }
 
+function getSomoLandingBuildDir(rootDir) {
+  const candidates = [
+    path.join(rootDir, '..', 'unified-dashboard', 'somo-landing', 'build'),
+    path.join(rootDir, 'unified-dashboard', 'somo-landing', 'build'),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
+  }
+  return null;
+}
+
+/** Public B2B marketing homepage — somo-landing SPA or signup fallback. */
+function serveMarketingLandingRoot(res, rootDir) {
+  const landingDir = getSomoLandingBuildDir(rootDir);
+  if (landingDir) {
+    return res.sendFile(path.resolve(path.join(landingDir, 'index.html')));
+  }
+  return res.redirect(302, '/signup');
+}
+
 /**
  * Serve unified-dashboard /assets before the global middleware stack on marketing hosts.
  */
@@ -95,7 +115,7 @@ function registerEarlySomoLandingStatic(app, { express, rootDir }) {
           '</body></html>'
         );
       }
-      return res.redirect(302, '/business/trial-activation.html');
+      return serveMarketingLandingRoot(res, rootDir);
     }
     if (
       process.env.LOCAL_DEV_ROOT === 'health' &&
@@ -122,4 +142,10 @@ function redirectHealthVideoEntry(res) {
   return res.redirect(302, '/health-video.html');
 }
 
-module.exports = { registerStaticHosting, registerEarlySomoLandingStatic, LEGACY_LANDING_REDIRECT_PREFIXES };
+module.exports = {
+  registerStaticHosting,
+  registerEarlySomoLandingStatic,
+  LEGACY_LANDING_REDIRECT_PREFIXES,
+  getSomoLandingBuildDir,
+  serveMarketingLandingRoot,
+};

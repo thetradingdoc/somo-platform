@@ -95,6 +95,16 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
   });
 
   if (!resolved.ok) {
+    if (resolved.error_code === 'CODE_NOT_IN_STARTER_SET') {
+      const { emitCodingStarterSetMiss } = require('../resolve-admin-visit-codes');
+      emitCodingStarterSetMiss({
+        sessionId,
+        clinicId,
+        visitReason: args.visit_reason,
+        channel: 'voice',
+        tenantSpecialty
+      });
+    }
     if (resolved.error_code === 'CODING_REVIEW_REQUIRED') {
       bump(
         resolved.pair_reason || resolved.code_pair_valid === false
@@ -184,13 +194,15 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     }
     if (finalResolution.status === 'hard_number') {
       const quoteGate = journeyGates.checkQuoteGate({ resolution: finalResolution });
-      if (quoteGate.allowed) {
+      const spokenDelivery =
+        insResult.quote_delivered === true || args.spoken_quote === true || args.deliver_quote === true;
+      if (quoteGate.allowed && spokenDelivery) {
         KellyToolExecutor._setSessionMeta(sessionId, 'quote_delivered', '1');
         KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', 'hard_number');
         KellyToolExecutor._setSessionMeta(sessionId, 'last_copay_due', String(finalResolution.amount));
         KellyToolExecutor._setSessionMeta(sessionId, 'copay_amount', String(finalResolution.amount));
       } else {
-        KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', quoteGate.status);
+        KellyToolExecutor._setSessionMeta(sessionId, 'last_quote_status', quoteGate.status || finalResolution.status);
         KellyToolExecutor._setSessionMeta(sessionId, 'quote_delivered', '0');
         finalResolution = {
           ...finalResolution,
@@ -267,7 +279,13 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     return {
       ...(insResult || {}),
       quote: insResult?.quote || null,
-      amount_resolution: finalResolution
+      amount_resolution: finalResolution,
+      copay_due_now:
+        finalResolution.status === 'hard_number' ? finalResolution.amount : insResult?.copay_due_now,
+      message:
+        finalResolution.status === 'hard_number' && finalResolution.amount != null
+          ? `Based on your plan, your estimated copay for this visit is $${Number(finalResolution.amount).toFixed(2)}.`
+          : insResult?.message
     };
   }
   return { ...(insResult || {}), quote: insResult?.quote || null };

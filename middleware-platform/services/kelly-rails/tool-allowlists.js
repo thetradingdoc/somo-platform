@@ -24,6 +24,7 @@ const TRANSACTIONAL_GATE_TOOLS = new Set([
   'schedule_appointment',
   'create_appointment_checkout',
   'request_patient_payment',
+  'collect_insurance',
   'cancel_appointment',
   'reschedule_appointment'
 ]);
@@ -88,6 +89,7 @@ const ALLOWLISTS = {
 function isGateOwnedTransactionalStep(lane, step, flags = {}) {
   if (lane === 'booking' && step === 'confirm_visit') return true;
   if (lane === 'payment' && step === 'pay_invoice') return true;
+  if (lane === 'payment' && (step === 'insurance' || step === 'front_desk_insurance')) return true;
   if (lane === 'reschedule' && step === 'move_or_cancel' && flags.cancel_pending) return true;
   if (lane === 'reschedule' && step === 'move_or_cancel' && flags.cancel_confirmed) return true;
   return false;
