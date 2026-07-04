@@ -78,7 +78,12 @@ describe('kelly-rails voice payment lane', () => {
     expect(callArg.maxTokens).toBeLessThanOrEqual(300);
     expect(callArg.maxTokens).toBeGreaterThan(0);
 
-    const allowed = getAllowedToolNames('payment', 'pay_invoice');
+    let allowed = getAllowedToolNames('payment', 'pay_invoice');
+    // Mirror node-runner pay_invoice override (gate-owned step still exposes payment tool).
+    allowed = allowed.filter((n) => n !== 'get_triage_session');
+    if (!allowed.includes('request_patient_payment')) {
+      allowed.push('request_patient_payment');
+    }
     const toolNames = (callArg.tools || []).map((t) => t.function.name);
     for (const name of toolNames) {
       expect(allowed).toContain(name);

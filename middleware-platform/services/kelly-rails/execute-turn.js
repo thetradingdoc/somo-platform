@@ -379,12 +379,17 @@ async function executeTurn(input = {}) {
       state.step = 'pay_invoice';
       state.flags._turn_plan = { owner: 'gate', gateId: 'payment' };
     } else if (payIntentNow) {
-      state.active_lane = KELLY_LANE.PAYMENT;
-      state.step = 'insurance';
-      state.active_subrail = state.active_subrail || 'copay_link';
-      state.flags.active_subrail = state.active_subrail;
-      state.conversation_mode = state.conversation_mode || 'tenant_billing';
-      state.flags.conversation_mode = state.conversation_mode;
+      if (state.flags.has_rag || state.flags.triage_complete) {
+        state.active_lane = KELLY_LANE.BOOKING;
+        state.step = 'schedule_visit';
+      } else {
+        state.active_lane = KELLY_LANE.PAYMENT;
+        state.step = 'insurance';
+        state.active_subrail = state.active_subrail || 'copay_link';
+        state.flags.active_subrail = state.active_subrail;
+        state.conversation_mode = state.conversation_mode || 'tenant_billing';
+        state.flags.conversation_mode = state.conversation_mode;
+      }
     }
   }
 
@@ -458,7 +463,10 @@ async function executeTurn(input = {}) {
     }
   }
 
-  const executorTools = KellyToolExecutor.getTurnToolsUsed(ctx.sessionId) || [];
+  const executorTools =
+    typeof KellyToolExecutor.getTurnToolsUsed === 'function'
+      ? KellyToolExecutor.getTurnToolsUsed(ctx.sessionId) || []
+      : [];
   if (executorTools.length) {
     toolsUsed = [...new Set([...(toolsUsed || []), ...executorTools])];
   }
