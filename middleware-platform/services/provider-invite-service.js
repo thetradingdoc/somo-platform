@@ -36,7 +36,7 @@ function assertInviteEmailAvailable(email, { excludeInviteId = null } = {}) {
        ${excludeInviteId ? 'AND id != ?' : ''}
        LIMIT 1`
     )
-    .get(excludeInviteId ? normalized, excludeInviteId : normalized);
+    .get(...(excludeInviteId ? [normalized, excludeInviteId] : [normalized]));
   if (pending) {
     const err = new Error('A pending invite already exists for this email.');
     err.code = 'invite_pending_exists';
