@@ -378,7 +378,7 @@ async function runKellyTurn(opts = {}) {
         for (const tool of dispatchTools) {
           if (!tool?.name) continue;
           const mode = toolContext.conversation_mode;
-          if (mode && !isToolAllowedForMode(mode, toolContext.active_subrail, tool.name)) {
+          if (mode && !isToolAllowedForMode(tool.name, toolContext)) {
             throw new Error(`Tool ${tool.name} blocked by conversation mode firewall`);
           }
           try {
