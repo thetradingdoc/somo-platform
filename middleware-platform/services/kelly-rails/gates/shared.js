@@ -49,6 +49,13 @@ function nextBusinessDayIso(offsetDays = 1) {
   return d.toISOString().slice(0, 10);
 }
 
+function nextWeekdayIso(targetDay, minDaysAhead = 1) {
+  const d = new Date();
+  d.setDate(d.getDate() + minDaysAhead);
+  while (d.getDay() !== targetDay) d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function addBusinessDaysIso(startIso, businessDays) {
   const d = new Date(`${startIso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return nextBusinessDayIso(businessDays);
@@ -100,12 +107,24 @@ function resolveBookingSlot(state, ctx) {
   let apptTime = normalizeSlotTime(slot.time) || normalizeSlotTime(argsFromMeta(ctx.sessionId, 'last_slot_time'));
   let slotId = slot.slot_id || argsFromMeta(ctx.sessionId, 'last_slot_id');
   const msg = String(ctx.message || '');
+  const hadBoundSlot = !!(apptDate && apptTime);
+  let confirmatory = false;
+  try {
+    const { isConfirmatoryUtterance } = require('../confirm-utterance');
+    confirmatory = isConfirmatoryUtterance(msg);
+  } catch (_) {}
 
   const dateInMsg = msg.match(/\b(\d{4}-\d{2}-\d{2})\b/);
   const timeFromMsg = parseSlotTimeFromMessage(msg);
   if (dateInMsg) apptDate = dateInMsg[1];
-  else if (/next week/i.test(msg)) apptDate = nextBusinessDayIso(7);
+  else if (/next week/i.test(msg) && !(hadBoundSlot && confirmatory)) apptDate = nextBusinessDayIso(7);
+  else if (/tuesday|martes|вторник/i.test(msg) && !(hadBoundSlot && confirmatory)) {
+    apptDate = nextWeekdayIso(2);
+  }
   if (timeFromMsg) apptTime = timeFromMsg;
+  else if (/afternoon|tarde|днём|днем/i.test(msg) && !(hadBoundSlot && confirmatory && apptTime)) {
+    apptTime = '14:00';
+  }
   if (apptTime && !apptDate) {
     apptDate =
       slot.date ||
@@ -213,10 +232,16 @@ function parseRescheduleSlot(state, ctx) {
   const dateFromMsg = msg.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
   const timeFromMsg = msg.match(/\b(\d{1,2}:\d{2})\b/);
   const slot = state.flags.current_booking_slot || {};
-  const newDate =
+  let newDate =
     dateFromMsg?.[1] || slot.date || argsFromMeta(ctx.sessionId, 'last_slot_date') || null;
-  const newTime =
+  let newTime =
     timeFromMsg?.[1] || slot.time || argsFromMeta(ctx.sessionId, 'last_slot_time') || null;
+  if (!newDate && /next week|próxima semana|следующ/i.test(msg)) {
+    newDate = nextBusinessDayIso(7);
+  }
+  if (!newTime && newDate) {
+    newTime = parseSlotTimeFromMessage(msg) || '09:00';
+  }
   return { newDate, newTime };
 }
 
@@ -264,6 +289,7 @@ module.exports = {
   sessionRow,
   argsFromMeta,
   nextBusinessDayIso,
+  nextWeekdayIso,
   addBusinessDaysIso,
   isSyntheticSlotId,
   scheduleSucceeded,

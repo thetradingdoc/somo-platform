@@ -2,7 +2,8 @@
 
 const {
   evaluateIdentityAdmission,
-  handoffCopy
+  handoffCopy,
+  isTenantIdentityResolved
 } = require('../services/voice-identity-admission');
 
 describe('voice identity admission', () => {
@@ -19,12 +20,32 @@ describe('voice identity admission', () => {
 
   test('admits inbound when clinic id present', () => {
     const out = evaluateIdentityAdmission({
-      call_type: 'inbound_tenant',
+      call_type: 'tenant',
       direction: 'inbound',
       clinicId: 'clinic-1',
-      tenantResolved: true
+      db: {
+        getCustomerIdForClinic: () => 'cust-1',
+        getClinic: () => ({ clinic_id: 'clinic-1' })
+      }
     });
     expect(out.admitted).toBe(true);
+  });
+
+  test('admits inbound when clinic row exists without customer mapping', () => {
+    const out = evaluateIdentityAdmission({
+      call_type: 'tenant',
+      direction: 'inbound',
+      clinicId: 'clinic-orphan',
+      db: {
+        getCustomerIdForClinic: () => null,
+        getClinic: (id) => (id === 'clinic-orphan' ? { clinic_id: id } : null)
+      }
+    });
+    expect(out.admitted).toBe(true);
+  });
+
+  test('isTenantIdentityResolved with customer id', () => {
+    expect(isTenantIdentityResolved({ customerId: 'cust-1' })).toBe(true);
   });
 
   test('handoff copy available in es', () => {

@@ -176,6 +176,27 @@ function _emitAppointmentRescheduled(ctx, result, args = {}) {
   });
 }
 
+function _persistSlotOfferMeta(sessionId, result, args = {}) {
+  if (!sessionId || !_toolSuccess(result)) return;
+  const bundles = Array.isArray(result.slot_bundles) ? result.slot_bundles : [];
+  if (!bundles.length) return;
+  const pick = bundles.find((b) => b.time && !/^ASYNC/i.test(String(b.time))) || bundles[0];
+  const slotDate =
+    pick.date ||
+    args.date ||
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    })();
+  const slotTime = String(pick.time || '09:00').replace(/^ASYNC.*/i, '09:00');
+  const sid = pick.id || pick.slot_id || pick.practitioner_id;
+  KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_date', slotDate);
+  KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_time', slotTime);
+  if (sid) KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_id', String(sid));
+  KellyToolExecutor._setSessionMeta(sessionId, 'slots_offered', '1');
+}
+
 function _emitAfterToolSuccess(toolName, result, context, args = {}) {
   if (!_toolSuccess(result)) return;
   const ctx = {
@@ -184,8 +205,13 @@ function _emitAfterToolSuccess(toolName, result, context, args = {}) {
     patientId: context.patientId,
     customerId: context.customerId
   };
-  if (toolName === 'cancel_appointment') {
+  if (toolName === 'get_available_slots') {
+    _persistSlotOfferMeta(ctx.sessionId, result, args);
+  } else if (toolName === 'cancel_appointment') {
     _emitAppointmentCancelled(ctx, result, args);
+    if (ctx.sessionId && _toolSuccess(result)) {
+      KellyToolExecutor._setSessionMeta(ctx.sessionId, 'cancel_complete', '1');
+    }
   } else if (toolName === 'reschedule_appointment') {
     _emitAppointmentRescheduled(ctx, result, args);
   }
@@ -804,6 +830,71 @@ class KellyToolExecutor {
       channel: channel || null
     });
 
+    if (toolName === 'cancel_appointment' && sessionId) {
+      const utterance = String(
+        context.message ||
+          context.utterance ||
+          KellyToolExecutor._getSessionMeta(sessionId, 'last_user_message') ||
+          ''
+      );
+      const reschedulePendingMeta = String(
+        KellyToolExecutor._getSessionMeta(sessionId, 'reschedule_pending') || ''
+      ).toLowerCase();
+      const { detectRescheduleIntents } = require('./kelly-rails/turn-planner');
+      const rescheduleIntentNow = detectRescheduleIntents(utterance).length > 0;
+      if (
+        reschedulePendingMeta === '1' ||
+        reschedulePendingMeta === 'true' ||
+        rescheduleIntentNow
+      ) {
+        return {
+          success: false,
+          error: 'RESCHEDULE_PENDING',
+          message: 'Use reschedule_appointment instead of cancel while rescheduling.'
+        };
+      }
+      const cancelDone = KellyToolExecutor._getSessionMeta(sessionId, 'cancel_complete') === '1';
+      if (cancelDone) {
+        const { parseRescheduleSlot } = require('./kelly-rails/gates/shared');
+        const wantsReschedule =
+          rescheduleIntentNow ||
+          /move|next week|reschedule|instead|próxima semana|cambiarla/i.test(utterance);
+        if (wantsReschedule) {
+          const apptId =
+            args.appointment_id ||
+            KellyToolExecutor._getSessionMeta(sessionId, 'existing_appointment_id') ||
+            KellyToolExecutor._getSessionMeta(sessionId, 'last_appointment_id');
+          const { newDate, newTime } = parseRescheduleSlot({ flags: {} }, {
+            ...context,
+            sessionId,
+            message: utterance
+          });
+          if (cancelDone) {
+            return KellyToolExecutor.execute(
+              'reschedule_appointment',
+              {
+                appointment_id: apptId,
+                new_date: newDate,
+                new_time: newTime,
+                clinic_id: clinicId
+              },
+              context
+            );
+          }
+          return KellyToolExecutor.execute(
+            'reschedule_appointment',
+            {
+              appointment_id: apptId,
+              new_date: newDate,
+              new_time: newTime,
+              clinic_id: clinicId
+            },
+            context
+          );
+        }
+      }
+    }
+
     try {
       const result = await KellyToolExecutor._executeToolCore(toolName, args, context);
       const success = _toolSuccess(result);
@@ -956,60 +1047,87 @@ class KellyToolExecutor {
           // Routine/no-symptoms path: bypass full triage stack when session has routine_no_symptoms flag.
           // Voice HTTP guardrails (allowRoutineBypass) already permit schedule; executor must not block.
           if (routineNoSymptoms && !triageReopenSchedule) {
-            const { ensurePreventiveSpine } = require('./preventive-visit-spine');
-            const preventive = await ensurePreventiveSpine({
-              sessionId,
-              patientId,
-              clinicId,
-              isNewPatient: args.is_new_patient !== false
-            });
-            if (preventive.hitl_required) {
-              try {
-                const codingReview = require('./coding-review-service');
-                codingReview.flagForReview({
-                  sessionId,
-                  clinicId,
-                  patientId,
-                  proposed_icd10: preventive.proposed_icd10 || '',
-                  proposed_cpt: preventive.proposed_cpt || '',
-                  confidence: preventive.confidence || 0,
-                  reason: preventive.reason || 'preventive_spine_hitl'
-                });
-              } catch (_) {}
-              return {
-                success: false,
-                error: 'CODING_REVIEW_REQUIRED',
-                error_code: 'CODING_REVIEW_REQUIRED',
-                message: 'A clinical reviewer must confirm preventive visit codes before scheduling.'
-              };
-            }
-            const syntheticTriage = {
-              target_specialty: 'Primary Care',
-              urgency: 'routine',
-              primary_icd10: preventive.primary_icd10,
-              primary_cpt: preventive.primary_cpt,
-              soap_note: 'Routine wellness visit — preventive care'
-            };
-            const primaryCptRoutine = preventive.primary_cpt;
+            const targetSpecialty =
+              args.specialty ||
+              args.appointment_type ||
+              sessionRow?.target_specialty ||
+              KellyToolExecutor._getSessionMeta(sessionId, 'target_specialty') ||
+              null;
+            const isDental = /dental/i.test(String(targetSpecialty || ''));
             const normalizedArgsRoutine = { ...args };
             if (normalizedArgsRoutine.date) {
-              normalizedArgsRoutine.date = KellyToolExecutor._normalizeToBusinessDate(normalizedArgsRoutine.date, clinicId);
+              normalizedArgsRoutine.date = KellyToolExecutor._normalizeToBusinessDate(
+                normalizedArgsRoutine.date,
+                clinicId
+              );
             }
             const rawTime = String(args.time || '').trim();
             const rawLane = String(args.lane || '').trim();
-            const isAsyncSlot = rawTime.toUpperCase().includes('ASYNC') || rawLane.toLowerCase().includes('async');
-            const normalizedTime = rawTime && !rawTime.toUpperCase().includes('ASYNC') ? rawTime : '11:30 AM';
+            const isAsyncSlot =
+              rawTime.toUpperCase().includes('ASYNC') || rawLane.toLowerCase().includes('async');
+            const normalizedTime =
+              rawTime && !rawTime.toUpperCase().includes('ASYNC') ? rawTime : '11:30 AM';
             normalizedArgsRoutine.time = normalizedTime;
-            const visitMode = isAsyncSlot ? 'sync_video' : (String(rawLane || '').toLowerCase() === 'async' ? 'async_review' : 'sync_video');
-            const scheduleEndpoint = channel === 'chat' ? '/api/appointments/schedule' : '/voice/appointments/schedule';
+            const visitMode = isAsyncSlot
+              ? 'sync_video'
+              : String(rawLane || '').toLowerCase() === 'async'
+                ? 'async_review'
+                : 'sync_video';
+            const scheduleEndpoint =
+              channel === 'chat' ? '/api/appointments/schedule' : '/voice/appointments/schedule';
+            const appointmentType =
+              normalizedArgsRoutine.appointment_type ||
+              (isDental ? 'Dental' : 'Primary Care');
+            let primaryIcd10 = normalizedArgsRoutine.primary_icd10 || null;
+            let primaryCpt = normalizedArgsRoutine.primary_cpt || null;
+            let scheduleNotes =
+              normalizedArgsRoutine.notes || 'Routine visit';
+
+            if (isDental) {
+              primaryIcd10 = primaryIcd10 || 'Z01.20';
+              primaryCpt = primaryCpt || 'D1110';
+              scheduleNotes = normalizedArgsRoutine.notes || 'Routine dental visit';
+            } else {
+              const { ensurePreventiveSpine } = require('./preventive-visit-spine');
+              const preventive = await ensurePreventiveSpine({
+                sessionId,
+                patientId,
+                clinicId,
+                isNewPatient: args.is_new_patient !== false
+              });
+              if (preventive.hitl_required) {
+                try {
+                  const codingReview = require('./coding-review-service');
+                  codingReview.flagForReview({
+                    sessionId,
+                    clinicId,
+                    patientId,
+                    proposed_icd10: preventive.proposed_icd10 || '',
+                    proposed_cpt: preventive.proposed_cpt || '',
+                    confidence: preventive.confidence || 0,
+                    reason: preventive.reason || 'preventive_spine_hitl'
+                  });
+                } catch (_) {}
+                return {
+                  success: false,
+                  error: 'CODING_REVIEW_REQUIRED',
+                  error_code: 'CODING_REVIEW_REQUIRED',
+                  message: 'A clinical reviewer must confirm preventive visit codes before scheduling.'
+                };
+              }
+              primaryIcd10 = preventive.primary_icd10;
+              primaryCpt = preventive.primary_cpt;
+              scheduleNotes = normalizedArgsRoutine.notes || 'Routine wellness visit — preventive care';
+            }
+
             const scheduleResultRoutine = await this._post(scheduleEndpoint, {
               ...normalizedArgsRoutine,
-              appointment_type: normalizedArgsRoutine.appointment_type || 'Primary Care',
+              appointment_type: appointmentType,
               clinic_id: clinicId,
               visit_mode: visitMode,
-              notes: normalizedArgsRoutine.notes || syntheticTriage.soap_note,
-              primary_icd10: preventive.primary_icd10,
-              primary_cpt: primaryCptRoutine || null,
+              notes: scheduleNotes,
+              primary_icd10: primaryIcd10,
+              primary_cpt: primaryCpt || null,
               metadata: { session_id: sessionId },
               session_id: sessionId
             });
@@ -1048,7 +1166,7 @@ class KellyToolExecutor {
                   patient_email: normalizedArgsRoutine.patient_email,
                   patient_name: normalizedArgsRoutine.patient_name || 'Patient',
                   clinic_id: clinicId,
-                  appointment_type: 'Primary Care',
+                  appointment_type: appointmentType,
                   triage_session_id: sessionId,
                   customer_type: _resolveCustomerType(clinicId, null),
                   timeoutMs: KellyToolExecutor._httpTimeoutMs()
@@ -1483,13 +1601,23 @@ class KellyToolExecutor {
             console.warn('[request_patient_payment] Ignoring LLM patient_id mismatch');
           }
 
-          const identityVerified = KellyToolExecutor._getSessionMeta(sessionId, 'patient_identity_verified');
+          const identityVerifiedRaw = KellyToolExecutor._getSessionMeta(sessionId, 'patient_identity_verified');
+          const identityVerified =
+            identityVerifiedRaw === true ||
+            identityVerifiedRaw === 'true' ||
+            identityVerifiedRaw === 1 ||
+            identityVerifiedRaw === '1';
           const dobLast4 = String(args.patient_dob_last4 || args.dob_last4 || '').replace(/\D/g, '').slice(-4);
           if (!identityVerified) {
             if (dobLast4.length === 4 && resolvedPatientId) {
               try {
                 const fhir = db.getFHIRPatient(resolvedPatientId);
-                const stored = String(fhir?.birth_date || fhir?.date_of_birth || '').replace(/\D/g, '');
+                const stored = String(
+                  fhir?.birth_date ||
+                    fhir?.date_of_birth ||
+                    fhir?.resource_data?.birthDate ||
+                    ''
+                ).replace(/\D/g, '');
                 if (!stored.endsWith(dobLast4)) {
                   return {
                     success: false,
@@ -1572,6 +1700,12 @@ class KellyToolExecutor {
           }
 
           const delivery = args.delivery || 'both';
+          const payLocale =
+            KellyToolExecutor._getSessionMeta(sessionId, 'preferred_language') ||
+            KellyToolExecutor._getSessionMeta(sessionId, 'fd_locale') ||
+            KellyToolExecutor._getSessionMeta(sessionId, 'detected_language') ||
+            args.locale ||
+            'en';
           const notify = await paymentRequestService.notifyPatientPaymentLink({
             payUrl: result.pay_url,
             amount: result.amount,
@@ -1579,11 +1713,16 @@ class KellyToolExecutor {
             patientPhone,
             delivery,
             clinicId,
+            locale: String(payLocale).slice(0, 2),
+            messageKind: 'copay',
           });
 
           if (sessionId) {
             KellyToolExecutor._setSessionMeta(sessionId, 'rcm_pay_token', result.pay_token);
             KellyToolExecutor._setSessionMeta(sessionId, 'rcm_payment_id', result.payment_id);
+            if (notify.sms_body) {
+              KellyToolExecutor._setSessionMeta(sessionId, 'rcm_pay_sms_body', notify.sms_body);
+            }
           }
 
           _emitKellyActivityEvent({
@@ -1597,6 +1736,8 @@ class KellyToolExecutor {
               amount: result.amount,
               patient_name: args.patient_name || null,
               caller_risk_score: antiSybil?.score ?? null,
+              sms_body: notify.sms_body || notify.sms?.sms_body || null,
+              sms_locale: notify.sms_locale || null,
             },
           });
           try {
@@ -2710,20 +2851,39 @@ class KellyToolExecutor {
 
     let triageResult = TriageRAGService.getAuthoritativeForSession(sessionId);
     let usingRoutineBypass = false;
-    if (!triageResult && routineNoSymptoms) {
+    const { isFrontDeskTenant } = require('./front-desk-intake');
+    const clinicIdForPolicy =
+      KellyToolExecutor._getSessionMeta(sessionId, 'clinic_id') ||
+      (sessionRow && sessionRow.clinic_id) ||
+      null;
+    const triagePolicyDisabled = isFrontDeskTenant({
+      front_desk_mode: KellyToolExecutor._getSessionMeta(sessionId, 'kelly_e2e_skip_triage') === '1',
+      db,
+      clinicId: clinicIdForPolicy
+    });
+    const frontDeskSpecialty = (() => {
+      if (args.appointment_type) return String(args.appointment_type);
+      const visit = KellyToolExecutor._getSessionMeta(sessionId, 'visit_reason');
+      if (visit && /clean|dental|dentist|hygien/i.test(String(visit))) return 'Dental';
+      const target = KellyToolExecutor._getSessionMeta(sessionId, 'target_specialty');
+      if (target) return String(target);
+      return 'PrimaryCare';
+    })();
+    if (!triageResult && (routineNoSymptoms || e2eSkipTriage || triagePolicyDisabled)) {
       usingRoutineBypass = true;
-      // Synthetic row: confidence is current threshold so gating passes; not persisted as a real RAG row.
-      // If RAG_CONFIDENCE_THRESHOLD changes mid-session, stored triage rows keep their original scores.
+      // Front-desk triage_policy DISABLED (or test bypass): specialty from visit_reason, not RAG.
       triageResult = {
-        id: `routine-${sessionId}`,
-        target_specialty: args.appointment_type || 'PrimaryCare',
+        id: triagePolicyDisabled ? `frontdesk-${sessionId}` : `routine-${sessionId}`,
+        target_specialty: frontDeskSpecialty,
         urgency: 'routine',
         recommended_lane: args.lane || 'sync',
         rag_confidence: THRESHOLD,
-        differentials: [{ specialty: args.appointment_type || 'PrimaryCare', probability: 1 }]
+        differentials: [{ specialty: frontDeskSpecialty, probability: 1 }]
       };
-      KellyToolExecutor._logGateBypass(sessionId, 'synthetic_routine_triage_row', {
-        appointment_type: args.appointment_type || 'PrimaryCare'
+      KellyToolExecutor._logGateBypass(sessionId, 'front_desk_slots_bypass', {
+        appointment_type: frontDeskSpecialty,
+        e2e_skip_triage: e2eSkipTriage,
+        triage_policy_disabled: triagePolicyDisabled
       });
     }
     if (!triageResult) {
@@ -2736,7 +2896,7 @@ class KellyToolExecutor {
       };
     }
     // Block orphan/stale RAG: triage_sessions must point at this exact RAG row (set on run_triage_rag).
-    if (routineNoSymptoms) {
+    if (routineNoSymptoms || usingRoutineBypass) {
       console.log('[SLOTS] Routine session - skipping stale RAG check');
     } else if (
       !usingRoutineBypass &&
@@ -2786,7 +2946,7 @@ class KellyToolExecutor {
       hasSpecialty &&
       confidenceNearThreshold
     );
-    const bypassConfidenceForRoutine = routineNoSymptoms || usingRoutineBypass || e2eSkipTriage;
+    const bypassConfidenceForRoutine = routineNoSymptoms || usingRoutineBypass || e2eSkipTriage || triagePolicyDisabled;
     if (confidence < THRESHOLD && !allowBorderlineProgress && !bypassConfidenceForRoutine) {
       bump('voice_agent_misuse_get_available_slots_low_confidence');
       return {
@@ -2800,6 +2960,7 @@ class KellyToolExecutor {
     const triageComplete =
       usingRoutineBypass ||
       routineNoSymptoms ||
+      e2eSkipTriage ||
       (sessionRow && KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete));
     if (!triageComplete) {
       bump('voice_agent_misuse_get_available_slots_triage_incomplete');
@@ -2816,9 +2977,16 @@ class KellyToolExecutor {
     const timezone = args.timezone || 'America/New_York';
     const lane = args.lane || triageResult.recommended_lane || 'sync';
     // W3-S5.2: specialty from differential (triageResult.target_specialty)
-    const appointmentType = routineNoSymptoms
-      ? 'Primary Care'
-      : (args.appointment_type || triageResult.target_specialty || 'General Consult');
+    const specialtyFromTriage =
+      triageResult?.target_specialty ||
+      (triageResult?.differentials?.[0]?.specialty) ||
+      frontDeskSpecialty ||
+      null;
+    const appointmentType =
+      args.appointment_type ||
+      specialtyFromTriage ||
+      (routineNoSymptoms || usingRoutineBypass ? frontDeskSpecialty : null) ||
+      'General Consult';
 
     // gap5: pass patient price_tier
     const pricing = db.getPatientPricing ? db.getPatientPricing(patientId) : { price_tier: 2 };

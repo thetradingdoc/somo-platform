@@ -15,12 +15,18 @@ const {
   resolvePracticeDisplayName
 } = require('../services/call-opener-resolver');
 const { normalizeSettingsRow } = require('../services/voice-settings-sync');
+const { resolveClinicForCustomer } = require('../services/tenant-voice-config');
 
 function requireAdmin(req, res, next) {
   if (!hasValidSession(req)) {
     return res.status(401).json({ success: false, error: 'Admin authentication required' });
   }
   return next();
+}
+
+function resolveClinicIdForCustomer(dbModule, customerId) {
+  const clinic = resolveClinicForCustomer(dbModule, customerId);
+  return clinic?.clinic_id || null;
 }
 
 router.get('/customers/:customerId/voice-onboarding', requireAdmin, (req, res) => {
@@ -49,6 +55,9 @@ router.get('/customers/:customerId/voice-onboarding', requireAdmin, (req, res) =
     console.error('[admin-voice-onboarding] voice-onboarding GET failed:', e.message);
     return res.status(500).json({ success: false, error: 'server_error' });
   }
+});
+
+router.post('/customers/:customerId/reset-onboarding', requireAdmin, (req, res) => {
   try {
     const customer = db.getCustomer(req.params.customerId);
     if (!customer) {
@@ -66,6 +75,9 @@ router.get('/customers/:customerId/voice-onboarding', requireAdmin, (req, res) =
     console.error('[admin-voice-onboarding] reset-onboarding failed:', e.message);
     return res.status(500).json({ success: false, error: 'server_error' });
   }
+});
+
+router.get('/customers/:customerId/opener-compare', requireAdmin, (req, res) => {
   try {
     const customer = db.getCustomer(req.params.customerId);
     if (!customer) {
@@ -109,11 +121,7 @@ router.get('/customers/:customerId/voice-onboarding', requireAdmin, (req, res) =
     console.error('[admin-voice-onboarding] opener-compare failed:', e.message);
     return res.status(500).json({ success: false, error: 'server_error' });
   }
-
-function resolveClinicIdForCustomer(db, customerId) {
-  const clinic = resolveClinicForCustomer(db, customerId);
-  return clinic?.clinic_id || null;
-}
+});
 
 router.post('/customers/:customerId/go-live', requireAdmin, (req, res) => {
   try {
@@ -157,6 +165,9 @@ router.post('/customers/:customerId/go-live', requireAdmin, (req, res) => {
     console.error('[admin-voice-onboarding] go-live failed:', e.message);
     return res.status(500).json({ success: false, error: 'server_error' });
   }
+});
+
+router.get('/stuck', requireAdmin, (req, res) => {
   try {
     const days = parseInt(req.query.days, 10) || 7;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -216,3 +227,6 @@ router.post('/customers/:customerId/go-live', requireAdmin, (req, res) => {
     console.error('[admin-voice-onboarding] stuck list failed:', e.message);
     return res.status(500).json({ success: false, error: 'server_error' });
   }
+});
+
+module.exports = router;

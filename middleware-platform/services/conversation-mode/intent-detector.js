@@ -17,6 +17,19 @@ const BILLING_PIVOT_PHRASES = [
   'outstanding balance',
   'what do i owe',
   'amount due',
+  'how much',
+  'what would',
+  'cost me',
+  'out of pocket',
+  'coverage',
+  'copago',
+  'cuánto',
+  'cuanto',
+  'pagar',
+  'seguro',
+  'сколько',
+  'страховка',
+  'оплат',
   '付款',
   '支付',
   '诊费'
@@ -41,7 +54,12 @@ const CANCEL_PHRASES = [
   'need to cancel',
   'cancel the appointment',
   'cancelar mi cita',
-  'cancelar cita'
+  'cancelar cita',
+  'отменить',
+  'отмена',
+  'отмену',
+  'нужно отменить',
+  'отмен'
 ];
 
 const RESCHEDULE_PHRASES = [
@@ -76,7 +94,12 @@ const BOOK_PHRASES = [
   'quiero reservar',
   'necesito una cita',
   'cita de',
-  'reservar una cita'
+  'reservar una cita',
+  'запис',
+  'записаться',
+  'осмотр',
+  'приём',
+  'прием'
 ];
 
 const CANCEL_REBOOK_PHRASES = [
@@ -164,7 +187,22 @@ function hasSymptomEvidence(msg) {
   return matchesAny(m, VAGUE_SYMPTOM_PHRASES);
 }
 
+function isInsuranceAcceptanceInquiry(msg) {
+  const m = normalizeMsg(msg);
+  return /accept.*(insurance|medicaid|medicare)|aceptan.*seguro|toman.*seguro|take.*medicaid/i.test(m);
+}
+
+function isCostOrCopayInquiry(msg) {
+  const m = normalizeMsg(msg);
+  return (
+    /how much|what would.*cost|cost me|out of pocket|copay|copago|cuánto|cuanto|сколько|before i book|antes de reservar|antes de agendar/i.test(
+      m
+    ) || matchesAny(m, ['coverage', 'seguro', 'страховка', 'оплат'])
+  );
+}
+
 function isAdminBookingPhrase(msg) {
+  if (isCostOrCopayInquiry(msg)) return false;
   if (/\b(rash|itch|pain|hurt|symptom|fever|burn|swollen|erupcion|erupción|picor|comezón|comezon|dolor)\b/.test(msg)) {
     return false;
   }
@@ -197,7 +235,10 @@ function detectIntents(utterance) {
 
   if (isEmergency(msg)) intents.push({ intent: UserIntent.EMERGENCY, confidence: 0.95 });
 
-  if (matchesAny(msg, BILLING_PIVOT_PHRASES) || PAYMENT_SIGNALS.some((s) => msg.includes(s))) {
+  if (
+    !isInsuranceAcceptanceInquiry(msg) &&
+    (matchesAny(msg, BILLING_PIVOT_PHRASES) || PAYMENT_SIGNALS.some((s) => msg.includes(s)))
+  ) {
     intents.push({ intent: UserIntent.PAY_COPAY, confidence: 0.9 });
   }
 
@@ -289,5 +330,7 @@ module.exports = {
   isCancelRebookUtterance,
   isContactCaptureUtterance,
   hasSymptomEvidence,
-  isAdminBookingPhrase
+  isAdminBookingPhrase,
+  isCostOrCopayInquiry,
+  isInsuranceAcceptanceInquiry
 };

@@ -357,8 +357,12 @@ class InsuranceService {
       const stedi271Parser = require('./stedi-271-parser');
       let eligibilityResponse = null;
       let usedHealthcareV3 = false;
+      let stediFailed = true;
 
-      if (this.canCallStediHealthcare()) {
+      // Option A: simulate mode never probes Stedi (global semantics for eval/demo).
+      if (process.env.VOICE_ELIGIBILITY_SIMULATE === '1') {
+        eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
+      } else if (this.canCallStediHealthcare()) {
         try {
           const v3 = await this.checkEligibilityViaHealthcareV3(eligibilityData);
           if (v3.ok && v3.data) {
@@ -403,7 +407,7 @@ class InsuranceService {
         }
       }
 
-      if (!eligibilityResponse) {
+      if (!eligibilityResponse && process.env.VOICE_ELIGIBILITY_SIMULATE !== '1') {
         const x12Request = this._buildEligibilityRequest(eligibilityData);
         const stediClient = this.getStediClient();
         try {
@@ -428,17 +432,19 @@ class InsuranceService {
         }
       }
 
-      let stediFailed = !eligibilityResponse;
-      if (usedHealthcareV3 && eligibilityResponse) {
-        stediFailed = false;
-      } else if (stediFailed) {
-        const voiceSimulate =
-          process.env.VOICE_ELIGIBILITY_SIMULATE === '1' ||
-          (process.env.NODE_ENV !== 'production' && process.env.VOICE_ELIGIBILITY_SIMULATE !== '0');
-        if (voiceSimulate) {
-          eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
-        } else {
-          throw new Error('Stedi eligibility unavailable and simulation disabled for voice');
+      if (process.env.VOICE_ELIGIBILITY_SIMULATE !== '1') {
+        stediFailed = !eligibilityResponse;
+        if (usedHealthcareV3 && eligibilityResponse) {
+          stediFailed = false;
+        } else if (stediFailed) {
+          const voiceSimulate =
+            process.env.VOICE_ELIGIBILITY_SIMULATE === '1' ||
+            (process.env.NODE_ENV !== 'production' && process.env.VOICE_ELIGIBILITY_SIMULATE !== '0');
+          if (voiceSimulate) {
+            eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
+          } else {
+            throw new Error('Stedi eligibility unavailable and simulation disabled for voice');
+          }
         }
       }
 
@@ -1264,10 +1270,103 @@ class InsuranceService {
   }
 
   /**
+   * Map caller/payer phrasing to mock table keys (AETNA, BCBS, UHC, …).
+   * @private
+   */
+  static _resolveSimulatePayerKey(eligibilityData = {}) {
+    const parts = [
+      eligibilityData.payerId,
+      eligibilityData.payer_id,
+      eligibilityData.payerName,
+      eligibilityData.payer_name
+    ]
+      .filter(Boolean)
+      .map((v) => String(v).toLowerCase());
+    const blob = parts.join(' ');
+    if (/aetna/.test(blob)) return 'AETNA';
+    if (/delta/.test(blob)) return 'BCBS';
+    if (/met\s*life|metlife/.test(blob)) return 'UHC';
+    if (/cigna/.test(blob)) return 'AETNA';
+    if (/united|uhc/.test(blob)) return 'UHC';
+    if (/blue\s*cross|blue\s*shield|bcbs/.test(blob)) return 'BCBS';
+    const upper = String(eligibilityData.payerId || eligibilityData.payer_id || '').toUpperCase();
+    if (upper && ['BCBS', 'AETNA', 'UHC'].includes(upper)) return upper;
+    return 'BCBS';
+  }
+
+  /**
+   * Deterministic mock eligibility (no Stedi). Used when VOICE_ELIGIBILITY_SIMULATE=1.
+   * @private
+   */
+  static async _mockEligibilityTable(eligibilityData) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const mockResponses = {
+      BCBS: {
+        eligible: true,
+        copay: 20,
+        allowedAmount: 150,
+        insurancePays: 130,
+        deductibleTotal: 500,
+        deductibleRemaining: 200,
+        coinsurancePercent: 20,
+        oopMax: 5000,
+        oopMet: 0,
+        planSummary: 'Covers outpatient mental health visits; prior auth not required for first 6 visits.',
+        message: 'Eligible - Copay $20'
+      },
+      AETNA: {
+        eligible: true,
+        copay: 25,
+        allowedAmount: 150,
+        insurancePays: 125,
+        deductibleTotal: 1000,
+        deductibleRemaining: 600,
+        coinsurancePercent: 20,
+        oopMax: 6000,
+        oopMet: 0,
+        planSummary: 'Standard PPO: outpatient mental health covered after copay; deductible applies to labs only.',
+        message: 'Eligible - Copay $25'
+      },
+      UHC: {
+        eligible: true,
+        copay: 30,
+        allowedAmount: 150,
+        insurancePays: 120,
+        deductibleTotal: 750,
+        deductibleRemaining: 300,
+        coinsurancePercent: 20,
+        oopMax: 5500,
+        oopMet: 0,
+        planSummary: 'Outpatient behavioral health in-network covered; 30$ copay; 20% coinsurance after deductible for some services.',
+        message: 'Eligible - Copay $30'
+      }
+    };
+
+    const payerId = this._resolveSimulatePayerKey(eligibilityData);
+    return (
+      mockResponses[payerId] || {
+        eligible: true,
+        copay: 20,
+        allowedAmount: 150,
+        insurancePays: 130,
+        oopMax: 5000,
+        oopMet: 0,
+        message: 'Eligible - Copay $20 (default)'
+      }
+    );
+  }
+
+  /**
    * Fallback eligibility when Stedi 270/271 fails. Attempts Stedi API when configured.
+   * When VOICE_ELIGIBILITY_SIMULATE=1, uses deterministic mock only (Option A — global simulate semantics).
    * @private
    */
   static async _simulateEligibilityCheck(eligibilityData) {
+    if (process.env.VOICE_ELIGIBILITY_SIMULATE === '1') {
+      return this._mockEligibilityTable(eligibilityData);
+    }
+
     const stediClient = this.getStediClient();
     const hasRealKey = this.STEDI_API_KEY && !this.STEDI_API_KEY.startsWith('test_');
     if (hasRealKey) {
@@ -1302,60 +1401,7 @@ class InsuranceService {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Mock response - in production, this comes from insurance payer
-    const mockResponses = {
-      'BCBS': {
-        eligible: true,
-        copay: 20,
-        allowedAmount: 150,
-        insurancePays: 130,
-        deductibleTotal: 500,
-        deductibleRemaining: 200,
-        coinsurancePercent: 20,
-        oopMax: 5000,
-        oopMet: 0,
-        planSummary: 'Covers outpatient mental health visits; prior auth not required for first 6 visits.',
-        message: 'Eligible - Copay $20'
-      },
-      'AETNA': {
-        eligible: true,
-        copay: 25,
-        allowedAmount: 150,
-        insurancePays: 125,
-        deductibleTotal: 1000,
-        deductibleRemaining: 600,
-        coinsurancePercent: 20,
-        oopMax: 6000,
-        oopMet: 0,
-        planSummary: 'Standard PPO: outpatient mental health covered after copay; deductible applies to labs only.',
-        message: 'Eligible - Copay $25'
-      },
-      'UHC': {
-        eligible: true,
-        copay: 30,
-        allowedAmount: 150,
-        insurancePays: 120,
-        deductibleTotal: 750,
-        deductibleRemaining: 300,
-        coinsurancePercent: 20,
-        oopMax: 5500,
-        oopMet: 0,
-        planSummary: 'Outpatient behavioral health in-network covered; 30$ copay; 20% coinsurance after deductible for some services.',
-        message: 'Eligible - Copay $30'
-      }
-    };
-
-    // Default response
-    const payerId = eligibilityData.payerId?.toUpperCase() || 'BCBS';
-    return mockResponses[payerId] || {
-      eligible: true,
-      copay: 20,
-      allowedAmount: 150,
-      insurancePays: 130,
-      oopMax: 5000,
-      oopMet: 0,
-      message: 'Eligible - Copay $20 (default)'
-    };
+    return this._mockEligibilityTable(eligibilityData);
   }
 
   /**

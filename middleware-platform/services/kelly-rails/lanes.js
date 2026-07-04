@@ -15,6 +15,7 @@ const {
   runDeterministicSafety,
   runDeterministicPostPaymentConfirmation,
   runDeterministicPayment,
+  runDeterministicInsurance,
   runDeterministicRecords,
   runDeterministicApptLookup,
   runDeterministicReschedule,
@@ -135,6 +136,13 @@ function advanceAfterStep(state, { outcome, toolsUsed = [] } = {}) {
     return;
   }
 
+  if (lane === KELLY_LANE.PAYMENT && toolsUsed.includes('collect_insurance')) {
+    if (state.flags.copay_amount != null) {
+      state.step = 'pay_invoice';
+    }
+    return;
+  }
+
   if (lane === KELLY_LANE.PAYMENT && toolsUsed.includes('request_patient_payment')) {
     state.step = 'insurance';
     return;
@@ -172,6 +180,7 @@ async function executeLaneStep(state, ctx) {
     runDeterministicSafety,
     runDeterministicPostPaymentConfirmation,
     runDeterministicPayment,
+    runDeterministicInsurance,
     runDeterministicRecords,
     runDeterministicApptLookup,
     runDeterministicReschedule,

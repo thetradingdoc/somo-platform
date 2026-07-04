@@ -86,6 +86,18 @@ const APPOINTMENT_TYPES = {
     color: 'teal',
     is_video: true
   },
+  Dental: {
+    duration_minutes: 60,
+    buffer_before_minutes: 5,
+    buffer_after_minutes: 5,
+    color: 'cyan'
+  },
+  'Primary Care': {
+    duration_minutes: 30,
+    buffer_before_minutes: 5,
+    buffer_after_minutes: 5,
+    color: 'blue'
+  },
   'External Calendar Event': {
     duration_minutes: 0,
     buffer_before_minutes: 0,
@@ -894,9 +906,27 @@ class BookingService {
       console.log(`   Current: ${appointment.date} at ${appointment.time}`);
       console.log(`   New: ${newDate} at ${newTime}`);
 
-      // Check if already cancelled
+      // Rebook when patient cancels then asks to move (common voice flow).
       if (appointment.status === 'cancelled') {
-        throw new Error('Cannot reschedule a cancelled appointment');
+        const rebooked = await this.scheduleAppointment({
+          patient_name: appointment.patient_name,
+          patient_phone: appointment.patient_phone,
+          patient_email: appointment.patient_email,
+          patient_id: appointment.patient_id,
+          appointment_type: appointment.appointment_type || 'Dental',
+          date: newDate,
+          time: newTime,
+          timezone: timezone || appointment.timezone || BUSINESS_HOURS.timezone,
+          clinic_id: scopedClinicId,
+          practitioner_id: appointment.practitioner_id || null,
+          notes: reason || 'Rebooked after cancellation'
+        });
+        return {
+          ...rebooked,
+          success: rebooked?.success !== false,
+          rescheduled_from_cancelled: true,
+          appointment_id: rebooked?.appointment?.id || rebooked?.appointment_id || appointmentId
+        };
       }
 
       // Get appointment type configuration

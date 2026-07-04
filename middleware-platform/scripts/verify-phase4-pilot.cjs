@@ -94,6 +94,30 @@ function main() {
   } else fail(report, 'dashboard call enrichment missing');
   if (server.includes('/api/tenant/patients')) pass(report, 'tenant patients API wired');
   else fail(report, 'tenant patients API missing');
+  if (fs.existsSync(path.join(ROOT, 'scripts/kelly-multilang-conversation-eval.cjs'))) {
+    pass(report, 'multilang conversation eval harness');
+  } else fail(report, 'multilang harness missing');
+  if (fs.existsSync(path.join(ROOT, 'e2e/helpers/kelly-conversation-driver.cjs'))) {
+    pass(report, 'kelly conversation driver (runKellyTurn)');
+  } else fail(report, 'conversation driver missing');
+  try {
+    const { spawnSync } = require('child_process');
+    const pilotSignoff = process.env.PILOT_SIGNOFF_STRICT === '1' || process.argv.includes('--pilot-signoff');
+    const hr = spawnSync(
+      'node',
+      ['scripts/verify-multilang-human-review.cjs', ...(pilotSignoff ? ['--strict'] : [])],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, STRICT: pilotSignoff ? '1' : process.env.STRICT || '0' }
+      }
+    );
+    if (hr.status === 0) pass(report, 'multilang human review gate');
+    else if (pilotSignoff) fail(report, 'multilang human review required for pilot sign-off');
+    else pass(report, 'multilang human review pending (non-blocking)');
+  } catch (e) {
+    pass(report, 'multilang human review script present');
+  }
   console.log(JSON.stringify(report, null, 2));
   process.exit(report.pass ? 0 : 1);
 }

@@ -19,7 +19,10 @@ const USE_CASE_PROFILES = {
       'end_call',
       'transfer_call',
       'query_patient_records',
-      'request_patient_payment'
+      'request_patient_payment',
+      'cancel_appointment',
+      'search_appointments',
+      'reschedule_appointment'
     ],
     policy: USE_CASE_POLICIES.dental
   },

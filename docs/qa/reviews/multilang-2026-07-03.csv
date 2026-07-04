@@ -1,0 +1,2 @@
+scenario_id,reviewer,reviewed_at,tone_score,naturalness_score,notes,ship_ok,summary_hash
+_meta,pilot-oncall,2026-07-03,5,5,placeholder until native speaker review; re-run after harness,0,registry_pending

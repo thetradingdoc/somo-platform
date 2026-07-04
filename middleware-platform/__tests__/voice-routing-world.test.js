@@ -36,10 +36,16 @@ describe('voice-routing-world', () => {
     ).toBe('unidentified');
   });
 
-  test('tenant requires customer_id for mode resolution', () => {
+  test('tenant requires customer_id or clinic for mode resolution', () => {
     expect(isTenantResolvedForMode(null)).toBe(false);
     expect(isTenantResolvedForMode('cust-123')).toBe(true);
     expect(isTenantResolvedForMode('')).toBe(false);
+    expect(
+      isTenantResolvedForMode({
+        clinicId: 'clinic-1',
+        db: { getCustomerIdForClinic: () => 'cust-1', getClinic: () => ({ clinic_id: 'clinic-1' }) }
+      })
+    ).toBe(true);
   });
 
   test('shouldBlockKellyTurn blocks navigation and unidentified', () => {

@@ -100,3 +100,6 @@ router.patch('/', (req, res) => {
     console.error('[tenant-clinic] PATCH failed:', e.message);
     return res.status(500).json({ success: false, error: 'server_error' });
   }
+});
+
+module.exports = router;

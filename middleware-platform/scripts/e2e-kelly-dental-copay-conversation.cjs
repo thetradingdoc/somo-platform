@@ -153,6 +153,17 @@ async function scenario1HappyPath(clinicId) {
   });
   assert(collectOut.success !== false, `collect_insurance failed: ${collectOut.error || collectOut.message}`);
   assert(KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered') === '1', 'quote_delivered set');
+  if (db.db) {
+    const eligRow = db.db
+      .prepare(
+        `SELECT eligibility_quality FROM eligibility_checks WHERE patient_id = ? ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(patientId);
+    assert(
+      eligRow?.eligibility_quality === 'hard_copay',
+      `eligibility_quality hard_copay after collect, got ${eligRow?.eligibility_quality || 'none'}`
+    );
+  }
 
   const paymentGate = journeyGates.checkPaymentGate({
     sessionFlags: { quote_delivered: KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered') }
@@ -328,17 +339,28 @@ async function scenario5PayLinkParity(clinicId) {
   );
 
   const settlement = require('../services/rcm-payment-settlement');
+  const { assertSessionCopayParity } = require('../e2e/helpers/copay-desk-parity.cjs');
   const payCtx = await settlement.getPaymentContext(payment.pay_token);
   assert(payCtx.success, `getPaymentContext failed: ${payCtx.error}`);
   assert(
     Math.abs(Number(payCtx.payment.amount) - voiceQuoted) < 0.01,
     `pay.html token amount ${payCtx.payment.amount} vs voice ${voiceQuoted}`
   );
-  console.log('  ✅ Scenario 5 passed');
+
+  const parity = assertSessionCopayParity({
+    sessionId,
+    patientId,
+    clinicId
+  });
+  assert(parity.ok || parity.paymentAmount == null, `desk parity: ${JSON.stringify(parity)}`);
+  console.log('  ✅ Scenario 5 passed (voice quote === pay token + desk parity)');
 }
 
 async function run() {
-  console.log('\n=== Phase 2 Dental Copay E2E (scenarios 1–5) ===\n');
+  console.log('\n=== Phase 2 Dental Copay E2E (scenarios 1–5) ===');
+  console.log(
+    'Scope: journey gates vs seeded eligibility rows; live Stedi may log inactive payer before simulate seed applies.\n'
+  );
 
   const clinicId = process.env.TEST_CLINIC_ID || 'clinic-default';
   seedDentalProfile(clinicId);

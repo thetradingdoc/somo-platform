@@ -4,7 +4,7 @@ const KellyToolExecutor = require('../../kelly-tool-executor');
 const { KELLY_LANE } = require('../state-schema');
 const { GATE_OUTCOME } = require('../phase-enums');
 const { getDeterministicReply } = require('../prompts/deterministic');
-const { isConfirmatoryUtterance } = require('../confirm-utterance');
+const { isConfirmatoryUtterance, passesLocalizedBookConfirm } = require('../confirm-utterance');
 const { parseSlotTimeFromMessage, normalizeSlotTime } = require('../slot-time-parse');
 const { emitBookingOutcome } = require('../booking-outcome');
 const { readAppointmentRowById, formatAppointmentWhen } = require('../appointment-read');
@@ -22,6 +22,24 @@ const {
   parseProviderFromMessage,
   bundleMatchesProvider
 } = require('./shared');
+
+function resolveScheduleSpecialty(ctx, row) {
+  const visit =
+    argsFromMeta(ctx.sessionId, 'fd_reason_for_visit') ||
+    argsFromMeta(ctx.sessionId, 'reason_for_visit') ||
+    argsFromMeta(ctx.sessionId, 'visit_reason');
+  if (visit && /clean|dental|dentist|hygien/i.test(String(visit))) return 'Dental';
+  if (row?.target_specialty) return row.target_specialty;
+  const target = argsFromMeta(ctx.sessionId, 'target_specialty');
+  if (target) return String(target);
+  return 'Dental';
+}
+
+function specialtyTimesLabel(specialty) {
+  const s = String(specialty || 'Dental');
+  if (/dental/i.test(s)) return 'dental';
+  return s.toLowerCase();
+}
 
 async function runDeterministicSchedule(state, ctx) {
   const toolsUsed = [];
@@ -55,16 +73,41 @@ async function runDeterministicSchedule(state, ctx) {
   const onBookingPath =
     state.active_lane === KELLY_LANE.BOOKING ||
     state.active_subrail === 'booking' ||
-    state.flags?.active_subrail === 'booking';
+    state.flags?.active_subrail === 'booking' ||
+    argsFromMeta(ctx.sessionId, 'slots_offered') === '1' ||
+    !!(argsFromMeta(ctx.sessionId, 'last_slot_date') && argsFromMeta(ctx.sessionId, 'last_slot_time'));
+
+  const slotsOffered =
+    state.flags?.slots_offered ||
+    argsFromMeta(ctx.sessionId, 'slots_offered') === '1' ||
+    hasBookingSlot;
+  const nameFromMsgEarly = parseNameFromMessage(ctx.message);
+  if (onBookingPath && slotsOffered && nameFromMsgEarly && !confirmatory) {
+    try {
+      KellyToolExecutor._setSessionMeta(ctx.sessionId, 'collected_name', nameFromMsgEarly);
+    } catch (_) {}
+    state.flags.slots_offered = true;
+    state.step = 'confirm_visit';
+    return {
+      reply: getDeterministicReply('slot_confirm_contact', state.locale || 'en'),
+      toolsUsed,
+      endCall: false
+    };
+  }
 
   const wantsBookConfirm =
     onBookingPath &&
     (state.step === 'confirm_visit' ||
       (hasBookingSlot && confirmatory) ||
+      ((state.flags?.slots_offered ||
+        argsFromMeta(ctx.sessionId, 'slots_offered') === '1' ||
+        (argsFromMeta(ctx.sessionId, 'last_slot_date') &&
+          argsFromMeta(ctx.sessionId, 'last_slot_time'))) &&
+        confirmatory) ||
       (conflictActive && hasBookingSlot && confirmatory) ||
-      /@|please book|works for me|funciona|me funciona|reservar|por favor/.test(msg));
+      /@|please book|works for me|funciona|me funciona|me viene bien|reservar|por favor|хорошо|подходит|да\b|martes|tarde|вторник|днём|днем/.test(msg));
 
-  if (onBookingPath && wantsBookConfirm && (confirmatory || /book|confirm|works|yes|please|email|@|sí|si\b|por favor|reservar/.test(msg))) {
+  if (onBookingPath && wantsBookConfirm && passesLocalizedBookConfirm(ctx.message)) {
     const existingApptId =
       state.flags.last_appointment_id ||
       state.flags.appointment_id ||
@@ -107,7 +150,7 @@ async function runDeterministicSchedule(state, ctx) {
     if (!slotId && !(apptDate && apptTime)) {
       const slots = await KellyToolExecutor.execute(
         'get_available_slots',
-        { specialty: row?.target_specialty || 'Dermatology', days_ahead: 14 },
+        { specialty: resolveScheduleSpecialty(ctx, row) || 'Dental', days_ahead: 14 },
         ctx
       );
       const bundles = Array.isArray(slots?.slot_bundles) ? slots.slot_bundles : [];
@@ -146,7 +189,7 @@ async function runDeterministicSchedule(state, ctx) {
       if (providerPrefEarly) {
         const slotsProbe = await KellyToolExecutor.execute(
           'get_available_slots',
-          { specialty: row?.target_specialty || 'Dermatology', days_ahead: 14 },
+          { specialty: resolveScheduleSpecialty(ctx, row) || 'Dental', days_ahead: 14 },
           ctx
         );
         const probeBundles = Array.isArray(slotsProbe?.slot_bundles) ? slotsProbe.slot_bundles : [];
@@ -182,10 +225,11 @@ async function runDeterministicSchedule(state, ctx) {
       practitionerId = resolvePractitionerForProvider(providerPref, ctx.clinicId);
     }
 
+    const specialty = resolveScheduleSpecialty(ctx, row);
     const scheduleBase = {
       patient_id: ctx.patientId,
-      specialty: row?.target_specialty || 'Dermatology',
-      appointment_type: row?.target_specialty || 'Dermatology',
+      specialty,
+      appointment_type: specialty,
       patient_name:
         nameFromMsg ||
         argsFromMeta(ctx.sessionId, 'collected_name') ||
@@ -231,6 +275,7 @@ async function runDeterministicSchedule(state, ctx) {
       KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_slot_date', bookedDate);
       KellyToolExecutor._setSessionMeta(ctx.sessionId, 'last_slot_time', bookedTime);
       state.flags.schedule_appointment_success = true;
+      KellyToolExecutor._setSessionMeta(ctx.sessionId, 'schedule_appointment_success', '1');
       if (state.flags.copay_amount == null) {
         const metaCopay = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'copay_amount');
         if (metaCopay != null && Number.isFinite(Number(metaCopay))) {
@@ -286,10 +331,21 @@ async function runDeterministicSchedule(state, ctx) {
   }
 
   if (state.active_lane === KELLY_LANE.BOOKING && state.step === 'schedule_visit' && !/@/.test(msg)) {
-    if (/schedule|appointment|slot|tomorrow|noon|12:00|available|check|next week|works for me/.test(msg)) {
+    if (confirmatory && hasBookingSlot) {
+      return null;
+    }
+    if (hasBookingSlot && wantsBookConfirm) {
+      return null;
+    }
+    if (
+      /schedule|appointment|slot|tomorrow|noon|12:00|available|check|next week|works for me|cleaning|cita|limpieza|запис|tuesday|afternoon|tarde|martes|вторник|осмотр|приём|прием|днём|днем/.test(
+        msg
+      )
+    ) {
+      const specialty = resolveScheduleSpecialty(ctx, row);
       const slots = await KellyToolExecutor.execute(
         'get_available_slots',
-        { specialty: row?.target_specialty || 'Dermatology', days_ahead: 14 },
+        { specialty, days_ahead: 14, appointment_type: specialty },
         ctx
       );
       if (slots && !slots.error) {
@@ -304,8 +360,7 @@ async function runDeterministicSchedule(state, ctx) {
             state.flags.current_booking_slot = { slot_id: null, date: slotDate, time: explicitTime };
             state.step = 'confirm_visit';
             return {
-              reply:
-                'I can book that time. Can you confirm your name and the best email or phone to reach you?',
+              reply: getDeterministicReply('slot_confirm_contact', state.locale || 'en'),
               toolsUsed,
               endCall: false
             };
@@ -340,8 +395,11 @@ async function runDeterministicSchedule(state, ctx) {
         }
         const reply =
           lines.length > 0
-            ? `Here are the next available dermatology times:\n${lines.join('\n')}\nWhich works best for you?`
-            : 'I checked availability — tell me if tomorrow at 12:00 PM works and I can book that for you.';
+            ? getDeterministicReply('slots_preview', state.locale || 'en', {
+                specialty: specialtyTimesLabel(specialty),
+                slots: lines.join('\n')
+              })
+            : getDeterministicReply('slots_offered', state.locale || 'en');
         return { reply, toolsUsed, endCall: false };
       }
     }

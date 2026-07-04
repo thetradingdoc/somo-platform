@@ -11,14 +11,18 @@ const { resolveDentalCdtFromReason, isDentalCdt } = require('../utils/cpt-helper
 const DEFAULT_DENTAL_ICD10 = 'Z01.20';
 
 const TRIGGER_MAP = [
-  { patterns: [/\bcleaning\b/i, /\bprophylaxis\b/i, /\bhygiene\b/i], code: 'D1110', childCode: 'D1120' },
+  { patterns: [/\bcleaning\b/i, /\bprophylaxis\b/i, /\bhygiene\b/i, /\blimpieza\b/i], code: 'D1110', childCode: 'D1120' },
+  { patterns: [/\bcopay\b/i, /\bcopago\b/i, /\bcoverage\b/i, /\bcost\b/i, /\bcuánto\b/i, /\bcuanto\b/i], code: 'D1110' },
   { patterns: [/\bnew patient\b/i, /\bfirst time\b/i, /\bfirst visit\b/i], code: 'D0150' },
   { patterns: [/\bcheckup\b/i, /\bcheck.?up\b/i, /\bexam\b/i, /\broutine\b/i], code: 'D0120' },
   { patterns: [/\btooth\s*pain\b/i, /\bsomething.?s wrong\b/i, /\bproblem\b/i, /\bhurts\b/i], code: 'D0140' },
   { patterns: [/\bx.?ray\b/i, /\bxray\b/i, /\bbitewing\b/i], code: 'D0274' },
   { patterns: [/\bfilling\b/i, /\bcavity\b/i], code: 'D2391' },
   { patterns: [/\broot canal\b/i], code: 'D3310' },
-  { patterns: [/\bdeep cleaning\b/i, /\bscaling\b/i], code: 'D4341' },
+  { patterns: [/\bdeep cleaning\b/i, /\bscaling\b/i, /\bperio\b/i, /\bperiodontal\b/i], code: 'D4341' },
+  { patterns: [/\bcrown\b/i, /\bcap\b/i], code: 'D2740' },
+  { patterns: [/\bimplant\b/i], code: 'D6010' },
+  { patterns: [/\bortho\b/i, /\bbraces\b/i, /\binvisalign\b/i], code: 'D8080' },
   { patterns: [/\bextraction\b/i, /\bpull\b/i, /\btooth pulled\b/i], code: 'D7140' },
   { patterns: [/\bemergency\b/i, /\bin pain\b/i, /\bsevere pain\b/i], code: 'D9110' }
 ];
@@ -93,6 +97,31 @@ function resolveAdminVisitCodes(visitReasonText, tenantSpecialty = 'Dental', opt
   };
 }
 
+function emitCodingStarterSetMiss(opts = {}) {
+  try {
+    const crypto = require('crypto');
+    const db = require('../database');
+    const reasonHash = crypto
+      .createHash('sha256')
+      .update(String(opts.visitReason || opts.visit_reason || ''))
+      .digest('hex')
+      .slice(0, 16);
+    db.insertKellyCallEvent?.({
+      session_id: opts.sessionId || null,
+      call_id: opts.callId || opts.sessionId || null,
+      event_type: 'coding_starter_set_miss',
+      payload_json: {
+        clinic_id: opts.clinicId || null,
+        visit_reason_hash: reasonHash,
+        channel: opts.channel || 'voice',
+        error_code: 'CODE_NOT_IN_STARTER_SET',
+        tenant_specialty: opts.tenantSpecialty || 'Dental'
+      },
+      clinic_id: opts.clinicId || null
+    });
+  } catch (_) {}
+}
+
 function resolveAdminInsuranceCodes(opts = {}) {
   const {
     visit_reason: visitReason = null,
@@ -136,6 +165,7 @@ function resolveAdminInsuranceCodes(opts = {}) {
 module.exports = {
   resolveAdminVisitCodes,
   resolveAdminInsuranceCodes,
+  emitCodingStarterSetMiss,
   DEFAULT_DENTAL_ICD10,
   TRIGGER_MAP
 };

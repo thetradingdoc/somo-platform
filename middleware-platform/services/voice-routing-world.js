@@ -59,9 +59,19 @@ function resolveRoutingWorld(opts = {}) {
   return 'unidentified';
 }
 
-/** Tenant mode seeding requires customer_id — clinic_id alone is not enough (R-5b). */
-function isTenantResolvedForMode(customerId) {
-  return !!(customerId && String(customerId).trim());
+/** Tenant mode: customer_id or resolvable clinic_id (inbound tenant). */
+function isTenantResolvedForMode(customerIdOrOpts, clinicIdLegacy) {
+  if (typeof customerIdOrOpts === 'object' && customerIdOrOpts !== null) {
+    const { isTenantIdentityResolved } = require('./voice-identity-admission');
+    return isTenantIdentityResolved(customerIdOrOpts);
+  }
+  if (customerIdOrOpts && String(customerIdOrOpts).trim()) return true;
+  if (clinicIdLegacy) {
+    const { isTenantIdentityResolved } = require('./voice-identity-admission');
+    const db = require('../database');
+    return isTenantIdentityResolved({ clinicId: clinicIdLegacy, db });
+  }
+  return false;
 }
 
 /** Kelly Rails must not run for navigation or unidentified inbound. */

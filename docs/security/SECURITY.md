@@ -27,3 +27,14 @@ GitHub Actions runs **npm audit** (moderate threshold) and a **heuristic grep** 
 
 - Never commit `.env` files; use `.env.example` without real values.
 - Prefer **short-lived** API keys where possible.
+
+## RCM test strict flags (money path vs conversation eval)
+
+Two independent promotion gates — do not merge flags:
+
+| Flag | Suite | Purpose |
+|------|-------|---------|
+| `RCM_MONEY_STRICT=1` | `npm run test:rcm:money-path` | Copay gates, settlement idempotency, pay-link identity (P0-8) |
+| `CONVERSATION_EVAL_STRICT=1` | `npm run test:eval:multilang` | Multilang Kelly conversation matrix (nightly) |
+
+`RCM_MONEY_STRICT` must never be read by the multilang harness. See `docs/voice-agent/pilot-scenario-matrix.md` (Ring 3 section).

@@ -117,14 +117,71 @@ async function postDirect(path, body = {}) {
     );
   }
   if (p.includes('/insurance/collect')) {
+    const InsuranceService = require('../insurance-service');
+    const { resolveAmountDue } = require('../resolve-amount-due');
+    const journeyGates = require('../journey-gates-service');
+    const payerName = body.payer_name || body.payer_id || 'aetna';
+    const payerKey = InsuranceService._resolveSimulatePayerKey({
+      payer_name: payerName,
+      payerId: body.payer_id,
+      payer_id: body.payer_id
+    });
+    const sessionId = body.call_id || body.session_id || null;
+    const eligibilityResult = await InsuranceService.checkEligibility({
+      patientId: body.patient_id,
+      sessionId,
+      memberId: body.member_id || 'EVAL-MBR-001',
+      payerId: payerKey,
+      payer_name: payerName,
+      serviceCode: body.primary_cpt || 'D1110',
+      dateOfBirth: body.date_of_birth || body.dateOfBirth || '1990-01-15',
+      patientName: body.patient_name || 'E2E Patient',
+      dateOfService:
+        body.date_of_service ||
+        body.dateOfService ||
+        new Date().toISOString().split('T')[0],
+      customerId: body.customer_id || null
+    });
+    let amountResolved = await resolveAmountDue({
+      patientId: body.patient_id,
+      sessionId,
+      payerId: payerKey,
+      planId: body.plan_id,
+      serviceCode: body.primary_cpt || 'D1110'
+    });
+    if (amountResolved.status !== 'hard_number' && eligibilityResult.success) {
+      const copay = Number(eligibilityResult.copay || 0);
+      if (copay > 0) {
+        amountResolved = {
+          amount: copay,
+          copay_due_now: copay,
+          status: 'hard_number',
+          source: 'simulate_eligibility'
+        };
+      }
+    }
+    const quoteGate = journeyGates.checkQuoteGate({ resolution: amountResolved });
+    const quoteDelivered =
+      quoteGate.allowed &&
+      amountResolved.status === 'hard_number' &&
+      Number(amountResolved.amount) > 0;
     return {
       success: true,
-      call_id: body.call_id || body.session_id || null,
+      call_id: sessionId,
       patient_id: body.patient_id || null,
+      payer_id: payerKey,
+      payer_name: payerName,
       primary_icd10: body.primary_icd10 || null,
       primary_cpt: body.primary_cpt || null,
       code_source: body.code_source || 'spine',
-      quote: body.quote || null
+      eligible: eligibilityResult.eligible,
+      copay_due_now: quoteDelivered ? amountResolved.amount : eligibilityResult.copay,
+      quote_delivered: quoteDelivered,
+      amount_resolution: amountResolved,
+      coverage: {
+        eligible: eligibilityResult.eligible,
+        copay_amount: eligibilityResult.copay
+      }
     };
   }
 

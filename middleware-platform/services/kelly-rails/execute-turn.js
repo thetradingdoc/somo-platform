@@ -339,6 +339,10 @@ async function executeTurn(input = {}) {
   }
 
   if (payIntentNow) {
+    const metaQuote = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'quote_delivered');
+    const metaQuoteStatus = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_quote_status');
+    if (metaQuote === '1') state.flags.quote_delivered = '1';
+    if (metaQuoteStatus) state.flags.last_quote_status = metaQuoteStatus;
     if (state.flags.copay_amount == null) {
       const metaCopay = KellyToolExecutor._getSessionMeta(ctx.sessionId, 'copay_amount');
       if (metaCopay != null && Number.isFinite(Number(metaCopay))) {
@@ -373,6 +377,14 @@ async function executeTurn(input = {}) {
     if (paymentGateOpen(state.flags)) {
       state.active_lane = KELLY_LANE.PAYMENT;
       state.step = 'pay_invoice';
+      state.flags._turn_plan = { owner: 'gate', gateId: 'payment' };
+    } else if (payIntentNow) {
+      state.active_lane = KELLY_LANE.PAYMENT;
+      state.step = 'insurance';
+      state.active_subrail = state.active_subrail || 'copay_link';
+      state.flags.active_subrail = state.active_subrail;
+      state.conversation_mode = state.conversation_mode || 'tenant_billing';
+      state.flags.conversation_mode = state.conversation_mode;
     }
   }
 
@@ -408,11 +420,54 @@ async function executeTurn(input = {}) {
   }
 
   const laneOut = await executeLaneStep(state, ctx);
-  const { reply, toolsUsed, endCall, gate_matched, gate_outcome } = laneOut;
+  let { reply, toolsUsed, endCall, gate_matched, gate_outcome } = laneOut;
   state.gate_matched = gate_matched;
   state.gate_outcome = gate_outcome;
   if (gate_matched) state.flags.gate_matched = gate_matched;
   if (gate_outcome) state.flags.gate_outcome = gate_outcome;
+
+  if (
+    state.flags?.schedule_appointment_success &&
+    (toolsUsed || []).includes('schedule_appointment')
+  ) {
+    const failureRe =
+      /unable to complete|not able to complete|connect you with|front desk to finish/i;
+    if (failureRe.test(String(reply || ''))) {
+      const { getDeterministicReply } = require('./prompts/deterministic');
+      const { formatAppointmentWhen, readAppointmentRowById } = require('./appointment-read');
+      const apptId =
+        state.flags.appointment_id ||
+        state.flags.last_appointment_id ||
+        KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_appointment_id');
+      let when = '';
+      if (apptId) {
+        const row = readAppointmentRowById(apptId);
+        if (row) when = formatAppointmentWhen(row);
+      }
+      if (!when) {
+        when = [
+          KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_date'),
+          KellyToolExecutor._getSessionMeta(ctx.sessionId, 'last_slot_time')
+        ]
+          .filter(Boolean)
+          .join(' at ');
+      }
+      reply = getDeterministicReply('booking_confirmed', state.locale || ctx.locale || 'en', {
+        when: when || 'your selected time'
+      });
+    }
+  }
+
+  const executorTools = KellyToolExecutor.getTurnToolsUsed(ctx.sessionId) || [];
+  if (executorTools.length) {
+    toolsUsed = [...new Set([...(toolsUsed || []), ...executorTools])];
+  }
+  const { repairRescheduleOverCancel } = require('./reply-repair');
+  const repairedReply = repairRescheduleOverCancel(reply, state, toolsUsed, ctx);
+  if (repairedReply !== reply) {
+    reply = repairedReply;
+    state.flags.reschedule_complete = true;
+  }
 
   if (state.active_lane === KELLY_LANE.BOOKING) {
     state.active_subrail = state.active_subrail || 'booking';
@@ -429,6 +484,10 @@ async function executeTurn(input = {}) {
         date: slotDate,
         time: slotTime
       };
+      state.flags.slots_offered = true;
+      if (state.active_lane === KELLY_LANE.BOOKING && state.step === 'schedule_visit') {
+        state.step = 'confirm_visit';
+      }
     }
   }
 

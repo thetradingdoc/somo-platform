@@ -72,6 +72,12 @@ async function runKellyTurn(opts = {}) {
   const channel = opts.channel || 'chat';
   const turnReceivedAt = opts.turnReceivedAt || Date.now();
 
+  if (sessionId && message) {
+    try {
+      KellyToolExecutor._setSessionMeta(sessionId, 'last_user_message', message);
+    } catch (_) {}
+  }
+
   try {
     const prior = db.listKellyCallEvents?.({ session_id: sessionId, limit: 20 }) || [];
     if (sessionId && !prior.some((e) => e.event_type === 'call_started')) {
@@ -119,8 +125,15 @@ async function runKellyTurn(opts = {}) {
     const explicitLocale = opts.preferredLanguage ? String(opts.preferredLanguage).slice(0, 2) : null;
     if (!sessionLanguage) {
       if (explicitLocale) {
+        const tenantLang = getTenantVoiceLanguageConfig(db, {
+          clinicId,
+          customerId: opts.customerId || null
+        });
         db.upsertKellySessionLanguage(sessionId, explicitLocale);
         opts.preferredLanguage = explicitLocale;
+        if (!isLanguageSupported(explicitLocale, tenantLang.supported_languages)) {
+          opts.forceLanguageHandoff = true;
+        }
       } else if (message) {
         const tenantLang = getTenantVoiceLanguageConfig(db, {
           clinicId,
@@ -188,6 +201,57 @@ async function runKellyTurn(opts = {}) {
   const locale = String(opts.preferredLanguage || sessionLanguage || 'en').slice(0, 2);
   opts.locale = locale;
 
+  if (channel === 'voice' && sessionId) {
+    try {
+      const priorOpeners = db.listKellyCallEvents?.({ session_id: sessionId, limit: 20 }) || [];
+      if (!priorOpeners.some((e) => e.event_type === 'call_opener_used')) {
+        const {
+          resolveFirstContactGreeting,
+          resolvePracticeDisplayName,
+          prependAiDisclosure
+        } = require('./call-opener-resolver');
+        let settings = null;
+        if (clinicId && db.getVoiceAgentSettingsForClinic) {
+          settings = db.getVoiceAgentSettingsForClinic({ clinicId });
+        }
+        const practiceName = resolvePracticeDisplayName(db, {
+          clinicId,
+          customerId: opts.customerId || null
+        });
+        const greeting = resolveFirstContactGreeting({
+          channel: 'voice',
+          settings: settings || {},
+          practiceName,
+          callType: opts.call_type || 'tenant',
+          direction: opts.direction || 'inbound'
+        });
+        const openerText = greeting?.text
+          ? prependAiDisclosure(greeting.text, {
+              enabled: settings?.ai_disclosure_enabled !== 0,
+              locale
+            })
+          : null;
+        if (openerText) {
+          emitKellyCallEvent({
+            session_id: sessionId,
+            call_id: opts.callId || null,
+            clinic_id: clinicId || null,
+            event_type: 'call_opener_used',
+            payload_json: {
+              opener_text: openerText,
+              opener_source: greeting.source || 'default',
+              channel: 'voice',
+              clinic_id: clinicId || null,
+              locale
+            }
+          });
+        }
+      }
+    } catch (openerErr) {
+      console.warn('[kelly-turn] call_opener_used seed skipped:', openerErr.message);
+    }
+  }
+
   if (!opts.skipIdentityAdmission && !opts.forceLanguageHandoff) {
     const {
       evaluateIdentityAdmission,
@@ -201,9 +265,14 @@ async function runKellyTurn(opts = {}) {
       call_type: opts.call_type || null,
       direction: opts.direction || null,
       site_context_status: opts.site_context_status || null,
-      tenantResolved: require('./voice-routing-world').isTenantResolvedForMode(opts.customerId),
+      tenantResolved: require('./voice-routing-world').isTenantResolvedForMode({
+        customerId: opts.customerId,
+        clinicId,
+        db
+      }),
       routing_world: opts.routing_world || null,
-      preferredLanguage: locale
+      preferredLanguage: locale,
+      db
     });
     if (!admission.admitted) {
       emitIdentityInvalid(db, {
@@ -256,6 +325,7 @@ async function runKellyTurn(opts = {}) {
       if (executorTools.length) {
         out.toolsUsed = [...new Set([...(out?.toolsUsed || []), ...executorTools])];
       }
+      out.forceLanguageHandoff = true;
       recordKellyLlmUsage(opts, out, Math.max(0, Date.now() - turnReceivedAt));
       return out;
     }
@@ -376,6 +446,20 @@ async function runKellyTurn(opts = {}) {
     const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);
     if (executorTools.length) {
       out.toolsUsed = [...new Set([...(out?.toolsUsed || []), ...executorTools])];
+    }
+    if ((out.toolsUsed || []).includes('reschedule_appointment')) {
+      const { repairRescheduleOverCancel } = require('./kelly-rails/reply-repair');
+      const railsState = out?.kelly_rails || {};
+      const repaired = repairRescheduleOverCancel(out.reply, railsState, out.toolsUsed, {
+        sessionId,
+        locale: locale || opts.locale
+      });
+      if (repaired !== out.reply) {
+        out.reply = repaired;
+        if (out.kelly_rails?.flags) {
+          out.kelly_rails.flags.reschedule_complete = true;
+        }
+      }
     }
 
     if (convResult?.session && sessionId) {

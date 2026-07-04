@@ -9,6 +9,7 @@ const { loadHistory, appendHistory } = require('./history');
 const { formatVoiceReply } = require('../voice-reply-formatter');
 const { isToolAllowedForMode, logModeViolation } = require('../conversation-mode/mode-tool-firewall');
 const { isOpqrstFieldGateEnabled } = require('./config');
+const { KELLY_LANE } = require('./state-schema');
 
 const OFF_TOPIC_PATTERNS = [
   /\bI can also help with\b/i,
@@ -26,6 +27,8 @@ const INVENTED_CONFIRMATION_PATTERNS = [
   /\byour copay\b/i,
   /\bcancel(?:led|ed|ación)\b/i
 ];
+
+const { repairRescheduleOverCancel } = require('./reply-repair');
 
 function stripInventedTransactionalConfirmation(reply, state = {}, toolsUsed = []) {
   if (!isGateOwnedTransactionalStep(state.active_lane, state.step, state.flags || {})) {
@@ -164,6 +167,12 @@ async function runNodeStep(state, ctx) {
     db: ctx.db
   };
   allowedNames = allowedNames.filter((n) => isToolAllowedForMode(n, modeCtx));
+  if (lane === KELLY_LANE.PAYMENT && step === 'pay_invoice') {
+    allowedNames = allowedNames.filter((n) => n !== 'get_triage_session');
+    if (!allowedNames.includes('request_patient_payment')) {
+      allowedNames.push('request_patient_payment');
+    }
+  }
   if (isOpqrstFieldGateEnabled()) {
     const gate = state.flags?._opqrst_gate;
     if (gate?.active && !gate.allowStoreOpqrst) {
@@ -229,7 +238,9 @@ async function runNodeStep(state, ctx) {
           clinicId,
           patientId,
           callerPhone,
-          channel
+          channel,
+          message: ctx.message,
+          utterance: ctx.message
         });
         if (!result || result.success === false || result.error) {
           messages.push({
@@ -268,6 +279,7 @@ async function runNodeStep(state, ctx) {
   }
 
   reply = stripInventedTransactionalConfirmation(reply, state, toolsUsed);
+  reply = repairRescheduleOverCancel(reply, state, toolsUsed, ctx);
   reply = enforceScopeGuardrail(reply, state, { ...ctx, db: ctx.db });
 
   appendHistory(sessionId, 'assistant', reply);

@@ -112,4 +112,45 @@ describe('rcm payment settlement', () => {
       stripeConfig.initializeStripe = origInit;
     }
   });
+
+  test('3.14 settleStripe is idempotent when called twice', async () => {
+    const clinicId = 'clinic-settle-idem';
+    const { journey } = orchestrator.startJourney({
+      clinicId,
+      skipGates: true,
+      stage: 'patient_collection'
+    });
+    const payToken = `tok_idem_${Date.now()}`;
+    const payId = `pay_idem_${Date.now()}`;
+    const piId = 'pi_test_idempotent';
+    db.db
+      .prepare(
+        `INSERT INTO rcm_payments (id, clinic_id, journey_id, amount, status, pay_token, stripe_payment_intent_id)
+         VALUES (?, ?, ?, ?, 'requested', ?, ?)`
+      )
+      .run(payId, clinicId, journey.id, 45, payToken, piId);
+
+    const mockRetrieve = jest.fn().mockResolvedValue({
+      id: piId,
+      status: 'succeeded',
+      metadata: { rcm_payment_id: payId, pay_token: payToken }
+    });
+    const stripeConfig = require('../../utils/stripe-config');
+    const origInit = stripeConfig.initializeStripe;
+    stripeConfig.initializeStripe = () => ({
+      paymentIntents: { retrieve: mockRetrieve }
+    });
+
+    try {
+      const first = await settlement.settleStripe(payToken, piId);
+      expect(first.success).toBe(true);
+      const second = await settlement.settleStripe(payToken, piId);
+      expect(second.success).toBe(true);
+      const row = db.db.prepare(`SELECT status FROM rcm_payments WHERE id = ?`).get(payId);
+      expect(row.status).toBe('paid');
+      expect(mockRetrieve).toHaveBeenCalled();
+    } finally {
+      stripeConfig.initializeStripe = origInit;
+    }
+  });
 });

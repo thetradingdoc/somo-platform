@@ -5,6 +5,7 @@
 
 ### NYC front desk (active pilot)
 
+- **Pilot scoreboard:** **[qa/dental-pilot-readiness.md](./qa/dental-pilot-readiness.md)** — strict multilang eval baseline (14/16)
 - **Master plan:** `~/.cursor/plans/provider_portal_production_20d1693f.plan.md`
 - **Architecture:** **[architecture/LIVE.md](./architecture/LIVE.md)** — onboarding, overflow, verify gates
 - **Voice agent:** **[voice-agent/README.md](./voice-agent/README.md)** — runtime paths, prompts

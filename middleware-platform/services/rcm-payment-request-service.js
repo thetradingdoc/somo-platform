@@ -148,6 +148,18 @@ async function createRcmPaymentRequest({
   };
 }
 
+async function resolveClinicDisplayName(clinicId) {
+  if (!clinicId) return process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
+  try {
+    const row = db.db
+      ?.prepare(`SELECT name FROM clinics WHERE clinic_id = ? LIMIT 1`)
+      .get(clinicId);
+    return row?.name || process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
+  } catch (_) {
+    return process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
+  }
+}
+
 async function notifyPatientPaymentLink({
   payUrl,
   amount,
@@ -155,13 +167,17 @@ async function notifyPatientPaymentLink({
   patientPhone,
   delivery = 'both',
   clinicId = null,
+  locale = 'en',
+  messageKind = 'copay',
 }) {
+  const clinicName = await resolveClinicDisplayName(clinicId);
   const order = {
     product_name: 'Copay / balance due',
     amount: Number(amount) || 0,
+    merchant_name: clinicName,
   };
   const mode = String(delivery || 'both').toLowerCase();
-  const results = { email: null, sms: null };
+  const results = { email: null, sms: null, sms_body: null, sms_locale: null };
 
   if ((mode === 'email' || mode === 'both') && patientEmail) {
     try {
@@ -175,13 +191,19 @@ async function notifyPatientPaymentLink({
   if ((mode === 'sms' || mode === 'both') && patientPhone) {
     try {
       const SMSService = require('./sms-service');
-      results.sms = await SMSService.sendPaymentLink(
-        patientPhone,
-        payUrl,
-        order,
-        null,
-        clinicId
-      );
+      if (messageKind === 'copay') {
+        results.sms = await SMSService.sendCopayPaymentLink(
+          patientPhone,
+          payUrl,
+          { locale, clinicName, amount: order.amount },
+          null,
+          clinicId
+        );
+      } else {
+        results.sms = await SMSService.sendPaymentLink(patientPhone, payUrl, order, null, clinicId);
+      }
+      results.sms_body = results.sms?.sms_body || null;
+      results.sms_locale = results.sms?.sms_locale || String(locale || 'en').slice(0, 2);
     } catch (err) {
       results.sms = { success: false, error: err.message };
     }

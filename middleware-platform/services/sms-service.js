@@ -54,108 +54,24 @@ class SMSService {
      */
     static async sendPaymentLink(phoneNumber, paymentLink, orderDetails, customerId = null, merchantId = null) {
         try {
-            const client = this.getTwilioClient();
-            const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-
-            // Validate phone number format
             const formattedPhone = this.formatPhoneNumber(phoneNumber);
             if (!this.validatePhoneNumber(formattedPhone)) {
                 throw new Error(`Invalid phone number format: ${phoneNumber}`);
             }
 
-            // Format SMS message
             const message = this.formatPaymentMessage(paymentLink, orderDetails);
-            const messageSegments = Math.ceil(message.length / 160); // SMS segments (160 chars each)
-
-            // If Twilio is configured, send real SMS
-            if (this.isTestNumber(formattedPhone)) {
-                return {
-                    success: true,
-                    simulated: true,
-                    message: 'SMS simulated for test number',
-                    phone: formattedPhone,
-                    provider: 'test',
-                    real_sms: false
-                };
-            }
-
-            if (client && fromNumber) {
-                console.log('\n📱 SENDING REAL SMS VIA TWILIO');
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                console.log(`From: ${fromNumber}`);
-                console.log(`To: ${formattedPhone}`);
-                console.log(`Message Length: ${message.length} characters`);
-                console.log(`Message Segments: ${messageSegments}`);
-                console.log(`Message:\n${message}`);
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-                try {
-                    const result = await client.messages.create({
-                        body: message,
-                        from: fromNumber,
-                        to: formattedPhone
-                    });
-
-                    console.log(`✅ SMS sent successfully!`);
-                    console.log(`   Message SID: ${result.sid}`);
-                    console.log(`   Status: ${result.status}`);
-                    console.log(`   To: ${result.to}\n`);
-
-                    // Log SMS usage if customer/merchant info available
-                    if (customerId || merchantId) {
-                        try {
-                            UsageMonitor.logSMSUsage(
-                                customerId,
-                                merchantId,
-                                formattedPhone,
-                                'outbound',
-                                result.sid,
-                                messageSegments
-                            );
-                        } catch (logError) {
-                            console.warn('⚠️  Failed to log SMS usage:', logError.message);
-                            // Don't fail SMS send if logging fails
-                        }
-                    }
-
-                    return {
-                        success: true,
-                        message_sid: result.sid,
-                        status: result.status,
-                        to: formattedPhone,
-                        provider: 'twilio',
-                        real_sms: true
-                    };
-                } catch (twilioError) {
-                    console.error('❌ Twilio API Error:', twilioError.message);
-                    console.error('   Error Code:', twilioError.code);
-                    console.error('   More Info:', twilioError.moreInfo);
-
-                    throw new Error(`Twilio SMS failed: ${twilioError.message}`);
-                }
-            } else {
-                // Fallback to simulation if Twilio not configured
-                console.log('\n📱 SMS SIMULATION (Twilio not configured)');
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                console.log(`To: ${formattedPhone}`);
-                console.log(`Message:\n${message}`);
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                console.log('💡 To send real SMS, add Twilio credentials to .env file');
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-                return {
-                    success: true,
-                    simulated: true,
-                    message: 'SMS simulated - Twilio not configured',
-                    phone: formattedPhone,
-                    real_sms: false
-                };
-            }
+            const result = await this._dispatchPaymentLinkSms(
+                formattedPhone,
+                message,
+                orderDetails,
+                customerId,
+                merchantId
+            );
+            return { ...result, sms_body: message };
 
         } catch (error) {
             console.error('❌ SMS Service Error:', error.message);
 
-            // Return error details
             return {
                 success: false,
                 error: error.message,
@@ -167,12 +83,128 @@ class SMSService {
     }
 
     /**
-     * Format SMS message for payment link
+     * Format SMS message for payment link (commerce checkout).
      */
     static formatPaymentMessage(paymentLink, orderDetails) {
         const { product_name, amount, merchant_name } = orderDetails;
+        const clinic = merchant_name || process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
 
-        return `${merchant_name}: Complete your order for ${product_name} ($${amount}):\n\n${paymentLink}\n\nLink expires in 1 hour.`;
+        return `${clinic}: Complete your order for ${product_name} ($${amount}):\n\n${paymentLink}\n\nLink expires in 1 hour.`;
+    }
+
+    /**
+     * Patient-facing copay / balance SMS (RCM voice path) — localized, no commerce copy.
+     */
+    static formatCopayPaymentSms({ locale = 'en', clinicName, amount, paymentLink }) {
+        const clinic = clinicName || process.env.CLINIC_DISPLAY_NAME || 'Your clinic';
+        const amt = Number(amount);
+        const formatted = Number.isFinite(amt) ? amt.toFixed(2) : String(amount || '0');
+        const loc = String(locale || 'en').slice(0, 2).toLowerCase();
+        const templates = {
+            en: `${clinic}: Your estimated copay is $${formatted}. Pay securely: ${paymentLink}`,
+            es: `${clinic}: Su copago estimado es $${formatted}. Pague de forma segura: ${paymentLink}`,
+            ru: `${clinic}: Ваш ориентировочный копай — $${formatted}. Оплатите по ссылке: ${paymentLink}`
+        };
+        return templates[loc] || templates.en;
+    }
+
+    /**
+     * Send copay payment link SMS (uses formatCopayPaymentSms).
+     */
+    static async sendCopayPaymentLink(phoneNumber, paymentLink, { locale, clinicName, amount }, customerId = null, merchantId = null) {
+        const message = this.formatCopayPaymentSms({ locale, clinicName, amount, paymentLink });
+        const orderDetails = { product_name: 'Copay / balance due', amount, merchant_name: clinicName, locale };
+        const baseResult = await this._dispatchPaymentLinkSms(phoneNumber, message, orderDetails, customerId, merchantId);
+        return { ...baseResult, sms_body: message, sms_locale: String(locale || 'en').slice(0, 2) };
+    }
+
+    /** @private */
+    static async _dispatchPaymentLinkSms(phoneNumber, message, orderDetails, customerId, merchantId) {
+        try {
+            const client = this.getTwilioClient();
+            const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+            const formattedPhone = this.formatPhoneNumber(phoneNumber);
+            if (!this.validatePhoneNumber(formattedPhone)) {
+                throw new Error(`Invalid phone number format: ${phoneNumber}`);
+            }
+            const messageSegments = Math.ceil(message.length / 160);
+
+            if (this.isTestNumber(formattedPhone)) {
+                console.log('\n📱 COPAY SMS (test number — simulated)');
+                console.log(`To: ${formattedPhone}\nMessage:\n${message}\n`);
+                return {
+                    success: true,
+                    simulated: true,
+                    message: 'SMS simulated for test number',
+                    phone: formattedPhone,
+                    provider: 'test',
+                    real_sms: false
+                };
+            }
+
+            if (client && fromNumber) {
+                console.log('\n📱 SENDING COPAY SMS VIA TWILIO');
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.log(`From: ${fromNumber}`);
+                console.log(`To: ${formattedPhone}`);
+                console.log(`Message:\n${message}`);
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+                try {
+                    const result = await client.messages.create({
+                        body: message,
+                        from: fromNumber,
+                        to: formattedPhone
+                    });
+                    if (customerId || merchantId) {
+                        try {
+                            UsageMonitor.logSMSUsage(
+                                customerId,
+                                merchantId,
+                                formattedPhone,
+                                'outbound',
+                                result.sid,
+                                messageSegments
+                            );
+                        } catch (_) {}
+                    }
+                    return {
+                        success: true,
+                        message_sid: result.sid,
+                        status: result.status,
+                        to: formattedPhone,
+                        provider: 'twilio',
+                        real_sms: true
+                    };
+                } catch (twilioError) {
+                    console.error('❌ Twilio API Error:', twilioError.message);
+                    return {
+                        success: false,
+                        error: twilioError.message,
+                        code: twilioError.code,
+                        phone: formattedPhone,
+                        real_sms: false
+                    };
+                }
+            }
+
+            console.log('\n📱 COPAY SMS SIMULATION (Twilio not configured)');
+            console.log(`To: ${formattedPhone}\nMessage:\n${message}\n`);
+            return {
+                success: true,
+                simulated: true,
+                message: 'SMS simulated - Twilio not configured',
+                phone: formattedPhone,
+                real_sms: false
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                phone: phoneNumber,
+                real_sms: false
+            };
+        }
     }
 
     /**
