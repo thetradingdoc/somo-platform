@@ -60,6 +60,9 @@ function copyDir(src, dest, { merge = false } = {}) {
 
 function main() {
   console.log('Building somo-landing…');
+  if (fs.existsSync(path.join(LANDING, 'package.json'))) {
+    execSync('npm ci', { cwd: LANDING, stdio: 'inherit' });
+  }
   const env = {
     ...process.env,
     VITE_API_BASE: process.env.VITE_API_BASE || 'https://api.callsomo.com',
