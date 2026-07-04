@@ -8,7 +8,7 @@ function generateInviteCode() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function assertInviteEmailAvailable(email) {
+function assertInviteEmailAvailable(email, { excludeInviteId = null } = {}) {
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) {
     const err = new Error('email required');
@@ -33,9 +33,10 @@ function assertInviteEmailAvailable(email) {
     .prepare(
       `SELECT id FROM provider_invites
        WHERE lower(email) = ? AND status = 'pending' AND datetime(expires_at) > datetime('now')
+       ${excludeInviteId ? 'AND id != ?' : ''}
        LIMIT 1`
     )
-    .get(normalized);
+    .get(excludeInviteId ? normalized, excludeInviteId : normalized);
   if (pending) {
     const err = new Error('A pending invite already exists for this email.');
     err.code = 'invite_pending_exists';
@@ -204,7 +205,7 @@ async function acceptInvite(code, { password, name, baaAcknowledged, ip, userAge
     throw new Error('BAA acknowledgment required');
   }
   const invite = validation.invite;
-  assertInviteEmailAvailable(invite.email);
+  assertInviteEmailAvailable(invite.email, { excludeInviteId: invite.id });
   const bcrypt = require('bcryptjs');
   const passwordHash = await bcrypt.hash(String(password), 10);
   const customerId = `cust_${uuidv4()}`;
