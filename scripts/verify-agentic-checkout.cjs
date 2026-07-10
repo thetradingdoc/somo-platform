@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 /**
  * Static verification for agentic checkout surfaces (no server required).
+ * Patient web checkout (`unified-dashboard/patients/checkout-chat.html`) was retired (G4).
+ * This gate asserts retirement + remaining RN checkout analytics contract.
+ *
  * Run from repo root: node scripts/verify-agentic-checkout.cjs
  */
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 
@@ -13,25 +18,42 @@ const fail = (msg) => {
 };
 
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+const exists = (rel) => fs.existsSync(path.join(root, rel));
 
 try {
-  const html = read('unified-dashboard/patients/checkout-chat.html');
-  const checkoutJs = read('unified-dashboard/patients/checkout-chat.js');
-  const tsx = read('patient-app/app/checkout-chat.tsx');
-  const analytics = read('patient-app/lib/checkoutAnalytics.ts');
+  // G4 — Skin & Care patient portal retired; do not resurrect static checkout HTML.
+  if (exists('unified-dashboard/patients/checkout-chat.html')) {
+    fail(
+      'unified-dashboard/patients/checkout-chat.html must remain retired (G4). Remove it or update patient-portal-retirement.'
+    );
+  }
+  if (exists('unified-dashboard/patients/checkout-chat.js')) {
+    fail('unified-dashboard/patients/checkout-chat.js must remain retired (G4).');
+  }
 
-  if (!checkoutJs.includes("emitFunnelEvent('agentic_primary'")) fail('checkout-chat.js missing agentic_primary analytics');
-  if (!checkoutJs.includes("emitFunnelEvent('in_chat_pay_tap'")) fail('checkout-chat.js missing in_chat_pay_tap');
-  if (!checkoutJs.includes("emitFunnelEvent('manual_checkout_click'")) fail('checkout-chat.js missing manual_checkout_click');
-  if (!html.includes("id=\"whyPriceDetails\"")) fail('checkout-chat.html missing why price disclosure');
-  if (!html.includes('checkout-chat.js')) fail('checkout-chat.html must link checkout-chat.js');
-  if (!html.includes('checkout-phone-e164.js')) fail('checkout-chat.html must link checkout-phone-e164.js');
-  if (!tsx.includes('somo_kelly_commerce_quote_v1')) fail('RN missing KELLY_QUOTE_KEY');
-  if (!tsx.includes('emitCheckoutAnalytics')) fail('RN missing checkout analytics import/usage');
-  if (!analytics.includes('DeviceEventEmitter.emit')) fail('checkoutAnalytics must emit DeviceEventEmitter');
-  if (!analytics.includes('checkout-funnel')) fail('checkoutAnalytics must use checkout-funnel event name');
+  // RN commerce quote surface may still exist for mobile; keep analytics contract.
+  if (exists('patient-app/app/checkout-chat.tsx')) {
+    const tsx = read('patient-app/app/checkout-chat.tsx');
+    if (!tsx.includes('somo_kelly_commerce_quote_v1')) fail('RN missing KELLY_QUOTE_KEY');
+    if (!tsx.includes('emitCheckoutAnalytics')) fail('RN missing checkout analytics import/usage');
+  }
+  if (exists('patient-app/lib/checkoutAnalytics.ts')) {
+    const analytics = read('patient-app/lib/checkoutAnalytics.ts');
+    if (!analytics.includes('DeviceEventEmitter.emit')) fail('checkoutAnalytics must emit DeviceEventEmitter');
+    if (!analytics.includes('checkout-funnel')) fail('checkoutAnalytics must use checkout-funnel event name');
+  }
 
-  console.log('verify-agentic-checkout: OK (static checks passed)');
+  // Server must keep retirement redirects for /patients/*
+  const retirementTest = 'middleware-platform/__tests__/patient-portal-retirement.test.js';
+  if (!exists(retirementTest)) {
+    fail('missing patient-portal-retirement.test.js (G4 redirect coverage)');
+  }
+  const retirementSrc = read(retirementTest);
+  if (!retirementSrc.includes('/patients/')) {
+    fail('patient-portal-retirement.test.js must cover /patients/* redirects');
+  }
+
+  console.log('verify-agentic-checkout: OK (patient web checkout retired; RN/analytics contract checked)');
 } catch (e) {
   fail(e && e.message ? e.message : String(e));
 }
