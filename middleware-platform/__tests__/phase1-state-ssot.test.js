@@ -105,7 +105,15 @@ describe('phase1 state SSOT', () => {
     });
     const row = getRailsSessionProjection(sid);
     expect(row?.step).not.toBe('done');
-    expect(['await_intent', 'confirm_visit', 'confirmation', 'handoff']).toContain(row?.step);
+    // Remap may land on router await_intent, booking confirm, post-payment confirmation,
+    // support handoff, or basic_intake identity depending on lane handoff order.
+    expect([
+      'await_intent',
+      'confirm_visit',
+      'confirmation',
+      'handoff',
+      'identity'
+    ]).toContain(row?.step);
   });
 });
 

@@ -7,6 +7,31 @@ jest.mock('../services/outbound-call-service', () => ({
 const { getUseCaseContext, requestDemoCall } = require('../services/somo-demo-service');
 
 describe('somo-demo-service', () => {
+  const prev = {};
+
+  beforeAll(() => {
+    for (const key of [
+      'SOMO_DEMO_ENABLED',
+      'SOMO_DEMO_RELAX_LIMITS',
+      'SOMO_DEMO_RETELL_AGENT_ID',
+      'SOMO_DEMO_TWILIO_FROM_NUMBER',
+      'NODE_ENV'
+    ]) {
+      prev[key] = process.env[key];
+    }
+    process.env.SOMO_DEMO_ENABLED = '1';
+    process.env.SOMO_DEMO_RETELL_AGENT_ID = 'agent_test_demo';
+    process.env.SOMO_DEMO_TWILIO_FROM_NUMBER = '+15551234567';
+    process.env.NODE_ENV = 'test';
+  });
+
+  afterAll(() => {
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
   test('getUseCaseContext returns label and opener per use case', () => {
     const ctx = getUseCaseContext('appointment_setter');
     expect(ctx.use_case_label).toBe('Appointment Setter');
@@ -19,9 +44,7 @@ describe('somo-demo-service', () => {
   });
 
   test('requestDemoCall defaults empty use_case to medical_clinic', async () => {
-    process.env.SOMO_DEMO_ENABLED = '1';
     process.env.SOMO_DEMO_RELAX_LIMITS = '1';
-    process.env.NODE_ENV = 'test';
 
     const phone = `+1416${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
     const result = await requestDemoCall({
@@ -38,9 +61,7 @@ describe('somo-demo-service', () => {
   });
 
   test('duplicate phone within 24h is blocked with deterministic error code', async () => {
-    process.env.SOMO_DEMO_ENABLED = '1';
     process.env.SOMO_DEMO_RELAX_LIMITS = '0';
-    process.env.NODE_ENV = 'test';
 
     const payload = {
       name: 'Test Lead',
