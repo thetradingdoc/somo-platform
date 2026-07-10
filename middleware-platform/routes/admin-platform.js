@@ -1570,7 +1570,18 @@ app.get('/api/admin/claims/review-queue', (req, res) => {
   }
 });
 
-app.get('/api/admin/coding-reviews', (req, res) => {
+function requireCodingReview(req, res, next) {
+  const caps = req.adminUser?.capabilities || [];
+  if (!req.adminUser) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  if (!caps.includes('platform.coding.review') && !req.adminUser.is_super_admin) {
+    return res.status(403).json({ success: false, error: 'platform.coding.review required' });
+  }
+  return next();
+}
+
+app.get('/api/admin/coding-reviews', requireCodingReview, (req, res) => {
   try {
     const codingReview = require('../services/coding-review-service');
     const status = req.query.status || 'pending';
@@ -1585,7 +1596,7 @@ app.get('/api/admin/coding-reviews', (req, res) => {
   }
 });
 
-app.post('/api/admin/coding-reviews/:id/approve', (req, res) => {
+app.post('/api/admin/coding-reviews/:id/approve', requireCodingReview, (req, res) => {
   try {
     const codingReview = require('../services/coding-review-service');
     const { icd10, cpt, resolved_by, session_id } = req.body || {};
@@ -1602,7 +1613,7 @@ app.post('/api/admin/coding-reviews/:id/approve', (req, res) => {
   }
 });
 
-app.post('/api/admin/coding-reviews/:id/reject', (req, res) => {
+app.post('/api/admin/coding-reviews/:id/reject', requireCodingReview, (req, res) => {
   try {
     const codingReview = require('../services/coding-review-service');
     const { rejection_reason, resolved_by, session_id } = req.body || {};
@@ -3584,11 +3595,20 @@ app.get('/api/admin/ops/summary', apiLimiter, requireAdminAuth, async (req, res)
     const notif = db.getNotificationQueueStats ? db.getNotificationQueueStats() : { success: true, by_status: {} };
     const dead = db.listDeadNotificationJobs ? db.listDeadNotificationJobs(50) : [];
     const counters = db.getOpsCounters ? db.getOpsCounters(24) : [];
+    let codingStarterMiss = 0;
+    try {
+      codingStarterMiss = db.db.prepare(`
+        SELECT COUNT(*) AS n FROM kelly_call_events
+        WHERE event_type = 'coding_starter_set_miss'
+          AND datetime(created_at) >= datetime('now', '-24 hours')
+      `).get()?.n ?? 0;
+    } catch (_) {}
     return res.json({
       success: true,
       notification_queue: notif.success ? notif.by_status : {},
       notification_dead_letter: dead,
-      ops_counters_24h: counters
+      ops_counters_24h: counters,
+      coding_starter_set_miss_24h: codingStarterMiss
     });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });

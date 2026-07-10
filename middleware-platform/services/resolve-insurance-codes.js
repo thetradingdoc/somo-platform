@@ -6,12 +6,55 @@
 
 const TriageRAGService = require('./triage-rag-service');
 const knowledgeService = require('./knowledge-service');
+const db = require('../database');
 const { resolveCptForVisit, isDentalCdt } = require('../utils/cpt-helper');
 const { resolveAdminInsuranceCodes } = require('./resolve-admin-visit-codes');
 const { CODING_CONFIDENCE_THRESHOLD, isConfidenceNearThreshold } = require('../config/coding-thresholds');
 const { TriagePolicy } = require('./conversation-mode/tenant-policy');
+const { resolveVisitCodingPath } = require('./resolve-visit-codes');
+const { persistCodingProvenanceRow, logCodingProvenanceEvent } = require('./coding-provenance-store');
 
-function resolveInsuranceCodes(sessionId, opts = {}) {
+function attachModifiers(primaryIcd10, serviceCode, extraCpt = []) {
+  const cptList = [serviceCode, ...extraCpt].filter(Boolean).map((code) => ({ code }));
+  const required = knowledgeService.getRequiredModifiers(cptList);
+  const suggested = required.get(serviceCode) || [];
+  return suggested.length ? suggested : undefined;
+}
+
+function finalizeResolved(sessionId, resolved, routing, opts = {}) {
+  const visitMode = routing?.visitMode || opts.visit_mode || null;
+  const modifiers = resolved.primary_cpt
+    ? attachModifiers(resolved.primary_icd10, resolved.primary_cpt, opts.secondary_cpt || [])
+    : undefined;
+
+  if (sessionId && resolved.coding_provenance) {
+    persistCodingProvenanceRow(sessionId, {
+      ...resolved.coding_provenance,
+      visit_mode: visitMode,
+      suggested_modifiers: modifiers
+    }, {
+      targetSpecialty: resolved.target_specialty,
+      channel: resolved.admin_path ? 'admin' : 'rag'
+    });
+    logCodingProvenanceEvent(sessionId, {
+      code_source: resolved.code_source,
+      primary_icd10: resolved.primary_icd10,
+      primary_cpt: resolved.primary_cpt,
+      visit_mode: visitMode,
+      admin_path: !!resolved.admin_path
+    }, { clinicId: opts.clinicId });
+  }
+
+  return {
+    ...resolved,
+    visit_mode: visitMode,
+    suggested_modifiers: modifiers,
+    coding_path: routing?.path || resolved.coding_path,
+    routing_reason: routing?.reason || resolved.routing_reason
+  };
+}
+
+function resolveInsuranceCodesCore(sessionId, opts = {}) {
   const {
     service_code: clientServiceCode = null,
     adminOverride = false,
@@ -22,22 +65,49 @@ function resolveInsuranceCodes(sessionId, opts = {}) {
     triage_policy: triagePolicy = null,
     visit_reason: visitReason = null,
     tenantSpecialty = null,
-    useAdminPath = false
+    useAdminPath = false,
+    use_case: useCase = null
   } = opts;
+
+  const routing = resolveVisitCodingPath({
+    triagePolicy,
+    visitReason,
+    tenantSpecialty,
+    useCase
+  });
 
   const adminPath =
     useAdminPath === true ||
+    routing.useAdminPath ||
     triagePolicy === TriagePolicy.DISABLED ||
     String(triagePolicy || '').toLowerCase() === 'disabled';
 
   if (adminPath) {
-    return resolveAdminInsuranceCodes({
+    const harnessRow = sessionId && db.db
+      ? db.db.prepare(
+          `SELECT seeded_for_harness FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`
+        ).get(sessionId)
+      : null;
+    if (harnessRow?.seeded_for_harness === 1) {
+      return {
+        ok: false,
+        status: 'CODING_REVIEW_REQUIRED',
+        error_code: 'CODING_REVIEW_REQUIRED',
+        message: 'Harness-seeded triage requires clinical review before insurance verification.'
+      };
+    }
+
+    const adminResult = resolveAdminInsuranceCodes({
       visit_reason: visitReason,
       visitReasonText: visitReason,
       tenantSpecialty: tenantSpecialty || 'Dental',
       isNewPatient: opts.isNewPatient !== false,
       patient_age: opts.patient_age
     });
+    if (adminResult.ok) {
+      return finalizeResolved(sessionId, { ...adminResult, admin_path: true }, routing, opts);
+    }
+    return adminResult;
   }
 
   if (clientServiceCode && !adminOverride) {
@@ -162,9 +232,7 @@ function resolveInsuranceCodes(sessionId, opts = {}) {
     };
   }
 
-  const pairCheck = isDentalCdt(serviceCode)
-    ? { valid: true }
-    : knowledgeService.validateCodePair(primaryIcd10, serviceCode);
+  const pairCheck = knowledgeService.validateCodePair(primaryIcd10, serviceCode);
   if (!pairCheck.valid) {
     if (flagHitl) {
       flagHitl({
@@ -187,17 +255,50 @@ function resolveInsuranceCodes(sessionId, opts = {}) {
     };
   }
 
-  return {
-    ok: true,
-    status: 'OK',
-    primary_icd10: primaryIcd10,
-    primary_cpt: serviceCode,
-    code_source: cptResolution.code_source,
-    fallback_reason: cptResolution.fallback_reason,
-    rag_confidence: confidence,
-    code_pair_valid: true,
-    target_specialty: triageResult.target_specialty || null
-  };
+  return finalizeResolved(
+    sessionId,
+    {
+      ok: true,
+      status: 'OK',
+      primary_icd10: primaryIcd10,
+      primary_cpt: serviceCode,
+      code_source: triageResult.primary_cpt ? 'spine' : cptResolution.code_source,
+      fallback_reason: cptResolution.fallback_reason,
+      rag_confidence: confidence,
+      code_pair_valid: true,
+      target_specialty: triageResult.target_specialty || null,
+      coding_provenance: {
+        code_source: triageResult.primary_cpt ? 'spine' : cptResolution.code_source,
+        primary_icd10: primaryIcd10,
+        primary_cpt: serviceCode,
+        admin_path: false
+      }
+    },
+    routing,
+    opts
+  );
 }
 
-module.exports = { resolveInsuranceCodes };
+function resolveInsuranceCodes(sessionId, opts = {}) {
+  const started = Date.now();
+  const result = resolveInsuranceCodesCore(sessionId, opts);
+  const ms = Date.now() - started;
+  try {
+    db.insertKellyCallEvent?.({
+      session_id: sessionId || null,
+      event_type: 'coding_resolution_latency',
+      payload_json: {
+        ms,
+        ok: result?.ok === true,
+        code_source: result?.code_source || null,
+        primary_cpt: result?.primary_cpt || null
+      }
+    });
+    if (ms > parseInt(process.env.CODING_RESOLUTION_P95_MS || '2500', 10)) {
+      db.bumpOpsCounter?.('coding_resolution_sla_breach');
+    }
+  } catch (_) {}
+  return result;
+}
+
+module.exports = { resolveInsuranceCodes, resolveInsuranceCodesCore };

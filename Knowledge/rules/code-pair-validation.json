@@ -1,5 +1,5 @@
 {
-  "version": "2025-06",
+  "version": "2025-07",
   "incompatible_pairs": [
     {
       "icd10_pattern": "^K[0-9]",
@@ -10,6 +10,156 @@
       "icd10_pattern": "^Z[0-9]",
       "cpt_pattern": "^9928[0-9]$",
       "reason": "Emergency E/M code incompatible with preventive/encounter diagnosis"
+    },
+    {
+      "icd10_pattern": "^Z[0-9]",
+      "cpt_pattern": "^99291$",
+      "reason": "Critical care incompatible with routine encounter diagnosis"
+    },
+    {
+      "icd10_pattern": "^F[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "E/M office visit typically incompatible with mental health diagnosis without MH psychotherapy code"
+    },
+    {
+      "icd10_pattern": "^L[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Dermatology procedure visits should not default to generic E/M without skin procedure context"
+    },
+    {
+      "icd10_pattern": "^J[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Respiratory diagnosis with generic E/M may indicate missing procedure or pulmonology code"
+    },
+    {
+      "icd10_pattern": "^M[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Musculoskeletal diagnosis with generic E/M may need procedure or therapy code"
+    },
+    {
+      "icd10_pattern": "^Z01\\.20$",
+      "cpt_pattern": "^99[0-9]{3}$",
+      "reason": "Dental encounter ICD should pair with CDT, not medical E/M"
+    },
+    {
+      "icd10_pattern": "^Z01\\.20$",
+      "cpt_pattern": "^908[0-9]{2}$",
+      "reason": "Dental encounter ICD incompatible with psychotherapy CPT"
+    },
+    {
+      "icd10_pattern": "^Z00\\.",
+      "cpt_pattern": "^9928[0-9]$",
+      "reason": "Preventive encounter incompatible with emergency E/M"
+    },
+    {
+      "icd10_pattern": "^E11\\.",
+      "cpt_pattern": "^9928[0-9]$",
+      "reason": "Emergency E/M incompatible with routine diabetes management diagnosis"
+    },
+    {
+      "icd10_pattern": "^I10$",
+      "cpt_pattern": "^99291$",
+      "reason": "Critical care incompatible with essential hypertension diagnosis"
+    },
+    {
+      "icd10_pattern": "^N39\\.0$",
+      "cpt_pattern": "^9928[0-9]$",
+      "reason": "Emergency E/M overuse risk with UTI diagnosis"
+    },
+    {
+      "icd10_pattern": "^R10\\.",
+      "cpt_pattern": "^9939[0-9]$",
+      "reason": "Preventive E/M incompatible with acute abdominal pain symptom"
+    },
+    {
+      "icd10_pattern": "^Z23$",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Immunization encounter should use vaccine admin codes not office E/M"
+    },
+    {
+      "icd10_pattern": "^Z00\\.",
+      "cpt_pattern": "^908[0-9]{2}$",
+      "reason": "Preventive wellness visit incompatible with psychotherapy CPT"
+    },
+    {
+      "icd10_pattern": "^F32\\.",
+      "cpt_pattern": "^9939[0-9]$",
+      "reason": "Preventive E/M incompatible with major depressive disorder"
+    },
+    {
+      "icd10_pattern": "^S[0-9]",
+      "cpt_pattern": "^9939[0-9]$",
+      "reason": "Injury diagnosis incompatible with preventive E/M"
+    },
+    {
+      "icd10_pattern": "^O[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "OB diagnosis requires OB-specific E/M or procedure codes"
+    },
+    {
+      "icd10_pattern": "^P[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Perinatal diagnosis incompatible with generic adult E/M"
+    },
+    {
+      "icd10_pattern": "^C[0-9]",
+      "cpt_pattern": "^9939[0-9]$",
+      "reason": "Oncology diagnosis incompatible with preventive E/M"
+    },
+    {
+      "icd10_pattern": "^G[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Neurology diagnosis may need specialty E/M or procedure"
+    },
+    {
+      "icd10_pattern": "^H[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Eye/ear diagnosis should pair with ophthalmology/otology codes"
+    },
+    {
+      "icd10_pattern": "^Z01\\.20$",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Dental encounter ICD must not pair with medical office E/M"
+    },
+    {
+      "icd10_pattern": "^Z01\\.20$",
+      "cpt_pattern": "^G0[0-9]{3}$",
+      "reason": "Dental encounter ICD incompatible with Medicare HCPCS E/M"
+    },
+    {
+      "icd10_pattern": "^Z00\\.",
+      "cpt_pattern": "^G0438$",
+      "reason": "NCCI-style: AWV HCPCS should not pair with generic preventive ICD without AWV context"
+    },
+    {
+      "icd10_pattern": "^F[0-9]",
+      "cpt_pattern": "^99[2-4][0-9]{2}$",
+      "reason": "Mental health diagnosis requires MH psychotherapy or psychiatry E/M"
+    },
+    {
+      "icd10_pattern": "^K21\\.",
+      "cpt_pattern": "^43239$",
+      "reason": "GERD diagnosis incompatible with upper endoscopy without indication documentation"
+    },
+    {
+      "icd10_pattern": "^Z00\\.",
+      "cpt_pattern": "^97161$",
+      "reason": "Preventive wellness incompatible with PT evaluation"
+    },
+    {
+      "icd10_pattern": "^M25\\.",
+      "cpt_pattern": "^27447$",
+      "reason": "Joint pain diagnosis incompatible with major joint replacement without staging"
+    },
+    {
+      "icd10_pattern": "^J06\\.",
+      "cpt_pattern": "^99291$",
+      "reason": "URI diagnosis incompatible with critical care"
+    },
+    {
+      "icd10_pattern": "^Z23$",
+      "cpt_pattern": "^90471$",
+      "reason": "Immunization ICD should include vaccine product code with admin"
     }
   ]
 }

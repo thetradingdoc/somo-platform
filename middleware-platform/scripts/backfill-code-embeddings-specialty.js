@@ -6,14 +6,15 @@
  */
 
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
-const db = require('../database');
+const dbModule = require('../database');
 
 function main() {
-  if (typeof db.backfillCodeEmbeddingsSpecialty !== 'function') {
-    console.error('❌ backfillCodeEmbeddingsSpecialty not found in database module.');
+  const backfill = dbModule.backfillCodeEmbeddingSpecialty;
+  if (typeof backfill !== 'function') {
+    console.error('❌ backfillCodeEmbeddingSpecialty not found in database module.');
     process.exit(1);
   }
-  const result = db.backfillCodeEmbeddingsSpecialty();
+  const result = backfill();
   console.log(`✅ Backfilled specialty for ${result.updated} code embeddings`);
   if (result.message) console.log(`   ${result.message}`);
 }

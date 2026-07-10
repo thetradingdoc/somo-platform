@@ -126,4 +126,34 @@ describe('coding layer leak regression', () => {
     const src = read('scripts/verify-kelly-rails-env.cjs');
     expect(src).toMatch(/CALLSOMO_OPERATOR_FALLBACK_PSTN/);
   });
+
+  it('Retell primary switch routes collect_insurance through KellyToolExecutor (G-08)', () => {
+    const src = read('webhooks/retell-websocket.js');
+    const switchBlock = src.slice(src.indexOf("case 'collect_insurance'"), src.indexOf("case 'collect_insurance'") + 800);
+    expect(switchBlock).toMatch(/KellyToolExecutor\.execute/);
+  });
+
+  it('legacy handleCollectInsurance axios bypass is not invoked from switch', () => {
+    const src = read('webhooks/retell-websocket.js');
+    const switchArea = src.slice(src.indexOf("case 'collect_insurance'"), src.indexOf("case 'schedule_appointment'"));
+    expect(switchArea).not.toMatch(/handleCollectInsurance/);
+  });
+
+  it('Retell coding search tools exist but should migrate to Kelly spine (G-08)', () => {
+    const src = read('webhooks/retell-websocket.js');
+    expect(src).toMatch(/case 'search_icd10_codes'/);
+    expect(src).toMatch(/case 'search_cpt_codes'/);
+    expect(src).toMatch(/case 'validate_code_pair'/);
+  });
+
+  it('hipaa-production-guards blocks KELLY_RAILS_FAST_RAG in production (F-05)', () => {
+    const { getKellyRoutingViolations } = require('../services/hipaa-production-guards');
+    const violations = getKellyRoutingViolations({
+      NODE_ENV: 'production',
+      CLOUDRUN_PROFILE: 'production',
+      KELLY_RAILS_FAST_RAG: '1',
+      CONVERSATION_MODE_ROUTING: 'enforce'
+    });
+    expect(violations.some((v) => /KELLY_RAILS_FAST_RAG/.test(v))).toBe(true);
+  });
 });

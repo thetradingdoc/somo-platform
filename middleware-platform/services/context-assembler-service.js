@@ -88,15 +88,18 @@ async function assembleContext(callId, currentQuery, options = {}) {
   const maxHcpcs = options.maxHcpcs ?? MAX_HCPCS_CANDIDATES;
 
   let codeCandidates = { icd10: [], cpt: [], hcpcs: [] };
-  if (typeof knowledgeService.getCodeCandidates === 'function') {
-    codeCandidates = await knowledgeService.getCodeCandidates(truncatedQuery, {
-      maxIcd10,
-      maxCpt,
-      maxHcpcs,
-      useSemantic: options.useSemantic,
-      clinicId: options.clinicId,
-      callId
-    });
+  const fetchOpts = {
+    maxIcd10,
+    maxCpt,
+    maxHcpcs,
+    useSemantic: options.useSemantic,
+    clinicId: options.clinicId,
+    callId
+  };
+  if (typeof knowledgeService.getCodeCandidatesDualSource === 'function') {
+    codeCandidates = await knowledgeService.getCodeCandidatesDualSource(truncatedQuery, fetchOpts);
+  } else if (typeof knowledgeService.getCodeCandidates === 'function') {
+    codeCandidates = await knowledgeService.getCodeCandidates(truncatedQuery, fetchOpts);
   }
 
   let patientHistory = null;

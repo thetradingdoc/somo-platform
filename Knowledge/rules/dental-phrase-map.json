@@ -1,0 +1,262 @@
+{
+  "version": "1",
+  "comment": "Dental lay-language → CDT phrase map (SSOT). Order matters: more specific entries first.",
+  "entries": [
+    {
+      "id": "perio_maintenance",
+      "patterns": ["\\bperio maintenance\\b", "\\bperiodontal maintenance\\b", "\\bmaintenance perio\\b"],
+      "code": "D4910"
+    },
+    {
+      "id": "deep_scaling",
+      "patterns": ["\\bdeep cleaning\\b", "\\bscaling and root planing\\b", "\\broot planing\\b", "\\bscaling\\b"],
+      "code": "D4341"
+    },
+    {
+      "id": "perio_general",
+      "patterns": ["\\bperio\\b", "\\bperiodontal\\b", "\\bperiodontitis\\b"],
+      "code": "D4341"
+    },
+    {
+      "id": "gingivectomy",
+      "patterns": ["\\bgingivectomy\\b", "\\bgum surgery\\b"],
+      "code": "D4210"
+    },
+    {
+      "id": "crown_lengthening",
+      "patterns": ["\\bcrown lengthening\\b"],
+      "code": "D4249"
+    },
+    {
+      "id": "debridement",
+      "patterns": ["\\bfull mouth debridement\\b", "\\bdebridement\\b"],
+      "code": "D4355"
+    },
+    {
+      "id": "pulpotomy",
+      "patterns": ["\\bpulpotomy\\b", "\\bbaby root canal\\b", "\\bpediatric root canal\\b"],
+      "code": "D3220"
+    },
+    {
+      "id": "molar_root_canal",
+      "patterns": ["\\bmolar root canal\\b", "\\broot canal.+molar\\b"],
+      "code": "D3330"
+    },
+    {
+      "id": "root_canal",
+      "patterns": ["\\broot canal\\b", "\\bendodontic\\b", "\\bendo\\b", "\\bcanal treatment\\b"],
+      "code": "D3310"
+    },
+    {
+      "id": "apicoectomy",
+      "patterns": ["\\bapicoectomy\\b", "\\broot end surgery\\b"],
+      "code": "D3410"
+    },
+    {
+      "id": "pulp_cap",
+      "patterns": ["\\bpulp cap\\b", "\\bindirect pulp\\b"],
+      "code": "D3120"
+    },
+    {
+      "id": "core_buildup",
+      "patterns": ["\\bcore buildup\\b", "\\bpost and core\\b", "\\bcracked tooth\\b"],
+      "code": "D2950"
+    },
+    {
+      "id": "panoramic_xray",
+      "patterns": ["\\bfull.+x.?ray\\b", "\\bpanoramic\\b", "\\bpanorex\\b", "\\bpanoramic x.?ray\\b"],
+      "code": "D0330"
+    },
+    {
+      "id": "periapical_xray",
+      "patterns": ["\\bperiapical\\b", "\\bp.a. x.?ray\\b"],
+      "code": "D0220"
+    },
+    {
+      "id": "bitewing_xray",
+      "patterns": ["\\bbitewing\\b", "\\bbite wing\\b"],
+      "code": "D0274"
+    },
+    {
+      "id": "xray_general",
+      "patterns": ["\\bx.?ray\\b", "\\bxray\\b", "\\bradiograph\\b"],
+      "code": "D0274"
+    },
+    {
+      "id": "surgical_extraction",
+      "patterns": ["\\bwisdom teeth\\b", "\\bwisdom tooth\\b", "\\bimpacted\\b", "\\bsurgical extraction\\b"],
+      "code": "D7210"
+    },
+    {
+      "id": "simple_extraction",
+      "patterns": ["\\bextraction\\b", "\\bpull.+tooth\\b", "\\btooth pulled\\b", "\\btooth removal\\b"],
+      "code": "D7140"
+    },
+    {
+      "id": "ortho_retainer",
+      "patterns": ["\\bretainer\\b", "\\bretainers\\b"],
+      "code": "D8680"
+    },
+    {
+      "id": "ortho_appliance",
+      "patterns": ["\\bremovable appliance\\b", "\\borthodontic appliance\\b", "\\bexpander\\b"],
+      "code": "D8210"
+    },
+    {
+      "id": "ortho_comprehensive",
+      "patterns": ["\\bortho\\b", "\\bbraces\\b", "\\binvisalign\\b", "\\bfrenillos\\b", "\\borthodontics\\b"],
+      "code": "D8080"
+    },
+    {
+      "id": "implant_abutment",
+      "patterns": ["\\babutment\\b", "\\bimplant crown\\b"],
+      "code": "D6056"
+    },
+    {
+      "id": "implant_placement",
+      "patterns": ["\\bimplant\\b", "\\bimplant consult\\b", "\\bdental implant\\b"],
+      "code": "D6010"
+    },
+    {
+      "id": "bone_graft",
+      "patterns": ["\\bbone graft\\b", "\\bbone grafting\\b"],
+      "code": "D7953"
+    },
+    {
+      "id": "sinus_lift",
+      "patterns": ["\\bsinus lift\\b", "\\bsinus augmentation\\b"],
+      "code": "D7951"
+    },
+    {
+      "id": "crown_temp",
+      "patterns": ["\\btemporary crown\\b", "\\btemp crown\\b"],
+      "code": "D2799"
+    },
+    {
+      "id": "crown",
+      "patterns": ["\\bcrown\\b", "\\bcap\\b", "\\bcorona\\b"],
+      "code": "D2740"
+    },
+    {
+      "id": "veneer",
+      "patterns": ["\\bveneer\\b", "\\bveneers\\b", "\\bp laminate\\b"],
+      "code": "D2962"
+    },
+    {
+      "id": "bridge",
+      "patterns": ["\\bbridge\\b", "\\bfixed bridge\\b", "\\bpuente\\b"],
+      "code": "D6240"
+    },
+    {
+      "id": "partial_denture",
+      "patterns": ["\\bpartial denture\\b", "\\bpartial plate\\b"],
+      "code": "D5211"
+    },
+    {
+      "id": "denture_reline",
+      "patterns": ["\\bdenture reline\\b", "\\breline\\b"],
+      "code": "D5730"
+    },
+    {
+      "id": "denture_complete",
+      "patterns": ["\\bcomplete denture\\b", "\\bfull denture\\b", "\\bfalse teeth\\b", "\\bdenture\\b"],
+      "code": "D5110"
+    },
+    {
+      "id": "amalgam_filling",
+      "patterns": ["\\bsilver filling\\b", "\\bamalgam\\b"],
+      "code": "D2140"
+    },
+    {
+      "id": "composite_filling",
+      "patterns": ["\\bfilling\\b", "\\bcavity\\b", "\\bempaste\\b", "\\bcaries\\b"],
+      "code": "D2391"
+    },
+    {
+      "id": "sealant",
+      "patterns": ["\\bsealant\\b", "\\bsealants\\b"],
+      "code": "D1351"
+    },
+    {
+      "id": "fluoride",
+      "patterns": ["\\bfluoride\\b", "\\bfluoride treatment\\b"],
+      "code": "D1206"
+    },
+    {
+      "id": "space_maintainer",
+      "patterns": ["\\bspace maintainer\\b"],
+      "code": "D1510"
+    },
+    {
+      "id": "prophylaxis",
+      "patterns": ["\\bcleaning\\b", "\\bprophylaxis\\b", "\\bhygiene\\b", "\\blimpieza\\b", "\\bteeth cleaning\\b"],
+      "code": "D1110",
+      "childCode": "D1120"
+    },
+    {
+      "id": "copay_pricing",
+      "patterns": ["\\bcopay\\b", "\\bcopago\\b", "\\bcoverage\\b", "\\bcost\\b", "\\bcuánto\\b", "\\bcuanto\\b", "\\bprecio\\b", "\\bhow much\\b", "\\bprice\\b"],
+      "code": "D1110"
+    },
+    {
+      "id": "new_patient_exam",
+      "patterns": ["\\bnew patient\\b", "\\bfirst time\\b", "\\bfirst visit\\b", "\\bpaciente nuevo\\b", "\\bnuevo paciente\\b"],
+      "code": "D0150"
+    },
+    {
+      "id": "periodic_exam",
+      "patterns": ["\\bcheckup\\b", "\\bcheck.?up\\b", "\\bperiodic\\b", "\\broutine exam\\b", "\\bexam\\b", "\\broutine\\b"],
+      "code": "D0120"
+    },
+    {
+      "id": "limited_eval_pain",
+      "patterns": ["\\btooth\\s*pain\\b", "\\bsomething.?s wrong\\b", "\\bproblem\\b", "\\bhurts\\b", "\\bdolor de muela\\b", "\\bdolor dental\\b", "\\btoothache\\b"],
+      "code": "D0140"
+    },
+    {
+      "id": "emergency_palliative",
+      "patterns": ["\\bemergency\\b", "\\bin pain\\b", "\\bsevere pain\\b", "\\bemergencia\\b", "\\burgent dental\\b"],
+      "code": "D9110"
+    },
+    {
+      "id": "consultation",
+      "patterns": ["\\bconsult\\b", "\\bconsultation\\b", "\\bsecond opinion\\b"],
+      "code": "D9310"
+    },
+    {
+      "id": "oral_cancer_screen",
+      "patterns": ["\\boral cancer\\b", "\\bcancer screening\\b", "\\boral screening\\b"],
+      "code": "D0431"
+    },
+    {
+      "id": "whitening",
+      "patterns": ["\\bwhitening\\b", "\\bbleaching\\b", "\\bblanqueamiento\\b", "\\bteeth whitening\\b"],
+      "code": "D9972"
+    },
+    {
+      "id": "night_guard",
+      "patterns": ["\\bnight guard\\b", "\\bmouth guard\\b", "\\bbruxism\\b", "\\bgrinding teeth\\b"],
+      "code": "D9944"
+    },
+    {
+      "id": "tmj",
+      "patterns": ["\\btmj\\b", "\\bjaw pain\\b", "\\bclicking jaw\\b"],
+      "code": "D7899"
+    },
+    {
+      "id": "nitrous_sedation",
+      "patterns": ["\\bnitrous\\b", "\\blaughing gas\\b", "\\bnitrous oxide\\b"],
+      "code": "D9230"
+    },
+    {
+      "id": "iv_sedation",
+      "patterns": ["\\biv sedation\\b", "\\bintravenous sedation\\b", "\\bconscious sedation\\b"],
+      "code": "D9223"
+    },
+    {
+      "id": "post_op_visit",
+      "patterns": ["\\bpost.?op\\b", "\\bfollow up after\\b", "\\bpost operative\\b"],
+      "code": "D0171"
+    }
+  ]
+}

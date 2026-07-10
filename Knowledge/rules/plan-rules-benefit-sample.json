@@ -1,0 +1,30 @@
+[
+  {
+    "payer_id": "DELTA_DENTAL_NY",
+    "plan_id": "dental_ppo",
+    "service_code": "D1110",
+    "copay_due_now": 0,
+    "notes": "Sample preventive cleaning"
+  },
+  {
+    "payer_id": "DELTA_DENTAL_NY",
+    "plan_id": "dental_ppo",
+    "service_code": "D3310",
+    "copay_due_now": 150,
+    "notes": "Sample endo — replaces D* wildcard guess"
+  },
+  {
+    "payer_id": "AETNA_DENTAL",
+    "plan_id": "dental_ppo",
+    "service_code": "D4341",
+    "copay_due_now": 75,
+    "notes": "Sample perio scaling"
+  },
+  {
+    "payer_id": "METLIFE_DENTAL",
+    "plan_id": "dental_ppo",
+    "service_code": "D8080",
+    "copay_due_now": 35,
+    "notes": "Sample ortho — replaces D* wildcard guess"
+  }
+]

@@ -92,6 +92,13 @@ case "$cmd" in
       echo "ERROR: verify:env-gates failed — production profile must not use shadow routing."
       exit 1
     }
+    if [[ -f "$ROOT/middleware-platform/scripts/verify-prod-codebook.cjs" ]]; then
+      echo "Verifying production codebook parity (ICD/CPT/HCPCS/CDT)..."
+      npm run verify:prod-codebook --prefix "$ROOT/middleware-platform" || {
+        echo "ERROR: verify:prod-codebook failed — prod codebook below parity targets."
+        exit 1
+      }
+    fi
     if [[ "${SKIP_LIVE_CALL_VERIFY:-}" == "1" ]]; then
       echo "SKIP_LIVE_CALL_VERIFY=1 — skipping verify:live-booking-call"
     elif [[ -n "${SESSION_ID:-}${CALL_ID:-}" && -n "${DB_PATH:-}" ]]; then

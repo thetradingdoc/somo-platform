@@ -116,12 +116,23 @@ function checkBookingAfterQuoteGate({ sessionFlags = {} }) {
   };
 }
 
+function checkLocationQuoteGate({ providerId, locationId, providerName, locationName } = {}) {
+  const blocked = !!(providerId || locationId || providerName || locationName);
+  return {
+    allowed: !blocked,
+    holding_utterance:
+      'I can book your visit, but copay amounts can vary by provider and location. Our front desk will confirm your exact copay.',
+    reason: blocked ? 'provider_location_quote_deferred' : null
+  };
+}
+
 module.exports = {
   checkCodingGate,
   checkQuoteGate,
   quoteStatusFromResolution,
   checkPaymentGate,
   checkBookingAfterQuoteGate,
+  checkLocationQuoteGate,
   HOLDING,
   THRESHOLD,
   isConfidenceNearThreshold

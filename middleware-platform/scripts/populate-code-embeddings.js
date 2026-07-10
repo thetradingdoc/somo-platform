@@ -4,7 +4,7 @@
  * Requires OPENAI_API_KEY. Run after ICD-10/CPT/HCPCS imports.
  *
  * Usage:
- *   node scripts/populate-code-embeddings.js [--limit N] [--type icd10|cpt|hcpcs|icd10_pcs] [--incremental]
+ *   node scripts/populate-code-embeddings.js [--limit N] [--type icd10|cpt|hcpcs|cdt|icd10_pcs] [--incremental]
  *   node scripts/populate-code-embeddings.js --until-done [--batch-size 5000]
  */
 
@@ -33,15 +33,21 @@ async function embedTextsBatch(texts, retries = 3) {
       });
       if (!res.ok) {
         const err = await res.text();
-        throw new Error(`OpenAI embeddings ${res.status}: ${err.slice(0, 300)}`);
+        const quota = res.status === 429 || /quota|rate limit/i.test(err);
+        const e = new Error(`OpenAI embeddings ${res.status}: ${err.slice(0, 300)}`);
+        e.quotaExceeded = quota;
+        throw e;
       }
       const data = await res.json();
       const sorted = (data.data || []).sort((a, b) => a.index - b.index);
       return sorted.map((d) => d.embedding);
     } catch (e) {
       lastErr = e;
+      if (e.quotaExceeded && attempt >= retries) throw e;
       if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
+        const delay = e.quotaExceeded ? 15000 * attempt : 1000 * attempt;
+        console.warn(`⚠️  Embedding API error (attempt ${attempt}/${retries}), retry in ${delay}ms: ${e.message}`);
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
   }
@@ -113,6 +119,16 @@ const TYPE_CONFIG = {
     descField: 'long_desc',
     defaultBatch: 2000
   },
+  cdt: {
+    incrementalSql: `SELECT c.code, c.description FROM cdt_codes c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM code_embeddings e
+        WHERE e.code = c.code AND e.code_type = 'cdt'
+      ) LIMIT ?`,
+    fullSql: 'SELECT code, description FROM cdt_codes LIMIT ?',
+    descField: 'description',
+    defaultBatch: 2000
+  },
   icd10_pcs: {
     incrementalSql: `SELECT c.code, c.description FROM icd10_pcs_codes c
       WHERE NOT EXISTS (
@@ -146,10 +162,19 @@ async function embedBatch(type, { limit, incremental }) {
     try {
       vectors = await embedTextsBatch(payloads.map((p) => p.text));
     } catch (e) {
+      if (e.quotaExceeded) {
+        console.error('❌ OpenAI quota exceeded — restore billing and re-run populate-code-embeddings.');
+        process.exit(3);
+      }
       console.warn(`  [${type}] batch API failed, falling back to single embed: ${e.message}`);
       vectors = [];
       for (const p of payloads) {
-        vectors.push(await embedText(p.text));
+        const vec = await embedText(p.text);
+        if (!vec && inserted === 0 && vectors.length === 0) {
+          console.error('❌ Embedding unavailable (likely OpenAI quota). Aborting.');
+          process.exit(3);
+        }
+        vectors.push(vec);
       }
     }
     const upsertMany = sqlite.transaction((items) => {
@@ -196,7 +221,8 @@ async function runTypes(types, { limit, incremental }) {
 const CODE_TABLE_BY_TYPE = {
   icd10: 'icd10_codes',
   cpt: 'cpt_codes',
-  hcpcs: 'hcpcs_codes'
+  hcpcs: 'hcpcs_codes',
+  cdt: 'cdt_codes'
 };
 
 /** Fast remaining estimate for --until-done loop (uses live codebook row counts). */
@@ -219,6 +245,7 @@ async function untilDone(batchSize, types = ['icd10', 'cpt', 'hcpcs']) {
   let round = 0;
   let grandTotal = 0;
   console.log('Counting remaining codes per type...');
+  let quotaStrikes = 0;
   while (true) {
     round++;
     const remaining = {};
@@ -231,7 +258,7 @@ async function untilDone(batchSize, types = ['icd10', 'cpt', 'hcpcs']) {
       console.log(`✅ All code types fully embedded after ${round - 1} batch round(s). Total inserted: ${grandTotal}`);
       break;
     }
-    console.log(`\n--- Round ${round} remaining: icd10=${remaining.icd10}, cpt=${remaining.cpt}, hcpcs=${remaining.hcpcs} ---`);
+    console.log(`\n--- Round ${round} remaining: ${types.map((t) => `${t}=${remaining[t]}`).join(', ')} ---`);
     for (const t of types) {
       if (remaining[t] <= 0) continue;
       const limit = Math.min(batchSize, remaining[t]);
@@ -240,6 +267,13 @@ async function untilDone(batchSize, types = ['icd10', 'cpt', 'hcpcs']) {
       console.log(`  ${t}: +${inserted}`);
       if (inserted === 0 && remaining[t] > 0) {
         console.warn(`⚠️  ${t}: no progress this round (${remaining[t]} still missing). Check OPENAI_API_KEY / rate limits.`);
+        quotaStrikes++;
+        if (quotaStrikes >= 3) {
+          console.error('❌ Aborting --until-done after 3 rounds with zero progress (likely OpenAI quota). Restore billing and re-run.');
+          process.exit(2);
+        }
+      } else if (inserted > 0) {
+        quotaStrikes = 0;
       }
     }
     if (round > 500) {
@@ -267,6 +301,7 @@ async function main() {
   const untilDoneFlag = args.includes('--until-done');
   const batchIdx = args.indexOf('--batch-size');
   const batchSize = batchIdx >= 0 ? parseInt(args[batchIdx + 1], 10) || 5000 : 5000;
+  const effectiveLimit = limit ?? (batchIdx >= 0 && !untilDoneFlag ? batchSize : null);
   const backfillSpecialty = args.includes('--backfill-specialty');
 
   if (backfillSpecialty) {
@@ -288,7 +323,7 @@ async function main() {
     console.log(`✅ Populated ${total} code embeddings (--until-done)`);
     return;
   }
-  const total = await runTypes(types, { limit, incremental });
+  const total = await runTypes(types, { limit: effectiveLimit, incremental });
   console.log(`✅ Populated ${total} code embeddings`);
 }
 

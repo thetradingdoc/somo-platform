@@ -225,17 +225,24 @@ class TriageRAGService {
 
     let icdCodes = [];
     let cptCodes = [];
+    let hcpcsCodes = [];
     if (_ragResultOverride) {
       // Bug 1: Normalize to { code, description, confidence } — downstream expects objects
       const rawIcd = _ragResultOverride.icdCodes || _ragResultOverride.icd10 || [];
       icdCodes = rawIcd.map(c => typeof c === 'string' ? { code: c, description: '', confidence: 0.8 } : c);
       const rawCpt = _ragResultOverride.cptCodes || _ragResultOverride.cpt || [];
       cptCodes = rawCpt.map(c => typeof c === 'string' ? { code: c, description: '', confidence: 0.8 } : c);
-    } else if (!_skipKnowledgeService) {
+      const rawHcpcs = _ragResultOverride.hcpcsCodes || _ragResultOverride.hcpcs || [];
+      hcpcsCodes = rawHcpcs.map(c => typeof c === 'string' ? { code: c, description: '', confidence: 0.8 } : c);
       try {
         const knowledgeService = require('./knowledge-service');
         const useDual = String(process.env.USE_TRIAGE_RAG_V2 || '1').trim() !== '0'
           && typeof knowledgeService.getCodeCandidatesDualSource === 'function';
+        const { isEnabled } = require('../config/feature-flags');
+        const semanticAllowed =
+          isEnabled('semantic_search_enabled') &&
+          process.env.EVAL_USE_SEMANTIC !== 'false' &&
+          String(process.env.VOICE_CODING_SEMANTIC_BUDGET || '1') !== '0';
         const remoteTimeoutMs = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
         const ragResult = useDual
           ? await knowledgeService.getCodeCandidatesDualSource(combinedText, {
@@ -244,7 +251,7 @@ class TriageRAGService {
             clinicId,
             callId: sessionId,
             remoteTimeoutMs,
-            useSemantic: process.env.EVAL_USE_SEMANTIC !== 'false'
+            useSemantic: semanticAllowed
           })
           : await knowledgeService.getCodeCandidates(combinedText, {
             maxIcd10: 5,
@@ -254,6 +261,7 @@ class TriageRAGService {
           });
         icdCodes = ragResult?.icd10 || [];
         cptCodes = ragResult?.cpt || [];
+        hcpcsCodes = ragResult?.hcpcs || [];
         if (!_codingProvenance && ragResult?.confidence_breakdown) {
           _codingProvenance = {
             confidence_breakdown: ragResult.confidence_breakdown,
@@ -341,9 +349,23 @@ class TriageRAGService {
     const isSecondPass = !!existingRow;
     const resultId = existingRow?.id || uuidv4();
 
-    // W3-S4.1: primary_icd10 / primary_cpt for billing spine
-    let primaryIcd10 = (differentials?.[0]?.icd10 || icdCodes?.[0]?.code || '').trim() || null;
-    let primaryCpt = (cptCodes?.[0]?.code || '').trim() || null;
+    // W3-S4.1: ranked primary codes for billing spine (F-01, F-02)
+    const { selectPrimaryIcd10, selectPrimaryProcedure } = require('./select-primary-codes');
+    let primaryIcd10 = selectPrimaryIcd10(icdCodes, differentials);
+    const procedurePick = selectPrimaryProcedure({
+      cptCandidates: cptCodes,
+      hcpcsCandidates: hcpcsCodes,
+      primaryIcd10,
+      telehealthIntent: Boolean(richIntake?.telehealth || richIntake?.is_telehealth),
+      preferEm: true
+    });
+    let primaryCpt =
+      procedurePick.code_type === 'cpt' ? (procedurePick.code || null) : null;
+    const primaryHcpcs =
+      procedurePick.code_type === 'hcpcs' ? (procedurePick.code || null) : null;
+    if (!primaryCpt && primaryHcpcs) {
+      primaryCpt = primaryHcpcs;
+    }
     let codePairValid = true;
     if (primaryIcd10 && primaryCpt) {
       const knowledgeService = require('./knowledge-service');
@@ -378,10 +400,14 @@ class TriageRAGService {
     } catch (_) {}
 
     try {
+      require('../migrations/108_triage_hcpcs_codes').up(db.db);
+    } catch (_) {}
+
+    try {
       if (isSecondPass) {
         db.db.prepare(`
           UPDATE triage_rag_results SET
-            symptom_text = ?, opqrst_json = ?, icd_codes = ?, cpt_codes = ?,
+            symptom_text = ?, opqrst_json = ?, icd_codes = ?, cpt_codes = ?, hcpcs_codes = ?,
             target_specialty = ?, secondary_specialties = ?, urgency = ?, safety_level = ?,
             red_flags = ?, recommended_lane = ?, patient_friendly_summary = ?, specialist_context = ?,
             soap_note = ?, rag_confidence = ?, differentials = ?,
@@ -389,6 +415,7 @@ class TriageRAGService {
           WHERE id = ?
         `).run(
           symptomText, JSON.stringify(opqrst), JSON.stringify(icdCodes), JSON.stringify(cptCodes),
+          JSON.stringify(hcpcsCodes || []),
           specialty, JSON.stringify(secondarySpecialties), urgency, safetyLevel,
           JSON.stringify(redFlags), recommendedLane, patientFriendlySummary, specialistContext,
           soapNote, ragConfidence, JSON.stringify(differentials || []),
@@ -398,15 +425,15 @@ class TriageRAGService {
       db.db.prepare(`
         INSERT INTO triage_rag_results (
           id, session_id, patient_id, symptom_text, opqrst_json,
-          icd_codes, cpt_codes, target_specialty, secondary_specialties,
+          icd_codes, cpt_codes, hcpcs_codes, target_specialty, secondary_specialties,
           urgency, safety_level, red_flags, recommended_lane,
           patient_friendly_summary, specialist_context, differentials,
           soap_note, rag_confidence, primary_icd10, primary_cpt, coding_provenance_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
         resultId, sessionId, patientId, symptomText,
         JSON.stringify(opqrst),
-        JSON.stringify(icdCodes), JSON.stringify(cptCodes),
+        JSON.stringify(icdCodes), JSON.stringify(cptCodes), JSON.stringify(hcpcsCodes || []),
         specialty, JSON.stringify(secondarySpecialties),
         urgency, safetyLevel, JSON.stringify(redFlags), recommendedLane,
         patientFriendlySummary, specialistContext, JSON.stringify(differentials || []),
@@ -421,8 +448,10 @@ class TriageRAGService {
       id: resultId,
       icd_codes: icdCodes,
       cpt_codes: cptCodes,
+      hcpcs_codes: hcpcsCodes,
       primary_icd10: primaryIcd10,
       primary_cpt: primaryCpt,
+      primary_hcpcs: primaryHcpcs,
       target_specialty: specialty,
       secondary_specialties: secondarySpecialties,
       differentials: differentials || [],

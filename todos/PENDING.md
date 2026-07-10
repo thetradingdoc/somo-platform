@@ -1,7 +1,45 @@
 # Somo — all pending work
 
-**Last updated:** 2026-07-06  
-**Engineering status SSOT:** This file is the **sole** entry point for open engineering work.  
+**Last updated:** 2026-07-10  
+**Engineering status SSOT:** This file is the **sole** entry point for open engineering work.
+
+## P0 — CODING-FOUNDATION closeout (operator)
+
+**SSOT:** [`todos/CODING-FOUNDATION.md`](./CODING-FOUNDATION.md) · [`docs/Medical Coding/OPERATIONS.md`](../docs/Medical%20Coding/OPERATIONS.md)
+
+Eng tracks A–N complete on dev. **Operator closeout pending:**
+
+- [x] **CF-OP-1** Staging + prod import chain (B-01–B-04) → `verify:prod-codebook` → GCS upload *(prod GCS verified 2026-07-10)*
+- [x] **CF-OP-2** Embeddings `--until-done` + specialty backfill (C-01, C-02, C-03) — 110,017 on prod GCS
+- [x] **CF-OP-3** Pinecone env + K-06 staging spine (`verify-live-spine`, `verify-triage-spine`) — green 2026-07-10
+- [x] **CF-OP-4** K-02 nightly workflow wired (`ci-coding-db-fixture` + secrets); K-05 evidence script in deploy checklist
+- [ ] **CF-OP-5** F-09 Kelly Phase C clinical sign-off *(eng-ready; operator signature pending)*
+
+**Honesty fixes (eng):** B-05 partial (synthetic CDT documented), L-03 done, M-02 CDT-aware simulate tested.
+
+## P0.5 — Copay product gaps (post-epic)
+
+**Out of CODING-FOUNDATION IDs.** Stedi 271 at scale remains out of scope.
+
+- [x] **C-DF** Honest deferral SSOT (`coding-deferral-copy.json`) + PSTN scenario DENTAL-015 + `dental-deferral-copy.test.js`
+- [x] **C-BR** `plan_rules` benefit ingest schema + `import-plan-rules-benefits.cjs` + sample (3 payers)
+- [x] **C-PR** Medical vs dental payer routing (`payer-class-routing.js`, collect + quote path, tests)
+- [x] **C-PL** Provider/location copay — **defer Phase 1** (`resolve-amount-due`, `journey-gates-service`, OPERATIONS.md)
+
+## P0 — CODING-FOUNDATION epic (archived — eng complete)
+
+**SSOT:** [`todos/CODING-FOUNDATION.md`](./CODING-FOUNDATION.md) · [`docs/Medical Coding/CODING_PATH_MATRIX.md`](../docs/Medical%20Coding/CODING_PATH_MATRIX.md)
+
+Medical + dental coding layer: ICD/CPT/HCPCS/CDT codebooks, embeddings, Pinecone (medical), phrase maps, triage spine, resolver validation, eval/CI gates.
+
+- [x] **CF-A** Tenant routing + `resolve-visit-codes.js` (Tracks A, M handoff)
+- [x] **CF-B** Codebook parity gates + CDT import (**7.7-EXT** → B-05 partial)
+- [x] **CF-C/D** Embeddings scripts, dual-source migration, Pinecone deploy gates (operator run pending)
+- [x] **CF-F/G** Triage ranking, HCPCS, NCCI pair validation
+- [x] **CF-H/I** Dental spine + admin medical phrase map
+- [x] **CF-K/N** Eval profiles, governance docs, outage runbook
+
+**Out of epic:** dollar precedence (M-01 done); `plan_rules` ingest → **P0.5 C-BR**; Stedi **6.10**.  
 **Production execution:** [`docs/plans/CURSOR_PRODUCTION_PLAN.md`](../docs/plans/CURSOR_PRODUCTION_PLAN.md) · audit [`PRODUCTION_PLAN_LOG.md`](../PRODUCTION_PLAN_LOG.md)  
 **CR/FE detail archive:** [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_READY_BACKLOG.md) (historical ticket IDs only — do not update status here)
 
@@ -99,7 +137,7 @@ Source: [`tenant-front-desk-audit.md`](../middleware-platform/test-results/tenan
 
 ### P2 — Stretch / hygiene
 
-- [ ] **7.7-EXT** `open` — Expand CDT import 427 → full ADA ~900+ codes
+- [ ] **7.7-EXT** `open` — Expand CDT import 427 → full ADA ~900+ codes (**→ CODING-FOUNDATION B-05**)
 
 **Active epic:** [VOICE-SITE-ESC-EPIC.md](./VOICE-SITE-ESC-EPIC.md) — CallSiteContext (L1.5), escalation ladder, migrations 061–074, post-epic review train.
 

@@ -1033,16 +1033,24 @@ class KellyToolExecutor {
         }
 
         case 'suggest_codes_from_symptoms': {
-          const visitCodes = require('./visit-codes-service');
-          const text = args.clinical_text || args.symptoms || '';
-          const codes = await visitCodes.getVisitCodes(text, {
-            clinicId,
-            callId: sessionId,
-            maxIcd10: args.max_icd10 || 5,
-            maxCpt: args.max_cpt || 3,
-            useSemantic: args.use_semantic !== false
-          });
-          return { success: true, ...codes };
+          const codingTools = require('./coding-voice-tools');
+          return codingTools.suggestCodesFromSymptoms(args, { sessionId, clinicId });
+        }
+
+        case 'search_icd10_codes':
+          return require('./coding-voice-tools').searchIcd10Codes(args);
+
+        case 'search_cpt_codes':
+          return require('./coding-voice-tools').searchCptCodes(args);
+
+        case 'search_hcpcs_codes':
+          return require('./coding-voice-tools').searchHcpcsCodes(args);
+
+        case 'validate_code_pair':
+          return require('./coding-voice-tools').validateCodePair(args);
+
+        case 'search_cdt_codes': {
+          return require('./coding-voice-tools').searchCdtCodes(args);
         }
 
         case 'get_available_slots':

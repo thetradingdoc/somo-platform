@@ -140,5 +140,7 @@ module.exports = {
   ensurePreventiveSpine,
   isPreventiveIcd,
   PREVENTIVE_ICD_NEW,
-  PREVENTIVE_ICD_EST
+  PREVENTIVE_ICD_EST,
+  PREVENTIVE_CPT_NEW,
+  PREVENTIVE_CPT_EST
 };

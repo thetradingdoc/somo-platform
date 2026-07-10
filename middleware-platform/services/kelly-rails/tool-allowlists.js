@@ -93,6 +93,7 @@ const PROFILE_ALLOWED_TOOLS = {
     'get_available_slots',
     'collect_insurance',
     'compute_visit_quote',
+    'search_cdt_codes',
     'end_call',
     'transfer_call',
     'query_patient_records',

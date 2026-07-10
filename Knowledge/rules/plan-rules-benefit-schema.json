@@ -1,0 +1,33 @@
+{
+  "$schema": "plan_rules benefit ingest v1",
+  "description": "C-BR: Manual benefit file schema (no Stedi 271 automation). Import via scripts/import-plan-rules-benefits.cjs",
+  "required": ["payer_id", "plan_id", "service_code", "copay_due_now"],
+  "fields": {
+    "payer_id": "Canonical payer key e.g. DELTA_DENTAL_NY",
+    "plan_id": "Plan slug e.g. dental_ppo",
+    "service_code": "CPT, HCPCS, or CDT code",
+    "copay_due_now": "Hard dollar copay (number)",
+    "coinsurance_pct": "Optional 0-100",
+    "network_tier": "in_network | out_of_network | any",
+    "effective_date": "ISO date optional",
+    "notes": "Source document reference"
+  },
+  "example_rows": [
+    {
+      "payer_id": "DELTA_DENTAL_NY",
+      "plan_id": "dental_ppo",
+      "service_code": "D1110",
+      "copay_due_now": 0,
+      "network_tier": "in_network",
+      "notes": "Preventive cleaning — manual summary sheet 2025"
+    },
+    {
+      "payer_id": "DELTA_DENTAL_NY",
+      "plan_id": "dental_ppo",
+      "service_code": "D3310",
+      "copay_due_now": 150,
+      "network_tier": "in_network",
+      "notes": "Endo — not wildcard D*"
+    }
+  ]
+}

@@ -6,6 +6,22 @@ const { loadTenantPolicyFromProfile, TriagePolicy } = require('../conversation-m
 const { resolveAmountDue, logAmountResolution } = require('../resolve-amount-due');
 const journeyGates = require('../journey-gates-service');
 
+function logCollectProvenance(KellyToolExecutor, sessionId, payload) {
+  try {
+    KellyToolExecutor._logCodingProvenance(sessionId, { tool: 'collect_insurance', ...payload });
+  } catch (_) {}
+}
+
+function failCollect(KellyToolExecutor, sessionId, body) {
+  logCollectProvenance(KellyToolExecutor, sessionId, {
+    code_source: body.code_source || 'none',
+    error_code: body.error_code || body.error,
+    primary_cpt: body.primary_cpt || null,
+    primary_icd10: body.primary_icd10 || null
+  });
+  return body;
+}
+
 /**
  * Kelly collect_insurance tool — session gates, resolver, HTTP collect (quote from HTTP only).
  */
@@ -26,30 +42,43 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
 
   const adminPath = triagePolicy === TriagePolicy.DISABLED;
 
-  if (!adminPath) {
+  const { resolveVisitCodingPath } = require('../resolve-visit-codes');
+  const routing = resolveVisitCodingPath({
+    triagePolicy,
+    visitReason:
+      args.visit_reason ||
+      args.reason_for_visit ||
+      KellyToolExecutor._getSessionMeta(sessionId, 'visit_reason'),
+    tenantSpecialty,
+    useCase: args.use_case || null
+  });
+
+  const requiresTriageRag = routing.requiresTriageRag && !routing.useAdminPath;
+
+  if (requiresTriageRag) {
     const guardBlock = KellyToolExecutor._enforceKellyTriageGuardrails(sessionId, args, 'insurance');
     if (guardBlock) return guardBlock;
 
     const triageResult = TriageRAGService.getAuthoritativeForSession(sessionId);
     if (!triageResult) {
       bump('voice_agent_misuse_collect_insurance_no_rag_result');
-      return {
+      return failCollect(KellyToolExecutor, sessionId, {
         success: false,
         error: 'TRIAGE_REQUIRED',
         error_code: 'TRIAGE_REQUIRED',
         message:
           'Complete triage first with run_triage_rag to determine the right specialty and CPT code for insurance verification.'
-      };
+      });
     }
 
     if (!triageResult.target_specialty) {
-      return {
+      return failCollect(KellyToolExecutor, sessionId, {
         success: false,
         error: 'TRIAGE_INCOMPLETE',
         error_code: 'TRIAGE_INCOMPLETE',
         message:
           "I'll confirm your coverage once we understand your needs better. Please complete triage first so we can verify the right specialty and codes."
-      };
+      });
     }
   } else {
     const visitReason =
@@ -58,23 +87,38 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
       KellyToolExecutor._getSessionMeta(sessionId, 'visit_reason') ||
       KellyToolExecutor._getSessionMeta(sessionId, 'reason_for_visit');
     if (!visitReason && !args.visit_reason) {
-      return {
+      return failCollect(KellyToolExecutor, sessionId, {
         success: false,
         error: 'VISIT_REASON_REQUIRED',
         error_code: 'VISIT_REASON_REQUIRED',
         message: 'What is the reason for your visit? For example, a cleaning, checkup, or new patient exam.'
-      };
+      });
     }
     args.visit_reason = visitReason || args.visit_reason;
   }
 
   if (!args.date_of_birth && !args.dateOfBirth) {
-    return {
+    return failCollect(KellyToolExecutor, sessionId, {
       success: false,
       error: 'DOB_REQUIRED',
       error_code: 'DOB_REQUIRED',
       message: 'I need your date of birth to verify insurance with your plan.'
-    };
+    });
+  }
+
+  const { validatePayerClassForCollect } = require('../resolve-visit-codes');
+  const payerCheck = validatePayerClassForCollect({
+    payerId: args.payer_id,
+    planId: args.plan_id,
+    tenantSpecialty
+  });
+  if (!payerCheck.ok) {
+    return failCollect(KellyToolExecutor, sessionId, {
+      success: false,
+      error: payerCheck.error_code,
+      error_code: payerCheck.error_code,
+      message: payerCheck.message
+    });
   }
 
   const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
@@ -91,7 +135,8 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     triage_policy: triagePolicy,
     visit_reason: args.visit_reason,
     tenantSpecialty,
-    useAdminPath: adminPath
+    useAdminPath: routing.useAdminPath,
+    use_case: args.use_case || null
   });
 
   if (!resolved.ok) {
@@ -117,13 +162,16 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     ) {
       bump('voice_agent_misuse_collect_insurance_invalid_codes');
     }
-    return {
+    return failCollect(KellyToolExecutor, sessionId, {
       success: false,
       error: resolved.error_code || resolved.status,
       error_code: resolved.error_code || resolved.status,
       message: resolved.message,
-      invalid_codes: resolved.invalid_codes
-    };
+      invalid_codes: resolved.invalid_codes,
+      code_source: resolved.code_source,
+      primary_cpt: resolved.primary_cpt,
+      primary_icd10: resolved.primary_icd10
+    });
   }
 
   const serviceCode = resolved.primary_cpt;
@@ -166,6 +214,7 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     primary_icd10: resolved.primary_icd10,
     primary_cpt: serviceCode,
     code_source: resolved.code_source,
+    visit_mode: routing.visitMode || args.visit_mode || null,
     payer_id: args.payer_id,
     plan_id: args.plan_id,
     initial_name: initialName || undefined,
@@ -180,7 +229,10 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
       sessionId,
       payerId: insResult.payer_id || args.payer_id,
       planId: args.plan_id,
-      serviceCode: resolved.primary_cpt
+      serviceCode: resolved.primary_cpt,
+      tenantSpecialty,
+      providerId: args.provider_id || args.provider_npi || null,
+      locationId: args.location_id || null
     });
     let finalResolution = amountResolved;
     if (finalResolution.status !== 'hard_number') {

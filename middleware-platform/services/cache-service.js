@@ -135,7 +135,12 @@ function warm() {
     for (const note of notes) {
       try {
         if (ks.getCandidateCptCodes) ks.getCandidateCptCodes(note, { limit: 10 });
-        if (ks.getCodeCandidates) ks.getCodeCandidates(note, { maxIcd10: 5, maxCpt: 5 });
+        const fetchOpts = { maxIcd10: 5, maxCpt: 5 };
+        if (typeof ks.getCodeCandidatesDualSource === 'function') {
+          ks.getCodeCandidatesDualSource(note, fetchOpts).catch(() => {});
+        } else if (ks.getCodeCandidates) {
+          ks.getCodeCandidates(note, fetchOpts).catch(() => {});
+        }
       } catch (_) { /* skip */ }
     }
     if (ks.loadModifierRules) ks.loadModifierRules();

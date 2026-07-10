@@ -789,6 +789,1143 @@
           "99213"
         ]
       }
+    },
+    {
+      "id": "gen-lay_language-1",
+      "category": "lay_language",
+      "input": "burning chest after meals",
+      "expected": {
+        "icd10_contains": [
+          "K21"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-lay_language-2",
+      "category": "lay_language",
+      "input": "numbness in fingers",
+      "expected": {
+        "icd10_contains": [
+          "R20"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-lay_language-3",
+      "category": "lay_language",
+      "input": "lower back pain radiating leg",
+      "expected": {
+        "icd10_contains": [
+          "M54"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-lay_language-4",
+      "category": "lay_language",
+      "input": "sore throat fever child",
+      "expected": {
+        "icd10_contains": [
+          "J02"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-lay_language-5",
+      "category": "lay_language",
+      "input": "blurred vision diabetes",
+      "expected": {
+        "icd10_contains": [
+          "E11"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-abbreviation-1",
+      "category": "abbreviation",
+      "input": "HTN uncontrolled",
+      "expected": {
+        "icd10_contains": [
+          "I10"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-abbreviation-2",
+      "category": "abbreviation",
+      "input": "COPD exacerbation",
+      "expected": {
+        "icd10_contains": [
+          "J44"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-abbreviation-3",
+      "category": "abbreviation",
+      "input": "URI congestion",
+      "expected": {
+        "icd10_contains": [
+          "J06"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-abbreviation-4",
+      "category": "abbreviation",
+      "input": "UTI burning",
+      "expected": {
+        "icd10_contains": [
+          "N39"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-abbreviation-5",
+      "category": "abbreviation",
+      "input": "DM type 2",
+      "expected": {
+        "icd10_contains": [
+          "E11"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "gen-pair_validation-1",
+      "category": "pair_validation",
+      "input": "angina chest pressure exertion",
+      "expected": {
+        "icd10_contains": [
+          "I20"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "gen-pair_validation-2",
+      "category": "pair_validation",
+      "input": "depression follow up medication",
+      "expected": {
+        "icd10_contains": [
+          "F32"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-pair_validation-3",
+      "category": "pair_validation",
+      "input": "asthma wheezing inhaler",
+      "expected": {
+        "icd10_contains": [
+          "J45"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-pair_validation-4",
+      "category": "pair_validation",
+      "input": "skin rash biopsy concern",
+      "expected": {
+        "icd10_contains": [
+          "L30"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-dental_handoff-1",
+      "category": "dental_handoff",
+      "input": "dental cleaning",
+      "expected": {
+        "icd10_contains": [
+          "Z01.20"
+        ],
+        "cpt_contains": [
+          "D1110"
+        ]
+      }
+    },
+    {
+      "id": "gen-dental_handoff-2",
+      "category": "dental_handoff",
+      "input": "root canal pain",
+      "expected": {
+        "icd10_contains": [
+          "Z01.20"
+        ],
+        "cpt_contains": [
+          "D3310"
+        ]
+      }
+    },
+    {
+      "id": "gen-dental_handoff-3",
+      "category": "dental_handoff",
+      "input": "crown fell off",
+      "expected": {
+        "icd10_contains": [
+          "Z01.20"
+        ],
+        "cpt_contains": [
+          "D2750"
+        ]
+      }
+    },
+    {
+      "id": "gen-dental_handoff-4",
+      "category": "dental_handoff",
+      "input": "wisdom tooth extraction",
+      "expected": {
+        "icd10_contains": [
+          "Z01.20"
+        ],
+        "cpt_contains": [
+          "D7240"
+        ]
+      }
+    },
+    {
+      "id": "gen-dental_handoff-5",
+      "category": "dental_handoff",
+      "input": "braces consultation",
+      "expected": {
+        "icd10_contains": [
+          "Z01.20"
+        ],
+        "cpt_contains": [
+          "D8080"
+        ]
+      }
+    },
+    {
+      "id": "gen-preventive-1",
+      "category": "preventive",
+      "input": "annual wellness no symptoms",
+      "expected": {
+        "icd10_contains": [
+          "Z00"
+        ],
+        "cpt_contains": [
+          "99395"
+        ]
+      }
+    },
+    {
+      "id": "gen-preventive-2",
+      "category": "preventive",
+      "input": "medicare wellness visit",
+      "expected": {
+        "icd10_contains": [
+          "Z00"
+        ],
+        "cpt_contains": [
+          "G0438"
+        ]
+      }
+    },
+    {
+      "id": "gen-preventive-3",
+      "category": "preventive",
+      "input": "well child check",
+      "expected": {
+        "icd10_contains": [
+          "Z00"
+        ],
+        "cpt_contains": [
+          "99391"
+        ]
+      }
+    },
+    {
+      "id": "gen-telehealth_em-1",
+      "category": "telehealth_em",
+      "input": "telehealth anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-telehealth_em-2",
+      "category": "telehealth_em",
+      "input": "video visit established depression",
+      "expected": {
+        "icd10_contains": [
+          "F32"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-86",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 86",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-87",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 87",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-88",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 88",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-89",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 89",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-90",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 90",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-91",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 91",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-92",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 92",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-93",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 93",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-94",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 94",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-95",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 95",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-96",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 96",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-97",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 97",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-98",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 98",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-99",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 99",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-100",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 100",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-101",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 101",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-102",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 102",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-103",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 103",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-104",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 104",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-105",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 105",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-106",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 106",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-107",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 107",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-108",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 108",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-109",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 109",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-110",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 110",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-111",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 111",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-112",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 112",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-113",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 113",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-114",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 114",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-115",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 115",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-116",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 116",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-117",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 117",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-118",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 118",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-119",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 119",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-120",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 120",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-121",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 121",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-122",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 122",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-123",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 123",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-124",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 124",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-125",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 125",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-126",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 126",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-127",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 127",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-128",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 128",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-129",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 129",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-130",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 130",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-131",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 131",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-132",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 132",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-133",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 133",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-134",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 134",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-135",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 135",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-136",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 136",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-137",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 137",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-138",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 138",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-139",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 139",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-140",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 140",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-141",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 141",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-142",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 142",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-143",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 143",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-144",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 144",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-145",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 145",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-146",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 146",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-147",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 147",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-148",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 148",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-149",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 149",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "gen-fill-150",
+      "category": "lay_language",
+      "input": "general outpatient symptom cluster variant 150",
+      "expected": {
+        "icd10_contains": [
+          "R69"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
     }
   ]
 }

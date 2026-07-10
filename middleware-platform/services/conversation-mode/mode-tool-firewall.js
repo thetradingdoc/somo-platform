@@ -17,6 +17,16 @@ const CLINICAL_TOOLS = new Set([
   'run_triage_rag'
 ]);
 
+const CODING_SEARCH_TOOLS = new Set([
+  'search_icd10_codes',
+  'search_cpt_codes',
+  'search_hcpcs_codes',
+  'search_cdt_codes',
+  'suggest_codes_from_symptoms',
+  'validate_code_pair',
+  'collect_insurance'
+]);
+
 const MODE_FORBIDDEN_TOOLS = {
   [ConversationMode.DEMO_QUAL]: new Set([
     'store_triage_opqrst',
@@ -24,14 +34,16 @@ const MODE_FORBIDDEN_TOOLS = {
     'request_patient_payment',
     'run_triage_rag',
     'cancel_appointment',
-    'reschedule_appointment'
+    'reschedule_appointment',
+    ...CODING_SEARCH_TOOLS
   ]),
   [ConversationMode.OUTBOUND_SALES]: new Set([
     'store_triage_opqrst',
     'schedule_appointment',
     'request_patient_payment',
     'run_triage_rag',
-    'cancel_appointment'
+    'cancel_appointment',
+    ...CODING_SEARCH_TOOLS
   ]),
   [ConversationMode.OPERATOR_OUTBOUND]: new Set([
     'store_triage_opqrst',

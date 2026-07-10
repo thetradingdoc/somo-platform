@@ -1,6 +1,6 @@
 # Medical Coding documentation
 
-> **Last reviewed:** 2026-07-02  
+> **Last reviewed:** 2026-07-10  
 > **Canonical home** for outpatient ICD-10 / CPT / HCPCS coding on the Somo platform.
 
 ## Read first
@@ -9,6 +9,7 @@
 |----------|---------|
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | End-to-end architecture: data layer, retrieval, voice, billing, env vars, quality metrics |
 | **[OPERATIONS.md](./OPERATIONS.md)** | Import, embeddings, prod parity, eval commands (links to deployment runbooks) |
+| **[PENDING.md § CODING-FOUNDATION](../../todos/PENDING.md#p0--coding-foundation-epic-medical--dental-coding-layer)** | Active engineering backlog (CF-A..N, 98 tasks) |
 
 ## Related deployment docs (do not duplicate here)
 

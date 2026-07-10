@@ -33,6 +33,10 @@ function getKellyRoutingViolations(env = process.env) {
   if (truthy(env.KELLY_ALLOW_HYBRID_GRAPH)) {
     violations.push('KELLY_ALLOW_HYBRID_GRAPH=1 is not allowed in production');
   }
+  const fastRag = String(env.KELLY_RAILS_FAST_RAG || '0').trim();
+  if (fastRag === '1' || fastRag.toLowerCase() === 'true') {
+    violations.push('KELLY_RAILS_FAST_RAG must be 0 in production');
+  }
   return violations;
 }
 

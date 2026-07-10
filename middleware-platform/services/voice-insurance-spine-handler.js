@@ -49,6 +49,15 @@ function resolveInsuranceSpineForRequest(sessionId, args, opts = {}) {
   );
 
   if (spineResolved.ok) {
+    const { logCodingProvenanceEvent } = require('./coding-provenance-store');
+    logCodingProvenanceEvent(sessionId, {
+      tool: 'collect_insurance',
+      code_source: spineResolved.code_source,
+      primary_icd10: spineResolved.primary_icd10,
+      primary_cpt: spineResolved.primary_cpt,
+      visit_mode: spineResolved.visit_mode,
+      layer: 'http_spine'
+    }, { clinicId: args.clinic_id || opts.clinicId });
     return { ok: true, spineResolved };
   }
 
@@ -94,6 +103,10 @@ function applySpineResolvedToArgs(args, spineResolved) {
   args.primary_cpt = spineResolved.primary_cpt;
   args.service_code = spineResolved.primary_cpt;
   args.code_source = spineResolved.code_source;
+  args.visit_mode = spineResolved.visit_mode || args.visit_mode;
+  if (spineResolved.suggested_modifiers?.length) {
+    args.suggested_modifiers = spineResolved.suggested_modifiers;
+  }
   return args;
 }
 

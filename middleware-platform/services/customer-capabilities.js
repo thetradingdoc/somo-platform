@@ -7,6 +7,7 @@ const OPERATOR_CAPABILITIES = [
   'platform.tenants',
   'platform.tenants.delete',
   'platform.feature_flags',
+  'platform.coding.review',
   'voice.outbound_unlimited',
   'voice.inbound',
   'voice.outbound'

@@ -1,6 +1,6 @@
 # Medical coding architecture
 
-> **Last reviewed:** 2026-06-20  
+> **Last reviewed:** 2026-07-10  
 > **Status:** Voice Kelly coding spine implemented; live Retell call proof is manual. See [VOICE_CODING_SPINE.md](./VOICE_CODING_SPINE.md).
 
 This document describes the **implemented** medical coding stack in `middleware-platform`. It is the canonical reference for how ICD-10, CPT, and HCPCS codes are retrieved, validated, suggested to the voice agent, and attached to claims.
@@ -99,7 +99,7 @@ flowchart TB
 | `icd10_codes` | ICD-10-CM descriptions | ~74,260 |
 | `cpt_codes` | CPT/HCPCS procedure codes for search | ~17,170 (MPFS) |
 | `hcpcs_codes` | HCPCS Level II | ~9,006 |
-| `code_embeddings` | `text-embedding-3-small` vectors per code | ~100k+ total |
+| `code_embeddings` | `text-embedding-3-small` vectors per code (see [§ Embedding model version](#embedding-model-version)) | ~100k+ total |
 | `fee_schedules` | Medicare allowed amounts (MPFS import) | ~15,272 |
 | `code_acceptance_rates` | Payer outcomes for confidence (Stedi webhook) | grows with claims |
 
@@ -109,6 +109,30 @@ flowchart TB
 - **Wrong for E/M:** DHS addendum only (~1,299 rows) — missing **99202–99215**, **90834**, etc.
 
 MPFS descriptions use CMS abbreviations (e.g. `Office o/p est low 20 min`). Phrase expansion in `knowledge-service` maps lay terms (`established patient`) to searchable shorthand (`office o/p est`).
+
+<a id="embedding-model-version"></a>
+
+### Embedding model version (N-04)
+
+Index-time and query-time embeddings **must use the same model and dimension** or semantic search and Pinecone similarity scores are invalid.
+
+| Setting | Default | Where used |
+|---------|---------|------------|
+| `OPENAI_EMBEDDING_MODEL` / `EMBEDDING_MODEL_ID` | `text-embedding-3-small` | `embedding-provider.js`, `populate-code-embeddings.js` |
+| `EMBEDDING_DIM` | `1536` | Must match Pinecone index dimension |
+| `EMBEDDING_PROVIDER` | `openai` | Required for live vectors (`vector-sync-knowledge-chunks.cjs`) |
+
+**SSOT modules:** `middleware-platform/services/embedding-provider.js` (runtime config), `semantic-search-service.js` (query embed for local hybrid search), `scripts/populate-code-embeddings.js` (batch index).
+
+**Version change procedure:**
+
+1. Record old model ID and row counts from `verify:prod-codebook`.
+2. Update env vars on Cloud Run **and** local import hosts together.
+3. Re-run `populate-code-embeddings.js --until-done` for all `code_type` values (or per-type incremental).
+4. If Pinecone code-metadata index was built with the old model, re-index per [CODEBOOK_REFRESH_CALENDAR.md](./CODEBOOK_REFRESH_CALENDAR.md).
+5. Re-baseline `eval:coding` and nightly `eval:coding:prod`.
+
+`knowledge_vector_index_meta` (migration 035) stores `embedding_model` and `dimensions` from the last `vector-sync-knowledge-chunks.cjs` run for audit.
 
 ### Knowledge JSON (no static export required)
 
@@ -167,6 +191,18 @@ Implemented in `services/layer2-rag/remote-rag-client.js`:
 3. **Timeout:** `REMOTE_RAG_TIMEOUT_MS` (default 2000ms) so voice stays within tool budget.
 
 **Production:** set `RAG_API_URL=disabled`. Unset `RAG_API_URL` no longer defaults to `localhost:4000`.
+
+#### 5.3.1 Pinecone code-metadata re-index (D-03)
+
+When ICD/CPT/HCPCS corpora or `EMBEDDING_MODEL` change:
+
+1. Run dev import chain per [OPERATIONS.md](./OPERATIONS.md) until `npm run verify:prod-codebook` passes locally.
+2. `populate-code-embeddings.js --until-done` for affected `code_type` values on the target DB.
+3. Re-upsert Pinecone namespace via `pinecone-code-metadata-client` batch sync (same model + `EMBEDDING_DIM` as query-time embed).
+4. Set `PINECONE_MIN_SCORE` / `PINECONE_FALLBACK_MIN_SCORE` from staging eval evidence (see `.env.staging.example`).
+5. Deploy with `PINECONE_DEPLOY_GATE=1` and `RAG_API_URL=disabled`; run `verify-live-spine.cjs` + `verify-triage-spine.cjs` on staging before prod.
+
+Rollback: restore GCS DB backup; revert Pinecone namespace to prior snapshot if a partial re-index occurred.
 
 ### 5.4 Post-merge
 
@@ -436,6 +472,40 @@ npm run fee-schedule:mpfs
 ```
 
 See [Knowledge/fee-schedules/README.md](../../Knowledge/fee-schedules/README.md).
+
+<a id="codebook-rollback"></a>
+
+### Codebook rollback (N-05)
+
+Use when a bad import corrupts row counts, eval/regression fails post-refresh, or prod smoke shows missing E/M codes.
+
+**Before any prod import:** snapshot DB to GCS `backups/` (mandatory):
+
+```bash
+gsutil cp gs://somo-staging-db-somo-callsomo/middleware-staging.db \
+  gs://somo-staging-db-somo-callsomo/backups/middleware-pre-codebook-$(date +%Y%m%d-%H%M%S).db
+```
+
+**Rollback steps:**
+
+1. **Stop writers** — pause deploys; ensure no `populate-code-embeddings` daemon on prod host.
+2. **List backups** — `gsutil ls gs://$GCS_DB_BUCKET/backups/`
+3. **Restore** — copy known-good object to working path:
+
+```bash
+gsutil cp gs://somo-staging-db-somo-callsomo/backups/middleware-pre-codebook-YYYYMMDD-HHMMSS.db \
+  gs://somo-staging-db-somo-callsomo/middleware-staging.db
+# Or local: cp backups/middleware-pre-codebook-*.db "$DB_PATH"
+```
+
+4. **Verify** — `npm run verify:prod-codebook` (CPT ≥ 15k; CPT embeddings parity).
+5. **Smoke** — `npm run verify:kelly-http-collect`, `node scripts/verify-triage-spine.cjs`.
+6. **Pinecone** — if index was partially re-built on bad corpus, re-sync or revert namespace per D-03; local SQLite rollback does not auto-revert Pinecone.
+7. **Document** — incident note + root cause (wrong CMS file, DHS import, partial embed).
+
+**Do not** roll back middleware Cloud Run revision alone for codebook issues — app code and DB codebook are independent. For service rollback see [GCP_DEPLOY_ROLLBACK_RUNBOOK.md](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md).
+
+Annual refresh checklist: [CODEBOOK_REFRESH_CALENDAR.md](./CODEBOOK_REFRESH_CALENDAR.md).
 
 ---
 

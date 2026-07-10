@@ -1,6 +1,6 @@
 # Voice Kelly Coding Spine
 
-> **Last reviewed:** 2026-06-20  
+> **Last reviewed:** 2026-07-10  
 > **Scope:** Kelly voice agent → triage RAG → insurance collect → quote → book
 
 This document is the canonical reference for **production voice coding orchestration** in `middleware-platform`. PDF/orchestrator flows are described in [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -56,6 +56,25 @@ Kelly must **not** pass client `service_code` on internal HTTP collect — the r
 | `DB_PATH` | `./var/db/middleware-dev.db` (dev) |
 
 Generate Cloud Run env: `node middleware-platform/scripts/generate-cloudrun-env-yaml.cjs`
+
+---
+
+## Coding path router
+
+Tenants do not all use full RAG. See [CODING_PATH_MATRIX.md](./CODING_PATH_MATRIX.md).
+
+- **Router SSOT:** [`resolve-visit-codes.js`](../../middleware-platform/services/resolve-visit-codes.js)
+- **Dental / disabled clinic:** admin phrase map (no `run_triage_rag`)
+- **Dermatology / required triage:** OPQRST → dual-source RAG
+
+## Voice vs chat RAG (intentional)
+
+| | Voice | Chat |
+|---|-------|------|
+| HyDE | Off | On (`TRIAGE_HYDE_ENABLED`) |
+| Remote timeout | 2000ms | 8000ms |
+
+Configured in [`voice-rag-config.js`](../../middleware-platform/services/voice-rag-config.js). Voice prioritizes turn latency over maximum recall. Regression: `eval:coding:prod` (nightly) uses full stack.
 
 ---
 

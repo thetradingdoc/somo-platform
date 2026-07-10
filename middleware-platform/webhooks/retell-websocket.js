@@ -1973,16 +1973,21 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     break;
 
                 case 'search_icd10_codes':
-                    result = await this.handleSearchIcd10Codes(callId, functionArgs);
-                    break;
-
                 case 'search_cpt_codes':
-                    result = await this.handleSearchCptCodes(callId, functionArgs);
-                    break;
-
                 case 'search_hcpcs_codes':
-                    result = await this.handleSearchHcpcsCodes(callId, functionArgs);
+                case 'search_cdt_codes':
+                case 'suggest_codes_from_symptoms':
+                case 'validate_code_pair': {
+                    const KellyToolExecutor = require('../services/kelly-tool-executor');
+                    const clinicId = this.getClinicId(callId);
+                    const connection = this.activeConnections.get(callId);
+                    result = await KellyToolExecutor.execute(
+                      functionName,
+                      functionArgs,
+                      this._kellyExecutorContext(connection, callId, clinicId)
+                    );
                     break;
+                }
 
                 case 'extract_medical_text':
                     result = await this.handleExtractMedicalText(callId, functionArgs);
@@ -1990,14 +1995,6 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
 
                 case 'assess_urgency':
                     result = await this.handleAssessUrgency(callId, functionArgs);
-                    break;
-
-                case 'suggest_codes_from_symptoms':
-                    result = await this.handleSuggestCodesFromSymptoms(callId, functionArgs);
-                    break;
-
-                case 'validate_code_pair':
-                    result = await this.handleValidateCodePair(callId, functionArgs);
                     break;
 
                 case 'check_payer_guidelines':
@@ -3956,36 +3953,7 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
     // HEALTHCARE FUNCTION HANDLERS
     // ==========================================
 
-    // Handle collect_insurance function
-    async handleCollectInsurance(callId, args) {
-        try {
-            // Get the initial name stored when caller first identified themselves
-            const connection = this.activeConnections.get(callId);
-            const initialName = connection?.initialName || null;
-
-            // Pass callId and initialName for fraud validation
-            const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/insurance/collect`, {
-                patient_name: args.patient_name,
-                member_id: args.member_id,
-                payer_name: args.payer_name,
-                payer_id: args.payer_id,
-                patient_phone: args.patient_phone 
-                    ? SMSService.formatPhoneNumber(args.patient_phone) 
-                    : this.getCustomerPhone(callId),
-                patient_email: args.patient_email,
-                service_code: args.service_code,
-                call_id: callId, // Pass callId for fraud validation
-                initial_name: initialName // Pass initial name for validation
-            });
-
-            return response.data;
-        } catch (error) {
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
+    // Handle collect_insurance function — removed legacy axios bypass (G-08); use KellyToolExecutor switch.
 
     // Handle schedule_appointment function (delegates to KellyToolExecutor — KELLY_RAILS_V2 SSOT)
     async handleScheduleAppointment(callId, args) {

@@ -9663,6 +9663,25 @@ function onServerListening() {
     console.warn('⚠️  Fraud review SLA monitor disabled:', e.message);
   }
 
+  // Coding review SLA breaches (L-02)
+  try {
+    const codingReview = require('./services/coding-review-service');
+    const codingPollMs = parseInt(process.env.CODING_REVIEW_SLA_POLL_MS || '300000', 10);
+    const runCodingSla = () => {
+      try {
+        const n = codingReview.checkSlaBreaches();
+        if (n > 0) console.log(`[CodingReview] SLA breaches flagged: ${n}`);
+      } catch (e) {
+        console.warn('[CodingReview] SLA monitor error:', e.message);
+      }
+    };
+    runCodingSla();
+    setInterval(runCodingSla, codingPollMs);
+    console.log(`✅ Coding review SLA monitor started (interval ${codingPollMs}ms)`);
+  } catch (e) {
+    console.warn('⚠️  Coding review SLA monitor disabled:', e.message);
+  }
+
   // Phase 1: Auto-cancel unpaid appointment checkouts (webhook-safe)
   try {
     const BookingService = require('./services/booking-service');

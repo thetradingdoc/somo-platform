@@ -11,10 +11,13 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 process.env.SKIP_STARTUP_MIGRATIONS = '1';
 
 const db = require('../database').db;
+const { cdtQualityFromDb } = require('./lib/cdt-description-quality.cjs');
 
 const MIN_ICD = parseInt(process.env.MIN_ICD10_CODES || '70000', 10);
 const MIN_CPT = parseInt(process.env.MIN_CPT_CODES || '15000', 10);
 const MIN_HCPCS = parseInt(process.env.MIN_HCPCS_CODES || '8000', 10);
+const MIN_CDT = parseInt(process.env.MIN_CDT_CODES || '800', 10);
+const MIN_CDT_QUALITY = parseFloat(process.env.MIN_CDT_QUALITY || '0.8');
 const MIN_PCS = parseInt(process.env.MIN_ICD10_PCS_CODES || '75000', 10);
 const MIN_POS = parseInt(process.env.MIN_POS_CODES || '50', 10);
 const MIN_MODIFIERS = parseInt(process.env.MIN_MODIFIER_CODES || '40', 10);
@@ -39,6 +42,9 @@ function describe(code, type) {
 const icd = count('SELECT COUNT(*) AS n FROM icd10_codes');
 const cpt = count('SELECT COUNT(*) AS n FROM cpt_codes');
 const hcpcs = count('SELECT COUNT(*) AS n FROM hcpcs_codes');
+const cdt = count('SELECT COUNT(*) AS n FROM cdt_codes');
+const cdtQuality = cdtQualityFromDb(db);
+const cdtQualityRounded = Number(cdtQuality.quality_ratio.toFixed(4));
 const pcs = count('SELECT COUNT(*) AS n FROM icd10_pcs_codes');
 const pos = count('SELECT COUNT(*) AS n FROM place_of_service_codes');
 const modifiers = count('SELECT COUNT(*) AS n FROM modifier_codes');
@@ -56,6 +62,15 @@ const report = {
   icd10: { count: icd, ok: icd >= MIN_ICD, min: MIN_ICD },
   cpt: { count: cpt, ok: cpt >= MIN_CPT, min: MIN_CPT },
   hcpcs: { count: hcpcs, ok: hcpcs >= MIN_HCPCS, min: MIN_HCPCS },
+  cdt: {
+    count: cdt,
+    ok: cdt >= MIN_CDT && cdtQualityRounded >= MIN_CDT_QUALITY,
+    min: MIN_CDT,
+    quality_ratio: cdtQualityRounded,
+    min_quality: MIN_CDT_QUALITY,
+    non_placeholder: cdtQuality.non_placeholder,
+    placeholder: cdtQuality.placeholder
+  },
   icd10_pcs: { count: pcs, ok: pcs >= MIN_PCS, min: MIN_PCS, loaded: pcs > 0 },
   place_of_service: { count: pos, ok: pos >= MIN_POS, min: MIN_POS },
   modifiers: { count: modifiers, ok: modifiers >= MIN_MODIFIERS, min: MIN_MODIFIERS },
@@ -77,6 +92,7 @@ const ok =
   report.icd10.ok &&
   report.cpt.ok &&
   report.hcpcs.ok &&
+  report.cdt.ok &&
   report.icd10_pcs.ok &&
   report.place_of_service.ok &&
   report.modifiers.ok &&

@@ -9,7 +9,7 @@ const VALID_STATUS = new Set(['hard_number', 'estimate', 'cannot_determine', 'th
  * Single source of truth for patient amount due at checkout / on call.
  * Precedence: Stedi 271 hard copay → plan_rules hard_number → journey amount_due → defer (never visit_pricing for insured).
  */
-async function resolveAmountDue({ patientId, appointmentId, sessionId, payerId, planId, serviceCode } = {}) {
+async function resolveAmountDue({ patientId, appointmentId, sessionId, payerId, planId, serviceCode, tenantSpecialty, providerId, locationId } = {}) {
   const base = {
     amount: 0,
     source: 'none',
@@ -21,6 +21,28 @@ async function resolveAmountDue({ patientId, appointmentId, sessionId, payerId, 
 
   if (!patientId && !sessionId) {
     return { ...base, notes: 'patient_or_session_required' };
+  }
+
+  if (providerId || locationId) {
+    return {
+      ...base,
+      status: 'defer',
+      source: 'provider_location',
+      notes: 'provider_location_out_of_scope',
+      message_key: 'PROVIDER_LOCATION_DEFER'
+    };
+  }
+
+  const { classifyPayerContext } = require('./payer-class-routing');
+  const payerClass = classifyPayerContext({ payerId, planId, tenantSpecialty });
+  if (!payerClass.ok) {
+    return {
+      ...base,
+      status: 'cannot_determine',
+      source: 'payer_class',
+      notes: payerClass.error_code,
+      message_key: payerClass.message_key
+    };
   }
 
   let eligibilityRow = null;
@@ -38,6 +60,13 @@ async function resolveAmountDue({ patientId, appointmentId, sessionId, payerId, 
 
   if (eligibilityRow) {
     const quality = String(eligibilityRow.eligibility_quality || '').toLowerCase();
+    if (quality === 'simulate') {
+      // M-01/M-02: plan_rules wins over simulate; CDT codes never use flat simulate copay
+      const simCode = serviceCode || eligibilityRow.service_code;
+      if (simCode && /^D\d{4}$/i.test(String(simCode))) {
+        // fall through to plan_rules with spine CDT
+      }
+    } else {
     const copay = Number(eligibilityRow.copay_amount);
     const hasHardCopay =
       quality === 'hard_copay' ||
@@ -65,6 +94,7 @@ async function resolveAmountDue({ patientId, appointmentId, sessionId, payerId, 
         notes: 'thin_271_defer',
         payer_id: eligibilityRow.payer_id
       };
+    }
     }
   }
 

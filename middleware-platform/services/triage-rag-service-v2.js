@@ -97,6 +97,7 @@ class TriageRAGServiceV2 {
     const useDualSource = typeof knowledgeService.getCodeCandidatesDualSource === 'function';
     let icdCodes = [];
     let cptCodes = [];
+    let hcpcsCodes = [];
     /** True if at least one knowledge call completed without throw (empty arrays OK). */
     let knowledgeFetchSucceeded = false;
     let codingProvenance = params._codingProvenance || null;
@@ -114,6 +115,7 @@ class TriageRAGServiceV2 {
         });
         icdCodes = result?.icd10 || result?.merged_codes?.icd10 || [];
         cptCodes = result?.cpt || result?.merged_codes?.cpt || [];
+        hcpcsCodes = result?.hcpcs || result?.merged_codes?.hcpcs || [];
         knowledgeFetchSucceeded = true;
         codingProvenance = {
           confidence_breakdown: result.confidence_breakdown,
@@ -122,23 +124,6 @@ class TriageRAGServiceV2 {
         };
       } catch (e) {
         console.warn('[TriageRAGv2] Dual-source failed, falling back to v1:', e.message);
-      }
-    }
-
-    if (icdCodes.length === 0 && cptCodes.length === 0) {
-      try {
-        const ragResult = await knowledgeService.getCodeCandidates(queryForRAG, {
-          maxIcd10: 5,
-          maxCpt: 3,
-          clinicId,
-          callId: sessionId,
-          useSemantic: true
-        });
-        icdCodes = ragResult?.icd10 || [];
-        cptCodes = ragResult?.cpt || [];
-        knowledgeFetchSucceeded = true;
-      } catch (e) {
-        console.warn('[TriageRAGv2] knowledge-service unavailable:', e.message);
       }
     }
 
@@ -169,7 +154,7 @@ class TriageRAGServiceV2 {
     // Successful fetch (possibly empty codes): pass override so V1 does not duplicate the call.
     return TriageRAGService.enrichFromSymptoms({
       ...params,
-      _ragResultOverride: { icdCodes, cptCodes },
+      _ragResultOverride: { icdCodes, cptCodes, hcpcsCodes },
       _codingProvenance: codingProvenance,
       _skipKnowledgeService: false
     });

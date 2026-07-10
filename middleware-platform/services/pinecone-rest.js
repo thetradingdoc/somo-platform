@@ -29,6 +29,10 @@ function pineconeNamespace() {
   return String(process.env.PINECONE_NAMESPACE || '').trim();
 }
 
+function getNamespace() {
+  return pineconeNamespace();
+}
+
 function isPineconeConfigured() {
   return Boolean(pineconeBaseUrl() && pineconeHeaders());
 }
@@ -138,4 +142,5 @@ module.exports = {
   pineconeQuery,
   pineconeDescribeIndexStats,
   pineconeNamespace,
+  getNamespace
 };

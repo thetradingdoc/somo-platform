@@ -74,5 +74,10 @@
   "WNL": "within normal limits",
   "NAD": "no acute distress",
   "A&O": "alert and oriented",
-  "EOMI": "extraocular movements intact"
+  "EOMI": "extraocular movements intact",
+  "MDD": "major depressive disorder",
+  "SSRI": "selective serotonin reuptake inhibitor",
+  "GAD": "generalized anxiety disorder",
+  "PTSD": "post traumatic stress disorder",
+  "ADHD": "attention deficit hyperactivity disorder"
 }

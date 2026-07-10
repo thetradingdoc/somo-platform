@@ -63,15 +63,15 @@ step "Voice load smoke (mocked)"
 cd "$MP"
 VOICE_RATE_LIMIT_BACKEND=memory npm run test:voice:load
 
-step "Codebook parity (Session 2 gate)"
+step "Codebook parity (Session 2 gate — ICD/CPT/HCPCS/CDT)"
 cd "$MP"
 if [[ -f var/db/middleware-dev.db ]]; then
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-codebook-parity.js || {
-    echo "⚠️  Codebook parity failed — run Session 2 imports (import-icd10/cpt/hcpcs + embeddings)"
+    echo "⚠️  Codebook parity failed — run Session 2 imports (import-icd10/cpt/hcpcs/cdt + embeddings)"
   }
 else
   SKIP_EMBED_CHECK=1 DB_PATH=./var/db/middleware-dev.db node scripts/verify-codebook-parity.js || {
-    echo "⚠️  Codebook parity skipped — no var/db/middleware-dev.db (Session 2)"
+    echo "⚠️  Codebook parity skipped — no var/db/middleware-dev.db (Session 2; includes CDT ≥800 / ≥80% quality)"
   }
 fi
 
@@ -96,7 +96,15 @@ fi
 step "Coding prod gates"
 node scripts/verify-no-hardcoded-coding.cjs || { echo "❌ verify-no-hardcoded-coding failed"; exit 1; }
 node scripts/verify-threshold-ssot.cjs || { echo "❌ verify-threshold-ssot failed"; exit 1; }
-if [[ -f var/db/middleware-dev.db ]] && [[ "${CI:-}" != "true" ]]; then
+node scripts/verify-coding-spine-tool-order.cjs || { echo "❌ verify-coding-spine-tool-order failed"; exit 1; }
+SKIP_STARTUP_MIGRATIONS=1 RAG_API_URL=disabled EVAL_USE_SEMANTIC=false npm run eval:coding:fast || {
+  echo "❌ eval:coding:fast failed"; exit 1;
+}
+npm run audit:eval-cpt || { echo "❌ audit:eval-cpt failed"; exit 1; }
+if [[ "${CI:-}" == "true" ]]; then
+  node scripts/ci-coding-db-fixture.cjs || { echo "❌ ci-coding-db-fixture failed"; exit 1; }
+fi
+if [[ -f var/db/middleware-dev.db ]]; then
   DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-db-path.cjs || { echo "❌ verify-db-path failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-tools.cjs || { echo "❌ verify-kelly-tools failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-kelly-http-collect.cjs || { echo "❌ verify-kelly-http-collect failed"; exit 1; }
@@ -115,12 +123,18 @@ if [[ -f var/db/middleware-dev.db ]] && [[ "${CI:-}" != "true" ]]; then
     if [[ -n "${GROQ_API_KEY:-}" || -n "${OPENAI_API_KEY:-}" || -n "${ANTHROPIC_API_KEY:-}" ]]; then
       npm run test:coding:terminal-call || { echo "❌ terminal-coding-call failed"; exit 1; }
     else
-      echo "⚠️  Skipping test:coding:terminal-call — set GROQ_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY"
+      CODING_CI_FIXTURE=1 DB_PATH=./var/db/middleware-dev.db node scripts/terminal-coding-call.cjs --scenario=copay_due --fixture-only || {
+        echo "❌ terminal-coding-call fixture failed"; exit 1;
+      }
     fi
+  else
+    CODING_CI_FIXTURE=1 DB_PATH=./var/db/middleware-dev.db node scripts/terminal-coding-call.cjs --scenario=copay_due --fixture-only || {
+      echo "❌ terminal-coding-call fixture failed"; exit 1;
+    }
   fi
 else
   if [[ -f var/db/middleware-dev.db ]] && [[ "${CI:-}" == "true" ]]; then
-    echo "ℹ️  DB-backed coding gates skipped in CI (codebook Session 2 not imported on runners)"
+    echo "ℹ️  DB-backed coding gates running with CI fixture DB"
   else
     echo "ℹ️  DB-backed coding gates skipped (var/db/middleware-dev.db missing)"
   fi

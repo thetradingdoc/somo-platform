@@ -416,6 +416,12 @@ function applyConfidenceRules(list, opts = {}) {
  * @returns {{ icd10: Array, cpt: Array, hcpcs: Array }}
  */
 function enrichCandidatesFromExport(candidates, queryText, options = {}) {
+  if (
+    process.env.DISABLE_KNOWLEDGE_EXPORT_ENRICH === '1' ||
+    String(process.env.NODE_ENV || '').toLowerCase() === 'production'
+  ) {
+    return candidates;
+  }
   if (!_colabLoaded) return candidates;
   const q = (queryText || '').toLowerCase();
   const icdSet = new Map();

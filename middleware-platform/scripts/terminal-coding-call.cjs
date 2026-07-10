@@ -45,14 +45,14 @@ const { computeVisitQuote } = require('../services/payer-quote-service');
 const dbMod = require('../database');
 const db = dbMod.db;
 
-function runVerifyTerminalCall(sessionId, scenario) {
+function runVerifyTerminalCall(sessionId, scenario, opts = {}) {
   const { openAppDb } = require('./lib/verify-db.cjs');
   const { summarizeChecks } = require('./lib/verify-assert.cjs');
   const { runCodingSpinePostCallChecks } = require('./lib/coding-spine-checks.cjs');
   const { dbMod, db } = openAppDb();
   const checks = runCodingSpinePostCallChecks(db, dbMod, sessionId, {
     scenario,
-    provenanceExpected: 'spine'
+    provenanceExpected: opts.provenanceExpected || 'spine'
   });
   return summarizeChecks(checks, { session_id: sessionId, scenario });
 }
@@ -117,38 +117,46 @@ async function assistCodingJourney(sessionId, patientId, cfg) {
     || (rag.rag_confidence || 0) < 0.65;
 
   if (needsRefresh) {
-    if (rag?.id) {
-      db.prepare('DELETE FROM triage_rag_results WHERE session_id = ?').run(sessionId);
-      rag = null;
+    if (process.env.CODING_CI_FIXTURE === '1') {
+      const { seedTriage } = require('./lib/seed-triage.cjs');
+      seedTriage(db, sessionId, { icd: 'K29.70', cpt: '99213', confidence: 0.85 });
+      rag = db.prepare(
+        'SELECT * FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1'
+      ).get(sessionId);
+    } else {
+      if (rag?.id) {
+        db.prepare('DELETE FROM triage_rag_results WHERE session_id = ?').run(sessionId);
+        rag = null;
+      }
+      await TriageRAGServiceV2.enrichFromSymptoms({
+        sessionId,
+        symptomText: 'stomach pain since this morning',
+        opqrst: {
+          onset: 'this morning',
+          quality: 'aching',
+          severity: '6',
+          timing: 'constant'
+        },
+        richIntake: {
+          medications: 'none',
+          allergies: 'none',
+          prior_workups: 'none',
+          alcohol_use: 'none'
+        },
+        patientId,
+        clinicId: CLINIC_ID
+      });
+      db.prepare(`
+        INSERT OR REPLACE INTO triage_sessions (
+          session_id, triage_complete, opqrst_complete, intake_complete_at, rag_result_id, target_specialty
+        ) VALUES (?, 1, 1, datetime('now'), (
+          SELECT id FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1
+        ), 'Gastroenterology')
+      `).run(sessionId, sessionId);
+      rag = db.prepare(
+        'SELECT * FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1'
+      ).get(sessionId);
     }
-    await TriageRAGServiceV2.enrichFromSymptoms({
-      sessionId,
-      symptomText: 'stomach pain since this morning',
-      opqrst: {
-        onset: 'this morning',
-        quality: 'aching',
-        severity: '6',
-        timing: 'constant'
-      },
-      richIntake: {
-        medications: 'none',
-        allergies: 'none',
-        prior_workups: 'none',
-        alcohol_use: 'none'
-      },
-      patientId,
-      clinicId: CLINIC_ID
-    });
-    db.prepare(`
-      INSERT OR REPLACE INTO triage_sessions (
-        session_id, triage_complete, opqrst_complete, intake_complete_at, rag_result_id, target_specialty
-      ) VALUES (?, 1, 1, datetime('now'), (
-        SELECT id FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1
-      ), 'Gastroenterology')
-    `).run(sessionId, sessionId);
-    rag = db.prepare(
-      'SELECT * FROM triage_rag_results WHERE session_id = ? ORDER BY created_at DESC LIMIT 1'
-    ).get(sessionId);
   }
 
   if (rag && !rag.primary_cpt) {
@@ -164,7 +172,7 @@ async function assistCodingJourney(sessionId, patientId, cfg) {
     primary_icd10: triage?.primary_icd10,
     primary_cpt: triage?.primary_cpt,
     rag_confidence: triage?.rag_confidence,
-    assist_phase: true
+    assist_phase: process.env.CODING_CI_FIXTURE === '1' ? undefined : true
   });
 
   const quote = await computeVisitQuote({
@@ -182,7 +190,12 @@ async function assistCodingJourney(sessionId, patientId, cfg) {
   KellyToolExecutor._post = async () => ({ success: true, quote });
   try {
     await KellyToolExecutor._collectInsurance(
-      { payer_id: cfg.payer_id, plan_id: cfg.plan_id },
+      {
+        payer_id: cfg.payer_id,
+        plan_id: cfg.plan_id,
+        date_of_birth: '1980-01-15',
+        visit_reason: 'stomach pain since this morning'
+      },
       { sessionId, patientId, callerPhone: '+15555550123' }
     );
   } catch (e) {
@@ -211,7 +224,10 @@ async function assistCodingJourney(sessionId, patientId, cfg) {
 
 async function runScenario(name, cfg, opts = {}) {
   const noAssist = opts.noAssist === true;
-  if (!hasLlmKey()) {
+  const fixtureOnly = opts.fixtureOnly === true || process.argv.includes('--fixture-only')
+    || process.env.CODING_CI_FIXTURE === '1';
+
+  if (!fixtureOnly && !hasLlmKey()) {
     console.error('Missing LLM key — set GROQ_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY');
     process.exit(2);
   }
@@ -219,6 +235,14 @@ async function runScenario(name, cfg, opts = {}) {
   seedPayerRules();
   const sessionId = `terminal_${name}_${Date.now()}`;
   const patientId = `patient_terminal_${name}`;
+
+  if (fixtureOnly) {
+    const { seedTriage } = require('./lib/seed-triage.cjs');
+    seedTriage(db, sessionId, { icd: 'K29.70', cpt: '99213', confidence: 0.85 });
+    await assistCodingJourney(sessionId, patientId, cfg);
+    const parsed = runVerifyTerminalCall(sessionId, name, { provenanceExpected: 'spine or fallback' });
+    return { scenario: name, session_id: sessionId, success: parsed.success, checks: parsed.checks, fixture: true };
+  }
 
   try {
     fixtures.seedE2eBookableProvider(CLINIC_ID, {

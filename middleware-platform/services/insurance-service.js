@@ -14,6 +14,7 @@ const { redactForLog } = require('./log-redaction');
 const stediBreaker = getOrCreate(STEDI, { failureThreshold: 5, windowMs: 60000, resetTimeMs: 30000 });
 
 function classifyEligibilityQuality(response = {}) {
+  if (response._simulate === true || response.eligibility_source === 'simulate') return 'simulate';
   if (!response || response.eligible === false) return 'inactive';
   const copay = response.copay;
   const hasCopay = copay !== null && copay !== undefined && !Number.isNaN(Number(copay));
@@ -1344,17 +1345,16 @@ class InsuranceService {
     };
 
     const payerId = this._resolveSimulatePayerKey(eligibilityData);
-    return (
-      mockResponses[payerId] || {
-        eligible: true,
-        copay: 20,
-        allowedAmount: 150,
-        insurancePays: 130,
-        oopMax: 5000,
-        oopMet: 0,
-        message: 'Eligible - Copay $20 (default)'
-      }
-    );
+    const mock = mockResponses[payerId] || {
+      eligible: true,
+      copay: 20,
+      allowedAmount: 150,
+      insurancePays: 130,
+      oopMax: 5000,
+      oopMet: 0,
+      message: 'Eligible - Copay $20 (default)'
+    };
+    return { ...mock, _simulate: true, eligibility_source: 'simulate' };
   }
 
   /**

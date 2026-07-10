@@ -488,12 +488,16 @@ async function orchestrate(input) {
   /** Phase 1: RAG intent resolver — replace regex with knowledge-service */
   let ragCandidates = { icd10: [], cpt: [], hcpcs: [] };
   try {
-    ragCandidates = await knowledgeService.getCodeCandidates(message, {
+    const fetchOpts = {
       maxIcd10: 5,
       maxCpt: 3,
+      maxHcpcs: 5,
       clinicId: clinic_id || null,
       callId: session_id || null
-    });
+    };
+    ragCandidates = typeof knowledgeService.getCodeCandidatesDualSource === 'function'
+      ? await knowledgeService.getCodeCandidatesDualSource(message, fetchOpts)
+      : await knowledgeService.getCodeCandidates(message, fetchOpts);
   } catch (e) {
     console.warn('[orchestrator] RAG fallback:', e.message);
   }
@@ -991,11 +995,14 @@ async function orchestrate(input) {
     try {
       const opqrstText = [state.opqrst.onset, state.opqrst.quality, state.opqrst.severity, state.opqrst.time, state.reason]
         .filter(Boolean).join(' ');
-      const icdCandidates = await knowledgeService.getCodeCandidates(opqrstText, {
+      const fetchOpts = {
         maxIcd10: 3,
         clinicId: clinic_id || session.clinic_id || null,
         callId: session_id || null
-      });
+      };
+      const icdCandidates = typeof knowledgeService.getCodeCandidatesDualSource === 'function'
+        ? await knowledgeService.getCodeCandidatesDualSource(opqrstText, fetchOpts)
+        : await knowledgeService.getCodeCandidates(opqrstText, fetchOpts);
       state.suggested_icd10 = icdCandidates?.icd10?.[0]?.code || null;
     } catch (e) {
       console.warn('[orchestrator] getCodeCandidates failed:', e?.message || e);

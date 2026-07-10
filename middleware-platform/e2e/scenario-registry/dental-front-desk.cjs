@@ -155,6 +155,67 @@ const DENTAL_PSTN_SCENARIOS = [
     expectedTools: ['schedule_appointment'],
     assertions: ['BILINGUAL_GREETING', 'BOOKING_OFFER'],
     skipIdentityAdmission: true
+  },
+  {
+    id: 'DENTAL-012',
+    title: 'Endodontics — root canal (D3310)',
+    locale: 'en-US',
+    language_mode: 'en_only',
+    intent: 'copay',
+    utterances: [
+      'I need a root canal on my back molar.',
+      'My Delta Dental member ID is DD445566778.'
+    ],
+    expectedTools: ['collect_insurance'],
+    assertions: ['COPAY_QUOTE', 'ENDO_CDT'],
+    skipIdentityAdmission: true,
+    evalTags: ['endo', 'cdt']
+  },
+  {
+    id: 'DENTAL-013',
+    title: 'Periodontics — deep cleaning (D4341)',
+    locale: 'en-US',
+    language_mode: 'en_only',
+    intent: 'copay',
+    utterances: [
+      'My dentist said I need a deep cleaning for gum disease.',
+      'I have Aetna dental, member ID AE998877665.'
+    ],
+    expectedTools: ['collect_insurance'],
+    assertions: ['PERIO_CDT', 'PAYER_COLLECT'],
+    skipIdentityAdmission: true,
+    evalTags: ['perio', 'cdt']
+  },
+  {
+    id: 'DENTAL-014',
+    title: 'Orthodontics — braces consult (D9310)',
+    locale: 'en-US',
+    language_mode: 'en_only',
+    intent: 'booking',
+    utterances: [
+      'I want a consultation for braces for my teenager.',
+      'We have MetLife dental.'
+    ],
+    expectedTools: ['schedule_appointment'],
+    assertions: ['ORTHO_CONSULT', 'BOOKING_OFFER'],
+    skipIdentityAdmission: true,
+    evalTags: ['ortho', 'cdt']
+  },
+  {
+    id: 'DENTAL-015',
+    title: 'Payer not seeded — desk callback',
+    locale: 'en-US',
+    language_mode: 'en_only',
+    intent: 'copay',
+    payer_not_seeded: true,
+    utterances: [
+      'Do you take Guardian dental insurance?',
+      'Member ID is GU112233445.'
+    ],
+    expectedTools: ['collect_insurance'],
+    assertions: ['PAYER_NOT_SEEDED', 'DESK_CALLBACK'],
+    skipIdentityAdmission: true,
+    evalTags: ['payer_not_seeded']
   }
 ];
 

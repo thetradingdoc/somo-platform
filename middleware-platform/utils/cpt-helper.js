@@ -171,27 +171,7 @@ const APPOINTMENT_TYPE_TO_SPECIALTY = {
   'General Consult': 'PrimaryCare'
 };
 
-/** Dental CDT phrase → code (admin front-desk path). */
-const DENTAL_CDT_TRIGGERS = [
-  { patterns: [/\bdeep cleaning\b/i], code: 'D4341' },
-  { patterns: [/\bcleaning\b/i, /\bprophylaxis\b/i, /\bhygiene\b/i], adult: 'D1110', child: 'D1120' },
-  { patterns: [/\bnew patient\b/i, /\bfirst time\b/i], code: 'D0150' },
-  { patterns: [/\bcheckup\b/i, /\bcheck.?up\b/i, /\bperiodic\b/i], code: 'D0120' },
-  { patterns: [/\btooth\s*pain\b/i, /\bproblem\b/i, /\bhurts\b/i], code: 'D0140' },
-  { patterns: [/\bfull.+x.?ray\b/i, /\bpanoramic\b/i, /\bpanorex\b/i], code: 'D0330' },
-  { patterns: [/\bbitewing\b/i], code: 'D0274' },
-  { patterns: [/\bfilling\b/i, /\bcavity\b/i], code: 'D2391' },
-  { patterns: [/\broot canal\b/i], code: 'D3310' },
-  { patterns: [/\bdeep cleaning\b/i], code: 'D4341' },
-  { patterns: [/\bperio\b/i, /\bperiodontal\b/i, /\bperio maintenance\b/i], code: 'D4910' },
-  { patterns: [/\bcrown\b/i, /\bcap\b/i], code: 'D2740' },
-  { patterns: [/\bimplant\b/i, /\bimplant consult\b/i], code: 'D6010' },
-  { patterns: [/\bortho\b/i, /\bbraces\b/i, /\binvisalign\b/i], code: 'D8080' },
-  { patterns: [/\bextraction\b/i, /\bpull.+tooth\b/i], code: 'D7140' },
-  { patterns: [/\bemergency\b/i, /\bin pain\b/i], code: 'D9110' },
-  { patterns: [/\bfluoride\b/i], code: 'D1206' },
-  { patterns: [/\bsealant\b/i], code: 'D1351' }
-];
+const { getDentalPhraseEntries } = require('../services/dental-phrase-map');
 
 const DENTAL_CDT_TABLE = {
   Dental: {
@@ -204,15 +184,34 @@ function isDentalCdt(code) {
   return /^D\d{4}$/i.test(String(code || '').trim());
 }
 
+function scoreCdtCodebookConfidence(reason, description) {
+  const tokens = String(reason || '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 2);
+  if (tokens.length === 0) return 0;
+  const desc = String(description || '').toLowerCase();
+  const matched = tokens.filter((t) => desc.includes(t)).length;
+  return matched / tokens.length;
+}
+
 function resolveDentalCdtFromReason(reasonText, opts = {}) {
   const reason = String(reasonText || '').trim().toLowerCase();
   const isChild = opts.isChild === true;
-  for (const entry of DENTAL_CDT_TRIGGERS) {
-    if (!entry.patterns.some((re) => re.test(reason))) continue;
-    const code = entry.adult
-      ? (isChild ? entry.child || entry.adult : entry.adult)
+  const threshold = opts.confidenceThreshold ?? CODING_CONFIDENCE_THRESHOLD;
+
+  for (const entry of getDentalPhraseEntries()) {
+    if (!entry.compiled.some((re) => re.test(reason))) continue;
+    const code = entry.childCode
+      ? (isChild ? entry.childCode : entry.code)
       : entry.code;
-    return { code, matched_phrase: reason, code_source: 'phrase_map' };
+    return {
+      code,
+      matched_phrase: reason,
+      code_source: 'phrase_map',
+      confidence: 1
+    };
   }
 
   // Full codebook lookup (Phase 7.7) — phrase map is fast-path only
@@ -221,28 +220,49 @@ function resolveDentalCdtFromReason(reasonText, opts = {}) {
     const hits = db.searchCdtCodes?.(reason, 5) || [];
     if (hits.length > 0) {
       const tokens = reason.split(/\s+/).filter((t) => t.length > 2);
-      let best = hits[0];
-      let bestScore = 0;
+      let best = null;
+      let bestConfidence = 0;
       for (const row of hits) {
-        const desc = String(row.description || '').toLowerCase();
-        const score = tokens.reduce((n, t) => (desc.includes(t) ? n + 1 : n), 0);
-        if (score > bestScore) {
-          bestScore = score;
+        if (row.code && reason.includes(String(row.code).toLowerCase())) {
+          return {
+            code: row.code,
+            matched_phrase: reason,
+            code_source: 'cdt_codebook',
+            confidence: 1,
+            description: row.description
+          };
+        }
+        if (tokens.length === 0) continue;
+        const confidence = scoreCdtCodebookConfidence(reason, row.description);
+        if (confidence > bestConfidence) {
+          bestConfidence = confidence;
           best = row;
         }
       }
-      if (best?.code) {
+      if (best?.code && bestConfidence >= threshold) {
         return {
           code: best.code,
           matched_phrase: reason,
           code_source: 'cdt_codebook',
+          confidence: bestConfidence,
           description: best.description
+        };
+      }
+      if (best?.code) {
+        return {
+          code: null,
+          matched_phrase: reason,
+          code_source: 'cdt_codebook_below_threshold',
+          confidence: bestConfidence,
+          suggested_code: best.code,
+          description: best.description,
+          hitl_required: true
         };
       }
     }
   } catch (_) {}
 
-  return { code: null, matched_phrase: null, code_source: null };
+  return { code: null, matched_phrase: null, code_source: null, confidence: 0 };
 }
 
 function getDentalCdtForVisit(opts = {}) {
@@ -259,7 +279,6 @@ module.exports = {
   resolveCptForVisit,
   CPT_TABLE,
   APPOINTMENT_TYPE_TO_SPECIALTY,
-  DENTAL_CDT_TRIGGERS,
   DENTAL_CDT_TABLE,
   isDentalCdt,
   resolveDentalCdtFromReason,

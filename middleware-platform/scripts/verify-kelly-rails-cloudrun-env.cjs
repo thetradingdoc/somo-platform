@@ -63,6 +63,7 @@ function main() {
     'KELLY_RAILS_V2',
     'KELLY_ALLOW_HYBRID_GRAPH',
     'KELLY_RAILS_ROLLOUT_PCT',
+    'KELLY_RAILS_FAST_RAG',
     'CONVERSATION_MODE_ROUTING',
     'OPQRST_FIELD_GATE_ENABLED'
   ];
@@ -83,6 +84,10 @@ function main() {
   const gate = String(env.OPQRST_FIELD_GATE_ENABLED ?? '1').trim().toLowerCase();
   if (gate === '0' || gate === 'false' || gate === 'no') {
     errors.push('OPQRST_FIELD_GATE_ENABLED must be 1 or unset (default on)');
+  }
+  const fastRag = String(env.KELLY_RAILS_FAST_RAG ?? '0').trim();
+  if (fastRag === '1' || fastRag.toLowerCase() === 'true') {
+    errors.push('KELLY_RAILS_FAST_RAG must be 0 in production');
   }
 
   if (errors.length) {

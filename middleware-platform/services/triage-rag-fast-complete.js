@@ -9,7 +9,19 @@ const TriageRAGService = require('./triage-rag-service');
  * Persist a routine dermatology RAG row when OPQRST is already on the session.
  * TEST-ONLY: requires NODE_ENV=test and KELLY_RAILS_FAST_RAG=1.
  */
+
+function assertNotProduction() {
+  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+  if (nodeEnv === 'production' || nodeEnv === 'prod') {
+    throw new Error('triage-rag-fast-complete must not run in production');
+  }
+  if (String(process.env.KELLY_RAILS_FAST_RAG || '').trim() === '1' && nodeEnv !== 'test') {
+    throw new Error('KELLY_RAILS_FAST_RAG=1 is only allowed when NODE_ENV=test');
+  }
+}
+
 function fastRagAllowed() {
+  assertNotProduction();
   return String(process.env.NODE_ENV || '').toLowerCase() === 'test'
     && String(process.env.KELLY_RAILS_FAST_RAG || '').trim() === '1';
 }
@@ -103,4 +115,4 @@ function completeTriageRagForSession(sessionId, patientId, opts = {}) {
   return { ragId, alreadyComplete: false };
 }
 
-module.exports = { completeTriageRagForSession };
+module.exports = { completeTriageRagForSession, fastRagAllowed, assertNotProduction };

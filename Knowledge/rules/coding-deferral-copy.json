@@ -1,0 +1,9 @@
+{
+  "version": "2026-07",
+  "CODE_NOT_IN_STARTER_SET": "For that procedure our office will call you back with exact pricing. I can still help schedule or answer general questions.",
+  "cannot_determine": "I don't have enough benefit detail to quote an exact amount right now. Our front desk can confirm your copay when you arrive or call you back shortly.",
+  "PAYER_NOT_SEEDED": "I don't have your insurance plan on file yet. Our front desk will verify your benefits and call you back with your copay.",
+  "PAYER_CLASS_MISMATCH": "That looks like a medical plan ID. For dental benefits I'll need your dental insurance card, or our team can verify at the front desk.",
+  "PROVIDER_LOCATION_DEFER": "I can book your visit, but copay amounts can vary by provider and location. Our front desk will confirm your exact copay before your appointment.",
+  "CODING_REVIEW_REQUIRED": "A clinical reviewer needs to confirm the procedure codes before we can verify insurance. Our team will follow up shortly."
+}

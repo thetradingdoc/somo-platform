@@ -14,6 +14,7 @@ const FUNCTION_TO_STAGE = {
   // Coding tools → CODING
   search_icd10_codes: 'CODING',
   search_cpt_codes: 'CODING',
+  search_cdt_codes: 'CODING',
   search_hcpcs_codes: 'CODING',
   suggest_codes_from_symptoms: 'CODING',
   extract_medical_text: 'EXTRACTION',
@@ -50,7 +51,7 @@ function computeNextStage(currentStage, triggerType, triggerPayload = {}) {
 
   if (triggerType === 'function_call') {
     const fn = triggerPayload.function_name || triggerPayload.functionName;
-    const codingFns = ['search_icd10_codes', 'search_cpt_codes', 'search_hcpcs_codes', 'suggest_codes_from_symptoms'];
+    const codingFns = ['search_icd10_codes', 'search_cpt_codes', 'search_cdt_codes', 'search_hcpcs_codes', 'suggest_codes_from_symptoms'];
 
     // After coding functions complete, move CODING → VALIDATION
     if (stage === 'CODING' && codingFns.includes(fn)) {
