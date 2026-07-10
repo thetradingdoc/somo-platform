@@ -48,7 +48,8 @@ describe('voice-routing-world', () => {
     ).toBe(true);
   });
 
-  test('shouldBlockKellyTurn blocks navigation, platform_support, and unidentified', () => {
+  test('shouldBlockKellyTurn blocks demo, navigation, platform_support, and unidentified', () => {
+    expect(shouldBlockKellyTurn('demo')).toBe(true);
     expect(shouldBlockKellyTurn('navigation')).toBe(true);
     expect(shouldBlockKellyTurn('platform_support')).toBe(true);
     expect(shouldBlockKellyTurn('unidentified')).toBe(true);

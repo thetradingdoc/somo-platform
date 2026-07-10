@@ -4,7 +4,7 @@
 
 | Number | Role |
 |--------|------|
-| +13639990205 (`TWILIO_PHONE_NUMBER`) | **Consumer navigation inbound** — dial this for SomoPay pitch |
+| +13639990205 (`TWILIO_PHONE_NUMBER`) | **Company / platform support line** (`platform_support`) — not PSTN navigation when `NAVIGATION_ENABLED=0` |
 | +18623622415 | Phase 1 tenant Kelly line (unchanged; no Twilio work) |
 | +18622307479 | Transfer target only (answer for escalation) |
 

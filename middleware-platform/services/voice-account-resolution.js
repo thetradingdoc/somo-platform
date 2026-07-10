@@ -23,7 +23,8 @@ function isOutboundCallType(callType) {
   return OUTBOUND_CALL_TYPES.has(String(callType || '').toLowerCase());
 }
 
-function isOutboundRequest(req) {
+function isOutboundRequest(req, isSomoDemoDemo) {
+  if (isSomoDemoDemo) return false;
   const callType = req.query.call_type ? String(req.query.call_type) : null;
   return (
     isOutboundCallType(callType) ||
@@ -32,7 +33,8 @@ function isOutboundRequest(req) {
   );
 }
 
-function normalizeCallType(req, { isOutbound, leadId }) {
+function normalizeCallType(req, { isOutbound, isSomoDemoDemo, leadId }) {
+  if (isSomoDemoDemo) return 'somo_demo';
   const explicit = req.query.call_type ? String(req.query.call_type) : null;
   if (explicit) return explicit;
   if (leadId) return 'sales_outbound';
@@ -59,12 +61,12 @@ function resolveNavigationInboundByDid(db, normalizedToNumber) {
  * Resolve customer_id and matched customer for a voice webhook.
  */
 function resolveVoiceAccount(db, req, opts) {
-  const { normalizedToNumber, isOutbound, leadId } = opts;
+  const { normalizedToNumber, isSomoDemoDemo, isOutbound, leadId } = opts;
   let customerId = req.query.customer_id ? String(req.query.customer_id).trim() : null;
   let matchedCustomer = null;
   let clinicId = req.query.clinic_id ? String(req.query.clinic_id).trim() : null;
 
-  if (!isOutbound) {
+  if (!isOutbound && !isSomoDemoDemo) {
     const navCustomer = resolveNavigationInboundByDid(db, normalizedToNumber);
     if (navCustomer) {
       customerId = navCustomer.id;
@@ -98,7 +100,7 @@ function resolveVoiceAccount(db, req, opts) {
     }
   }
 
-  if (!customerId && !isOutbound) {
+  if (!customerId && !isOutbound && !isSomoDemoDemo) {
     const customerByNumber = db.getCustomerByTwilioNumber(normalizedToNumber);
     if (customerByNumber) {
       matchedCustomer = customerByNumber;
@@ -262,6 +264,11 @@ function isNavigationCustomer(customer) {
   return String(customer?.customer_type || '').toLowerCase() === 'navigation';
 }
 
+/** Demo calls may proceed without a resolved tenant customer_id. */
+function requiresCustomerId(isSomoDemoDemo) {
+  return !isSomoDemoDemo;
+}
+
 module.exports = {
   getOperatorCustomerId,
   isOutboundCallType,
@@ -272,6 +279,7 @@ module.exports = {
   resolveMerchantForVoice,
   resolveCustomerIdForBilling,
   buildAccountResolutionFailureTwiml,
+  requiresCustomerId,
   isNavigationCustomer,
   resolveNavigationInboundByDid,
   resolveVoiceMerchantId: (db, customer) => {

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Resolve which voice "world" a call belongs to — tenant, operator outbound, navigation, etc.
+ * Resolve which voice "world" a call belongs to — demo, tenant, operator outbound, navigation, etc.
  */
 
 const { getOperatorCustomerId } = require('./voice-account-resolution');
@@ -19,6 +19,16 @@ function normalizePhone(n) {
   }
 }
 
+function isDemoLineToNumber(toNumber) {
+  if (!toNumber) return false;
+  try {
+    const { isDemoTwilioNumber } = require('./somo-demo-template-registry');
+    return isDemoTwilioNumber(normalizePhone(toNumber));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * @param {object} opts
  * @param {string} [opts.call_type]
@@ -30,8 +40,15 @@ function normalizePhone(n) {
 function resolveRoutingWorld(opts = {}) {
   const callType = String(opts.call_type || '').toLowerCase();
   const direction = String(opts.direction || '').toLowerCase();
+  const toNumber = normalizePhone(opts.to_number);
   const customerId = opts.customer_id ? String(opts.customer_id) : null;
   const customer = opts.customer || null;
+  const operatorId = getOperatorCustomerId();
+
+  // Explicit demo call_type always wins (landing outbound webhook).
+  if (callType === 'somo_demo') {
+    return 'demo';
+  }
 
   if (
     callType === 'operator_outbound' ||
@@ -48,8 +65,17 @@ function resolveRoutingWorld(opts = {}) {
     return ROUTING_WORLD_NAVIGATION;
   }
 
-  if (customerId && customer?.customer_type === 'operator') {
+  if (callType === 'platform_support' || customer?.customer_type === 'operator') {
     return 'platform_support';
+  }
+
+  if (customerId && operatorId && customerId === operatorId) {
+    return 'platform_support';
+  }
+
+  // Demo DID fallback only when not already claimed by navigation/support/tenant.
+  if (direction !== 'outbound' && isDemoLineToNumber(toNumber)) {
+    return 'demo';
   }
 
   if (customerId) {
@@ -74,10 +100,15 @@ function isTenantResolvedForMode(customerIdOrOpts, clinicIdLegacy) {
   return false;
 }
 
-/** Kelly Rails must not run for navigation, platform support, or unidentified inbound. */
+/** Kelly Rails must not run for demo, navigation, platform support, or unidentified inbound. */
 function shouldBlockKellyTurn(routingWorld) {
   const world = routingWorld || 'unidentified';
-  return world === ROUTING_WORLD_NAVIGATION || world === 'platform_support' || world === 'unidentified';
+  return (
+    world === 'demo' ||
+    world === ROUTING_WORLD_NAVIGATION ||
+    world === 'platform_support' ||
+    world === 'unidentified'
+  );
 }
 
 function emitRoutingWorldEvent(db, { session_id, call_id, routing_world, extra = {} }) {
@@ -98,6 +129,7 @@ function emitRoutingWorldEvent(db, { session_id, call_id, routing_world, extra =
 module.exports = {
   ROUTING_WORLD_NAVIGATION,
   normalizePhone,
+  isDemoLineToNumber,
   resolveRoutingWorld,
   isTenantResolvedForMode,
   shouldBlockKellyTurn,

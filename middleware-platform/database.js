@@ -17233,15 +17233,31 @@ module.exports = {
     if (!phone || !requestId) return false;
     try {
       const now = nowIso || new Date().toISOString();
-      const lockUntil = new Date(Date.parse(now) + (24 * 60 * 60 * 1000)).toISOString();
+      // Drop expired locks and locks for calls that never connected (allow retry).
       db.prepare(`
         DELETE FROM somo_demo_phone_window_lock
-        WHERE phone = ? AND locked_until <= ?
-      `).run(phone, now);
+        WHERE phone = ?
+          AND (
+            locked_until <= ?
+            OR request_id IN (
+              SELECT id FROM somo_demo_requests
+              WHERE phone = ?
+                AND (
+                  status IN ('failed', 'no-answer', 'busy', 'canceled', 'cancelled')
+                  OR outcome IN ('no-answer', 'busy', 'failed', 'voicemail')
+                )
+            )
+          )
+      `).run(phone, now, phone);
       db.prepare(`
         INSERT INTO somo_demo_phone_window_lock (phone, request_id, locked_until, created_at)
         VALUES (?, ?, ?, ?)
-      `).run(phone, requestId, lockUntil, now);
+      `).run(
+        phone,
+        requestId,
+        new Date(Date.parse(now) + 24 * 60 * 60 * 1000).toISOString(),
+        now
+      );
       return true;
     } catch (err) {
       if (String(err && err.message || '').includes('UNIQUE constraint failed')) {
@@ -17261,10 +17277,13 @@ module.exports = {
 
   countSomoDemoRequestsSince({ client_ip, phone, since, statuses }) {
     if (client_ip) {
-      const row = db.prepare(`
-        SELECT COUNT(*) AS c FROM somo_demo_requests
-        WHERE client_ip = ? AND created_at >= ?
-      `).get(client_ip, since);
+      let sql = `SELECT COUNT(*) AS c FROM somo_demo_requests WHERE client_ip = ? AND created_at >= ?`;
+      const params = [client_ip, since];
+      if (statuses && statuses.length) {
+        sql += ` AND status IN (${statuses.map(() => '?').join(',')})`;
+        params.push(...statuses);
+      }
+      const row = db.prepare(sql).get(...params);
       return row?.c || 0;
     }
     if (phone) {

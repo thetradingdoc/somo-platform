@@ -34,12 +34,13 @@ function isOutboundCallType(callType) {
 }
 
 function siteContextNotRequired(opts = {}) {
-  if (String(opts.call_type || '').toLowerCase() === 'consumer_navigation') return true;
+  if (opts.isSomoDemoDemo === true) return true;
+  const callType = String(opts.call_type || '').toLowerCase();
+  if (callType === 'somo_demo' || callType === 'consumer_navigation') return true;
   try {
     const { isPlatformNavigationDid } = require('./navigation/navigation-config');
     if (isPlatformNavigationDid(normalizePhone(opts.to_number))) return true;
   } catch (_) {}
-  const callType = String(opts.call_type || '').toLowerCase();
   const direction = String(opts.direction || '').toLowerCase();
   if (direction === 'outbound' || isOutboundCallType(callType)) {
     if (callType === 'operator_outbound') return true;

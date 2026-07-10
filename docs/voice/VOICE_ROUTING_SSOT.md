@@ -10,12 +10,16 @@ Last updated: 2026-07-04
 | **+18623622415** | **Tenant** practice line (when a real practice exists) | `tenant` |
 | Personal mobile | `CALLSOMO_OPERATOR_FALLBACK_PSTN` — human handoff from platform line | PSTN transfer |
 
+## Active: landing demo
+
+- **Landing demo call API** — `POST /api/public/somo-demo/request-call` (Twilio outbound + `somo-demo-handler`)
+- **Landing UI** — `unified-dashboard/somo-landing` on Firebase hosting (`callsomo.com`)
+
 ## Disabled / retired
 
-- **Consumer navigation on PSTN** — `NAVIGATION_ENABLED=0`, `PLATFORM_INBOUND_MODE=support`
-- **Landing demo call API** — `/api/public/somo-demo/request-call` removed; landing CTA → `/signup`
+- **Consumer navigation on PSTN** — `NAVIGATION_ENABLED=0`, `PLATFORM_INBOUND_MODE=support` (363 is platform sales / support, not navigation)
 - **Fake "Somo practice" tenant** for portal E2E — blocked until real signup
-- **Do not run** `navigation-gcs-seed.cjs` expecting navigation on 363 unless `PLATFORM_INBOUND_MODE=navigation`
+- **Do not run** `navigation-gcs-seed.cjs` expecting navigation on the company DID unless `PLATFORM_INBOUND_MODE=navigation`
 
 ## Deploy checklist (363)
 

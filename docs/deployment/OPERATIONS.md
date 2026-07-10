@@ -68,9 +68,9 @@ cd middleware-platform && npm run navigation:gcs-seed
 
 Operator runbook: [`docs/runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md).
 
-## Retired: Somo demo / somo-landing
+## Landing demo (somo-demo / somo-landing)
 
-`/api/public/somo-demo/*` and `unified-dashboard/somo-landing/` were removed (2026-06). Root `/` redirects to trial activation; platform inbound is navigation-only.
+`/api/public/somo-demo/*` and `unified-dashboard/somo-landing/` are **active** (restored 2026-07). Landing CTA places an outbound demo call via Twilio; platform company DID remains `platform_support` when `PLATFORM_INBOUND_MODE=support`.
 
 ## Kelly rails (production profile)
 

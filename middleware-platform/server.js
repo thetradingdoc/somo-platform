@@ -2924,6 +2924,8 @@ const rcmRoutes = require('./routes/rcm');
 app.use('/api/rcm', rcmRoutes);
 const rcmPublicRoutes = require('./routes/rcm-public');
 app.use('/api/public/rcm', rcmPublicRoutes);
+const somoDemoPublicRoutes = require('./routes/somo-demo-public');
+app.use('/api/public/somo-demo', somoDemoPublicRoutes);
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
 app.use('/api/internal/service-ops', internalServiceOpsRoutes);
 const internalEventsRoutes = require('./routes/internal-events');
@@ -3259,6 +3261,34 @@ function escapeXml(s) {
     .replace(/'/g, '&apos;');
 }
 
+// Twilio async AMD for Somo demo outbound
+const somoDemoAmdHandler = [
+  express.urlencoded({ extended: true }),
+  twilioSignatureRequired,
+  async (req, res) => {
+    try {
+      const callSid = req.body.CallSid;
+      const answeredBy = req.body.AnsweredBy || req.body.MachineDetectionResult || '';
+      if (callSid && /machine|fax/i.test(String(answeredBy))) {
+        const row = db.db
+          .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+          .get(callSid);
+        if (row?.id) {
+          db.updateSomoDemoRequest(row.id, {
+            voicemail_detected: 1,
+            outcome: 'voicemail',
+            status: 'completed'
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Somo demo AMD callback error:', e.message);
+    }
+    res.sendStatus(200);
+  }
+];
+app.post('/voice/somo-demo-amd-callback', ...somoDemoAmdHandler);
+
 // Twilio Status Callback - receives call status updates
 app.post(
   '/voice/status-callback',
@@ -3293,6 +3323,40 @@ app.post(
     if (callSid) {
       setImmediate(async () => {
         try {
+          const somoDemo = db.db
+            .prepare('SELECT id FROM somo_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+            .get(callSid);
+          if (somoDemo?.id) {
+            const patch = {};
+            if (callStatus) patch.status = callStatus;
+            if (callDuration) {
+              patch.duration_sec = parseInt(callDuration, 10);
+            }
+            if (callStatus === 'completed' && !patch.outcome) {
+              patch.outcome = 'completed_twilio';
+            }
+            if (callStatus === 'no-answer' || callStatus === 'busy') {
+              patch.outcome = callStatus;
+            }
+            if (Object.keys(patch).length) {
+              db.updateSomoDemoRequest(somoDemo.id, patch);
+            }
+            // Allow another demo today if the prospect never connected.
+            if (
+              callStatus === 'no-answer' ||
+              callStatus === 'busy' ||
+              callStatus === 'failed' ||
+              callStatus === 'canceled'
+            ) {
+              try {
+                const row = db.getSomoDemoRequest(somoDemo.id);
+                if (row?.phone) db.releaseSomoDemoDailyPhoneLock(row.phone);
+              } catch (lockErr) {
+                console.warn('Somo demo phone lock release failed:', lockErr.message);
+              }
+            }
+          }
+
           // Update voice_call_log with duration and calculate costs if call completed
           const voiceCall = db.db.prepare('SELECT * FROM voice_call_log WHERE twilio_call_sid = ? ORDER BY created_at DESC LIMIT 1').get(callSid);
 

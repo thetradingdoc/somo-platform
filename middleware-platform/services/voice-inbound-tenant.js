@@ -21,6 +21,7 @@ function isResolvedSaasTenant(customer) {
  * @param {object} params
  * @param {object|null} params.matchedCustomer
  * @param {string|null} params.customerId
+ * @param {boolean} [params.isSomoDemoDemo]
  * @param {boolean} params.isOutboundSales
  * @param {string} params.currentRetellAgentId
  * @param {string} [params.defaultAgentId]
@@ -29,6 +30,7 @@ function isResolvedSaasTenant(customer) {
 function resolveInboundRetellAgent({
   matchedCustomer,
   customerId,
+  isSomoDemoDemo,
   isOutboundSales,
   callType,
   currentRetellAgentId,
@@ -37,7 +39,7 @@ function resolveInboundRetellAgent({
   const outboundType = String(callType || '').toLowerCase();
   const isOperatorOutbound = outboundType === 'operator_outbound' || outboundType === 'sales_outbound';
 
-  if (isOperatorOutbound) {
+  if (isSomoDemoDemo || isOperatorOutbound) {
     return {
       retellAgentId: currentRetellAgentId,
       failClosed: false,

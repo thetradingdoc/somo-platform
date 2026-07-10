@@ -6,7 +6,7 @@
 
 This document describes how inbound and outbound voice calls are classified, routed, and handled across **routing worlds**, and how **L2 conversation mode** and **L4 Kelly Rails / OPQRST guards** prevent clinical bleed on tenant lines.
 
-**Platform DID (`+13639990205`):** Consumer **navigation** (need-first Kelly) via `consumer-navigation-handler` + `navigation-orchestrator` — not demo qualification or tenant Kelly. See [`PLATFORM_NUMBER_INBOUND_SPEC.md`](PLATFORM_NUMBER_INBOUND_SPEC.md).
+**Platform DID (`+13639990205`):** Company **platform support / sales** when `PLATFORM_INBOUND_MODE=support` — not tenant Kelly. Landing demos use `/api/public/somo-demo` (separate outbound path). See [`VOICE_ROUTING_SSOT.md`](VOICE_ROUTING_SSOT.md) and [`PLATFORM_NUMBER_INBOUND_SPEC.md`](PLATFORM_NUMBER_INBOUND_SPEC.md).
 
 ---
 
@@ -61,7 +61,7 @@ flowchart TB
 
 | Number / env | Typical role | `routing_world` | Handler |
 |--------------|--------------|-----------------|---------|
-| `+13639990205` / `CALLSOMO_OPERATOR_TWILIO_NUMBER` / `TWILIO_PHONE_NUMBER` | Consumer navigation inbound | `navigation` | `consumer-navigation-handler` |
+| `+13639990205` / `CALLSOMO_OPERATOR_TWILIO_NUMBER` / `TWILIO_PHONE_NUMBER` | Company sales / platform support | `platform_support` | platform support rail |
 | Tenant `customers.twilio_phone_number` | Clinic DID | `tenant` | Kelly Rails V2 |
 | Operator CID (outbound) | Somo operator calls | `operator_outbound` | `operator-outbound-rail` |
 | Sales outbound | Lead dialer | `sales_outbound` | Outbound sales rail |

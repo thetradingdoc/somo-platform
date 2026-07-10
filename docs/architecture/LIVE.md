@@ -74,8 +74,9 @@ Ops index: [`unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md)
 
 ## 2026-06-24 changelog
 
-- **Platform DID navigation:** `+13639990205` routes to consumer navigation (`consumer-navigation-handler` + `navigation-orchestrator`). Somo demo stack and `somo-landing` SPA retired; root `/` redirects to `/business/trial-activation.html`.
-- Operator runbook: [`runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md).
+- **Platform company DID:** `+13639990205` routes to `platform_support` when `PLATFORM_INBOUND_MODE=support` (PSTN navigation disabled).
+- **Landing demo restored (2026-07):** `/api/public/somo-demo/*` + `somo-landing` SPA on Firebase hosting.
+- Operator routing SSOT: [`voice/VOICE_ROUTING_SSOT.md`](../voice/VOICE_ROUTING_SSOT.md).
 
 ## 2026-06-17 changelog
 

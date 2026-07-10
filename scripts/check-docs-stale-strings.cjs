@@ -16,9 +16,8 @@ const DOCS = path.join(ROOT, 'docs');
 const PATTERNS = [
   { re: /myskin-middleware/i, label: 'myskin-middleware (decommissioned Cloud Run service)' },
   { re: /\/api\/public\/dodgecall\//i, label: '/api/public/dodgecall/ (removed HTTP routes)' },
-  { re: /\/api\/public\/somo-demo\//i, label: '/api/public/somo-demo/ (retired — use /health)' },
+  // Landing demo API + somo-landing are active again (restored 2026-07).
   { re: /NAVIGATION_ENABLED\s*=\s*1.*363|363.*consumer.?navigation|navigation.*\+13639990205/i, label: 'navigation on 363 (retired — use platform_support)' },
-  { re: /unified-dashboard\/somo-landing/i, label: 'somo-landing SPA (retired — root redirects to trial activation)' },
 ];
 
 const ALLOW_PATH = [

@@ -21,6 +21,7 @@ const KellyAgentService = require('../services/kelly-agent-service');
 const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
 const navigationHandler = require('./consumer-navigation-handler');
+const somoDemoHandler = require('./somo-demo-handler');
 const VoiceAgentRuntime = require('../services/voice-agent-runtime');
 const secureLogger = require('../services/secure-logger');
 const {
@@ -641,6 +642,11 @@ class RetellWebSocketHandler {
                 console.log(`✅ Voice caller name pre-filled from call metadata: ${pn}`);
             }
 
+            if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+                connection.awaitingName = false;
+                connection._demoCallType = 'somo_demo';
+            }
+
             try {
                 const { pmsContextFromDynamicVars } = require('../services/kelly-rails/prompts/pms-context-block');
                 const pmsCtx = pmsContextFromDynamicVars(dv);
@@ -699,6 +705,11 @@ class RetellWebSocketHandler {
                 if (routingWorld === 'navigation') {
                     connection._isNavigationConnection = true;
                     connection._navigationCallType = 'consumer_navigation';
+                    connection.awaitingName = false;
+                }
+                if (routingWorld === 'demo' || callTypeMeta === 'somo_demo') {
+                    connection._isSomoDemoDemo = true;
+                    connection._demoCallType = 'somo_demo';
                     connection.awaitingName = false;
                 }
                 if (routingWorld === 'platform_support') {
@@ -847,12 +858,24 @@ class RetellWebSocketHandler {
             }
 
             // Provider voice runtime (greeting, hours, enabled) — after tenant context exists
-            if (!connection._runtimeApplied && !navigationHandler.isNavigationConnection(connection)) {
+            if (
+                !connection._runtimeApplied &&
+                !navigationHandler.isNavigationConnection(connection) &&
+                !somoDemoHandler.isSomoDemoDemoConnection(connection)
+            ) {
                 this.applyProviderRuntime(callId, connection, callMeta, message.response_id);
             }
 
             // If the call starts and the caller is silent, proactively greet once.
-            if (!connection.sentInitialGreeting && navigationHandler.isNavigationConnection(connection)) {
+            if (!connection.sentInitialGreeting && somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+                somoDemoHandler.sendDemoInitialGreeting(
+                    callId,
+                    connection,
+                    callMeta,
+                    message.response_id,
+                    (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
+                );
+            } else if (!connection.sentInitialGreeting && navigationHandler.isNavigationConnection(connection)) {
                 navigationHandler.sendNavigationInitialGreeting(
                     callId,
                     connection,
@@ -895,6 +918,22 @@ class RetellWebSocketHandler {
         }
 
         console.log(`\n📨 Message from ${callId}:`, interactionType);
+
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+            if (interactionType === 'ping_pong') {
+                this.sendToRetell(connection.ws, { response_type: 'ping_pong', timestamp: message.timestamp });
+                return;
+            }
+            if (interactionType === 'ping') {
+                this.sendToRetell(connection.ws, { type: 'pong' });
+                return;
+            }
+            await somoDemoHandler.handleDemoMessage(callId, connection, message, {
+                sendRetellResponse: (ws, content, rid) => this.sendRetellResponse(ws, content, rid),
+                interactionType
+            });
+            return;
+        }
 
         if (navigationHandler.isNavigationConnection(connection)) {
             if (interactionType === 'ping_pong') {
@@ -985,6 +1024,25 @@ class RetellWebSocketHandler {
     // Handle user speech transcript
     async handleTranscript(callId, message) {
         const connection = this.activeConnections.get(callId);
+
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+            const userSaid = message.transcript;
+            if (userSaid) {
+                connection.conversationHistory.push({
+                    role: 'user',
+                    content: userSaid,
+                    timestamp: Date.now()
+                });
+                await somoDemoHandler.handleDemoTranscript(
+                    callId,
+                    connection,
+                    userSaid,
+                    message,
+                    (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
+                );
+            }
+            return;
+        }
 
         if (navigationHandler.isNavigationConnection(connection)) {
             const userSaid = message.transcript;
@@ -1770,6 +1828,11 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
     async handleFunctionCall(callId, message) {
         const connection = this.activeConnections.get(callId);
         if (!connection) return;
+
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+            await somoDemoHandler.handleDemoFunctionCall(callId, connection, message);
+            return;
+        }
 
         if (navigationHandler.isNavigationConnection(connection)) {
             await navigationHandler.handleNavigationFunctionCall(callId, connection, message);
@@ -3661,6 +3724,16 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
     // Helper: build and send one-time initial greeting
     sendInitialGreeting(callId, connection, callMeta, responseId = null) {
         if (!connection || connection.sentInitialGreeting) return;
+        if (somoDemoHandler.isSomoDemoDemoConnection(connection)) {
+            somoDemoHandler.sendDemoInitialGreeting(
+                callId,
+                connection,
+                callMeta,
+                responseId,
+                (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
+            );
+            return;
+        }
         if (navigationHandler.isNavigationConnection(connection)) {
             navigationHandler.sendNavigationInitialGreeting(
                 callId,

@@ -276,27 +276,20 @@ npm run navigation:routing-live -- --latest
 npm run verify:prod:routing-smoke --prefix middleware-platform
 ```
 
-### Consumer navigation (platform DID `+13639990205`)
+### Platform company DID (`+13639990205`)
 
-After API deploy, seed navigation on GCS and enable the handler:
+Production default: `PLATFORM_INBOUND_MODE=support`, `NAVIGATION_ENABLED=0` → `routing_world=platform_support`. See [`VOICE_ROUTING_SSOT.md`](../voice/VOICE_ROUTING_SSOT.md).
 
-```bash
-npm run phase1:pull-db
-cd middleware-platform
-npm run navigation:gcs-seed   # sets NAVIGATION_ENABLED=1 on Cloud Run
-npm run navigation:routing-live -- --pull-db --latest
-```
-
-Kill switch: set `NAVIGATION_ENABLED=0` on Cloud Run. See [`NAVIGATION_OPERATOR_RUNBOOK.md`](NAVIGATION_OPERATOR_RUNBOOK.md).
+Do **not** run `navigation:gcs-seed` expecting navigation on the company DID unless product explicitly re-enables `PLATFORM_INBOUND_MODE=navigation`.
 
 ### Hosting (Firebase)
 
 ```bash
 node scripts/build-staging-hosting.cjs
-npm run deploy:staging-hosting   # if marketing bundle changed
+npm run deploy:landing-hosting   # marketing / somo-landing bundle
 ```
 
-Root `/` redirects to `/business/trial-activation.html` (somo-landing SPA retired).
+Root `/` serves the landing SPA (`somo-landing`); demo CTA hits `POST /api/public/somo-demo/request-call`.
 
 ## Post-deploy smoke
 
@@ -430,7 +423,7 @@ Incident playbooks (Stripe, Stedi, reasoning, DLQ): [`docs/runbooks/README.md`](
 
 | Number / env | Role | `routing_world` | Handler |
 |--------------|------|-----------------|---------|
-| `+13639990205` / `TWILIO_PHONE_NUMBER` | Consumer navigation inbound | `navigation` inbound | `consumer-navigation-handler` |
+| `+13639990205` / `TWILIO_PHONE_NUMBER` | Company sales / platform support | `platform_support` | platform support rail |
 | `CALLSOMO_OPERATOR_TWILIO_NUMBER` | Operator CID outbound | `operator_outbound` | `operator-outbound-rail` |
 | Tenant `customers.twilio_phone_number` | Clinic DID | `tenant` | Kelly Rails V2 |
 | Unknown DID, no `customer_id` | Unidentified | `unidentified` | Fail-closed handoff |
