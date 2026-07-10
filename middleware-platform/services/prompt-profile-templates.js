@@ -2,65 +2,35 @@
 
 /**
  * Default prompt_profiles templates keyed by customer use_case.
- * allowed_tools must match real KELLY_TOOLS names (kelly-agent-service.js).
+ * system_prompt literals come from voice-prompt-templates (single canonical source).
  */
 const { USE_CASE_POLICIES } = require('./conversation-mode/tenant-policy');
+const { TEMPLATES } = require('./voice-prompt-templates');
+const { PROFILE_ALLOWED_TOOLS } = require('./kelly-rails/tool-allowlists');
 
 const USE_CASE_PROFILES = {
   dental: {
     specialty: 'Dental',
-    system_prompt:
-      'You are the AI front desk for a dental office. Help callers schedule hygiene and exam visits, reschedule, confirm hours and location, answer insurance and copay questions, and register new patients. Collect name, date of birth, phone, new vs returning, and reason for visit. Do not perform clinical triage or OPQRST. Escalate billing disputes and upset callers to staff.',
-    allowed_tools: [
-      'schedule_appointment',
-      'get_available_slots',
-      'collect_insurance',
-      'compute_visit_quote',
-      'end_call',
-      'transfer_call',
-      'query_patient_records',
-      'request_patient_payment',
-      'cancel_appointment',
-      'search_appointments',
-      'reschedule_appointment'
-    ],
+    system_prompt: TEMPLATES.dental,
+    allowed_tools: PROFILE_ALLOWED_TOOLS.dental,
     policy: USE_CASE_POLICIES.dental
   },
   healthcare_clinic: {
     specialty: 'General Medicine',
-    system_prompt:
-      'You are the AI front desk for a medical clinic. Help with new patient registration, rescheduling, insurance verification questions, copay collection, office hours, and location. Collect name, DOB, phone, new vs returning, and administrative reason for visit. Do not run clinical triage or OPQRST. Offer warm transfer for billing disputes or upset callers.',
-    allowed_tools: [
-      'schedule_appointment',
-      'get_available_slots',
-      'collect_insurance',
-      'end_call',
-      'transfer_call',
-      'query_patient_records',
-      'request_patient_payment'
-    ],
+    system_prompt: TEMPLATES.healthcare_clinic,
+    allowed_tools: PROFILE_ALLOWED_TOOLS.healthcare_clinic,
     policy: USE_CASE_POLICIES.healthcare_clinic
   },
   dermatology: {
     specialty: 'Dermatology',
-    system_prompt:
-      'You are the AI front desk for a dermatology practice. Focus on scheduling skin consultations and follow-ups. Collect chief complaint (e.g. rash, mole, acne) but do not diagnose. Do not handle payment on intake.',
-    allowed_tools: [
-      'schedule_appointment',
-      'get_available_slots',
-      'get_triage_session',
-      'store_triage_opqrst',
-      'end_call',
-      'query_patient_records',
-      'request_patient_payment'
-    ],
+    system_prompt: TEMPLATES.dermatology,
+    allowed_tools: PROFILE_ALLOWED_TOOLS.dermatology,
     policy: USE_CASE_POLICIES.dermatology
   },
   small_business: {
     specialty: 'General Business',
-    system_prompt:
-      'You are the AI front desk assistant. Help callers with appointments, general inquiries, and directing them to the right person. Do not collect insurance or process payments unless explicitly configured.',
-    allowed_tools: ['schedule_appointment', 'get_available_slots', 'end_call'],
+    system_prompt: TEMPLATES.small_business,
+    allowed_tools: PROFILE_ALLOWED_TOOLS.small_business,
     policy: USE_CASE_POLICIES.small_business
   }
 };
@@ -94,10 +64,17 @@ function getEffectiveTenantPolicy(profile) {
       policy = meta.tenant_policy || meta.policy || {};
     } catch (_) {}
   }
+  if (profile.policy_json) {
+    try {
+      const fromJson =
+        typeof profile.policy_json === 'string' ? JSON.parse(profile.policy_json) : profile.policy_json;
+      policy = { ...policy, ...(fromJson || {}) };
+    } catch (_) {}
+  }
   const useCase = profile.use_case || 'healthcare_clinic';
   const normalizedUseCase = useCase === 'dental_office' ? 'dental' : useCase;
   const basePolicy = USE_CASE_POLICIES[normalizedUseCase] || USE_CASE_POLICIES.healthcare_clinic;
-  return { ...USE_CASE_POLICIES.healthcare_clinic, ...basePolicy, ...policy };
+  return { ...basePolicy, ...policy };
 }
 
 module.exports = {

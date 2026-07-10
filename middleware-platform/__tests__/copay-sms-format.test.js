@@ -42,6 +42,17 @@ describe('copay SMS format (H5)', () => {
     expect(body).not.toMatch(/undefined/i);
   });
 
+  test('ZH template is localized', () => {
+    const body = SMSService.formatCopayPaymentSms({
+      locale: 'zh',
+      clinicName: 'Somo',
+      amount: 28,
+      paymentLink: link
+    });
+    expect(body).toMatch(/自付|支付/);
+    expect(body).not.toMatch(/undefined/i);
+  });
+
   test('falls back clinic name when missing', () => {
     const body = SMSService.formatCopayPaymentSms({
       locale: 'en',

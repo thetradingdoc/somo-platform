@@ -22,6 +22,7 @@ const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
 const navigationHandler = require('./consumer-navigation-handler');
 const VoiceAgentRuntime = require('../services/voice-agent-runtime');
+const secureLogger = require('../services/secure-logger');
 const {
     resolveCallOpeners,
     resolvePracticeDisplayName,
@@ -351,6 +352,42 @@ class RetellWebSocketHandler {
             }
 
             try {
+                if (connection?.routing_world === 'platform_support') {
+                    const { ensureInboundPlatformLead } = require('../services/platform-caller-lookup');
+                    const { processCallEnded } = require('../services/admin-call-outcome-service');
+                    const callerPhone =
+                        connection.callMetadata?.from_number ||
+                        connection.caller_phone ||
+                        null;
+                    let leadId = connection.platform_lead_id || null;
+                    if (!leadId && callerPhone && connection.platform_caller_type !== 'tenant') {
+                        const lead = ensureInboundPlatformLead(this.db, {
+                            phone: callerPhone,
+                            clinic_name: connection.clinic_name || undefined,
+                            notes: 'Qualified on inbound platform support call'
+                        });
+                        leadId = lead?.id || null;
+                    }
+                    if (leadId) {
+                        this.db.insertKellyCallEvent?.({
+                            session_id: callId,
+                            call_id: callId,
+                            customer_id: connection.customer_id,
+                            event_type: 'inbound_platform_lead_linked',
+                            payload_json: { lead_id: leadId, source: 'inbound_platform' }
+                        });
+                        await processCallEnded({ lead_id: leadId }, callId, {
+                            transcript: connection.conversationHistory
+                                ?.map((m) => `${m.role}: ${m.content}`)
+                                .join('\n')
+                        });
+                    }
+                }
+            } catch (platEndErr) {
+                console.warn('⚠️  platform_support post-call:', platEndErr.message);
+            }
+
+            try {
                 if (global.activeCalls && global.activeCalls[callId]) {
                     delete global.activeCalls[callId];
                 }
@@ -659,14 +696,29 @@ class RetellWebSocketHandler {
                         direction: directionMeta
                     }
                 });
-                if (routingWorld === 'demo') {
-                    connection._demoCallType = 'somo_demo';
-                    connection._isSomoDemoDemo = true;
-                }
                 if (routingWorld === 'navigation') {
                     connection._isNavigationConnection = true;
                     connection._navigationCallType = 'consumer_navigation';
                     connection.awaitingName = false;
+                }
+                if (routingWorld === 'platform_support') {
+                    connection._isPlatformSupport = true;
+                    connection.awaitingName = false;
+                    try {
+                        const events = this.db.listKellyCallEvents?.({ session_id: callId, limit: 30 }) || [];
+                        const resolved = events.find((e) => e.event_type === 'platform_caller_resolved');
+                        if (resolved?.payload_json) {
+                            const payload =
+                                typeof resolved.payload_json === 'string'
+                                    ? JSON.parse(resolved.payload_json)
+                                    : resolved.payload_json;
+                            connection.platform_caller_type = payload.caller_type;
+                            connection.platform_lead_id = payload.lead_id || null;
+                            connection.platform_tenant_id = payload.tenant_customer_id || null;
+                            connection.tenant_name = payload.tenant_name || null;
+                            connection.clinic_name = payload.clinic_name || null;
+                        }
+                    } catch (_) {}
                 }
             } catch (e) {
                 console.warn('⚠️  routing_world resolve failed:', e.message);
@@ -705,6 +757,14 @@ class RetellWebSocketHandler {
                 connection.conversation_mode = seeded.resolved.mode;
                 connection.active_subrail = seeded.resolved.subrail;
                 connection.conversation_fail_closed = !!seeded.resolved.fail_closed;
+                connection.triage_policy = seeded.policy?.triage_policy || null;
+                try {
+                    const profile = this.db.getClinicPromptProfile?.(
+                        connection.clinic_id,
+                        connection.customer_id
+                    );
+                    connection.use_case = profile?.use_case || null;
+                } catch (_) {}
                 this.db.insertKellyCallEvent?.({
                     session_id: callId,
                     call_id: callId,
@@ -768,7 +828,7 @@ class RetellWebSocketHandler {
                     dv?.locale ||
                     (tenantCfg.supported_languages && tenantCfg.supported_languages[0]) ||
                     'en';
-                KellyToolExecutor._setSessionMeta(callId, 'preferred_language', String(prefLang).slice(0, 2));
+                this.db?.upsertKellySessionLanguage?.(callId, String(prefLang).slice(0, 2));
                 connection.preferred_language = String(prefLang).slice(0, 2);
             } catch (metaErr) {
                 console.warn('⚠️  session meta stamp failed:', metaErr.message);
@@ -983,7 +1043,10 @@ class RetellWebSocketHandler {
 
         const userSaid = message.transcript;
 
-        console.log(`🗣️  User said: "${userSaid}"`);
+        secureLogger.info('User turn received', {
+            callId,
+            transcriptLength: String(userSaid || '').length
+        });
 
         const transferHint = VoiceAgentRuntime.detectTransferHint(userSaid, null);
         if (transferHint) {
@@ -1064,6 +1127,10 @@ class RetellWebSocketHandler {
         }
 
         // State machine: LangGraph when enabled, fallback to coding-state-service.
+        // Gated to coding-adjacent utterances on Kelly front-desk calls (Phase 6.6).
+        const { shouldRunCodingStateOnTranscript } = require('../services/voice-coding-hot-path');
+        const runCodingStateMachine = shouldRunCodingStateOnTranscript(userSaid, connection);
+        if (runCodingStateMachine) {
         // Production guardrail: LANGGRAPH_ROLLOUT_PCT must be 0 or 1 (enforced in services/coding-graph.js).
         const transcriptPayload = { transcript: userSaid };
         const clinicContext = { clinic_id: connection?.clinic_id || null };
@@ -1103,6 +1170,7 @@ class RetellWebSocketHandler {
                     });
                 } catch (_) {}
             }
+        }
         }
 
         // Kelly Agent (LLM) — K-1: Groq + tools; falls back to PatientOrchestrator when LLM unavailable
@@ -1184,6 +1252,69 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 if (!agentReply) {
                 const { shouldBlockKellyTurn } = require('../services/voice-routing-world');
                 if (shouldBlockKellyTurn(connection?.routing_world)) {
+                    if (connection?.routing_world === 'platform_support') {
+                        try {
+                            const { runConversationDispatch } = require('../services/conversation-mode/conversation-mode-session');
+                            const conv = await runConversationDispatch({
+                                sessionId: callId,
+                                message: userSaid,
+                                clinicId: connection.clinic_id,
+                                customerId: connection.customer_id,
+                                callId,
+                                call_type: 'platform_support',
+                                direction: 'inbound',
+                                routing_world: 'platform_support',
+                                opener_delivered: !!connection.opener_delivered,
+                                caller_type: connection.platform_caller_type,
+                                tenant_name: connection.tenant_name,
+                                clinic_name: connection.clinic_name,
+                                platform_caller_type: connection.platform_caller_type,
+                                platform_stage: connection.platform_stage,
+                                callerPhone: this.getCustomerPhone(callId),
+                                caller_phone: this.getCustomerPhone(callId),
+                                lead_id: connection.platform_lead_id,
+                                platform_lead_id: connection.platform_lead_id,
+                                db: this.db,
+                                utterance: userSaid
+                            });
+                            if (conv.dispatch?.reply) {
+                                agentReply = conv.dispatch.reply;
+                                kellyResult = {
+                                    reply: agentReply,
+                                    blocked: true,
+                                    routing_world: 'platform_support',
+                                    end_call: !!conv.dispatch.endCall,
+                                    transfer_number: null
+                                };
+                                if (conv.dispatch.active_subrail === 'handoff' || conv.dispatch.flags?.pending_human_handoff) {
+                                    const { attemptEscalation } = require('../services/escalation-service');
+                                    const esc = attemptEscalation(this.db, {
+                                        sessionId: callId,
+                                        callId,
+                                        reason: 'platform_support_handoff',
+                                        routing_world: 'platform_support',
+                                        customer_id: connection.customer_id
+                                    });
+                                    if (esc.transfer_number) {
+                                        kellyResult.transfer_number = esc.transfer_number;
+                                        this.sendEscalationResponse(connection.ws, agentReply, message.response_id, {
+                                            transferNumber: esc.transfer_number,
+                                            endCall: false
+                                        });
+                                        connection.conversationHistory.push({
+                                            role: 'assistant',
+                                            content: agentReply,
+                                            timestamp: Date.now()
+                                        });
+                                        return;
+                                    }
+                                }
+                            }
+                        } catch (platErr) {
+                            console.warn('⚠️  platform_support dispatch:', platErr.message);
+                        }
+                    }
+                    if (!agentReply) {
                     try {
                         const { getEmergencyResponseIfNeeded } = require('../services/emergency-safety');
                         const locale =
@@ -1239,6 +1370,7 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     if (!kellyResult) {
                         kellyResult = { reply: agentReply, blocked: true, routing_world: connection.routing_world };
                     }
+                    }
                 } else if (connection.kelly_admission_blocked) {
                     try {
                         const { attemptEscalation } = require('../services/escalation-service');
@@ -1277,7 +1409,6 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 // Coding graph handles billing codes; Kelly Rails V2 owns patient conversation (see kelly-rails/).
                 const { runKellyTurn } = require('../services/kelly-turn-resolver');
                 const {
-                    appendHistory,
                     getLastAssistantText,
                     lastAssistantFromMessages,
                     seedKellyHistoryFromOrchestrate
@@ -1288,9 +1419,7 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     } catch (_) {}
                     connection._kellyHistorySeeded = true;
                 }
-                try {
-                    appendHistory(callId, 'user', userSaid);
-                } catch (_) {}
+                const kellyTurnStartedAt = Date.now();
                 const turnOpts = {
                     message: userSaid,
                     sessionId: callId,
@@ -1301,7 +1430,7 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     callerPhone,
                     patientName: connection?.customerName || connection?.initialName || null,
                     providerInstructions: connection?.voiceRuntime?.customPrompt || null,
-                    turnReceivedAt: Date.now(),
+                    turnReceivedAt: kellyTurnStartedAt,
                     callId,
                     call_type: connection?.call_type || connection?.callMetadata?.metadata?.call_type || null,
                     direction: connection?.direction || connection?.callMetadata?.metadata?.direction || null,
@@ -1317,17 +1446,23 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     site_context_status: connection?.site_context_status || null,
                     pmsContext: connection?.pmsContext || null
                 };
-                const fillerMs = parseInt(process.env.KELLY_VOICE_FILLER_MS || '1200', 10) || 1200;
+                const {
+                    resolveVoiceFillerDelayMs,
+                    resolveVoiceFillerText
+                } = require('../services/voice-turn-filler');
                 const voiceLocaleForFiller =
                     this.db?.getKellySessionLanguage?.(callId) ||
                     connection?.preferred_language ||
                     'en';
-                const fillerText =
-                    String(voiceLocaleForFiller).slice(0, 2) === 'es'
-                        ? 'Un momento, por favor.'
-                        : 'One moment please.';
+                const fillerMs = resolveVoiceFillerDelayMs({
+                    message: userSaid,
+                    active_lane: connection?.last_kelly_lane,
+                    kelly_lane_hint: connection?.last_kelly_lane_hint
+                });
+                const fillerText = resolveVoiceFillerText(voiceLocaleForFiller);
                 let fillerSent = false;
                 let fillerTimer = null;
+                connection._kellyTurnStartedAt = kellyTurnStartedAt;
                 const turnPromise = runKellyTurn(turnOpts);
                 if (fillerMs > 0) {
                     fillerTimer = setTimeout(() => {
@@ -1345,6 +1480,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 }
                 kellyResult = result;
                 agentReply = result?.reply;
+                connection.last_kelly_lane = result?.kelly_rails?.active_lane || connection.last_kelly_lane;
+                connection.last_kelly_lane_hint = result?.kelly_lane_hint || connection.last_kelly_lane_hint;
                 const agentTransfer = VoiceAgentRuntime.detectTransferHint(null, agentReply);
                 if (agentTransfer) {
                     connection.voiceOutcomeHint = agentTransfer;
@@ -1373,9 +1510,6 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                             conversation_mode: result?.conversation_mode,
                             active_subrail: result?.active_subrail
                         });
-                        try {
-                            appendHistory(callId, 'assistant', agentReply);
-                        } catch (_) {}
                         if (result?.transfer_number) {
                             this.sendEscalationResponse(connection.ws, agentReply, message.response_id, {
                                 transferNumber: result.transfer_number,
@@ -1426,7 +1560,6 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 const { formatVoiceReply } = require('../services/voice-reply-formatter');
                 const { recordVoiceAssistantTurn } = require('../services/voice-slo-metrics');
                 const {
-                    appendHistory,
                     getLastAssistantText,
                     lastAssistantFromMessages
                 } = require('../services/kelly-rails/history');
@@ -1452,9 +1585,6 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     conversation_mode: kellyResult?.conversation_mode,
                     active_subrail: kellyResult?.active_subrail
                 });
-                try {
-                    appendHistory(callId, 'assistant', agentReply);
-                } catch (_) {}
                 recordVoiceAssistantTurn({
                     sessionId: callId,
                     replyText: agentReply,
@@ -1516,6 +1646,9 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
 
             if (this.db && typeof this.db.insertAgentTurn === 'function') {
                 try {
+                    const turnStartedAt =
+                        connection._kellyTurnStartedAt || connection._lastTranscriptAt || Date.now();
+                    const measuredLatencyMs = Math.max(0, Date.now() - turnStartedAt);
                     this.db.insertAgentTurn({
                         call_id: callId,
                         clinic_id: connection?.clinic_id || null,
@@ -1526,8 +1659,8 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                         prompt_profile_id: 'patient_orchestrate',
                         prompt_version: 'v1',
                         prompt_checksum: '',
-                        model: 'orchestrate',
-                        latency_ms: null,
+                        model: kellyResult?.turn_timeout ? 'kelly_timeout' : 'orchestrate',
+                        latency_ms: measuredLatencyMs,
                         trace_id: session?.traceId || null
                     });
                 } catch (e) {
@@ -1580,6 +1713,59 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         return clinicId;
     }
 
+    _buildRetellModeCtx(connection, callId) {
+        let triagePolicy = connection.triage_policy || null;
+        let useCase = connection.use_case || null;
+        if ((!triagePolicy || !useCase) && (connection.clinic_id || connection.customer_id)) {
+            try {
+                const { resolveTenantVoiceConfig } = require('../services/tenant-voice-config');
+                const cfg = resolveTenantVoiceConfig(this.db, {
+                    clinicId: connection.clinic_id,
+                    customerId: connection.customer_id
+                });
+                triagePolicy = triagePolicy || cfg.triage_policy || null;
+                useCase = useCase || cfg.use_case || null;
+                connection.triage_policy = triagePolicy;
+                connection.use_case = useCase;
+            } catch (_) {}
+        }
+        return {
+            conversation_mode: connection.conversation_mode,
+            active_subrail: connection.active_subrail,
+            site_context_status: connection.site_context_status || null,
+            routing_world: connection.routing_world || null,
+            triage_policy: triagePolicy,
+            use_case: useCase,
+            clinicId: connection.clinic_id || null,
+            customerId: connection.customer_id || null,
+            sessionId: callId,
+            callId
+        };
+    }
+
+    _kellyExecutorContext(connection, callId, clinicId, extras = {}) {
+        const modeCtx = this._buildRetellModeCtx(connection, callId);
+        const patientId = connection.patientId || null;
+        const callerPhone =
+            connection.customerPhone || connection.callMetadata?.from_number || null;
+        return {
+            sessionId: callId,
+            clinicId,
+            patientId,
+            callerPhone,
+            customerId: connection.customer_id || null,
+            callId,
+            channel: connection.replayChannel || 'voice',
+            conversation_mode: modeCtx.conversation_mode,
+            active_subrail: modeCtx.active_subrail,
+            triage_policy: modeCtx.triage_policy,
+            use_case: modeCtx.use_case,
+            routing_world: modeCtx.routing_world,
+            site_context_status: modeCtx.site_context_status,
+            ...extras
+        };
+    }
+
     // Handle function calls from Retell LLM
     async handleFunctionCall(callId, message) {
         const connection = this.activeConnections.get(callId);
@@ -1597,14 +1783,7 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
 
         try {
             const { isToolAllowedForMode, logModeViolation } = require('../services/conversation-mode/mode-tool-firewall');
-            const modeCtx = {
-                conversation_mode: connection.conversation_mode,
-                active_subrail: connection.active_subrail,
-                site_context_status: connection.site_context_status || null,
-                routing_world: connection.routing_world || null,
-                sessionId: callId,
-                callId
-            };
+            const modeCtx = this._buildRetellModeCtx(connection, callId);
             if (connection.conversation_mode && !isToolAllowedForMode(functionName, modeCtx)) {
                 logModeViolation(this.db, { ...modeCtx, toolName: functionName });
                 this.sendToRetell(connection.ws, {
@@ -1645,16 +1824,11 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 case 'create_appointment_checkout':
                 case 'verify_checkout_code': {
                     const KellyToolExecutor = require('../services/kelly-tool-executor');
-                    const patientId = connection.patientId || null;
-                    const callerPhone =
-                        connection.customerPhone || connection.callMetadata?.from_number || null;
-                    result = await KellyToolExecutor.execute(functionName, functionArgs, {
-                        sessionId: callId,
-                        clinicId,
-                        patientId,
-                        callerPhone,
-                        channel: 'voice'
-                    });
+                    result = await KellyToolExecutor.execute(
+                        functionName,
+                        functionArgs,
+                        this._kellyExecutorContext(connection, callId, clinicId)
+                    );
                     break;
                 }
 
@@ -1669,16 +1843,13 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                         break;
                     }
                     const KellyToolExecutor = require('../services/kelly-tool-executor');
-                    const patientId = connection.patientId || null;
-                    const callerPhone =
-                        connection.customerPhone || connection.callMetadata?.from_number || null;
-                    result = await KellyToolExecutor.execute(functionName, functionArgs, {
-                        sessionId: callId,
-                        clinicId,
-                        patientId,
-                        callerPhone,
-                        channel: 'voice'
-                    });
+                    result = await KellyToolExecutor.execute(
+                        functionName,
+                        functionArgs,
+                        this._kellyExecutorContext(connection, callId, clinicId, {
+                            locale: this.db?.getKellySessionLanguage?.(callId) || 'en'
+                        })
+                    );
                     break;
                 }
 
@@ -1700,19 +1871,14 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                     break;
 
                 case 'transfer_call': {
-                    const patientId = connection.patientId || null;
-                    const callerPhone =
-                        connection.customerPhone || connection.callMetadata?.from_number || null;
-                    result = await KellyToolExecutor.execute(functionName, functionArgs, {
-                        sessionId: callId,
-                        clinicId,
-                        patientId,
-                        callerPhone,
-                        customerId: connection.customer_id || null,
-                        callId,
-                        channel: 'voice',
-                        locale: this.db?.getKellySessionLanguage?.(callId) || 'en'
-                    });
+                    const KellyToolExecutor = require('../services/kelly-tool-executor');
+                    result = await KellyToolExecutor.execute(
+                        functionName,
+                        functionArgs,
+                        this._kellyExecutorContext(connection, callId, clinicId, {
+                            locale: this.db?.getKellySessionLanguage?.(callId) || 'en'
+                        })
+                    );
                     break;
                 }
 
@@ -1782,6 +1948,23 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 case 'send_document_upload_link':
                     result = await this.handleSendDocumentUploadLink(callId, functionArgs);
                     break;
+
+                case 'run_triage_rag':
+                case 'store_triage_opqrst':
+                case 'store_triage_rich_intake':
+                case 'compute_visit_quote':
+                case 'request_patient_payment':
+                case 'query_patient_records':
+                case 'get_triage_session':
+                case 'check_plan_benefits': {
+                    const KellyToolExecutor = require('../services/kelly-tool-executor');
+                    result = await KellyToolExecutor.execute(
+                        functionName,
+                        functionArgs,
+                        this._kellyExecutorContext(connection, callId, clinicId)
+                    );
+                    break;
+                }
 
                 default:
                     result = {
@@ -3268,8 +3451,9 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 settings: settingsRow || { greeting: admission.greeting },
                 customer: tenant.customer,
                 practiceName,
-                callType,
-                direction
+                callType: connection.routing_world === 'platform_support' ? 'platform_support' : callType,
+                direction,
+                routingWorld: connection.routing_world || null
             });
             connection._lastOpenerBundle = openerBundle;
             connection.providerGreeting = isOutbound
@@ -3282,11 +3466,32 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             // asks for it (asksName), and only when we don't already know it (caller-ID pre-fill).
             const nameAlreadyKnown = !!(connection.initialName || connection.customerName);
             const inboundAsksName =
-                !isOutbound && openerBundle.activeOpener?.asksName === true && !nameAlreadyKnown;
+                connection.routing_world !== 'platform_support' &&
+                !isOutbound &&
+                openerBundle.activeOpener?.asksName === true &&
+                !nameAlreadyKnown;
             if (!connection.sentInitialGreeting && connection.providerGreeting && !isOutbound) {
                 connection.awaitingName = inboundAsksName;
                 this.sendRetellResponse(connection.ws, connection.providerGreeting, responseId);
                 connection.sentInitialGreeting = true;
+                connection.opener_delivered = true;
+                if (connection.routing_world === 'platform_support') {
+                    connection.platform_stage = 'practice_type';
+                    try {
+                        const { saveConversationSession } = require('../services/conversation-mode/conversation-mode-session');
+                        saveConversationSession(callId, {
+                            opener_delivered: true,
+                            platform_stage: 'practice_type',
+                            conversation_mode: 'platform_support'
+                        });
+                        this.db.insertKellyCallEvent?.({
+                            session_id: callId,
+                            call_id: callId,
+                            event_type: 'platform_sales_stage',
+                            payload_json: { stage: 'practice_type', source: 'connect_opener' }
+                        });
+                    } catch (_) {}
+                }
                 connection.conversationHistory.push({
                     role: 'assistant',
                     content: connection.providerGreeting,
@@ -3497,8 +3702,9 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
                 settings: settingsRow || {},
                 customer: tenant.customer,
                 practiceName,
-                callType,
-                direction
+                callType: connection.routing_world === 'platform_support' ? 'platform_support' : callType,
+                direction,
+                routingWorld: connection.routing_world || null
             });
             connection._lastOpenerBundle = openerBundle;
             if (isOutbound) {
@@ -3531,6 +3737,9 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         if (connection.initialName || connection.customerName) {
             askNameAfterGreeting = false;
         }
+        if (connection.routing_world === 'platform_support') {
+            askNameAfterGreeting = false;
+        }
         connection.awaitingName = askNameAfterGreeting;
         this.sendRetellResponse(connection.ws, opening, responseId);
         connection.sentInitialGreeting = true;
@@ -3538,7 +3747,13 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         try {
             const { loadConversationSession, saveConversationSession } = require('../services/conversation-mode/conversation-mode-session');
             const fields = loadConversationSession(callId, this.db);
-            saveConversationSession(callId, { ...fields, opener_delivered: true });
+            const patch = { ...fields, opener_delivered: true };
+            if (connection.routing_world === 'platform_support') {
+                patch.platform_stage = 'practice_type';
+                patch.conversation_mode = 'platform_support';
+                connection.platform_stage = 'practice_type';
+            }
+            saveConversationSession(callId, patch);
         } catch (_) {}
         connection.conversationHistory.push({
             role: 'assistant',
@@ -3699,238 +3914,15 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         }
     }
 
-    // Handle schedule_appointment function
+    // Handle schedule_appointment function (delegates to KellyToolExecutor — KELLY_RAILS_V2 SSOT)
     async handleScheduleAppointment(callId, args) {
-        try {
-            const connection = this.activeConnections.get(callId);
-
-            // SAFETY: Red-flag check before scheduling (orch-9, V-2: ensure voice history available).
-            // Defense-in-depth: runs in addition to DB triage guardrails on /voice/appointments/schedule
-            // when session_id is passed (conversation-based emergency vs triage_sessions state).
-            const providerOverrideEmergency = args.provider_override_emergency === true || args.provider_override_emergency === 'true';
-            if (!providerOverrideEmergency) {
-                let recentTurns = [];
-                const orchRow = this.db?.getOrchestrateSessionBySessionId?.(callId);
-                if (orchRow?.conversation_history) {
-                    const hist = typeof orchRow.conversation_history === 'string'
-                        ? JSON.parse(orchRow.conversation_history) : orchRow.conversation_history;
-                    recentTurns = (Array.isArray(hist) ? hist : []).slice(-10);
-                }
-                if (recentTurns.length === 0 && typeof this.db?.getConversationHistory === 'function') {
-                    recentTurns = this.db.getConversationHistory(callId, 10);
-                }
-                // V-2: Merge in-memory transcript so we don't miss unpersisted turns
-                const connHist = connection?.conversationHistory || [];
-                for (const t of connHist.slice(-5)) {
-                    if (t?.content && t?.role === 'user') recentTurns.push({ role: 'user', content: t.content });
-                }
-                const { blockScheduling, assessment } = checkBeforeScheduling(recentTurns.map(t => ({
-                    role: t.role,
-                    content: t.content || t.content_english
-                })));
-                if (blockScheduling && assessment?.isEmergency) {
-                    console.warn(`🚨 EMERGENCY: Blocked scheduling - red flags detected: ${assessment.redFlags?.join(', ')}`);
-
-                    // Phase 1 safety: persist cross-channel emergency flag (24h)
-                    try {
-                        const phone = this.getCustomerPhone(callId);
-                        const email = this.getCustomerEmail(callId);
-                        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-                        if (this.db && typeof this.db.upsertPatientEmergencyFlag === 'function') {
-                            this.db.upsertPatientEmergencyFlag({
-                                phone: phone || null,
-                                email: email || null,
-                                source: 'voice',
-                                call_id: callId,
-                                expires_at: expiresAt,
-                                metadata: { red_flags: assessment.redFlags || [], urgency: assessment.urgency || 'EMERGENT' }
-                            });
-                        }
-                    } catch (e) {
-                        console.warn('⚠️  upsertPatientEmergencyFlag failed:', e?.message || e);
-                    }
-
-                    return {
-                        success: false,
-                        blockScheduling: true,
-                        isEmergency: true,
-                        urgency: 'EMERGENT',
-                        message: assessment.suggestedResponse,
-                        voice_agent_instruction: `CRITICAL: Do NOT schedule an appointment. The caller has described emergency symptoms. You MUST say: "${assessment.suggestedResponse}" and advise them to call 911 or go to the ER immediately. If a provider confirms this is a false positive, retry with provider_override_emergency=true.`
-                    };
-                }
-            } else if (providerOverrideEmergency) {
-                console.warn(`⚠️  Provider override: EMERGENT booking block bypassed for schedule_appointment`);
-            }
-
-            // Store the initial name when first provided (for fraud detection). V-3: use storeCustomerName to persist to DB.
-            if (connection && args.patient_name) {
-                this.storeCustomerName(callId, args.patient_name);
-            }
-
-            // CRITICAL: Validate email is provided (REQUIRED for confirmations)
-            if (!args.patient_email || !args.patient_email.trim()) {
-                console.warn(`⚠️  schedule_appointment called without email (callId: ${callId})`);
-                return {
-                    success: false,
-                    requiresEmail: true,
-                    error: 'Email address is required to schedule an appointment. Email is needed to send confirmation and payment information.',
-                    message: 'To complete your appointment booking, I need your email address to send you a confirmation. What is your email address?',
-                    voice_agent_instruction: 'Ask the caller for their email address. Do NOT proceed with booking until email is collected. After collecting email, retry schedule_appointment with the email included.'
-                };
-            }
-
-            // Validate email format
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(args.patient_email.trim())) {
-                return {
-                    success: false,
-                    requiresEmail: true,
-                    error: 'Invalid email format. Please provide a valid email address.',
-                    message: 'That email address doesn\'t look quite right. Could you please provide your email address again?',
-                    voice_agent_instruction: 'Ask the caller to provide their email address again. Make sure it includes @ and a domain (e.g., name@example.com).'
-                };
-            }
-
-            // Ensure phone number is provided (required for duplicate detection)
-            // CRITICAL: Normalize phone number to +1 format for US customers
-            let patientPhone = args.patient_phone || this.getCustomerPhone(callId);
-            
-            // Normalize phone number if provided (auto-adds +1 for US numbers)
-            if (patientPhone) {
-                patientPhone = SMSService.formatPhoneNumber(patientPhone);
-            }
-            
-            if (!patientPhone) {
-                return {
-                    success: false,
-                    requiresPhone: true,
-                    error: 'Phone number is required to schedule an appointment. Each patient must have a unique phone number.',
-                    message: 'To schedule your appointment, I need your phone number to verify your identity. Can you please provide your phone number?'
-                };
-            }
-
-            const clinicId = this.getClinicId(callId);
-            if (!clinicId) {
-                console.warn(`⚠️  Missing clinic_id for schedule_appointment (callId: ${callId})`);
-                return {
-                    success: false,
-                    error: 'Missing clinic context. Unable to schedule appointment without clinic_id.'
-                };
-            }
-
-            console.log(`📋 Scheduling appointment for ${args.patient_name} (${args.patient_email}) on ${args.date} at ${args.time} [clinic: ${clinicId}]`);
-
-            const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/schedule`, {
-                patient_name: args.patient_name,
-                patient_phone: patientPhone,
-                patient_email: args.patient_email.trim(),
-                appointment_type: args.appointment_type,
-                date: args.date,
-                time: args.time,
-                timezone: args.timezone || 'America/New_York',
-                notes: args.notes,
-                clinic_id: clinicId,
-                visit_mode: args.visit_mode || 'sync_video',
-                session_id: callId,
-                metadata: { session_id: callId }
-            });
-
-            // If duplicate was detected, return the duplicate response
-            if (response.data.duplicate && response.data.requiresPhoneConfirmation) {
-                console.log(`🚨 Duplicate patient detected for "${args.patient_name}" - phone confirmation required`);
-                return {
-                    success: false,
-                    duplicate: true,
-                    requiresPhoneConfirmation: true,
-                    error: response.data.message || 'Duplicate patient found. Please confirm your phone number.',
-                    duplicates: response.data.duplicates || [],
-                    provided_name: response.data.provided_name,
-                    provided_phone: response.data.provided_phone,
-                    message: response.data.message || `I found a patient with a similar name in our system. To verify your identity, please confirm your phone number.`,
-                    voice_agent_instruction: response.data.voice_agent_instruction || 'Ask the caller to confirm their phone number. If it matches, proceed with scheduling. If not, ask them to verify their information.'
-                };
-            }
-
-            // Log successful appointment creation
-            if (response.data.success && response.data.appointment) {
-                console.log(`✅ Appointment successfully created: ${response.data.appointment.id} (Confirmation: ${response.data.appointment.confirmation_number})`);
-                if (connection && !connection._onboardingStartAt) {
-                    connection._onboardingStartAt = Date.now();
-                }
-                if (this.db.setVoiceCallOutcome) {
-                    try {
-                        const oc = VoiceAgentRuntime.outcomeForScheduledAppointment(
-                            response.data.appointment
-                        );
-                        this.db.setVoiceCallOutcome(callId, oc);
-                    } catch (_) {}
-                }
-                // Surface voice bookings in the provider activity feed (feed-only notification).
-                try {
-                    const appt = response.data.appointment || {};
-                    const clinicId = this.getClinicId?.(callId) || connection?.clinic_id || null;
-                    const customerId = connection?.customer_id || null;
-                    const patientName =
-                        args.patient_name ||
-                        connection?.customerName ||
-                        connection?.initialName ||
-                        'Patient';
-                    this.db.insertKellyCallEvent?.({
-                        session_id: callId,
-                        call_id: callId,
-                        event_type: 'appointment_booked',
-                        clinic_id: clinicId,
-                        customer_id: customerId,
-                        payload_json: {
-                            tool_name: 'schedule_appointment',
-                            appointment_id: appt.id || null,
-                            appointment_type:
-                                args.appointment_type || appt.appointment_type || appt.specialty || null,
-                            patient_name: patientName,
-                            patient_id: appt.patient_id || connection?.patientId || null,
-                            confirmation_number: appt.confirmation_number || null,
-                            when: appt.start_time || appt.datetime || args.datetime || null,
-                            clinic_id: clinicId,
-                            customer_id: customerId
-                        }
-                    });
-                } catch (e) {
-                    console.warn('[voice] appointment_booked event emit failed:', e?.message);
-                }
-            } else if (!response.data.success) {
-                console.warn(`⚠️  Appointment scheduling failed: ${response.data.error || 'Unknown error'}`);
-            }
-
-            return response.data;
-        } catch (error) {
-            // Handle axios errors
-            if (error.response && error.response.data) {
-                // If backend returned duplicate error, return it
-                if (error.response.data.duplicate && error.response.data.requiresPhoneConfirmation) {
-                    return error.response.data;
-                }
-                const st = error.response.status;
-                const d = error.response.data;
-                if (st === 403 && d && (d.error_code || d.error)) {
-                    return {
-                        success: false,
-                        error: d.error || d.message,
-                        error_code: d.error_code || d.error,
-                        message: d.message || d.error
-                    };
-                }
-                return {
-                    success: false,
-                    error: d.error || d.message || error.message
-                };
-            }
-
-            return {
-                success: false,
-                error: error.message
-            };
+        const connection = this.activeConnections.get(callId);
+        if (!connection) {
+            return { success: false, error: 'Connection not found' };
         }
+        const clinicId = this.getClinicId(callId);
+        const KellyToolExecutor = require('../services/kelly-tool-executor');
+        return KellyToolExecutor.execute('schedule_appointment', args, this._kellyExecutorContext(connection, callId, clinicId));
     }
 
     // Handle patient_intake function (DOB + country/city onboarding)
@@ -4399,48 +4391,19 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         try {
             const connection = this.activeConnections.get(callId);
             const leadId = connection?.callMetadata?.lead_id || args.lead_id;
-
+            const { scheduleDemo } = require('../services/sales-crm-tools');
             console.log(`📅 Scheduling demo for ${args.clinic_name} (${args.contact_email}) on ${args.preferred_date} at ${args.preferred_time}`);
-
-            // Create demo record in database (you may want to create a demos table)
-            // For now, we'll update the lead with demo information
-            if (leadId) {
-                try {
-                    const currentLead = this.db.db.prepare('SELECT notes FROM leads WHERE id = ?').get(leadId);
-                    const newNotes = (currentLead?.notes || '') + '\nDemo scheduled: ' + args.preferred_date + ' at ' + args.preferred_time + ' (' + args.contact_name + ')';
-
-                    this.db.db.prepare(`
-                        UPDATE leads 
-                        SET pipeline_stage = 'demo_scheduled',
-                            status = 'demo_scheduled',
-                            notes = ?,
-                            follow_up_date = ?,
-                            next_action = 'Demo scheduled',
-                            updated_at = datetime('now')
-                        WHERE id = ?
-                    `).run(
-                        newNotes,
-                        args.preferred_date,
-                        leadId
-                    );
-                    console.log(`✅ Updated lead ${leadId} with demo information`);
-                } catch (dbError) {
-                    console.warn('⚠️  Could not update lead:', dbError.message);
-                }
+            const result = scheduleDemo(this.db, { leadId, args });
+            if (!result.success) {
+                return { success: false, error: result.error, message: result.message };
             }
-
-            // In a real implementation, you might want to:
-            // 1. Send calendar invite via email
-            // 2. Create a calendar event
-            // 3. Send confirmation SMS
-
             return {
                 success: true,
-                message: `Demo scheduled successfully for ${args.preferred_date} at ${args.preferred_time}`,
-                demo_date: args.preferred_date,
-                demo_time: args.preferred_time,
+                message: result.message,
+                demo_date: result.demo_date,
+                demo_time: result.demo_time,
                 contact_email: args.contact_email,
-                confirmation: `Great! I've scheduled your demo for ${args.preferred_date} at ${args.preferred_time}. You'll receive a confirmation email at ${args.contact_email} shortly. Looking forward to showing you how Somo can help ${args.clinic_name}!`
+                confirmation: `Great! I've scheduled your demo for ${result.demo_date} at ${result.demo_time}. You'll receive a confirmation email at ${args.contact_email || 'your email'} shortly. Looking forward to showing you how Somo can help ${args.clinic_name}!`
             };
         } catch (error) {
             console.error('❌ Error scheduling demo:', error);
@@ -4456,43 +4419,15 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         try {
             const connection = this.activeConnections.get(callId);
             const leadId = connection?.callMetadata?.lead_id || args.lead_id;
-
+            const { collectContactInfo } = require('../services/sales-crm-tools');
             console.log(`📝 Collecting contact info for ${args.clinic_name}: ${args.contact_name} (${args.contact_email})`);
-
-            // Update lead with contact information
-            if (leadId) {
-                try {
-                    const updates = {};
-                    if (args.contact_email) {
-                        updates.clinic_email = args.contact_email;
-                    }
-                    if (args.contact_phone) {
-                        updates.clinic_phone = args.contact_phone;
-                    }
-                    if (args.interest_level) {
-                        updates.lead_score = args.interest_level === 'high' ? 90 :
-                            args.interest_level === 'medium' ? 60 :
-                                args.interest_level === 'low' ? 30 : 10;
-                        updates.priority = args.interest_level === 'high' ? 1 :
-                            args.interest_level === 'medium' ? 5 : 10;
-                    }
-                    if (Object.keys(updates).length > 0) {
-                        // Get current notes first if we need to append
-                        if (args.notes) {
-                            const currentLead = this.db.db.prepare('SELECT notes FROM leads WHERE id = ?').get(leadId);
-                            updates.notes = (currentLead?.notes || '') + '\n' + args.notes;
-                        }
-                        this.db.updateLead(leadId, updates);
-                        console.log(`✅ Updated lead ${leadId} with contact information`);
-                    }
-                } catch (dbError) {
-                    console.warn('⚠️  Could not update lead:', dbError.message);
-                }
+            const result = collectContactInfo(this.db, { leadId, args });
+            if (!result.success) {
+                return { success: false, error: result.error, message: result.message };
             }
-
             return {
                 success: true,
-                message: 'Contact information collected successfully',
+                message: result.message,
                 contact_name: args.contact_name,
                 contact_email: args.contact_email,
                 contact_phone: args.contact_phone,
@@ -4669,6 +4604,22 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
         const name = String(functionName || '').trim();
         const args = functionArgs && typeof functionArgs === 'object' ? functionArgs : {};
 
+        try {
+            const { isToolAllowedForMode, logModeViolation } = require('../services/conversation-mode/mode-tool-firewall');
+            const modeCtx = this._buildRetellModeCtx(connection, callId);
+            if (connection.conversation_mode && !isToolAllowedForMode(name, modeCtx)) {
+                logModeViolation(this.db, { ...modeCtx, toolName: name });
+                return {
+                    success: false,
+                    error: 'MODE_FIREWALL_BLOCKED',
+                    error_code: 'MODE_FIREWALL_BLOCKED',
+                    message: `Tool ${name} not allowed in current conversation mode`
+                };
+            }
+        } catch (fwErr) {
+            return { success: false, error: fwErr.message || 'Tool execution blocked' };
+        }
+
         switch (name) {
             case 'search_products':
                 return this.handleSearchProducts(callId, args);
@@ -4694,16 +4645,22 @@ const { emitLanguageMismatch } = require('../services/kelly-language-telemetry')
             case 'create_appointment_checkout':
             case 'get_product_quote':
             case 'prepare_commerce_checkout':
-            case 'transfer_call': {
+            case 'transfer_call':
+            case 'run_triage_rag':
+            case 'store_triage_opqrst':
+            case 'store_triage_rich_intake':
+            case 'compute_visit_quote':
+            case 'request_patient_payment':
+            case 'query_patient_records':
+            case 'get_triage_session':
+            case 'check_plan_benefits': {
                 const KellyToolExecutor = require('../services/kelly-tool-executor');
                 const clinicId = this.resolveClinicId(connection, args, {});
-                return KellyToolExecutor.execute(name, args, {
-                    sessionId: callId,
-                    clinicId,
-                    patientId: connection.patientId || null,
-                    callerPhone: connection.customerPhone || null,
-                    channel: connection.replayChannel || 'voice'
-                });
+                return KellyToolExecutor.execute(
+                    name,
+                    args,
+                    this._kellyExecutorContext(connection, callId, clinicId)
+                );
             }
             default:
                 return { success: false, error: `Unknown replay function: ${name}` };

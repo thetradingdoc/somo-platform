@@ -150,6 +150,15 @@ cd "$ROOT"
 node scripts/build-staging-hosting.cjs
 node scripts/verify-staging-hosting.cjs
 
+step "Tenant front-desk audit (structural)"
+cd "$MP"
+if [[ -f middleware-audit.db ]]; then
+  DB_PATH=./middleware-audit.db ALLOW_DEMO_SEED=1 node scripts/seed-demo-accounts.js >/dev/null 2>&1 || true
+  TENANT_AUDIT_FORCE_RESTART=1 TENANT_AUDIT_STRICT=1 PW_API_BASE_URL=http://127.0.0.1:4001 npm run test:e2e:tenant-audit:strict
+else
+  echo "ℹ️  Skipping tenant audit — middleware-audit.db missing (run npm run dev:audit once)"
+fi
+
 if [[ "$TIER" == "full" ]]; then
   step "Reasoning regression"
   cd "$ROOT"

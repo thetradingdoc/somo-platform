@@ -30,6 +30,8 @@ const {
 
   buildDefaultOutboundOpener,
 
+  buildPlatformSalesInboundGreeting,
+
   isLegacyGenericGreeting,
 
   isManagedDefaultGreeting,
@@ -82,7 +84,7 @@ function main() {
 
 
 
-  const inboundDefault = buildDefaultInboundGreeting(practiceName, 'warm');
+  const inboundDefault = buildPlatformSalesInboundGreeting();
 
   const outboundDefault = buildDefaultOutboundOpener(practiceName, 'warm');
 

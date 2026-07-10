@@ -35,7 +35,7 @@ function subrailPromptBlock(state = {}) {
 }
 
 function localePromptBlock(locale, state = {}) {
-  const sticky = state.flags?.preferred_language || state.preferred_language;
+  const sticky = state.flags?.locale || state.locale;
   const loc = String(sticky || locale || 'en').slice(0, 2);
   if (loc === 'en') return '';
   const names = { es: 'Spanish', zh: 'Chinese', pt: 'Portuguese', fr: 'French' };

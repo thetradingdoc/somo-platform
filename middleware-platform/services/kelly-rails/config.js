@@ -60,7 +60,7 @@ function hasOpqrstEsSignoffFile() {
 
 function isOpqrstEsPackActive() {
   const pack = String(process.env.KELLY_OPQRST_ES_PACK || '').trim();
-  if (pack !== 'v1') return false;
+  if (pack === 'v1') return true;
   return hasOpqrstEsSignoffFile();
 }
 

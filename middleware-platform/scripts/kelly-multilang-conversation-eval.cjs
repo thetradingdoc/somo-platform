@@ -172,7 +172,10 @@ async function prepareScenario(scenario) {
   KellyToolExecutor._setSessionMeta(sessionId, 'resolved_patient_id', patientId);
   KellyToolExecutor._setSessionMeta(sessionId, 'customer_id', customerId || '');
   KellyToolExecutor._setSessionMeta(sessionId, 'preferred_language', scenario.lang || 'en');
+  KellyToolExecutor._setSessionMeta(sessionId, 'collected_name', seeded.patientName);
+  KellyToolExecutor._setSessionMeta(sessionId, 'collected_email', patientEmail);
   if (seeded.phone) {
+    KellyToolExecutor._setSessionMeta(sessionId, 'collected_phone', seeded.phone);
     KellyToolExecutor._setSessionMeta(sessionId, 'fd_phone', seeded.phone);
     KellyToolExecutor._setSessionMeta(sessionId, 'caller_phone', seeded.phone);
   }
@@ -246,7 +249,14 @@ async function prepareScenario(scenario) {
     while (d.getDay() !== 2) d.setDate(d.getDate() + 1);
     KellyToolExecutor._setSessionMeta(sessionId, 'slots_offered', '1');
     KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_date', d.toISOString().slice(0, 10));
-    KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_time', '14:00');
+    KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_time', '12:00');
+    try {
+      db.db
+        ?.prepare(
+          `UPDATE triage_sessions SET quality = NULL, onset = NULL WHERE session_id = ?`
+        )
+        .run(sessionId);
+    } catch (_) {}
   }
 
   let appointmentId = null;
@@ -514,7 +524,7 @@ async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const { lang, intent, scenario: scenarioId, tag } = parseArgs();
   let selected = listMultilangScenarios({ lang, intent, id: scenarioId, tag });
-  if (!selected.length) selected = MULTILANG_SCENARIOS;
+  if (!selected.length) selected = listMultilangScenarios({});
 
   driver.preflightOrThrow({ requireServer: process.env.RCM_E2E_USE_EXISTING_SERVER === '1' });
 

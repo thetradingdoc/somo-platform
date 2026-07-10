@@ -14,22 +14,6 @@ function mountHealthSpine(app) {
   app.use('/api/video-consult', videoConsultRoutes);
 }
 
-function mountCommerceLegacy(app, { publicCommerceLimiter, isCommerceLegacyEnabled }) {
-  if (!isCommerceLegacyEnabled()) return;
-
-  const publicCommerceQuoteRoutes = require('./public-commerce-quote');
-  const publicCommerceCartRoutes = require('./public-commerce-cart');
-  app.use('/api/public/commerce', publicCommerceLimiter);
-  app.use('/api/public/commerce', publicCommerceQuoteRoutes);
-  app.use('/api/public/commerce', publicCommerceCartRoutes);
-  app.use('/public/commerce', publicCommerceLimiter);
-  app.use('/public/commerce', publicCommerceQuoteRoutes);
-  app.use('/public/commerce', publicCommerceCartRoutes);
-
-  const publicCheckoutChatRoutes = require('./public-checkout-chat');
-  app.use('/api/public/checkout-chat', publicCheckoutChatRoutes);
-}
-
 function mountVoiceRoutes(app) {
   const voiceRoutes = require('./voice');
   app.use('/voice', voiceRoutes);
@@ -50,15 +34,13 @@ function mountAdminRoutes(app) {
  * Central route registry — extend incrementally; server.js calls mountHealthSpine today.
  * Additional domains mount here as they migrate off server.js.
  */
-function mountAllRoutes(app, deps = {}) {
+function mountAllRoutes(app) {
   mountHealthSpine(app);
-  mountCommerceLegacy(app, deps);
   // Voice/RCM/admin mounts remain in server.js until Phase 3 extraction completes.
 }
 
 module.exports = {
   mountHealthSpine,
-  mountCommerceLegacy,
   mountVoiceRoutes,
   mountRcmRoutes,
   mountAdminRoutes,

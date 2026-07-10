@@ -1,5 +1,9 @@
 /**
  * Redirect legacy business/*.html routes to canonical Somo provider shell pages.
+ * Intentional stubs (Phase 5.18): billing, rcm, claims, medical-billing, invoices,
+ * records, orders, products, treatments, wallets, commerce-billing, patient-payments,
+ * merchant-orders, business-dashboard — each maps to today/revenue/patients/settings.
+ * pdf-coding.html uses an inline redirect to revenue claims create panel.
  */
 (function () {
   const file = (window.location.pathname.split('/').pop() || '').split('?')[0];

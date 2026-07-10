@@ -19,7 +19,7 @@ try {
   const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
   const isProductionEnv = nodeEnv === 'production' || nodeEnv === 'prod';
   if (!isProductionEnv && !String(process.env.LOCAL_DEV_ROOT || '').trim()) {
-    process.env.LOCAL_DEV_ROOT = 'health';
+    process.env.LOCAL_DEV_ROOT = 'signup';
   }
 }
 
@@ -85,8 +85,7 @@ const {
 } = require('./lib/static-hosting-paths');
 const { registerEarlySomoLandingStatic, serveMarketingLandingRoot } = require('./bootstrap/static-hosting');
 const { registerHealthUi } = require('./bootstrap/health-ui');
-const { mountHealthSpine, mountCommerceLegacy } = require('./routes/index');
-const { isCommerceLegacyEnabled } = require('./lib/commerce-legacy-flag');
+const { mountHealthSpine } = require('./routes/index');
 const { isLegacySurfacesEnabled } = require('./lib/legacy-surfaces-flag');
 // Node 18+ has global fetch; fallback to axios where needed
 // Initialize Stripe with proper configuration and validation
@@ -832,7 +831,7 @@ app.post('/api/customer/onboarding/step3', (req, res, next) => apiLimiter(req, r
         products_saved: skipStep3 ? 0 : seenDedup.size,
         custom_pending_enrichment: customPending
       },
-      next_route: '/patients/patient-dashboard.html'
+      next_route: '/signup'
     });
   } catch (e) {
     return res.status(400).json({ success: false, error_code: 'VALIDATION_ERROR', message: e.message });
@@ -1807,11 +1806,7 @@ function botGuard(req, res, next) {
 // Security middleware (must be first)
 app.use(securityHeaders);
 
-// Remove CSP for patient video page (Safari iOS blocks HTTP requests with strict CSP)
-app.use('/patients/video-call.html', (req, res, next) => {
-  res.removeHeader('Content-Security-Policy');
-  next();
-});
+// Legacy patient video-call CSP bypass removed — /patients/* redirects to provider signup (G4).
 
 // Remove CSP for calendar (FullCalendar CDN + data: fonts need style-src/font-src)
 app.use(['/business/calendar.html', '/unified-dashboard/business/calendar.html'], (req, res, next) => {
@@ -2284,14 +2279,13 @@ for (const legacyPath of LEGACY_LANDING_PATHS) {
   app.get(legacyPath, (req, res) => redirectLegacyLandingPath(req, res));
 }
 
-// Funnel signup / join CTAs → patient web login (email + 6-digit code), not the legacy Expo bridge.
-function redirectToPatientAuth(req, res, defaultIntent = 'signup') {
+// Legacy consumer funnel → provider signup (G4: patient portal retired).
+function redirectToProviderSignup(req, res) {
   const params = new URLSearchParams(req.query);
-  if (!params.get('intent')) params.set('intent', defaultIntent);
   const qs = params.toString();
-  return res.redirect(302, `/patients/patient-login.html${qs ? `?${qs}` : ''}`);
+  return res.redirect(302, qs ? `/signup?${qs}` : '/signup');
 }
-app.get(['/app', '/join'], (req, res) => redirectToPatientAuth(req, res, 'signup'));
+app.get(['/app', '/join'], (req, res) => redirectToProviderSignup(req, res));
 
 const { registerStaticHosting } = require('./bootstrap/static-hosting');
 registerStaticHosting(app, {
@@ -2316,7 +2310,7 @@ app.get('/waitlist', (req, res) => {
   }
   // Local dev bridge: landing "Get The App" should continue into patient auth.
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return res.redirect(302, '/patients/patient-login.html');
+    return res.redirect(302, '/signup');
   }
   return res.sendFile(getUnifiedDashboardPath('waitlist.html'));
 });
@@ -2439,6 +2433,14 @@ app.get('/signup-complete', (req, res) => {
     return res.status(404).json({ error: 'Not found on API subdomain' });
   }
   res.sendFile(getUnifiedDashboardPath('signup-complete.html'));
+});
+
+app.get('/portal', (req, res) => {
+  const hostname = getHostname(req);
+  if (isProductionApiHostname(hostname)) {
+    return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  res.sendFile(getUnifiedDashboardPath('portal.html'));
 });
 
 /** Canonical SaaS portal entry after signup (not business-dashboard stub). */
@@ -2568,10 +2570,13 @@ businessPages.forEach(page => {
   });
 });
 
-app.use('/patients', express.static(getUnifiedDashboardPath('patients'), {
-  index: false,
-  extensions: ['html']
-}));
+app.use('/patients', (req, res) => {
+  const hostname = getHostname(req);
+  if (isProductionApiHostname(hostname)) {
+    return res.status(404).json({ error: 'Patient portal retired', redirect: 'https://callsomo.com/signup' });
+  }
+  return res.redirect(301, '/signup');
+});
 
 app.use('/insurer', express.static(getUnifiedDashboardPath('insurer'), {
   index: false,
@@ -2743,7 +2748,7 @@ if (isLegacySurfacesEnabled()) {
 app.get(/^\/consumer(\/.*)?$/, (req, res) => {
   const sub = String(req.path || '').replace(/^\/consumer\/?/, '');
   if (sub.includes('get-app') || sub.includes('join')) {
-    return res.redirect(302, '/patients/patient-login.html?intent=signup');
+    return res.redirect(302, '/signup');
   }
   if (process.env.LOCAL_DEV_ROOT === 'health') {
     return redirectHealthVideoEntry(res);
@@ -2772,7 +2777,6 @@ const { registerPatientBillingPortalRoutes } = require('./routes/patient-billing
 const { registerPatientBookingRoutes } = require('./routes/patient-booking');
 const { registerPublicLandingAssistantRoutes } = require('./routes/public-landing-assistant');
 const { registerPublicProductScanRoutes } = require('./routes/public-product-scan');
-const { registerPatientCheckoutChatRoutes } = require('./routes/patient-checkout-chat');
 const { registerPatientProfileRoutes } = require('./routes/patient-profile');
 const { registerPatientAuthRoutes } = require('./routes/patient-auth');
 const { registerPatientDocumentsRoutes } = require('./routes/patient-documents');
@@ -2828,18 +2832,6 @@ const patientRouteDeps = {
   parseProductRef,
 };
 registerPublicProductScanRoutes(app, { apiLimiter });
-if (isCommerceLegacyEnabled()) {
-  registerPatientCheckoutChatRoutes(app, {
-    apiLimiter,
-    express,
-    requirePatientSession,
-    requireCsrfForCookieAuth,
-    validatePatientCheckoutChatBody,
-    rotatePatientSessionIfNeeded,
-    blockChatWhenDisabled,
-    db,
-  });
-}
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
 app.use('/api/retell', retellFunctionsRoutes);
@@ -2892,8 +2884,6 @@ app.use('/api/public/providers', publicCatalogReadLimiter, publicProviderSearchR
 // Public checkout (unauthenticated ensure customer)
 const publicCheckoutRoutes = require('./routes/public-checkout');
 app.use('/api/public/checkout', publicCheckoutRoutes);
-
-mountCommerceLegacy(app, { publicCommerceLimiter, isCommerceLegacyEnabled });
 
 // ============================================
 // Customer Agent Routes (Prompt Management)
@@ -9349,11 +9339,6 @@ function onServerListening() {
   }
   console.log('✅ Ready to accept requests (background startup tasks may still be running)\n');
   console.log(
-    isCommerceLegacyEnabled()
-      ? '🛒 COMMERCE_LEGACY_ENABLED=true — public commerce + checkout-chat routes mounted'
-      : '🏥 COMMERCE_LEGACY_ENABLED=false — health session is default; commerce routes not mounted'
-  );
-  console.log(
     isLegacySurfacesEnabled()
       ? '🧴 LEGACY_SURFACES_ENABLED=true — derm/funnel/shelf legacy routes mounted'
       : '🏢 LEGACY_SURFACES_ENABLED=false — front-desk default; derm legacy routes not mounted'
@@ -9366,21 +9351,6 @@ function onServerListening() {
 
   // Defer heavy sync work so HTTP handlers are not blocked during long listen-callback work.
   setImmediate(() => {
-  if (isCommerceLegacyEnabled()) {
-    try {
-      const checkoutSvc = require('./services/patient-checkout-chat-service');
-      if (typeof checkoutSvc._runCheckoutPreparedBackfillOnce === 'function') {
-        checkoutSvc._runCheckoutPreparedBackfillOnce().catch(() => {});
-      }
-      if (typeof checkoutSvc._runCheckoutContextBackfillOnce === 'function') {
-        checkoutSvc._runCheckoutContextBackfillOnce().catch(() => {});
-      }
-      if (typeof checkoutSvc._runCheckoutStaleInFlightRecoveryOnce === 'function') {
-        checkoutSvc._runCheckoutStaleInFlightRecoveryOnce();
-        setInterval(() => checkoutSvc._runCheckoutStaleInFlightRecoveryOnce(), 60 * 1000);
-      }
-    } catch (_) {}
-  }
   try {
     const cacheService = require('./services/cache-service');
     if (typeof cacheService.warm === 'function') cacheService.warm();
@@ -9629,26 +9599,6 @@ function onServerListening() {
     console.warn('⚠️  Fraud review SLA monitor disabled:', e.message);
   }
 
-  // Expired commerce quote sessions (checkout_sessions) — legacy commerce only
-  if (isCommerceLegacyEnabled()) {
-    try {
-      if (db.purgeExpiredCheckoutSessions) {
-        const purged = db.purgeExpiredCheckoutSessions();
-        if (purged > 0) console.log(`🧹 checkout_sessions purge: removed ${purged} expired row(s)`);
-        setInterval(() => {
-          const n = db.purgeExpiredCheckoutSessions();
-          if (n > 0) console.log(`🧹 checkout_sessions purge: removed ${n} expired row(s)`);
-        }, 6 * 60 * 60 * 1000);
-      }
-      if (db.purgeOrphanedCommerceFlowSessions) {
-        const orphaned = db.purgeOrphanedCommerceFlowSessions(30);
-        if (orphaned > 0) console.log(`🧹 commerce_flow purge: removed ${orphaned} stale row(s)`);
-      }
-    } catch (e) {
-      console.warn('⚠️  checkout_sessions purge disabled:', e.message);
-    }
-  }
-
   // Phase 1: Auto-cancel unpaid appointment checkouts (webhook-safe)
   try {
     const BookingService = require('./services/booking-service');
@@ -9890,6 +9840,11 @@ function onServerListening() {
 const server = app.listen(PORT, HOST, () => {
   console.log(`\n📍 HTTP listening on http://localhost:${PORT}`);
   setImmediate(onServerListening);
+  try {
+    require('./services/scrape-cron').startScrapeCron();
+  } catch (cronErr) {
+    console.warn('⚠️  scrape cron skipped:', cronErr.message);
+  }
 });
 
 // Handle WebSocket upgrades for Retell LLM

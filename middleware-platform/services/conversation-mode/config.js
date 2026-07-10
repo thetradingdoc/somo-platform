@@ -5,6 +5,7 @@ const STAGED_ENFORCE_MODE_DEFAULTS = Object.freeze({
   operator_outbound: true,
   outbound_sales: true,
   demo_qual: false,
+  platform_support: true,
   navigation_member: false,
   tenant_inbound_admin: false,
   tenant_inbound_clinical: false,

@@ -1,14 +1,16 @@
 # Phase 1 DID inventory
 
+**SSOT:** [VOICE_ROUTING_SSOT.md](../voice/VOICE_ROUTING_SSOT.md)
+
 **Generated for revision:** `somo-middleware-00114-f69` · image `gcr.io/somo-callsomo/somo-middleware:6cdfda9`  
 **Refresh:** `npm run phase1:inventory --prefix middleware-platform` after `npm run phase1:pull-db`
 
 | Role | Number | Source |
 |------|--------|--------|
-| Platform demo (PD-4 demo) | `+13639990205` | `CALLSOMO_OPERATOR_TWILIO_NUMBER` / Cloud Run |
-| Tenant DID (booking / PD-4 tenant) | `+18623622415` | Twilio voice URL → `api.callsomo.com` (`cust_96848972-…`) |
-| Operator customer | `drlittlekids@gmail.com` | `CALLSOMO_OPERATOR_CUSTOMER_ID` (no `twilio_phone_number` on row in GCS snapshot) |
-| Transfer target (T-001) | **`+18622307479`** | `clinics.transfer_number` + `CALLSOMO_OPERATOR_FALLBACK_PSTN` (rev 00123) |
+| **Platform support** (operator / admin) | `+13639990205` | Operator `customers.twilio_phone_number` + Twilio voice URL |
+| Tenant DID (when real practice exists) | `+18623622415` | Tenant customer row — archived Doclittle until replaced |
+| Operator customer | `richard@callsomo.com` | `CALLSOMO_OPERATOR_CUSTOMER_ID` |
+| Transfer target (T-001) | **Your mobile** | `CALLSOMO_OPERATOR_FALLBACK_PSTN` |
 | Twilio probe FROM (automated PD-4) | `+12028131474` | Set `PD4_PROBE_FROM_NUMBER` — must differ from platform DID |
 
 ## Prod DB snapshot notes

@@ -192,7 +192,7 @@
       } catch (e) { showToast(e.message, 'error'); }
     };
     window.revokePending = async (id) => {
-      if (!confirmAction('Revoke this invite?')) return;
+      if (!(await confirmAction('Revoke this invite?', { title: 'Revoke invite', destructive: true }))) return;
       try {
         await AdminOnboarding.revokeInvite(id);
         showToast('Invite revoked', 'success');
@@ -531,7 +531,10 @@
       const impact = isHard
         ? 'This permanently removes the clinic record, phone mappings, and agent config. Call history and billing logs are retained in audit tables only.'
         : 'This archives the tenant: agent config is deactivated, the clinic is hidden from lists, and credit balance is frozen. Call history is retained.';
-      if (!confirmAction(`${isHard ? 'Permanently delete' : 'Archive'} "${name}"?\n\n${impact}`)) return;
+      if (!(await confirmAction(
+        `${isHard ? 'Permanently delete' : 'Archive'} "${name}"?\n\n${impact}`,
+        { title: isHard ? 'Delete tenant' : 'Archive tenant', confirmLabel: isHard ? 'Delete' : 'Archive', destructive: true }
+      ))) return;
       const typed = prompt(`Type the tenant slug to confirm: ${slug}`);
       if (typed !== slug) {
         showToast('Slug did not match — delete cancelled', 'warning');
@@ -557,7 +560,10 @@
     window.deleteTenant = deleteTenant;
 
     async function resetTenantOnboarding(customerId, clinicId) {
-      if (!confirmAction('Reset onboarding to voice setup step 1?')) return;
+      if (!(await confirmAction(
+        'Reset onboarding to voice setup step 1?',
+        { title: 'Reset onboarding', confirmLabel: 'Reset', destructive: true }
+      ))) return;
       try {
         await AdminOnboarding.resetOnboarding(customerId);
         showToast('Onboarding reset', 'success');

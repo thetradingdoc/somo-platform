@@ -62,29 +62,63 @@ function recordResult(report, entry) {
 }
 
 async function ensureStandardProviderSession(page, request, context, existingCustomer = null) {
-  let customer = existingCustomer;
-  if (!customer) {
+  const { email, password } = ownerCredentials();
+  const loginRes = await request.post('/api/customers/login', {
+    data: { email, password, remember_me: true }
+  });
+  if (!loginRes.ok()) {
+    throw new Error(
+      'Provider login failed — set PW_PROVIDER_EMAIL / PW_PROVIDER_PASS (default provider@callsomo.com / demo123)'
+    );
+  }
+  const loginBody = await loginRes.json();
+  let customer = loginBody.customer || existingCustomer;
+  if (!customer?.id) {
     customer = await loginProviderViaApi(request);
     if (!customer) {
       throw new Error(
         'Provider login failed — set PW_PROVIDER_EMAIL / PW_PROVIDER_PASS (default provider@callsomo.com / demo123)'
       );
     }
-    const { cookies } = await request.storageState();
-    if (context && cookies.length) {
-      await context.addCookies(cookies);
-    }
   }
 
+  const { cookies } = await request.storageState();
+  if (context && cookies.length) {
+    await context.addCookies(cookies);
+  }
+
+  const clinicId = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'clinic-default';
+  const caps = ['voice.inbound', 'platform.leads', 'platform.tenants'];
   db.updateCustomer(customer.id, {
     voice_setup_completed_at: new Date().toISOString(),
     kelly_status: 'active',
-    trial_status: customer.trial_status || 'active'
+    trial_status: customer.trial_status || 'active',
+    capabilities: JSON.stringify(caps)
   });
+  try {
+    const sqlite = db.db;
+    if (sqlite) {
+      const link = sqlite
+        .prepare('SELECT 1 FROM customer_clinics WHERE customer_id = ? AND clinic_id = ?')
+        .get(customer.id, clinicId);
+      if (!link) {
+        sqlite
+          .prepare(
+            `INSERT INTO customer_clinics (customer_id, clinic_id, is_primary, created_at, updated_at)
+             VALUES (?, ?, 1, datetime('now'), datetime('now'))`
+          )
+          .run(customer.id, clinicId);
+      }
+    }
+  } catch (_) {
+    /* customer_clinics optional on older DBs */
+  }
+
   const fresh = db.getCustomer(customer.id) || customer;
   if (!fresh?.id) {
     throw new Error(`Provider customer not found in DB after login (id=${customer.id})`);
   }
+  customer = { ...fresh, clinic_id: clinicId };
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await page.evaluate((c) => {
@@ -95,12 +129,17 @@ async function ensureStandardProviderSession(page, request, context, existingCus
       JSON.stringify({
         name: c.name || c.company_name || 'Provider',
         role: c.role || 'Provider',
+        capabilities: c.capabilities
+          ? typeof c.capabilities === 'string'
+            ? JSON.parse(c.capabilities)
+            : c.capabilities
+          : ['voice.inbound', 'platform.leads', 'platform.tenants'],
         ...c
       })
     );
-  }, fresh);
+  }, customer);
 
-  return fresh;
+  return customer;
 }
 
 const AUDIT_INVITE_CODE = 'audit-invite-e2e';
@@ -123,6 +162,58 @@ function seedAuditInvite() {
   }
 }
 
+function seedAuditRevenueRow() {
+  try {
+    const provider = db.getCustomerByEmail('provider@callsomo.com');
+    const clinicId = process.env.DEFAULT_CLINIC_ID || 'clinic-default';
+    const patientRow = db.db.prepare(
+      'SELECT resource_id FROM fhir_patients WHERE is_deleted = 0 LIMIT 1'
+    ).get();
+    const patientId = patientRow?.resource_id
+      ? String(patientRow.resource_id).replace(/^Patient\//, '')
+      : 'audit-demo-001';
+    const existing = db.db.prepare(
+      "SELECT id FROM rcm_journeys WHERE id = 'audit-rev-journey-001'"
+    ).get();
+    if (!existing) {
+      db.db.prepare(
+        `INSERT INTO rcm_journeys (
+          id, clinic_id, patient_id, source, stage, intake_json, created_at, updated_at
+        ) VALUES (?, ?, ?, 'audit_seed', 'copay_collected', '{}', datetime('now'), datetime('now'))`
+      ).run('audit-rev-journey-001', clinicId, patientId);
+    }
+    return { ok: true, patientId, merchantId: provider?.merchant_id || null };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+async function assertCalendarViewTabs(page, report, record) {
+  const views = ['list', 'week', 'month'];
+  for (const view of views) {
+    await page.click(`button.pp-cal-view-tab[data-view="${view}"]`);
+    await page.waitForTimeout(500);
+    const state = await page.evaluate(() => {
+      const active = document.querySelector('.pp-cal-view-tab.active')?.getAttribute('data-view') || '';
+      const boardHidden = document.getElementById('scheduleBoard')?.hidden;
+      const wrapHidden = document.getElementById('calendarWrap')?.hidden;
+      return { active, boardHidden, wrapHidden };
+    });
+    const ok = state.active === view && state.boardHidden === true && state.wrapHidden === false;
+    record(report, {
+      page: 'calendar',
+      control: `view tab ${view}`,
+      kind: 'anchor',
+      status: ok ? 'pass' : 'fail',
+      detail: ok
+        ? `active=${state.active}, board hidden`
+        : `expected ${view}; active=${state.active}; boardHidden=${state.boardHidden}; wrapHidden=${state.wrapHidden}`
+    });
+  }
+  await page.click('button.pp-cal-view-tab[data-view="board"]');
+  await page.waitForTimeout(300);
+}
+
 function runPreflightSeed() {
   const script = path.join(__dirname, '..', '..', 'scripts', 'enable-demo-provider-availability.js');
   let availability = { ok: true };
@@ -138,9 +229,11 @@ function runPreflightSeed() {
 
   let fhirPatient = { ok: true };
   try {
+    const provider = db.getCustomerByEmail('provider@callsomo.com');
+    const merchantId = provider?.merchant_id || null;
     const row = db.db.prepare('SELECT resource_id FROM fhir_patients WHERE is_deleted = 0 LIMIT 1').get();
     if (!row?.resource_id && db.createFHIRPatient) {
-      const resourceId = 'Patient/audit-demo-001';
+      const resourceId = 'audit-demo-001';
       db.createFHIRPatient({
         resourceType: 'Patient',
         id: resourceId,
@@ -150,14 +243,28 @@ function runPreflightSeed() {
           { system: 'email', value: 'audit-demo@somo.test' }
         ]
       });
+      if (merchantId && db.db) {
+        db.db
+          .prepare('UPDATE fhir_patients SET merchant_id = ? WHERE resource_id = ?')
+          .run(merchantId, resourceId);
+      }
+    } else if (row?.resource_id && merchantId && db.db) {
+      const bareId = String(row.resource_id).replace(/^Patient\//, '');
+      if (bareId !== row.resource_id) {
+        db.db
+          .prepare('UPDATE fhir_patients SET resource_id = ? WHERE resource_id = ?')
+          .run(bareId, row.resource_id);
+      }
+      db.db.prepare('UPDATE fhir_patients SET merchant_id = ? WHERE resource_id = ?').run(merchantId, bareId);
     }
   } catch (e) {
     fhirPatient = { ok: false, error: e.message };
   }
 
   const invite = seedAuditInvite();
+  const revenue = seedAuditRevenueRow();
 
-  return { ok: availability.ok && fhirPatient.ok && invite.ok, availability, fhirPatient, invite };
+  return { ok: availability.ok && fhirPatient.ok && invite.ok, availability, fhirPatient, invite, revenue };
 }
 
 async function collectInteractives(page) {
@@ -171,6 +278,7 @@ async function collectInteractives(page) {
     const selectors = [
       '#ppSidebarNav a.pp-nav-item',
       '#ppSidebarNav a',
+      'a.portal-choice',
       '[role="tab"]',
       '.pp-ptab',
       '.pp-revenue-tab',
@@ -307,7 +415,13 @@ async function probeControl(page, pageId, control, opts = {}) {
         .filter((el) => !el.classList.contains('hidden'))
         .map((el) => (el.textContent || '').trim())
         .filter(Boolean);
-      const loadFail = /could not load|failed to load|error loading/i.test(document.body.innerText || '');
+      const loadFail = [...document.querySelectorAll('body *')].some((el) => {
+        const s = window.getComputedStyle(el);
+        if (s.display === 'none' || s.visibility === 'hidden' || el.offsetParent === null) return false;
+        const text = (el.innerText || '').trim();
+        if (!text || text.length > 500) return false;
+        return /could not load|failed to load|error loading/i.test(text);
+      });
       const tabSelected = document.querySelector('[role="tab"][aria-selected="true"]');
       return {
         modalVisible,
@@ -391,7 +505,7 @@ async function runChromeAssertions(page, pageDef, report) {
 
   if (pageDef.expectAuthShell) {
     const authVisible = await page
-      .locator('.login-shell, .sfd-device-card, .signup-wizard-body')
+      .locator('.login-shell, .signup-shell, .sfd-device-card, .signup-wizard-body')
       .first()
       .isVisible()
       .catch(() => false);
@@ -471,6 +585,16 @@ async function auditPage(page, report, pageDef, opts = {}) {
     const maxProbes = pageDef.maxProbes || 15;
     for (const control of filtered.slice(0, maxProbes)) {
       if (opts.skipProbeIds?.has(control.id)) continue;
+      if (pageDef.skipProbeLabels?.includes(control.label)) {
+        recordResult(report, {
+          page: pageDef.id,
+          control: control.label || control.id || 'control',
+          kind: control.kind,
+          status: 'skip',
+          detail: 'pre-verified via page anchor'
+        });
+        continue;
+      }
       const outcome = await probeControl(page, pageDef.id, control, { netWatcher });
       recordResult(report, {
         page: pageDef.id,
@@ -559,7 +683,13 @@ function writeAuditReport(report) {
 
 const TENANT_PAGES = [
   { id: 'today', path: '/business/today.html', stayOnPage: true, maxProbes: 12 },
-  { id: 'calendar', path: '/business/calendar.html', stayOnPage: true, maxProbes: 14 },
+  {
+    id: 'calendar',
+    path: '/business/calendar.html',
+    stayOnPage: true,
+    maxProbes: 14,
+    anchor: async (page, report, record) => assertCalendarViewTabs(page, report, record)
+  },
   { id: 'patients', path: '/business/patients.html', stayOnPage: true, maxProbes: 12 },
   {
     id: 'patient-case',
@@ -581,12 +711,45 @@ const TENANT_PAGES = [
         });
         return;
       }
+
+      const caseReportPromise = page
+        .waitForResponse((r) => r.url().includes('/case-report') && r.request().method() === 'GET', {
+          timeout: 15000
+        })
+        .catch(() => null);
+
       await page.fill('#patientIdInput', pid);
       await page.click('#loadCaseBtn');
-      await page.waitForTimeout(1500);
-      const failed = await page.evaluate(() =>
-        /could not load|not found/i.test(document.body.innerText || '')
-      );
+      const caseRes = await caseReportPromise;
+      if (caseRes && !caseRes.ok()) {
+        record(report, {
+          page: 'patient-case',
+          control: 'load case',
+          kind: 'anchor',
+          status: 'fail',
+          detail: `case-report HTTP ${caseRes.status()}`
+        });
+        return;
+      }
+
+      let failed = true;
+      try {
+        await page.waitForFunction(
+          () => {
+            const msg = document.getElementById('msg');
+            if (msg && msg.style.display !== 'none' && /unable|not found|error/i.test(msg.textContent || '')) {
+              return false;
+            }
+            const title = (document.getElementById('patientTitle')?.textContent || '').trim();
+            return title && title !== 'Patient Case';
+          },
+          { timeout: 12000 }
+        );
+        failed = false;
+      } catch (_) {
+        failed = true;
+      }
+
       record(report, {
         page: 'patient-case',
         control: 'load case',
@@ -603,8 +766,8 @@ const TENANT_PAGES = [
   { id: 'revenue-payments', path: '/business/revenue.html?tab=payments', stayOnPage: true, maxProbes: 15 },
   { id: 'revenue-work', path: '/business/revenue.html?tab=work', stayOnPage: true, maxProbes: 12 },
   { id: 'rcm-journey', path: '/business/rcm-journey.html', stayOnPage: true, maxProbes: 10 },
-  { id: 'payor-review', path: '/business/payor-review.html', stayOnPage: true, maxProbes: 10 },
-  { id: 'merge-review', path: '/business/merge-review.html', stayOnPage: true, maxProbes: 10, expectSfd: true },
+  { id: 'payor-review', path: '/business/payor-review.html', stayOnPage: true, maxProbes: 10, platformCaps: ['platform.leads'] },
+  { id: 'merge-review', path: '/business/merge-review.html', stayOnPage: true, maxProbes: 10, expectSfd: true, platformCaps: ['platform.leads'] },
   {
     id: 'tenants',
     path: '/business/tenants.html',
@@ -616,13 +779,26 @@ const TENANT_PAGES = [
   {
     id: 'leads',
     path: '/business/leads.html',
-    stayOnPage: true,
-    maxProbes: 6,
-    expectSfd: true,
-    platformCaps: ['platform.leads']
+    expectRedirect: /\/admin\/pipeline\.html/,
+    maxProbes: 2
   },
   { id: 'agent', path: '/business/agent.html', stayOnPage: true, maxProbes: 14 },
-  { id: 'settings', path: '/business/settings.html', stayOnPage: true, maxProbes: 12 },
+  { id: 'settings', path: '/business/settings.html#connected', stayOnPage: true, maxProbes: 12,
+    skipProbeLabels: ['Connected Accounts'],
+    anchor: async (page, report, record) => {
+      const ok = await page
+        .waitForSelector('#connectedAccountsMount .sfd-card', { timeout: 8000 })
+        .then(() => true)
+        .catch(() => false);
+      record(report, {
+        page: 'settings',
+        control: 'Connected Accounts',
+        kind: 'anchor',
+        status: ok ? 'pass' : 'fail',
+        detail: ok ? 'integrations panel loaded' : 'integrations panel failed to load'
+      });
+    }
+  },
   { id: 'video-call', path: '/business/video-call.html', stayOnPage: true, maxProbes: 8 },
   { id: 'trial-activation', path: '/business/trial-activation.html', expectShell: false, maxProbes: 8 },
   {
@@ -677,23 +853,23 @@ const TENANT_PAGES = [
 
 const AUTH_PAGES = [
   { id: 'login', path: '/login.html', expectShell: false, expectAuthShell: true, maxProbes: 4 },
-  { id: 'signup', path: '/signup.html', expectShell: false, expectAuthShell: true, expectSfd: true, maxProbes: 4 },
+  { id: 'signup', path: '/signup', expectShell: false, expectAuthShell: true, expectSfd: true, maxProbes: 4 },
   {
     id: 'signup-complete',
-    path: '/signup-complete.html',
+    path: '/signup-complete',
     expectShell: false,
     expectAuthShell: true,
     maxProbes: 3
   },
   {
     id: 'reset-password',
-    path: '/reset-password.html?token=audit-token',
+    path: '/reset-password?token=audit-token&email=provider%40callsomo.com',
     expectShell: false,
     expectAuthShell: true,
     expectSfd: true,
     maxProbes: 3
   },
-  { id: 'portal', path: '/portal.html', expectShell: false, expectAuthShell: true, maxProbes: 4 }
+  { id: 'portal', path: '/portal', expectShell: false, expectAuthShell: true, expectSfd: true, maxProbes: 4 }
 ];
 
 module.exports = {

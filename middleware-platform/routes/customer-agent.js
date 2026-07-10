@@ -13,6 +13,12 @@ const constants = require('../utils/constants');
 const router = express.Router();
 const retellService = new RetellService();
 const { ensureCustomerRetellAgent } = require('../services/ensure-retell-agent');
+const {
+  savePromptProfileAndSyncRetell,
+  getTenantSystemPrompt,
+  resolvePromptProfileScope
+} = require('../services/prompt-profile-service');
+const { getDefaultCustomPrompt } = require('../services/voice-prompt-templates');
 
 /**
  * Helper to determine tenant type (shop vs clinic)
@@ -71,11 +77,11 @@ router.get('/prompt', authLimiter, async (req, res) => {
             });
         }
 
-        // Get current prompt from Retell agent if exists
-        let currentPrompt = null;
+        // SSOT: prompt_profiles.system_prompt
+        let currentPrompt = getTenantSystemPrompt(db, { customerId: customer.id });
         let agentData = null;
 
-        if (customer.retell_agent_id) {
+        if (!currentPrompt && customer.retell_agent_id) {
             try {
                 const agentResult = await retellService.getAgent(customer.retell_agent_id);
                 if (agentResult.success && agentResult.agent_data) {
@@ -87,23 +93,8 @@ router.get('/prompt', authLimiter, async (req, res) => {
             }
         }
 
-        // If no custom prompt, generate default based on tenant type
         if (!currentPrompt) {
-            const tenantType = getTenantType(customer);
-            
-            if (tenantType === 'shop') {
-                // Load shop prompt
-                currentPrompt = retellService.loadShopPrompt();
-            } else {
-                // Load clinic prompt
-            currentPrompt = retellService.generateClinicPrompt({
-                name: customer.company_name || customer.name || 'Your Clinic',
-                description: 'a healthcare practice',
-                business_hours: 'Monday-Friday, 9 AM - 5 PM',
-                phone_number: customer.twilio_phone_number || '',
-                address: ''
-            });
-        }
+            currentPrompt = getDefaultCustomPrompt(customer);
         }
 
         const tenantType = getTenantType(customer);
@@ -113,7 +104,7 @@ router.get('/prompt', authLimiter, async (req, res) => {
             prompt: currentPrompt,
             agent_id: customer.retell_agent_id,
             agent_name: agentData?.agent_name || null,
-            has_custom_prompt: !!customer.custom_prompt,
+            has_custom_prompt: !!getTenantSystemPrompt(db, { customerId: customer.id }),
             prompt_synced_at: customer.prompt_synced_at || customer.prompt_updated_at || null,
             tenant_type: tenantType, // 'shop' or 'clinic'
             can_edit: true // All customers can edit for now
@@ -199,28 +190,29 @@ router.put('/prompt', authLimiter, async (req, res) => {
             retellEnsure = await ensureCustomerRetellAgent(db, workingCustomer.id, { retellService });
             if (retellEnsure.agentId) {
                 workingCustomer = db.getCustomer(workingCustomer.id);
+            } else if (retellEnsure.error) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'retell_agent_required',
+                    message: retellEnsure.error
+                });
             }
         }
 
-        // Retell first (runtime SSOT), then DB cache
-        if (workingCustomer.retell_agent_id) {
-            try {
-                const updateResult = await retellService.updateAgent(workingCustomer.retell_agent_id, {
-                    general_prompt: trimmed,
-                    agent_name: agentName
-                });
-
-                if (!updateResult.success) {
-                    console.error('⚠️  Failed to update Retell agent:', updateResult.error);
-                    return res.status(502).json({
-                        success: false,
-                        error: 'retell_sync_failed',
-                        message: 'Could not update voice provider. Prompt was not saved.',
-                        details: updateResult.error
-                    });
-                }
-            } catch (error) {
-                console.error('⚠️  Error updating Retell agent:', error.message);
+        const scope = resolvePromptProfileScope(db, { customerId: workingCustomer.id });
+        let syncResult;
+        try {
+            syncResult = await savePromptProfileAndSyncRetell(db, {
+                customerId: workingCustomer.id,
+                clinicId: scope.clinicId,
+                merchantId: workingCustomer.merchant_id,
+                systemPrompt: trimmed,
+                userId: workingCustomer.id,
+                retellService,
+                syncRetell: !!workingCustomer.retell_agent_id
+            });
+        } catch (error) {
+            if (error.code === 'retell_sync_failed') {
                 return res.status(502).json({
                     success: false,
                     error: 'retell_sync_failed',
@@ -228,19 +220,20 @@ router.put('/prompt', authLimiter, async (req, res) => {
                     details: error.message
                 });
             }
+            throw error;
         }
 
-        const syncedAt = new Date().toISOString();
-        db.updateCustomer(customer.id, {
-            custom_prompt: trimmed,
-            prompt_updated_at: syncedAt,
-            prompt_synced_at: syncedAt
-        });
+        if (workingCustomer.retell_agent_id) {
+            try {
+                await retellService.updateAgent(workingCustomer.retell_agent_id, { agent_name: agentName });
+            } catch (_) {}
+        }
 
+        const syncedAt = syncResult.prompt_synced_at || new Date().toISOString();
         const retellLinked = !!workingCustomer.retell_agent_id;
         let message = retellLinked
             ? 'Prompt updated and synced with voice provider'
-            : 'Prompt saved (no Retell agent linked yet)';
+            : 'Prompt saved to profile (no Retell agent linked yet)';
         if (!retellLinked && retellEnsure?.error) {
             message = `Prompt saved (Retell unavailable: ${retellEnsure.error})`;
         }
@@ -252,6 +245,7 @@ router.put('/prompt', authLimiter, async (req, res) => {
             retell_created: retellEnsure?.created || false,
             retell_error: retellLinked ? null : (retellEnsure?.error || null),
             prompt_synced_at: syncedAt,
+            prompt_profile_id: syncResult.profile_id,
             prompt: trimmed
         });
     } catch (error) {

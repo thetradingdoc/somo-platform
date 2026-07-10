@@ -1391,6 +1391,8 @@
     let boardRangeStart = window.ProviderScheduleBoard
       ? window.ProviderScheduleBoard.startOfWeekSunday(new Date())
       : new Date();
+    /** Assigned in initCalendar(); hoisted so setCalendarUiView can call before init completes. */
+    let refresh = async function calendarRefreshPending() {};
 
     function isMonthFcView() {
       try {
@@ -1524,6 +1526,9 @@
       });
       const topCreate = document.getElementById('ppTopCreateAppt');
       if (topCreate) topCreate.addEventListener('click', openCreateModal);
+      if (new URLSearchParams(window.location.search).get('new') === '1') {
+        openCreateModal();
+      }
       // Default date filter empty = show ALL appointments (past + future); user can filter by date if needed
       const dateInput = document.getElementById('dateFilter');
       dateInput.placeholder = 'All dates';
@@ -1569,7 +1574,7 @@
         }
       });
 
-      async function refresh() {
+      refresh = async function refreshCalendarData() {
         const now = new Date();
         const currentYear = now.getFullYear();
         const firstOfMonth = (y, m) => `${y}-${String(m + 1).padStart(2, '0')}-01`;

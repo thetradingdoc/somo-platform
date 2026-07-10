@@ -104,7 +104,7 @@ function applyClinicalOpqrstVoiceLine(reply, state = {}) {
 }
 
 function formatVoiceReply(reply, state = {}) {
-  const stickyLocale = state.flags?.preferred_language || state.preferred_language;
+  const stickyLocale = state.flags?.locale || state.locale;
   const effectiveState = stickyLocale ? { ...state, locale: stickyLocale } : state;
   let text = applyClinicalOpqrstVoiceLine(reply, effectiveState);
   try {

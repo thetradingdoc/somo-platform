@@ -2,6 +2,7 @@
 
 const { Handoff } = require('../handoff-types');
 const { detectCancelIntents } = require('../../kelly-rails/turn-planner');
+const { isCancelFeeInquiry } = require('../intent-detector');
 
 const CANCEL_STEPS = ['find_booking', 'confirm_cancel', 'cancel_execute', 'confirm_message'];
 
@@ -33,6 +34,24 @@ async function handleCancellationSubrail(ctx = {}) {
   };
   if (cancelIntents.length) {
     stateUpdates.cancel_intents = cancelIntents;
+  }
+
+  if (isCancelFeeInquiry(msg) && step !== 'confirm_message') {
+    return {
+      reply: null,
+      endCall: false,
+      active_subrail: 'cancellation',
+      active_subrail_step: 'cancel_execute',
+      state_updates: {
+        ...stateUpdates,
+        active_subrail_step: 'cancel_execute',
+        cancel_confirmed: true,
+        cancel_pending: true,
+        cancel_fee_inquiry: true
+      },
+      handoff: Handoff.KELLY_REQUIRED,
+      kelly_lane_hint: 'cancel'
+    };
   }
 
   if (
@@ -75,7 +94,8 @@ async function handleCancellationSubrail(ctx = {}) {
   }
 
   if (
-    /reschedule instead|reschedule my|move my appointment|move it to|move to next week|next week instead|reprogramar|cambiar mi cita/i.test(
+    !isCancelFeeInquiry(msg) &&
+    /reschedule instead|reschedule my|move my appointment|move it to|move to next week|next week instead|reprogramar|cambiar mi cita|cambiarla|próxima semana|proxima semana|la próxima|podemos cambiar|перенести|на следующ/i.test(
       msg
     )
   ) {
@@ -114,7 +134,7 @@ async function handleCancellationSubrail(ctx = {}) {
         appt_lookup_only: true
       },
       handoff: Handoff.KELLY_REQUIRED,
-      kelly_lane_hint: 'reschedule'
+      kelly_lane_hint: 'cancel'
     };
   }
 
@@ -131,7 +151,7 @@ async function handleCancellationSubrail(ctx = {}) {
           cancel_find_pending: true
         },
         handoff: Handoff.KELLY_REQUIRED,
-        kelly_lane_hint: 'reschedule'
+        kelly_lane_hint: 'cancel'
       };
     }
     return {
@@ -145,7 +165,7 @@ async function handleCancellationSubrail(ctx = {}) {
         cancel_find_pending: true
       },
       handoff: Handoff.KELLY_REQUIRED,
-      kelly_lane_hint: 'reschedule'
+      kelly_lane_hint: 'cancel'
     };
   }
 
@@ -167,7 +187,7 @@ async function handleCancellationSubrail(ctx = {}) {
         }
       },
       handoff: Handoff.KELLY_REQUIRED,
-      kelly_lane_hint: 'reschedule'
+      kelly_lane_hint: 'cancel'
     };
   }
 
@@ -184,7 +204,7 @@ async function handleCancellationSubrail(ctx = {}) {
         cancel_pending: true
       },
       handoff: Handoff.KELLY_REQUIRED,
-      kelly_lane_hint: 'reschedule'
+      kelly_lane_hint: 'cancel'
     };
   }
 
@@ -200,7 +220,7 @@ async function handleCancellationSubrail(ctx = {}) {
     active_subrail_step: nextStep,
     state_updates: stateUpdates,
     handoff: Handoff.KELLY_OPTIONAL,
-    kelly_lane_hint: 'reschedule'
+    kelly_lane_hint: 'cancel'
   };
 }
 

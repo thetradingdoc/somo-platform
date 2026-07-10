@@ -408,6 +408,10 @@ async function main() {
         merchant_id: merchant.id,
         status: 'active',
         customer_type: acc.customer_type,
+        capabilities:
+          acc.role === 'Provider'
+            ? JSON.stringify(['voice.inbound', 'platform.leads', 'platform.tenants'])
+            : existing.capabilities
       });
       console.log('Created/Updated:', acc.email);
     } else {
@@ -423,6 +427,10 @@ async function main() {
         password_hash: passwordHash,
         merchant_id: merchant.id,
         customer_type: acc.customer_type,
+        capabilities:
+          acc.role === 'Provider'
+            ? JSON.stringify(['voice.inbound', 'platform.leads', 'platform.tenants'])
+            : undefined
       });
       console.log('Created:', acc.email);
     }
@@ -441,6 +449,23 @@ async function main() {
         console.log('   ✅ Demo provider enabled for availability:', providerAcc.email);
       } catch (e) {
         console.warn('   ⚠️  Could not enable demo provider availability:', e.message);
+      }
+      try {
+        const sqlite = db.db;
+        const link = sqlite
+          ?.prepare('SELECT 1 FROM customer_clinics WHERE customer_id = ? AND clinic_id = ?')
+          .get(pc.id, clinicId);
+        if (sqlite && !link) {
+          sqlite
+            .prepare(
+              `INSERT INTO customer_clinics (customer_id, clinic_id, is_primary, created_at)
+               VALUES (?, ?, 1, datetime('now'))`
+            )
+            .run(pc.id, clinicId);
+          console.log('   ✅ Linked demo provider to clinic:', clinicId);
+        }
+      } catch (e) {
+        console.warn('   ⚠️  customer_clinics link:', e.message);
       }
     }
   }

@@ -11,7 +11,9 @@ describe('meta-kv-policy phase 1 (T-010)', () => {
 
   test('direct orchestration meta_kv write is blocked', () => {
     const sid = 'meta-kv-test-' + Date.now();
-    KellyToolExecutor._setSessionMeta(sid, 'conversation_mode', 'tenant_inbound_admin');
+    expect(() => {
+      KellyToolExecutor._setSessionMeta(sid, 'conversation_mode', 'tenant_inbound_admin');
+    }).toThrow(/meta_kv_orchestration_write_blocked/);
     expect(KellyToolExecutor._getSessionMeta(sid, 'conversation_mode')).toBeNull();
   });
 

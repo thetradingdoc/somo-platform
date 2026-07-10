@@ -269,7 +269,7 @@ Keep responses under 50 words.`;
 
         try {
             const model = 'llama-3.1-8b-instant';
-            const userContent = `User said: "${userMessage}"\n\nError: ${error || 'None'}\nAvailable options: ${availableOptions.join(', ')}\n\nProvide a helpful response.`;
+            const userContent = `User message length: ${String(userMessage || '').length} chars\n\nError: ${error || 'None'}\nAvailable options: ${availableOptions.join(', ')}\n\nProvide a helpful response.`;
             let content;
             if (this._useLangChain()) {
                 const chatModel = new ChatGroq({

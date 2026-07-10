@@ -37,8 +37,8 @@
 
   const ADMIN_NAV_ITEMS = [
     { section: 'Admin' },
-    { id: 'leads', label: 'Leads', icon: 'phone', href: 'leads.html', capability: 'platform.leads' },
-    { id: 'tenants', label: 'Tenants', icon: 'building-office', href: 'tenants.html', capability: 'platform.tenants' },
+    { id: 'leads', label: 'Pipeline', icon: 'phone', href: '/admin/pipeline.html', capability: 'platform.leads' },
+    { id: 'tenants', label: 'Tenants', icon: 'building-office-2', href: 'tenants.html', capability: 'platform.tenants' },
     { id: 'payor-review', label: 'Payor Review', icon: 'clipboard-document-list', href: 'payor-review.html' },
     { id: 'merge-review', label: 'Merge Review', icon: 'document-text', href: 'merge-review.html' },
     { id: 'feature-flags', label: 'Feature Flags', icon: 'cube', href: 'feature-flags.html', capability: 'platform.feature_flags' }
@@ -378,8 +378,8 @@
 
     const agentSub = document.getElementById('ppKellySub');
     const agentLbl = document.getElementById('ppKellyLabel');
-    if (agentLbl) agentLbl.textContent = `${agentLabel()} is live`;
-    if (agentSub) agentSub.textContent = 'Voice · scheduling · copay';
+    if (agentLbl) agentLbl.textContent = agentLabel();
+    if (agentSub) agentSub.textContent = 'Loading status…';
   }
 
   function renderKellyStatus(status, billing) {
@@ -706,8 +706,31 @@
     return json.escalations || [];
   };
 
+  window.ppEnsureAlertStrip = function ppEnsureAlertStrip() {
+    let strip = document.getElementById('ppAlertStrip');
+    if (strip) return strip;
+    const main =
+      document.getElementById('ppMainContent') ||
+      document.querySelector('.pp-content') ||
+      document.querySelector('main');
+    if (!main) return null;
+    const shell = main.querySelector('.pp-page-shell') || main;
+    strip = document.createElement('div');
+    strip.className = 'pp-alert-strip pp-alert-strip--compact';
+    strip.id = 'ppAlertStrip';
+    strip.hidden = true;
+    strip.setAttribute('aria-live', 'polite');
+    shell.insertBefore(strip, shell.firstChild);
+    return strip;
+  };
+
+  window.ppIsDentalPortal = function ppIsDentalPortal() {
+    return window.__SOMO_DENTAL_PORTAL === true || localStorage.getItem('office_type') === 'dental';
+  };
+
   window.ppStartEscalationPoll = function (intervalMs) {
     if (escalationPollTimer) return;
+    window.ppEnsureAlertStrip();
     if (!document.getElementById('ppAlertStrip')) return;
     const ms = Math.max(8000, Number(intervalMs) || 10000);
     const tick = async () => {
@@ -880,7 +903,8 @@
     }
     normalizeEmojiUi();
     if (options.paymentPoll !== false) window.ppStartPaymentPoll(options.paymentPollMs || 15000);
-    if (options.escalationPoll !== false && document.getElementById('ppAlertStrip')) {
+    if (options.escalationPoll !== false) {
+      window.ppEnsureAlertStrip();
       window.ppStartEscalationPoll(options.escalationPollMs || 10000);
     }
     if (options.appointmentPoll !== false) window.ppStartAppointmentPoll(options.appointmentPollMs || 30000);
@@ -950,12 +974,14 @@
     const params = new URLSearchParams();
     params.append('clinic_id', getClinicId());
     params.append('date', todayYmd());
-    const res = await fetch(`${API_BASE()}/api/admin/appointments?${params}`, {
+    const res = await (window.ppFetch || fetch)(`${API_BASE()}/api/admin/appointments?${params}`, {
       credentials: 'include',
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: getAuthHeaders()
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Failed to load appointments');
+    if (!data.success) throw new Error(data.error || 'Failed to load today appointments');
     return sortAppointmentsAsc(data.appointments || []);
   };
 
@@ -964,10 +990,12 @@
     params.append('clinic_id', getClinicId());
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
-    const res = await fetch(`${API_BASE()}/api/admin/appointments?${params}`, {
+    const res = await (window.ppFetch || fetch)(`${API_BASE()}/api/admin/appointments?${params}`, {
       credentials: 'include',
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: getAuthHeaders()
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Failed to load appointments');
     return sortAppointmentsAsc(data.appointments || []);
@@ -977,10 +1005,12 @@
     const params = new URLSearchParams();
     params.append('clinic_id', getClinicId());
     params.append('limit', String(limit));
-    const res = await fetch(`${API_BASE()}/api/admin/appointments/upcoming?${params}`, {
+    const res = await (window.ppFetch || fetch)(`${API_BASE()}/api/admin/appointments/upcoming?${params}`, {
       credentials: 'include',
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: getAuthHeaders()
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Failed to load upcoming appointments');
     return sortAppointmentsAsc(data.appointments || []);
@@ -1007,11 +1037,14 @@
     const customer = getCustomer();
     if (customer.merchant_id) url.searchParams.set('merchant_id', customer.merchant_id);
     url.searchParams.set('clinic_id', getClinicId());
-    const res = await fetch(url.toString(), {
+    const res = await (window.ppFetch || fetch)(url.toString(), {
       credentials: 'include',
       headers: getAuthHeaders()
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 400 || res.status === 404) return [];
+      throw new Error(`HTTP ${res.status}`);
+    }
     const json = await res.json();
     return json.success && Array.isArray(json.items) ? json.items : [];
   };

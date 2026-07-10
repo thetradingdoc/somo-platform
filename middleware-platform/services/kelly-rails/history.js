@@ -108,7 +108,12 @@ function getLastAssistantText(sessionId, opts = {}) {
 }
 
 /**
- * One-time backfill when Kelly table is empty but orchestrate has prior turns.
+ * One-time legacy backfill: patient_orchestrate_sessions → kelly_conversation_history.
+ *
+ * Intentionally one-directional and deprecated — only runs when the Kelly history table
+ * is empty for the session. Does not sync back to orchestrate or merge when Kelly already
+ * has rows (orchestrate may hold a longer legacy transcript; Kelly Rails SSOT wins after
+ * first V2 turn). Safe to call repeatedly; returns false when no backfill occurred.
  */
 function seedKellyHistoryFromOrchestrate(sessionId, dbAdapter) {
   if (!sessionId) return false;
@@ -116,6 +121,11 @@ function seedKellyHistoryFromOrchestrate(sessionId, dbAdapter) {
   if (existing.length > 0) return false;
   const messages = orchestrateHistoryMessages(dbAdapter, sessionId);
   if (!messages.length) return false;
+  if (process.env.NODE_ENV !== 'test' && messages.length > 0) {
+    console.info(
+      `[kelly-rails] seedKellyHistoryFromOrchestrate: one-way backfill ${messages.length} turn(s) for ${sessionId}`
+    );
+  }
   for (const m of messages) {
     const role = m?.role;
     const content = String(m?.content || m?.content_english || '').trim();

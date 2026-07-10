@@ -22,6 +22,16 @@ router.get('/:fhirId/eligibility', (req, res) => {
     if (!patientInClinic(fhirId, clinicId)) {
       return res.status(404).json({ success: false, error: 'patient_not_found' });
     }
+    if (typeof db.logHipaaAccess === 'function') {
+      db.logHipaaAccess({
+        user_id: req.pmsUserId || req.auth?.userId || 'provider',
+        resource_type: 'eligibility',
+        resource_id: fhirId,
+        patient_id: fhirId,
+        action: 'read',
+        ip_address: req.ip || req.headers['x-forwarded-for'] || null
+      });
+    }
     let rows = db.getEligibilityChecksByPatient?.(fhirId) || [];
     if (!rows.length) {
       const insuranceList = db.getAllPatientInsurance?.(fhirId) || [];

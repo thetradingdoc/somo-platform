@@ -19,5 +19,8 @@ module.exports = {
   video_consult_review_tasks: 90,  // Keep HITL tasks longer for audit
   health_sessions: 90,
   health_session_transcripts: 90,
-  health_session_reports: 365
+  health_session_reports: 365,
+  // TODO: confirm retention period with counsel — placeholder value
+  kelly_conversation_history: 90,
+  triage_sessions: 90
 };

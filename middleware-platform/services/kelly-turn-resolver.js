@@ -20,6 +20,57 @@ const { recordCallStarted, recordCallCompleted } = require('./kelly-call-telemet
 const { Handoff } = require('./conversation-mode/handoff-types');
 const KellyToolExecutor = require('./kelly-tool-executor');
 
+const KELLY_TURN_TIMEOUT_MS = parseInt(process.env.KELLY_TURN_TIMEOUT_MS || '25000', 10);
+
+function turnTimeoutMs(opts = {}) {
+  if (opts.timeoutMs != null) return opts.timeoutMs;
+  return parseInt(process.env.KELLY_TURN_TIMEOUT_MS || String(KELLY_TURN_TIMEOUT_MS), 10);
+}
+
+function timeoutReplyForLocale(channel, locale) {
+  const loc = String(locale || 'en').slice(0, 2).toLowerCase();
+  const voice = channel === 'voice';
+  const replies = {
+    en: voice
+      ? "I'm still working on that — one moment, or I can connect you with the front desk."
+      : 'This is taking longer than expected. Please try again in a moment.',
+    es: voice
+      ? 'Sigo procesando — un momento, por favor, o puedo conectarle con recepción.'
+      : 'Esto está tardando más de lo esperado. Inténtelo de nuevo en un momento.',
+    ru: voice
+      ? 'Ещё минутку, пожалуйста — я обрабатываю ваш запрос.'
+      : 'Запрос занимает больше времени, чем ожидалось. Попробуйте ещё раз.',
+    zh: voice ? '请稍等，我还在处理您的请求。' : '处理时间较长，请稍后再试。'
+  };
+  return replies[loc] || replies.en;
+}
+
+function withKellyTurnTimeout(promise, opts = {}) {
+  const ms = turnTimeoutMs(opts);
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        const err = new Error('LLM_TURN_TIMEOUT');
+        err.code = 'LLM_TURN_TIMEOUT';
+        reject(err);
+      }, ms);
+    })
+  ]).catch((err) => {
+    if (err?.message !== 'LLM_TURN_TIMEOUT' && err?.code !== 'LLM_TURN_TIMEOUT') throw err;
+    const locale = opts.locale || opts.preferredLanguage || 'en';
+    return {
+      reply: timeoutReplyForLocale(opts.channel || 'chat', locale),
+      toolsUsed: [],
+      endCall: false,
+      language: locale,
+      turn_timeout: true,
+      usedFallback: true,
+      kelly_rails: { active_lane: 'support', step: 'timeout', flags: { turn_timeout: true } }
+    };
+  });
+}
+
 function recordKellyLlmUsage(opts = {}, out = {}, latencyMs = 0) {
   try {
     const usage = out?.usage || out?.llm_usage || out?.kelly_rails?.usage || {};
@@ -320,7 +371,7 @@ async function runKellyTurn(opts = {}) {
     opts.db = opts.db || db;
 
     if (opts.forceLanguageHandoff) {
-      const out = await handleTurn(opts);
+      const out = await withKellyTurnTimeout(handleTurn(opts), opts);
       const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);
       if (executorTools.length) {
         out.toolsUsed = [...new Set([...(out?.toolsUsed || []), ...executorTools])];
@@ -442,7 +493,7 @@ async function runKellyTurn(opts = {}) {
       console.warn('[kelly-turn] conversation mode dispatch skipped:', e.message);
     }
 
-    const out = await handleTurn(opts);
+    const out = await withKellyTurnTimeout(handleTurn(opts), opts);
     const executorTools = KellyToolExecutor.getTurnToolsUsed(sessionId);
     if (executorTools.length) {
       out.toolsUsed = [...new Set([...(out?.toolsUsed || []), ...executorTools])];
@@ -565,7 +616,7 @@ async function runKellyTurn(opts = {}) {
     sessionId &&
     KellyConversationGraph.shouldUseKellyGraph(sessionId, clinicId)
   ) {
-    const out = await runKellyConversationTurn(opts);
+    const out = await withKellyTurnTimeout(runKellyConversationTurn(opts), opts);
     const hybridLatencyMs = Math.max(0, Date.now() - turnReceivedAt);
     try {
       db.insertKellyCallEvent?.({
@@ -600,7 +651,7 @@ async function runKellyTurn(opts = {}) {
     throw productionRuntimeError('legacy_process_turn');
   }
 
-  const out = await KellyAgentService.processTurn(opts);
+  const out = await withKellyTurnTimeout(KellyAgentService.processTurn(opts), opts);
   const legacyLatencyMs = Math.max(0, Date.now() - turnReceivedAt);
   try {
     db.insertKellyCallEvent?.({
@@ -621,4 +672,4 @@ async function runKellyTurn(opts = {}) {
   return out;
 }
 
-module.exports = { runKellyTurn };
+module.exports = { runKellyTurn, withKellyTurnTimeout, KELLY_TURN_TIMEOUT_MS };

@@ -1,56 +1,45 @@
 # Canonical documentation map
 
-**Last updated:** 2026-07-02
+**Last updated:** 2026-07-05
 
-Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); see [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
+Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); historical merges live under `archive/`. See [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
 
 | Topic | Read first | Companion / depth |
 |-------|------------|-------------------|
-| **NYC front desk (active pilot SSOT)** | Master plan `~/.cursor/plans/provider_portal_production_20d1693f.plan.md` | [`architecture/LIVE.md`](../architecture/LIVE.md), [`voice-agent/unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md) |
-| **Healthcare financial agent (SSOT)** | Master plan `~/.cursor/plans/somo_health_session_architecture_723cc4d3.plan.md` | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) |
+| **Production execution (SSOT)** | [`plans/CURSOR_PRODUCTION_PLAN.md`](../plans/CURSOR_PRODUCTION_PLAN.md) | [`PRODUCTION_PLAN_LOG.md`](../../PRODUCTION_PLAN_LOG.md), [`plans/somo-backlog.csv`](../plans/somo-backlog.csv) |
+| **Open engineering work** | [`todos/PENDING.md`](../../todos/PENDING.md) | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) (archived CR index only) |
+| **NYC front desk (active pilot)** | [`architecture/LIVE.md`](../architecture/LIVE.md) | [`voice-agent/unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md) |
+| **Healthcare financial agent (deferred)** | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) | [`product/VIDEO_HEALTH.md`](../product/VIDEO_HEALTH.md) — Phase 9 deferred |
 | **Repo overview** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
-| **Deploy / CI / GCP (live)** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md#callsomo-gcp-cutover) | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md), [`deployment/README.md`](../deployment/README.md) (historical) |
-| **Retell agent inventory** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#retell-agent-inventory) + [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) | `npm run verify:agent-config` |
-| **Architecture snapshot** | [`architecture/LIVE.md`](../architecture/LIVE.md#current-state-architecture) | [`architecture/README.md`](../architecture/README.md) (archive TOC only) |
+| **Deploy / live verify** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md) | [`deployment/README.md`](../deployment/README.md) (pointer only) |
+| **Cutover / incidents** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md) | [`runbooks/README.md`](../runbooks/README.md) (pointer only) |
+| **Retell agent contract** | [`voice/VOICE_RETELL_AGENT_CONTRACT.md`](../voice/VOICE_RETELL_AGENT_CONTRACT.md) | [`deployment/retell-agent-inventory.json`](../deployment/retell-agent-inventory.json), `npm run verify:agent-config` |
+| **Retell agent inventory** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#retell-agent-inventory) | [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) |
+| **Architecture snapshot** | [`architecture/LIVE.md`](../architecture/LIVE.md) | [`architecture/README.md`](../architecture/README.md) (pointer; history in `archive/`) |
 | **Routes & call paths** | [`architecture/LIVE.md`](../architecture/LIVE.md#runtime-entrypoints-and-route-ownership) | [`middleware-platform/server.js`](../../middleware-platform/server.js) |
 | **Environment variables** | [`setup/README.md`](../setup/README.md) | Former `ENVIRONMENT_VARIABLES_BY_SURFACE` merged into setup README |
 | **Brand / logo / email HTML** | [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md) | [`Brand/README.md`](../Brand/README.md) |
-| **Provider portal shell** | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md) | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) (Today layout) |
-| **Provider calendar** | [`design/PROVIDER_CALENDAR.md`](../design/PROVIDER_CALENDAR.md) | Board + FullCalendar views in `business/calendar.html` |
-| **Provider Today UI** | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) | [`todos/PENDING.md`](../../todos/PENDING.md) (UI polish section) |
+| **Provider portal shell** | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md) | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) |
+| **Provider calendar** | [`design/PROVIDER_CALENDAR.md`](../design/PROVIDER_CALENDAR.md) | `business/calendar.html` (not `schedule.html`) |
+| **Provider Today UI** | [`design/PROVIDER_TODAY_PAGE.md`](../design/PROVIDER_TODAY_PAGE.md) | [`todos/PENDING.md`](../../todos/PENDING.md) |
 | **Staging profile** | [`meta/README.md`](./README.md#staging-profile) | [`testing/README.md`](../testing/README.md) |
-| **Consumer video health** | [`architecture/HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) | [`product/VIDEO_HEALTH.md`](../product/VIDEO_HEALTH.md), [`product/HEALTH_VIDEO_UX.md`](../product/HEALTH_VIDEO_UX.md) |
-| **Consumer navigation** (platform DID) | [`runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md) | [`voice/PLATFORM_NUMBER_INBOUND_SPEC.md`](../voice/PLATFORM_NUMBER_INBOUND_SPEC.md) |
-| **Kelly agentic orchestration** | [`architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md) | [`ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md), [`TURN_COMPLETION_CONTRACT.md`](../architecture/TURN_COMPLETION_CONTRACT.md) |
-| **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | [`kelly-rails/`](../../middleware-platform/services/kelly-rails/) in code |
-| **Conversation mode rails** | [`conversation/CONVERSATION_MODE_MATRIX.md`](../conversation/CONVERSATION_MODE_MATRIX.md) | [`runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md), `services/conversation-mode/*` |
-| **Kelly front-desk UX** | [`product/KELLY_FRONT_DESK_UX.md`](../product/KELLY_FRONT_DESK_UX.md) | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md), `call-opener-resolver.js` |
-| **PMS connect (Phase 3)** | [`architecture/PMS_CONNECT_ARCHITECTURE.md`](../architecture/PMS_CONNECT_ARCHITECTURE.md) | [`voice-agent/phase3-pilot-checklist.md`](../voice-agent/phase3-pilot-checklist.md), `services/pms/*` |
-| **Voice ops / verify gates** | [`voice-agent/unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md) | `npm run verify:unblocked-phases`, phase2–4 pilot checklists |
-| **Front-desk deploy** | [`deployment/FRONT_DESK_PRODUCTION.md`](../deployment/FRONT_DESK_PRODUCTION.md) | [`deployment/FRONT_DESK_DEPLOY_CHECKLIST.md`](../deployment/FRONT_DESK_DEPLOY_CHECKLIST.md), [`PHASE0_DEPLOY_STATE.md`](../deployment/PHASE0_DEPLOY_STATE.md) |
-| **Pilot week runbooks** | [`voice-agent/PILOT_ONCALL_WEEK.md`](../voice-agent/PILOT_ONCALL_WEEK.md) | [`SHADOW_WEEK_RUNBOOK.md`](../voice-agent/SHADOW_WEEK_RUNBOOK.md), [`PILOT_INCIDENT_PLAYBOOK.md`](../voice-agent/PILOT_INCIDENT_PLAYBOOK.md) |
-| **Tenant portal audit** | [`testing/TESTING.md`](../testing/TESTING.md#tenant-front-desk-audit) | `e2e/tenant-front-desk-audit.spec.cjs`, `test-results/tenant-front-desk-audit.md` |
-| **Kelly Phase C (language + voice)** | [`runbooks/KELLY_PHASE_C_STAGING.md`](../runbooks/KELLY_PHASE_C_STAGING.md) | [`DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md`](../agent/kelly-rails/DEMO_SCENARIO_HEALTHCARE_SPECIALIST.md), [`todos/PENDING.md`](../../todos/PENDING.md) (Phase C section) |
-| **Payor / provider search** | [`Payor/README.md`](../Payor/README.md) | [`Payor/OPERATIONS.md`](../Payor/OPERATIONS.md) |
-| **RCM** | [`RCM/README.md`](../RCM/README.md) | [`RCM/ARCHITECTURE.md`](../RCM/ARCHITECTURE.md) |
+| **Kelly orchestration** | [`architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md) | [`STATE_OWNERSHIP.md`](../architecture/STATE_OWNERSHIP.md) |
+| **Kelly agentic rails** | [`architecture/LIVE.md`](../architecture/LIVE.md#kelly-agentic-rails-target-and-build-plan) | `middleware-platform/services/kelly-rails/` |
+| **Conversation mode rails** | [`conversation/CONVERSATION_MODE_MATRIX.md`](../conversation/CONVERSATION_MODE_MATRIX.md) | [`runbooks/CONVERSATION_MODE_ROLLOUT.md`](../runbooks/CONVERSATION_MODE_ROLLOUT.md) |
+| **Kelly front-desk UX** | [`product/KELLY_FRONT_DESK_UX.md`](../product/KELLY_FRONT_DESK_UX.md) | [`design/PROVIDER_PORTAL_SHELL.md`](../design/PROVIDER_PORTAL_SHELL.md) |
+| **Voice routing** | [`voice/VOICE_ROUTING_SSOT.md`](../voice/VOICE_ROUTING_SSOT.md) | [`voice/PLATFORM_NUMBER_INBOUND_SPEC.md`](../voice/PLATFORM_NUMBER_INBOUND_SPEC.md) |
+| **Front-desk deploy** | [`deployment/FRONT_DESK_PRODUCTION.md`](../deployment/FRONT_DESK_PRODUCTION.md) | [`PHASE0_DEPLOY_STATE.md`](../deployment/PHASE0_DEPLOY_STATE.md) |
+| **Tenant portal E2E** | [`qa/portal-e2e-compliance.md`](../qa/portal-e2e-compliance.md) | `e2e/dentist-journey-parity.spec.cjs` |
 | **Database** | [`Database/README.md`](../Database/README.md) | [`Database/OPERATIONS.md`](../Database/OPERATIONS.md) |
-| **Patient timeline APIs** | [`architecture/LIVE.md`](../architecture/LIVE.md#patient-timeline-routine-and-billing) | Legacy consumer app code in `patient-app/` (coexisting; not front-desk SSOT) |
-| **Medical coding** | [`Medical Coding/ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md) | [`Medical Coding/README.md`](../Medical%20Coding/README.md) |
-| **Voice prompts (runtime paths)** | [`voice-agent/README.md`](../voice-agent/README.md) | `voice-agent/prompts/*.md` (loaded by `configure-retell.js`; exempt from 2-file rule) |
-| **Middleware depth** | [`architecture/MIDDLEWARE_PLATFORM.md`](../architecture/MIDDLEWARE_PLATFORM.md) | [`middleware-platform/README.md`](../middleware-platform/README.md) |
-| **Somo health agent** | [`architecture/SOMO_HEALTH_AGENT.md`](../architecture/SOMO_HEALTH_AGENT.md) | [`HEALTH_SESSION_ARCHITECTURE.md`](../architecture/HEALTH_SESSION_ARCHITECTURE.md) |
-| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md), [`admin-portal/BACKLOG.md`](../admin-portal/BACKLOG.md) | Scrape/enrich APIs, HITL gates, `unified-dashboard/admin/` |
+| **Middleware depth** | [`architecture/MIDDLEWARE_PLATFORM.md`](../architecture/MIDDLEWARE_PLATFORM.md) | [`middleware-platform/README.md`](../middleware-platform/README.md) (pointer) |
+| **PHI / HIPAA compliance** | [`compliance/README.md`](../compliance/README.md) | [`compliance/PHI_ENCRYPTION_AT_REST.md`](../compliance/PHI_ENCRYPTION_AT_REST.md), [`compliance/VENDOR_BAA_TRACKER.md`](../compliance/VENDOR_BAA_TRACKER.md) |
+| **Tenant offboarding** | [`runbooks/TENANT_OFFBOARDING.md`](../runbooks/TENANT_OFFBOARDING.md) | `GET /api/admin/tenants/:clinicId/phi-export` |
+| **Admin operator CRM** | [`admin-portal/README.md`](../admin-portal/README.md) | `unified-dashboard/admin/` |
 | **Testing / E2E** | [`testing/README.md`](../testing/README.md) | Playwright scripts in `middleware-platform/package.json` |
-| **Active work** | [`todos/PENDING.md`](../../todos/PENDING.md) | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) (CR/FE detail) |
-| **Customer-ready gates** | [`CUSTOMER_READY_BACKLOG.md`](../CUSTOMER_READY_BACKLOG.md) | [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md) |
-| **Brand prune / legacy DELETE** | [`todos/PENDING.md`](../../todos/PENDING.md#brand-prune-2026) | [`architecture/LIVE.md`](../architecture/LIVE.md#route-ownership-pre-phase-3) — DocLittle, LittleLab, commerce PSTN docs are archive only |
 
 ## Archived narratives (not active SSOT)
 
-- DocLittle / doctorlittle — legacy RAG export filenames only
-- LittleLab / Skin & Care / myskinandcare — `_archive/littlelab-landing/`, gated commerce
-- Commerce PSTN replay — `docs/qa/commerce-pstn-*` — DELETE LATER per master plan
-
-## Middleware consolidated README
-
-Kelly, checkout, Retell, and LangGraph depth: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Consumer naming: [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md).
+- **Folder merges:** `docs/*/archive/CONSOLIDATED-HISTORICAL.md` — searchable archaeology only
+- DocLittle / LittleLab / Skin & Care — retired consumer surfaces (Gate G4)
+- Commerce PSTN replay — [`qa/archive/commerce-pstn/`](../qa/archive/commerce-pstn/) — DELETE LATER actioned 2026-07-05
+- Cursor-local plan files (`~/.cursor/plans/`) — superseded by [`docs/plans/`](../plans/)

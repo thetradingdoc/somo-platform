@@ -4,6 +4,9 @@
 /**
  * Seed navigation demo on pulled GCS DB, clear tenant DID conflict, upload + restart.
  *
+ * ⚠️  When PLATFORM_INBOUND_MODE=support (default), this script binds +13639990205 to the
+ * operator account — NOT navigation-demo. Do not run expecting navigation PSTN on 363.
+ *
  * Usage:
  *   node scripts/navigation-gcs-seed.cjs
  *   node scripts/navigation-gcs-seed.cjs --dry-run
@@ -125,6 +128,32 @@ function assertDbIntegrity(stagingDb) {
 }
 
 function assertNavigationReady(stagingDb) {
+  const { isPlatformInboundSupportMode } = require('../services/platform-line-config');
+  if (isPlatformInboundSupportMode()) {
+    const opId =
+      process.env.CALLSOMO_OPERATOR_CUSTOMER_ID ||
+      process.env.CALLSOMO_VOICE_CUSTOMER_ID;
+    const sqlite = new Database(stagingDb, { readonly: true });
+    try {
+      if (opId) {
+        const op = sqlite
+          .prepare('SELECT twilio_phone_number FROM customers WHERE id = ?')
+          .get(opId);
+        if (op?.twilio_phone_number !== NAV_DID) {
+          throw new Error(`operator DID mismatch on ${stagingDb}: ${op?.twilio_phone_number} != ${NAV_DID}`);
+        }
+      }
+      const nav = sqlite
+        .prepare('SELECT twilio_phone_number FROM customers WHERE id = ?')
+        .get(NAV_CUSTOMER);
+      if (nav?.twilio_phone_number === NAV_DID) {
+        throw new Error(`navigation-demo still owns ${NAV_DID} on ${stagingDb}`);
+      }
+    } finally {
+      sqlite.close();
+    }
+    return;
+  }
   const sqlite = new Database(stagingDb, { readonly: true });
   try {
     const row = sqlite
@@ -152,6 +181,34 @@ function assertNavigationReady(stagingDb) {
 }
 
 function clearTenantDidConflict(sqlite) {
+  const { isPlatformInboundSupportMode } = require('../services/platform-line-config');
+  if (isPlatformInboundSupportMode()) {
+    console.log('⏭  Skipping navigation DID rebind — PLATFORM_INBOUND_MODE=support');
+    const opId =
+      process.env.CALLSOMO_OPERATOR_CUSTOMER_ID ||
+      process.env.CALLSOMO_VOICE_CUSTOMER_ID;
+    if (opId) {
+      sqlite
+        .prepare(
+          `UPDATE customers SET twilio_phone_number = NULL, updated_at = datetime('now')
+           WHERE twilio_phone_number = ? AND id NOT IN (?, ?)`
+        )
+        .run(NAV_DID, opId, NAV_CUSTOMER);
+      sqlite
+        .prepare(
+          `UPDATE customers SET twilio_phone_number = ?, updated_at = datetime('now') WHERE id = ?`
+        )
+        .run(NAV_DID, opId);
+      console.log(`✅ Platform support mode: bound ${NAV_DID} → operator ${opId}`);
+    }
+    sqlite
+      .prepare(
+        `UPDATE customers SET twilio_phone_number = NULL, updated_at = datetime('now')
+         WHERE id = ? AND twilio_phone_number = ?`
+      )
+      .run(NAV_CUSTOMER, NAV_DID);
+    return;
+  }
   const cleared = sqlite
     .prepare(
       `UPDATE customers SET twilio_phone_number = NULL, updated_at = datetime('now')
@@ -189,8 +246,9 @@ function uploadToGcs(dbPath) {
 
 function restartCloudRun() {
   const stamp = `NAV_SEED_${Date.now()}`;
+  const navFlag = process.env.PLATFORM_INBOUND_MODE === 'navigation' ? 'NAVIGATION_ENABLED=1' : 'NAVIGATION_ENABLED=0';
   execSync(
-    `gcloud run services update somo-middleware --region us-central1 --project somo-callsomo --update-env-vars ${stamp}=1,NAVIGATION_ENABLED=1`,
+    `gcloud run services update somo-middleware --region us-central1 --project somo-callsomo --update-env-vars ${stamp}=1,${navFlag},PLATFORM_INBOUND_MODE=${process.env.PLATFORM_INBOUND_MODE || 'support'}`,
     { stdio: 'inherit' }
   );
   console.log('Waiting 90s for instances to cycle…');

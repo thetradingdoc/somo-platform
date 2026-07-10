@@ -4,10 +4,11 @@
  * Conversation mode session helpers — merge mode state into Kelly Rails SSOT.
  */
 
-const { persistRailsSessionState, getRailsSessionProjection, mergeConversationStateUpdates } = require('../kelly-rails/session-ssot');
+const { persistRailsSessionState, mergeConversationStateUpdates } = require('../kelly-rails/session-ssot');
 const { defaultConversationFields } = require('../kelly-rails/state-schema');
+const { hydrateSessionForTurn } = require('../kelly-rails/hydrate');
 const { resolveConversationMode } = require('./conversation-mode-resolver');
-const { evaluateTurn, applyPivotToSession } = require('./pivot-engine');
+const { evaluateTurn, applyPivotToSession, isConversationModeRoutingEnforced } = require('./pivot-engine');
 const { normalizeForIntentDetection } = require('./asr-normalize');
 const { loadTenantPolicyFromProfile } = require('./tenant-policy');
 const { resolveDispositionFromState } = require('./disposition-taxonomy');
@@ -17,18 +18,21 @@ const { UserIntent } = require('./conversation-mode-types');
 const { Handoff } = require('./handoff-types');
 
 function loadConversationSession(sessionId, db) {
-  const projection = getRailsSessionProjection(sessionId);
-  let fields = defaultConversationFields();
-  if (projection?.flags_json) {
-    try {
-      const parsed = JSON.parse(projection.flags_json);
-      fields = { ...fields, ...parsed };
-    } catch (_) {}
-  }
+  const sid = String(sessionId || '').trim();
+  if (!sid) return defaultConversationFields();
+  const hydrated = hydrateSessionForTurn(sid, {});
+  const fields = { ...defaultConversationFields(), ...hydrated.flags };
+  if (hydrated.active_lane) fields.active_lane = hydrated.active_lane;
+  if (hydrated.step) fields.step = hydrated.step;
+  const projection = hydrated.projection;
   if (projection?.appointment_id && !fields.appointment_id) {
     fields.appointment_id = projection.appointment_id;
   }
   return fields;
+}
+
+function shouldWriteConversationProjection() {
+  return isConversationModeRoutingEnforced();
 }
 
 function saveConversationSession(sessionId, fields) {
@@ -36,6 +40,7 @@ function saveConversationSession(sessionId, fields) {
 }
 
 function writeSessionIfPresent(opts, fields, dispatchUpdates = null) {
+  if (!shouldWriteConversationProjection()) return;
   const sid = sessionId(opts);
   if (!sid) return;
   if (dispatchUpdates) {
@@ -134,7 +139,7 @@ function processConversationTurn(opts = {}) {
   const nextSession = applyPivotToSession(session, pivot);
   if (pivot.state_updates) Object.assign(nextSession, pivot.state_updates);
 
-  if (pivot.state_updates?._sync_triage_to_projection && sid) {
+  if (pivot.state_updates?._sync_triage_to_projection && sid && shouldWriteConversationProjection()) {
     try {
       const { syncTriageFieldsToProjection } = require('../kelly-rails/session-ssot');
       syncTriageFieldsToProjection(sid, {
@@ -146,7 +151,7 @@ function processConversationTurn(opts = {}) {
     } catch (_) {}
   }
 
-  if (sid) saveConversationSession(sid, nextSession);
+  if (sid && shouldWriteConversationProjection()) saveConversationSession(sid, nextSession);
 
   try {
     db?.insertKellyCallEvent?.({
@@ -247,6 +252,35 @@ function mergeKellyRailsIntoSession(session = {}, kellyRails = {}, toolsUsed = [
   return drainPendingIntentsForAppointment(merged, flags);
 }
 
+async function executeDispatchTools(dispatch, opts = {}) {
+  const tools = Array.isArray(dispatch?.toolsUsed) ? dispatch.toolsUsed : [];
+  if (!tools.length) return [];
+  const { KellyToolExecutor } = require('../kelly-tool-executor');
+  const results = [];
+  for (const entry of tools) {
+    const name = typeof entry === 'string' ? entry : entry?.name;
+    const args = typeof entry === 'object' && entry ? entry.args || {} : {};
+    if (!name) continue;
+    try {
+      const result = await KellyToolExecutor.execute(name, args, {
+        sessionId: opts.sessionId || opts.session_id,
+        callId: opts.callId || opts.call_id,
+        clinicId: opts.clinicId,
+        customerId: opts.customerId,
+        callerPhone: opts.callerPhone || opts.caller_phone,
+        lead_id: opts.lead_id || dispatch.lead_id || args.lead_id,
+        channel: 'voice',
+        conversation_mode: dispatch.conversation_mode || opts.conversation_mode,
+        routing_world: opts.routing_world || 'platform_support'
+      });
+      results.push({ name, result });
+    } catch (err) {
+      results.push({ name, error: err.message });
+    }
+  }
+  return results;
+}
+
 async function runConversationDispatch(opts = {}) {
   const { session, pivot, policy } = processConversationTurn(opts);
   const mode = session.conversation_mode;
@@ -264,12 +298,22 @@ async function runConversationDispatch(opts = {}) {
     tenantPolicy: policy,
     prior_conversation_mode: session.prior_conversation_mode,
     opener_delivered: !!(opts.opener_delivered || session.opener_delivered),
+    platform_stage: opts.platform_stage || session.platform_stage,
+    platform_caller_type: opts.platform_caller_type || session.platform_caller_type,
+    caller_type: opts.caller_type || session.platform_caller_type,
+    callerPhone: opts.callerPhone || opts.caller_phone,
+    db: opts.db,
     appt_lookup_only: session.appt_lookup_only,
     appointment_id: session.appointment_id || opts.appointmentId || opts.appointment_id || null,
     outbound_purpose: session.outbound_purpose || opts.outbound_purpose || null
   };
 
   const dispatch = await dispatchConversationTurn(mode, dispatchCtx);
+
+  const toolResults = await executeDispatchTools(dispatch, {
+    ...opts,
+    lead_id: dispatch.lead_id || opts.lead_id || opts.platform_lead_id
+  });
 
   let mergedSession = { ...session };
   if (dispatch.state_updates) {
@@ -308,6 +352,7 @@ async function runConversationDispatch(opts = {}) {
     pivot,
     policy,
     dispatch,
+    toolResults,
     enforce,
     handoff,
     needs_kelly: needsKelly,
@@ -343,6 +388,7 @@ module.exports = {
   seedModeAtCallStart,
   processConversationTurn,
   runConversationDispatch,
+  executeDispatchTools,
   mergeKellyRailsIntoSession,
   drainPendingIntentsForAppointment,
   emitDisposition

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "controls": [
+    { "id": "nav.calls", "page": "calls", "label": "Open Calls sidebar", "read_only": true },
+    { "id": "nav.schedule", "page": "schedule", "label": "Open Schedule sidebar", "read_only": true },
+    { "id": "nav.patients", "page": "patients", "label": "Open Patients sidebar", "read_only": true },
+    { "id": "nav.agent", "page": "agent", "label": "Open Kelly agent page", "read_only": true },
+    { "id": "nav.settings", "page": "settings", "label": "Open Settings", "read_only": true },
+    { "id": "nav.revenue", "page": "revenue", "label": "Open Revenue", "read_only": true },
+    { "id": "schedule.board_visible", "page": "schedule", "label": "Schedule board renders", "read_only": true },
+    { "id": "calendar.open_modal", "page": "schedule", "label": "Open appointment modal (cancel)", "read_only": true },
+    { "id": "calls.list_visible", "page": "calls", "label": "Calls list renders", "read_only": true },
+    { "id": "agent.nameplate", "page": "agent", "label": "Agent nameplate visible", "read_only": true },
+    { "id": "settings.profile_tab", "page": "settings", "label": "Settings profile tab", "read_only": true },
+    { "id": "revenue.payments_tab", "page": "revenue", "label": "Revenue payments tab", "read_only": true },
+    { "id": "today.kpi_row", "page": "today", "label": "Today KPI row", "read_only": true },
+    { "id": "today.onboarding_checklist", "page": "today", "label": "Go-live checklist visible", "read_only": true }
+  ]
+}

@@ -41,7 +41,8 @@
       { "source": "/signup", "destination": "/signup.html" },
       { "source": "/login", "destination": "/login.html" },
       { "source": "/terms", "destination": "/terms.html" },
-      { "source": "/business/billing.html", "destination": "/business/revenue.html?tab=payments" },
+      { "source": "/patients", "destination": "/index.html" },
+      { "source": "/patients/**", "destination": "/index.html" },
       { "source": "/admin", "destination": "/admin/index.html" },
       { "source": "/admin/**", "destination": "/admin/:splat" },
       { "source": "**", "destination": "/index.html" }

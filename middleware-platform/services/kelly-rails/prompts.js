@@ -9,7 +9,7 @@ const { parseSupportedLanguages } = require('../tenant-language-config');
 const PROMPT_MODULES = { en, es, zh, ru };
 
 function resolveLocale(state = {}, opts = {}, tenantLanguages = null) {
-  const sticky = String(state.locale || opts.locale || state.flags?.preferred_language || 'en').slice(0, 2);
+  const sticky = String(state.locale || opts.locale || state.flags?.locale || 'en').slice(0, 2);
   const allowed = parseSupportedLanguages(tenantLanguages || opts.supported_languages || ['en', 'es', 'zh', 'ru']);
   if (allowed.includes(sticky)) return sticky;
   if (allowed.includes('en')) return 'en';

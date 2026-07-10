@@ -36,4 +36,15 @@ describe('cancellation subrail intents', () => {
     expect(out.state_updates.cancel_pending).toBe(false);
     expect(out.kelly_lane_hint).toBe('reschedule');
   });
+
+  test('RU-3 fee inquiry advances to cancel_execute', async () => {
+    const out = await handleCancellationSubrail({
+      message: 'Есть ли штраф за отмену?',
+      active_subrail_step: 'find_booking',
+      flags: { cancel_find_pending: true }
+    });
+    expect(out.state_updates.cancel_pending).toBe(true);
+    expect(out.state_updates.cancel_fee_inquiry).toBe(true);
+    expect(out.kelly_lane_hint).toBe('cancel');
+  });
 });

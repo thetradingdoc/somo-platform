@@ -42,6 +42,16 @@ function fetchKellyEventsUnified(dbOrMod, sessionId) {
   return fetchKellyEventsRaw(dbOrMod, sessionId);
 }
 
+/** Async wrapper — uses Retell fallback when sqlite has 0 rows (POSTGRES_PRIMARY / GCS lag). */
+async function fetchKellyEventsUnifiedAsync(dbOrMod, sessionId) {
+  const events = fetchKellyEventsUnified(dbOrMod, sessionId);
+  if (events.length > 0) return { events, source: 'sqlite' };
+  const { fetchKellyEventsWithFallback } = require('./kelly-events-read-source.cjs');
+  const db = dbOrMod?.listKellyCallEvents ? null : dbOrMod;
+  if (!db) return { events: [], source: 'none' };
+  return fetchKellyEventsWithFallback(db, sessionId);
+}
+
 function findToolCompleted(events, toolNamePattern) {
   const re =
     toolNamePattern instanceof RegExp
@@ -114,6 +124,7 @@ module.exports = {
   openAppDb,
   fetchKellyEventsRaw,
   fetchKellyEventsUnified,
+  fetchKellyEventsUnifiedAsync,
   findToolCompleted,
   findEventType
 };

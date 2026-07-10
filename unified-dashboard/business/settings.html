@@ -45,7 +45,7 @@
             </div>
 
             <!-- Business Information -->
-            <div class="settings-section settings-panel" data-settings-panel="profile">
+            <div class="settings-section settings-panel" id="settings-panel-profile" data-settings-panel="profile">
                 <h3>🏪 Business Information</h3>
 
                 <div class="setting-row">
@@ -54,7 +54,7 @@
                         <p class="setting-description" id="businessNameSetting">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editBusinessName()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editBusinessName">
                             Edit
                         </button>
                     </div>
@@ -66,7 +66,7 @@
                         <p class="setting-description" id="businessEmail">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editEmail()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editEmail">
                             Edit
                         </button>
                     </div>
@@ -78,7 +78,7 @@
                         <p class="setting-description" id="businessPhone">Not set</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editPhone()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editPhone">
                             Edit
                         </button>
                     </div>
@@ -90,7 +90,7 @@
                         <p class="setting-description" id="providerDisplayName">Not set</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editProviderDisplayName()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editProviderDisplayName">
                             Edit
                         </button>
                     </div>
@@ -98,7 +98,7 @@
             </div>
 
             <!-- Account & Billing -->
-            <div class="settings-section settings-panel" data-settings-panel="billing">
+            <div class="settings-section settings-panel" id="settings-panel-billing" data-settings-panel="billing" hidden>
                 <h3>🧾 Account & Billing</h3>
                 <div class="service-card">
                     <div class="service-icon" style="background: #dbeafe;">📄</div>
@@ -111,14 +111,44 @@
             </div>
 
             <!-- Connected Accounts (FD-194) -->
-            <div class="settings-section settings-panel" data-settings-panel="connected" hidden>
+            <div class="settings-section settings-panel" id="settings-panel-connected" data-settings-panel="connected" hidden>
                 <h3>Connected Accounts</h3>
                 <p class="setting-description">Calendar, PMS, and billing integrations Kelly uses.</p>
                 <div id="connectedAccountsMount"></div>
+                <div class="settings-subsection" style="margin-top:24px">
+                    <h4>Notifications</h4>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h4>Appointment Notifications</h4>
+                            <p class="setting-description">Get notified when appointments are booked or changed</p>
+                        </div>
+                        <div class="setting-action">
+                            <input type="checkbox" id="notifOrders" data-notif-toggle="orders">
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h4>Fraud Alerts</h4>
+                            <p class="setting-description">Receive alerts for suspicious activity</p>
+                        </div>
+                        <div class="setting-action">
+                            <input type="checkbox" id="notifFraud" data-notif-toggle="fraud">
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h4>Weekly Reports</h4>
+                            <p class="setting-description">Get weekly performance summaries</p>
+                        </div>
+                        <div class="setting-action">
+                            <input type="checkbox" id="notifReports" data-notif-toggle="reports">
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Kelly voice config (FD-204) -->
-            <div class="settings-section settings-panel" data-settings-panel="kelly" hidden>
+            <div class="settings-section settings-panel" id="settings-panel-kelly" data-settings-panel="kelly" hidden>
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
                     <h3 style="margin:0">Kelly</h3>
                     <span id="kellyTabStatus"></span>
@@ -136,7 +166,7 @@
                         <h4>Stripe</h4>
                         <p class="service-status" id="stripeServiceStatus">Checking...</p>
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="manageStripe()">
+                    <button class="btn btn-secondary btn-sm" data-settings-action="manageStripe">
                         Manage
                     </button>
                 </div>
@@ -147,7 +177,7 @@
                         <h4>Twilio</h4>
                         <p class="service-status" id="twilioServiceStatus">Checking...</p>
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="manageTwilio()">
+                    <button class="btn btn-secondary btn-sm" data-settings-action="manageTwilio">
                         Manage
                     </button>
                 </div>
@@ -168,7 +198,7 @@
                         </select>
                     </div>
                     <div class="service-action" id="pmsActions">
-                        <button class="btn btn-primary btn-sm" onclick="connectPmsSomo()">Connect</button>
+                        <button class="btn btn-primary btn-sm" data-settings-action="connectPmsSomo">Connect</button>
                     </div>
                 </div>
 
@@ -182,7 +212,7 @@
                             style="color: var(--danger); display: none;"></p>
                     </div>
                     <div class="service-action" id="googleCalendarActions">
-                        <button class="btn btn-primary btn-sm" onclick="connectGoogleCalendar()">
+                        <button class="btn btn-primary btn-sm" data-settings-action="connectGoogleCalendar">
                             Connect
                         </button>
                     </div>
@@ -200,47 +230,14 @@
                         <p class="service-status" id="bookingObservabilitySummary"></p>
                     </div>
                     <div class="service-action" id="providerReadinessActions">
-                        <button class="btn btn-primary btn-sm" onclick="connectGoogleCalendar()">Connect Google calendar</button>
-                        <button class="btn btn-secondary btn-sm" onclick="window.location.href='calendar.html'">Set availability blocks</button>
-                        <button class="btn btn-secondary btn-sm" onclick="loadProviderBookingReadiness()">Test booking readiness</button>
+                        <button class="btn btn-primary btn-sm" data-settings-action="connectGoogleCalendar">Connect Google calendar</button>
+                        <button class="btn btn-secondary btn-sm" data-settings-action="openCalendar">Set availability blocks</button>
+                        <button class="btn btn-secondary btn-sm" data-settings-action="loadProviderBookingReadiness">Test booking readiness</button>
                     </div>
                 </div>
             </div>
 
-            <!-- Notifications -->
-            <div class="settings-section settings-panel" data-settings-panel="integrations">
-                <h3>🔔 Notifications</h3>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <h4>Appointment Notifications</h4>
-                        <p class="setting-description">Get notified when appointments are booked or changed</p>
-                    </div>
-                    <div class="setting-action">
-                        <input type="checkbox" id="notifOrders" onchange="toggleNotification('orders')">
-                    </div>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <h4>Fraud Alerts</h4>
-                        <p class="setting-description">Receive alerts for suspicious activity</p>
-                    </div>
-                    <div class="setting-action">
-                        <input type="checkbox" id="notifFraud" onchange="toggleNotification('fraud')">
-                    </div>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <h4>Weekly Reports</h4>
-                        <p class="setting-description">Get weekly performance summaries</p>
-                    </div>
-                    <div class="setting-action">
-                        <input type="checkbox" id="notifReports" onchange="toggleNotification('reports')">
-                    </div>
-                </div>
-            </div>
+            <!-- Notifications (retired — wired under Connected Accounts) -->
 
             <!-- Legacy voice summary (hidden — migrated to Kelly tab) -->
             <div class="settings-section settings-panel" data-settings-panel="voice" hidden aria-hidden="true">
@@ -302,24 +299,24 @@
                 </div>
 
                 <p class="voice-agent-footnote">
-                    First-time setup: <a href="voice-setup.html">Run the 3-step voice setup wizard</a>
+                    First-time setup: <a href="voice-setup.html">Run the 7-step voice setup wizard</a>
                 </p>
             </div>
 
             <!-- Pay-as-you-go Billing -->
-            <div class="settings-section settings-panel" data-settings-panel="billing">
+            <div class="settings-section settings-panel" data-settings-panel="billing" hidden>
                 <h3>📞 Voice subscription</h3>
                 <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 12px;">
                     Monthly plans include voice minutes. Tax is calculated at Stripe Checkout when enabled.
                 </p>
                 <p id="voiceBillingPlanSummary" class="setting-description" style="margin-bottom: 16px;">Loading subscription…</p>
-                <button type="button" class="btn btn-primary btn-sm" onclick="viewPlans()">
+                <button type="button" class="btn btn-primary btn-sm" data-settings-action="viewPlans">
                     Choose or change plan
                 </button>
             </div>
 
             <!-- Pay-as-you-go Billing -->
-            <div class="settings-section settings-panel" data-settings-panel="billing">
+            <div class="settings-section settings-panel" data-settings-panel="billing" hidden>
                 <h3>💰 Pay-as-you-go Billing</h3>
                 <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 20px;">
                     Track your usage and manage payment methods. You're charged based on actual voice call minutes.
@@ -368,7 +365,7 @@
                             <p class="setting-description" id="paymentMethodDesc">No payment method on file</p>
                         </div>
                         <div class="setting-action">
-                            <button class="btn btn-primary btn-sm" onclick="paymentMethodAction()" id="setupPaymentBtn">
+                            <button class="btn btn-primary btn-sm" data-settings-action="paymentMethodAction" id="setupPaymentBtn">
                                 Add Payment Method
                             </button>
                         </div>
@@ -380,7 +377,7 @@
                             <p class="setting-description">View and download past invoices</p>
                         </div>
                         <div class="setting-action">
-                            <button class="btn btn-secondary btn-sm" onclick="viewInvoices()">
+                            <button class="btn btn-secondary btn-sm" data-settings-action="viewInvoices">
                                 View Invoices
                             </button>
                         </div>
@@ -398,7 +395,7 @@
                         <p class="setting-description" id="merchantIdDisplay">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="copyMerchantId()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="copyMerchantId">
                             Copy ID
                         </button>
                     </div>
@@ -410,7 +407,7 @@
                         <p class="setting-description" id="merchantNameDisplay">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editMerchantName()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editMerchantName">
                             Edit
                         </button>
                     </div>
@@ -443,9 +440,9 @@
                             <a href="/api/tenant/roster/template" download="roster-template.csv">Download roster CSV template</a>
                         </p>
                         <input type="file" id="rosterCsvFile" accept=".csv,text/csv" />
-                        <button class="btn btn-secondary btn-sm" type="button" onclick="importRosterCsv()" style="margin-left:8px">Import roster</button>
+                        <button class="btn btn-secondary btn-sm" type="button" data-settings-action="importRosterCsv" style="margin-left:8px">Import roster</button>
                         <p id="rosterImportStatus" class="setting-description"></p>
-                        <button class="btn btn-primary btn-sm" type="button" onclick="savePracticeSettings()" style="margin-top:8px">Save practice settings</button>
+                        <button class="btn btn-primary btn-sm" type="button" data-settings-action="savePracticeSettings" style="margin-top:8px">Save practice settings</button>
                         <p id="practiceSaveMsg" class="setting-description" style="display:none"></p>
                         <details id="pmsHelpPanel" style="margin-top:12px" open>
                             <summary>PMS help — Ascend vs on-prem</summary>
@@ -453,7 +450,7 @@
                               <p><strong>Dentrix Ascend (cloud)</strong> — Requires Henry Schein API Exchange approval. Once approved, connect under Integrations → PMS. Kelly writes appointments back automatically.</p>
                               <p><strong>On-prem Dentrix / Eaglesoft</strong> — Use <em>E10 interim mode</em>: Somo calendar + nightly CSV digest until live write-back. Import roster CSV above; compare sync status on Today.</p>
                               <p><strong>Need help?</strong> Email <a href="mailto:support@callsomo.com">support@callsomo.com</a> with your PMS type and NPI. Include whether you are shadow week or live.</p>
-                              <p><a href="settings.html#connected" onclick="setTimeout(()=>setSettingsTab('connected'),0);return false">Open Connected Accounts →</a></p>
+                              <p><a href="settings.html#connected" data-settings-action="navigateConnected">Open Connected Accounts →</a></p>
                             </div>
                         </details>
                     </div>
@@ -466,10 +463,10 @@
                         </p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="viewApiKey()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="viewApiKey">
                             Show
                         </button>
-                        <button class="btn btn-secondary btn-sm" onclick="regenerateApiKey()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="regenerateApiKey">
                             Regenerate
                         </button>
                     </div>
@@ -481,10 +478,10 @@
                         <p class="setting-description" id="merchantWebhookDisplay">Not configured</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editWebhook()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editWebhook">
                             Edit
                         </button>
-                        <button class="btn btn-secondary btn-sm" onclick="testWebhook()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="testWebhook">
                             Test
                         </button>
                     </div>
@@ -496,7 +493,7 @@
                         <p class="setting-description" id="merchantPlatformsDisplay">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editPlatforms()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editPlatforms">
                             Edit
                         </button>
                     </div>
@@ -508,14 +505,14 @@
                         <p class="setting-description" id="twilioPhoneDisplay">Not configured</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="viewTwilioPhone()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="viewTwilioPhone">
                             View
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div class="settings-section settings-panel" data-settings-panel="advanced" hidden>
+            <div class="settings-section settings-panel" id="settings-panel-advanced" data-settings-panel="advanced" hidden>
                 <h3>Provider credentials</h3>
                 <p class="setting-description">License and NPI documentation for pilot compliance. Stored on your account profile.</p>
                 <label class="setting-description" for="credLicenseNumber">License number</label>
@@ -525,12 +522,12 @@
                 <label class="setting-description" for="credNpiDoc">NPI confirmation (PDF/image)</label>
                 <input type="file" id="credNpiDoc" accept=".pdf,.png,.jpg,.jpeg,.webp" />
                 <p id="credNpiDocStatus" class="setting-description"></p>
-                <button class="btn btn-primary btn-sm" type="button" onclick="saveCredentialsSettings()" style="margin-top:8px">Save credentials</button>
+                <button class="btn btn-primary btn-sm" type="button" data-settings-action="saveCredentialsSettings" style="margin-top:8px">Save credentials</button>
                 <p id="credSaveMsg" class="setting-description" style="display:none"></p>
             </div>
 
             <!-- Team access (multi-user pilot) -->
-            <div class="settings-section settings-panel" data-settings-panel="advanced" id="teamAccessPanel">
+            <div class="settings-section settings-panel" data-settings-panel="advanced" hidden id="teamAccessPanel">
                 <h3>👥 Team access</h3>
                 <p class="setting-description" style="margin-bottom:12px">
                   Invite front-desk staff with their own login. The owner account keeps billing and voice controls.
@@ -544,7 +541,7 @@
             </div>
 
             <!-- API & Developer -->
-            <div class="settings-section settings-panel" data-settings-panel="advanced">
+            <div class="settings-section settings-panel" data-settings-panel="advanced" hidden>
                 <h3>⚙ API & Developer Settings</h3>
 
                 <div class="setting-row">
@@ -553,10 +550,10 @@
                         <p class="setting-description" id="apiKeyDisplayMasked">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="viewApiKey()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="viewApiKey">
                             Show
                         </button>
-                        <button class="btn btn-secondary btn-sm" onclick="regenerateApiKey()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="regenerateApiKey">
                             Regenerate
                         </button>
                     </div>
@@ -568,10 +565,10 @@
                         <p class="setting-description" id="webhookUrlDisplay">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="editWebhook()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="editWebhook">
                             Edit
                         </button>
-                        <button class="btn btn-secondary btn-sm" onclick="testWebhook()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="testWebhook">
                             Test
                         </button>
                     </div>
@@ -583,7 +580,7 @@
                         <p class="setting-description">View complete API reference</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="viewApiDocs()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="viewApiDocs">
                             View Docs
                         </button>
                     </div>
@@ -591,7 +588,7 @@
             </div>
 
             <!-- Security -->
-            <div class="settings-section settings-panel" data-settings-panel="advanced">
+            <div class="settings-section settings-panel" data-settings-panel="advanced" hidden>
                 <h3>🔒 Security</h3>
 
                 <div class="setting-row">
@@ -600,7 +597,7 @@
                         <p class="setting-description" id="passwordLastChanged">Loading...</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="changePassword()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="changePassword">
                             Change Password
                         </button>
                     </div>
@@ -612,7 +609,7 @@
                         <p class="setting-description">Add an extra layer of security</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-primary btn-sm" onclick="enable2FA()">
+                        <button class="btn btn-primary btn-sm" data-settings-action="enable2FA">
                             Enable 2FA
                         </button>
                     </div>
@@ -624,10 +621,10 @@
                         <p class="setting-description">Manage your login sessions</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="viewSessions()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="viewSessions">
                             View Sessions
                         </button>
-                        <button class="btn btn-danger btn-sm" onclick="revokeOtherSessions()">
+                        <button class="btn btn-danger btn-sm" data-settings-action="revokeOtherSessions">
                             Revoke Others
                         </button>
                     </div>
@@ -636,7 +633,7 @@
             </div>
 
             <!-- Danger Zone -->
-            <div class="danger-zone settings-panel" data-settings-panel="advanced">
+            <div class="danger-zone settings-panel" data-settings-panel="advanced" hidden>
                 <h3>⚠ Danger Zone</h3>
                 <div class="setting-row">
                     <div class="setting-info">
@@ -644,7 +641,7 @@
                         <p class="setting-description">Download all your business data</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-secondary btn-sm" onclick="exportData()">
+                        <button class="btn btn-secondary btn-sm" data-settings-action="exportData">
                             Export Data
                         </button>
                     </div>
@@ -656,7 +653,7 @@
                         <p class="setting-description">Permanently delete your account and all data</p>
                     </div>
                     <div class="setting-action">
-                        <button class="btn btn-danger btn-sm" onclick="closeAccount()">
+                        <button class="btn btn-danger btn-sm" data-settings-action="closeAccount">
                             Close Account
                         </button>
                     </div>

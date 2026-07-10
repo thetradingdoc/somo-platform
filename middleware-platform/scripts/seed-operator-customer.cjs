@@ -166,6 +166,21 @@ function main() {
     process.exit(1);
   }
 
+  const { platformDid } = require('../services/platform-line-config');
+  const did = platformDid();
+  if (did && refreshed.twilio_phone_number !== did) {
+    db.updateCustomer(refreshed.id, { twilio_phone_number: did.replace(/\s+/g, '') });
+    refreshed.twilio_phone_number = did;
+    console.log(`   twilio_phone_number: ${did}`);
+  }
+
+  const navId = process.env.NAVIGATION_CUSTOMER_ID || 'cust-navigation-demo';
+  const nav = db.getCustomer(navId);
+  if (nav?.twilio_phone_number === did) {
+    db.updateCustomer(navId, { twilio_phone_number: null });
+    console.log(`   Cleared ${did} from navigation-demo ${navId}`);
+  }
+
   const credits = db.getCustomerCredits(refreshed.id);
   if (!credits) {
     db.allocateFreeCredits(refreshed.id, 10000);

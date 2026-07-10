@@ -39,6 +39,20 @@ const MODE_FORBIDDEN_TOOLS = {
     'run_triage_rag',
     'request_patient_payment'
   ]),
+  [ConversationMode.PLATFORM_SUPPORT]: new Set([
+    'store_triage_opqrst',
+    'store_triage_rich_intake',
+    'run_triage_rag',
+    'schedule_appointment',
+    'request_patient_payment',
+    'cancel_appointment',
+    'reschedule_appointment',
+    'create_appointment_checkout',
+    'search_appointments',
+    'query_patient_records',
+    'collect_insurance',
+    'compute_visit_quote'
+  ]),
   [ConversationMode.EMERGENCY_SAFETY]: new Set([
     'schedule_appointment',
     'request_patient_payment',
@@ -83,6 +97,52 @@ function isSiteSensitiveToolBlocked(ctx = {}, name) {
   const status = ctx.site_context_status || ctx.siteContextStatus;
   if (!status || status === 'not_required' || status === 'verified') return false;
   return true;
+}
+
+/** Tools outside KELLY_TOOLS but valid in specific modes (sales, navigation, Retell). */
+const EXTRA_REGISTERED_TOOL_NAMES = new Set([
+  'collect_contact_info',
+  'schedule_demo',
+  'request_human_handoff',
+  'transfer_call',
+  'resolve_patient_plan',
+  'check_plan_benefits',
+  'find_care_near_me',
+  'resolve_employer_member',
+  'patient_intake',
+  'get_patient_intake_status',
+  'confirm_appointment',
+  'verify_checkout_code',
+  'get_patient_claims',
+  'send_followup_email',
+  'send_followup_sms',
+  'search_products',
+  'create_checkout',
+  'get_available_payment_methods',
+  'get_order_tracking',
+  'verify_email_code',
+  'verify_email_verification_code'
+]);
+
+let _registeredKellyToolNames = null;
+
+function getRegisteredToolNames() {
+  if (_registeredKellyToolNames) return _registeredKellyToolNames;
+  const names = new Set(EXTRA_REGISTERED_TOOL_NAMES);
+  for (const n of ALWAYS_ALLOWED) names.add(n);
+  try {
+    const { KELLY_TOOLS } = require('../kelly-agent-service');
+    for (const t of KELLY_TOOLS || []) {
+      const n = t?.function?.name;
+      if (n) names.add(n);
+    }
+  } catch (_) {}
+  _registeredKellyToolNames = names;
+  return names;
+}
+
+function isRegisteredToolName(name) {
+  return getRegisteredToolNames().has(String(name || '').trim());
 }
 
 const SUBRAIL_ALLOWED_EXTRA = {
@@ -148,6 +208,22 @@ function isToolAllowedForMode(toolName, ctx = {}) {
     return allowed.has(name);
   }
 
+  if (
+    mode === ConversationMode.PLATFORM_SUPPORT ||
+    mode === ConversationMode.OUTBOUND_SALES ||
+    mode === ConversationMode.DEMO_QUAL
+  ) {
+    const salesAllowed = new Set([
+      'collect_contact_info',
+      'schedule_demo',
+      'end_call',
+      'transfer_call',
+      'get_triage_session',
+      'request_human_handoff'
+    ]);
+    if (salesAllowed.has(name)) return true;
+  }
+
   const modeForbidden = MODE_FORBIDDEN_TOOLS[mode];
   if (modeForbidden?.has(name)) return false;
 
@@ -202,7 +278,27 @@ function isToolAllowedForMode(toolName, ctx = {}) {
     if (subForbidden?.has(name)) return false;
   }
 
-  return true;
+  return isRegisteredToolName(name);
+}
+
+function buildFirewallContext(context = {}, toolName = '') {
+  return {
+    conversation_mode: context.conversation_mode || context.mode,
+    active_subrail: context.active_subrail || context.subrail,
+    site_context_status: context.site_context_status || context.siteContextStatus || null,
+    routing_world: context.routing_world || null,
+    triage_policy: context.triage_policy || context.triagePolicy || null,
+    use_case: context.use_case || context.prompt_use_case || null,
+    clinicId: context.clinicId || null,
+    customerId: context.customerId || null,
+    sessionId: context.sessionId || context.session_id || null,
+    callId: context.callId || context.call_id || null,
+    step: context.step || null,
+    allowStoreOpqrst: context.allowStoreOpqrst,
+    _opqrst_gate: context._opqrst_gate,
+    fail_closed: context.fail_closed,
+    toolName: toolName || context.toolName || null
+  };
 }
 
 function logModeViolation(db, ctx = {}) {
@@ -227,7 +323,11 @@ module.exports = {
   MODE_FORBIDDEN_TOOLS,
   SUBRAIL_FORBIDDEN_TOOLS,
   SUBRAIL_ALLOWED_EXTRA,
+  EXTRA_REGISTERED_TOOL_NAMES,
   isToolAllowedForMode,
+  isRegisteredToolName,
+  getRegisteredToolNames,
+  buildFirewallContext,
   logModeViolation,
   isClinicalToolBlocked
 };

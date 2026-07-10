@@ -5,6 +5,8 @@ const { shouldEnforceMode } = require('./config');
 const { Handoff } = require('./handoff-types');
 const { handleOutboundSalesTurn } = require('./rails/outbound-sales-rail');
 const { handleOperatorOutboundTurn } = require('./rails/operator-outbound-rail');
+const { handlePlatformSupportTurn } = require('./rails/platform-support-rail');
+const { handleSomoSalesInboundTurn } = require('./rails/somo-sales-inbound-rail');
 const { handleEmergencyTurn } = require('./rails/emergency-rail');
 const { handleSubrailTurn } = require('./subrails/subrail-router');
 
@@ -24,7 +26,9 @@ const MODE_SAFE_FALLBACK = {
   [ConversationMode.TENANT_RECORDS]:
     'I can help with questions about your medical records.',
   [ConversationMode.EMERGENCY_SAFETY]:
-    'This sounds urgent. I am connecting you with emergency support right away. If this is a life-threatening emergency, please hang up and call 911.'
+    'This sounds urgent. I am connecting you with emergency support right away. If this is a life-threatening emergency, please hang up and call 911.',
+  [ConversationMode.PLATFORM_SUPPORT]:
+    'Thanks for calling Somo. How can I help you today — signing up, or help with your practice account?'
 };
 
 /**
@@ -48,24 +52,21 @@ async function dispatchConversationTurn(mode, ctx = {}) {
     return { ...out, handoff: Handoff.SCRIPT_ONLY, conversation_mode: mode, enforced };
   }
 
+  if (mode === ConversationMode.PLATFORM_SUPPORT) {
+    const out = await handlePlatformSupportTurn(ctx);
+    return { ...out, handoff: Handoff.SCRIPT_ONLY, conversation_mode: mode, enforced };
+  }
+
   if (mode === ConversationMode.DEMO_QUAL) {
-    if (enforced) {
-      return {
-        reply: MODE_SAFE_FALLBACK[ConversationMode.TENANT_INBOUND_ADMIN],
-        endCall: false,
-        toolsUsed: [],
-        conversation_mode: ConversationMode.TENANT_INBOUND_ADMIN,
-        handoff: Handoff.KELLY_REQUIRED,
-        kelly_lane_hint: 'booking',
-        enforced
-      };
-    }
+    const out = await handleSomoSalesInboundTurn({
+      ...ctx,
+      conversation_mode: ConversationMode.PLATFORM_SUPPORT,
+      platform_stage: ctx.platform_stage || 'practice_type'
+    });
     return {
-      reply: MODE_SAFE_FALLBACK[ConversationMode.DEMO_QUAL],
-      endCall: false,
-      toolsUsed: [],
-      conversation_mode: mode,
+      ...out,
       handoff: Handoff.SCRIPT_ONLY,
+      conversation_mode: ConversationMode.PLATFORM_SUPPORT,
       enforced
     };
   }

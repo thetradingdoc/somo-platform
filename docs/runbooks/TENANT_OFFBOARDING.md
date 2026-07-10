@@ -36,13 +36,18 @@ curl -s -H "X-Admin-Secret: $ADMIN_PORTAL_SECRET" \
   -o tenant-export.json
 ```
 
-Bundle includes (tenant-scoped, redacted):
+Bundle includes (tenant-scoped):
 
 - Clinic + customer metadata (no API secrets)
 - Patients (`fhir_patients` for merchant)
-- Call log metadata (duration, outcome — not full transcripts)
+- **Triage sessions** (`triage_sessions` — OPQRST/clinical intake per tenant)
+- **Conversation history** (`kelly_conversation_history` — full turns for tenant voice `session_id`s)
+- **Health session transcripts** (`health_session_transcripts` when `session_id` correlates to tenant voice calls; empty for provider-only tenants)
+- Call log metadata (duration, outcome — `voice_call_log` rows; caller phone masked)
 - Eligibility check summaries (no raw 271 `response_data`)
 - Usage / billing month counters
+
+Export schema version: `export_version: "2"` (see `tenant-phi-export-service.js`).
 
 ## Step 3 — Retention
 

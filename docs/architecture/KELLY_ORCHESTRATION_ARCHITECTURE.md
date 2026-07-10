@@ -1,8 +1,20 @@
 # Kelly Agentic Orchestration Architecture
 
-**Last updated:** 2026-06-18  
+**Last updated:** 2026-07-04  
 **Status:** As-built — P0 gates shipped; enforce-routing on production (`api.callsomo.com`)  
 **Code:** [`middleware-platform/services/conversation-mode/`](../../middleware-platform/services/conversation-mode/), [`middleware-platform/services/kelly-rails/`](../../middleware-platform/services/kelly-rails/)
+
+## Platform sales line (`platform_support`, +363)
+
+Inbound calls to the Somo company DID use **`routing_world=platform_support`** with Kelly blocked at L4 (`shouldBlockKellyTurn`). Turns are handled by the **script-only sales rail** (`somo-sales-inbound-rail.js`):
+
+- **Connect:** `buildPlatformSalesOpener()` via `call-opener-resolver` — Kelly sales identity, recording consent, **no name-first intake**.
+- **Stages:** practice type → pain → value demo → signup CTA → demo offer → close.
+- **Branches:** existing tenant → account help; handoff keywords → PSTN escalation.
+- **CRM:** `collect_contact_info` / `schedule_demo` via `sales-crm-tools.js` + `KellyToolExecutor` when rail returns `toolsUsed`.
+- **Isolation:** `platform_support` in pivot `OUTBOUND_MODES` set — no billing/clinical/book pivots (emergency still preempts).
+
+Outbound admin sales uses `outbound-sales-rail.js` with the same **Kelly** persona (not Alex). English-only for platform sales v1.
 
 **Deep-dive docs (narrative):**
 

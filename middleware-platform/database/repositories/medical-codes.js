@@ -431,9 +431,65 @@ function createMedicalCodesRepository(db) {
     ).all(...normalized);
   }
 
+  function bulkUpsertCdtCodes(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+    const stmt = db.prepare(`
+    INSERT INTO cdt_codes (code, description, category, subcategory, billable, source_file)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      description = excluded.description,
+      category = excluded.category,
+      subcategory = excluded.subcategory,
+      billable = excluded.billable,
+      source_file = excluded.source_file,
+      updated_at = datetime('now')
+  `);
+    let count = 0;
+    for (const item of items) {
+      if (!item || !item.code || !item.description) continue;
+      stmt.run(
+        String(item.code).trim().toUpperCase(),
+        String(item.description).trim(),
+        item.category || null,
+        item.subcategory || null,
+        item.billable != null ? (item.billable ? 1 : 0) : 1,
+        item.source_file || null
+      );
+      count++;
+    }
+    return { inserted: count };
+  }
+
+  function searchCdtCodes(query, limit = 15) {
+    const q = (query || '').toString().trim();
+    if (!q) return [];
+    const term = `%${q.toLowerCase()}%`;
+    return db.prepare(`
+    SELECT code, description, category, subcategory
+    FROM cdt_codes
+    WHERE LOWER(code) LIKE ? OR LOWER(description) LIKE ?
+    ORDER BY CASE WHEN LOWER(code) LIKE ? THEN 0 ELSE 1 END,
+             CASE WHEN LOWER(code) = LOWER(?) THEN 0 ELSE 1 END,
+             description
+    LIMIT ?
+  `).all(term, term, term, q, limit);
+  }
+
+  function getCdtCodesCount() {
+    try {
+      const row = db.prepare('SELECT COUNT(*) as n FROM cdt_codes').get();
+      return row ? row.n : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   return {
     bulkUpsertCptCodes,
     searchCptCodes,
+    bulkUpsertCdtCodes,
+    searchCdtCodes,
+    getCdtCodesCount,
     bulkUpsertIcd10Codes,
     searchIcd10Codes,
     getIcd10CodesCount,

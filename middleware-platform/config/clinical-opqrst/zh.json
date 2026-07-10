@@ -1,0 +1,44 @@
+{
+  "pack_version": "v1",
+  "locale": "zh",
+  "core_sequence": [
+    "opqrst_onset",
+    "opqrst_provocation",
+    "opqrst_quality",
+    "opqrst_radiation",
+    "opqrst_severity",
+    "opqrst_timing"
+  ],
+  "questions": {
+    "opqrst_onset": {
+      "text": "这种情况是什么时候开始的？",
+      "voice_max_words": 12,
+      "store_field": "onset"
+    },
+    "opqrst_provocation": {
+      "text": "什么情况下会加重或减轻？",
+      "voice_max_words": 14,
+      "store_field": "provocation"
+    },
+    "opqrst_quality": {
+      "text": "能描述一下是什么感觉吗？",
+      "voice_max_words": 14,
+      "store_field": "quality"
+    },
+    "opqrst_radiation": {
+      "text": "有没有扩散到其他部位？",
+      "voice_max_words": 10,
+      "store_field": "radiation"
+    },
+    "opqrst_severity": {
+      "text": "如果用1到10分，严重程度是多少？",
+      "voice_max_words": 16,
+      "store_field": "severity"
+    },
+    "opqrst_timing": {
+      "text": "是一直这样还是时好时坏？",
+      "voice_max_words": 14,
+      "store_field": "timing"
+    }
+  }
+}

@@ -14,6 +14,7 @@ const sessionId = process.argv[2] || null;
 const P0_EVENTS = [
   'identity_invalid',
   'mode_violation_blocked',
+  'gate_bypass',
   'scope_guardrail_triggered',
   'turn_resolved',
   'handoff_recovery',

@@ -1,6 +1,6 @@
 # Conversation Mode Matrix
 
-Last updated: 2026-06-17
+Last updated: 2026-07-04
 
 **Architecture SSOT:** [`docs/architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md`](../architecture/KELLY_ORCHESTRATION_ARCHITECTURE.md)  
 **Gap matrix:** [`docs/architecture/ORCHESTRATION_GAP_MATRIX.md`](../architecture/ORCHESTRATION_GAP_MATRIX.md)
@@ -11,8 +11,9 @@ Maps `call_type × direction × tenant_policy × intent → conversation_mode`.
 
 | Mode | Description |
 |------|-------------|
-| `demo_qual` | Somo product demo — no clinical/billing tools |
-| `outbound_sales` | Sales outbound playbook |
+| `platform_support` | Somo company line (+363) — **Kelly sales qualification** (practice type, pain, value demo, signup CTA, optional demo). English-only scripted rail v1. Tenant account-help + human handoff branches. No clinical/booking tools. |
+| `demo_qual` | Legacy alias — under `enforce`, dispatcher routes to `platform_support` sales rail (`SCRIPT_ONLY`). Do not use for tenant booking. |
+| `outbound_sales` | Sales outbound playbook (Kelly persona) |
 | `operator_outbound` | Operator callback/update — no clinical tools |
 | `tenant_inbound_admin` | Tenant inbound — scheduling, FAQ, admin flows |
 | `tenant_inbound_clinical` | Tenant inbound — symptom/triage flows |
@@ -24,7 +25,8 @@ Maps `call_type × direction × tenant_policy × intent → conversation_mode`.
 
 | call_type | direction | tenant_policy | first_intent | → mode |
 |-----------|-----------|---------------|--------------|--------|
-| `somo_demo` | inbound | * | * | `demo_qual` |
+| `somo_demo` | inbound | * | * | `platform_support` |
+| `platform_support` / routing_world | inbound | * | * | `platform_support` |
 | `sales_outbound` | outbound | * | * | `outbound_sales` |
 | `operator_outbound` | outbound | * | * | `operator_outbound` |
 | `inbound_tenant` | inbound | triage=disabled | book/general | `tenant_inbound_admin` |
@@ -83,9 +85,17 @@ Before L2 dispatch, Retell calls must pass tenant identity validation (`clinic_i
 
 Intent detection and pivot use ASR-normalized utterances (filler strip, punctuation). **Conversation history is not mutated.** See `services/conversation-mode/asr-normalize.js`.
 
-## demo_qual under enforce (2026-06-17)
+## demo_qual under enforce (2026-07-04)
 
-Under `CONVERSATION_MODE_ROUTING=enforce`, pivot engine must **not** route to `demo_qual` from tenant modes. Either implement the rail or block pivot; static dispatcher fallback is not allowed in production.
+Under `CONVERSATION_MODE_ROUTING=enforce`, `demo_qual` and `somo_demo` resolve to **`platform_support`** and dispatch the Kelly sales inbound rail with `handoff: SCRIPT_ONLY`. Pivot engine treats `platform_support` as an isolated mode (no billing/clinical/book pivots; emergency + handoff only). Pivot to `demo_qual` from tenant modes remains blocked.
+
+## Platform sales language (v1)
+
+- **English only** on +363 / `platform_support`. ES/RU sales qual deferred.
+- Outbound sales **voicemail/IVR detection** deferred (parity with `operator-outbound-rail.js` post-v1).
+- Tests: `platform-sales-persona-sequence.test.js`, `platform-support-pivot-firewall.test.js` (EN baseline multilang harness).
+
+## demo_qual history (2026-06-17)
 
 ## Environment
 

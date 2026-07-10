@@ -102,6 +102,27 @@ describe('opqrst-voice-history-wiring', () => {
     expect(seedKellyHistoryFromOrchestrate(sessionId, mockDb)).toBe(false);
   });
 
+  test('seedKellyHistoryFromOrchestrate skips when Kelly already has rows (one-way)', () => {
+    appendHistory(sessionId, 'assistant', 'Kelly-owned turn');
+    const mockDb = {
+      getOrchestrateSessionBySessionId: () => ({
+        conversation_history: [
+          { role: 'user', content: 'legacy user' },
+          { role: 'assistant', content: 'legacy assistant' },
+          { role: 'user', content: 'extra legacy user' }
+        ]
+      })
+    };
+    expect(seedKellyHistoryFromOrchestrate(sessionId, mockDb)).toBe(false);
+    expect(kellyRows.filter((r) => r.session_id === sessionId).length).toBe(1);
+  });
+
+  test('getLastAssistantText ignores trailing user turn (post-2.1 single writer)', () => {
+    appendHistory(sessionId, 'assistant', provAsk);
+    appendHistory(sessionId, 'user', 'rest helps');
+    expect(getLastAssistantText(sessionId, {})).toBe(provAsk);
+  });
+
   test('T-7.3 two-turn gate: provocation stored after assistant in history', async () => {
     const triageRow = { onset: '3 days ago', target_specialty: 'Primary Care' };
     let storedProvocation = null;

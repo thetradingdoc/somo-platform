@@ -1,0 +1,428 @@
+# ADA CDT 2025 seed (Phase 7.7) — extend from Knowledge/CDT PDF guides
+D0100    diagnostic procedure D0100
+D0101    diagnostic procedure D0101
+D0102    diagnostic procedure D0102
+D0103    diagnostic procedure D0103
+D0104    diagnostic procedure D0104
+D0105    diagnostic procedure D0105
+D0106    diagnostic procedure D0106
+D0107    diagnostic procedure D0107
+D0108    diagnostic procedure D0108
+D0109    diagnostic procedure D0109
+D0110    diagnostic procedure D0110
+D0111    diagnostic procedure D0111
+D0112    diagnostic procedure D0112
+D0113    diagnostic procedure D0113
+D0114    diagnostic procedure D0114
+D0115    diagnostic procedure D0115
+D0116    diagnostic procedure D0116
+D0117    diagnostic procedure D0117
+D0118    diagnostic procedure D0118
+D0119    diagnostic procedure D0119
+D0120    periodic oral evaluation - established patient
+D0121    diagnostic procedure D0121
+D0122    diagnostic procedure D0122
+D0123    diagnostic procedure D0123
+D0124    diagnostic procedure D0124
+D0125    diagnostic procedure D0125
+D0126    diagnostic procedure D0126
+D0127    diagnostic procedure D0127
+D0128    diagnostic procedure D0128
+D0129    diagnostic procedure D0129
+D0130    diagnostic procedure D0130
+D0131    diagnostic procedure D0131
+D0132    diagnostic procedure D0132
+D0133    diagnostic procedure D0133
+D0134    diagnostic procedure D0134
+D0135    diagnostic procedure D0135
+D0136    diagnostic procedure D0136
+D0137    diagnostic procedure D0137
+D0138    diagnostic procedure D0138
+D0139    diagnostic procedure D0139
+D0140    limited oral evaluation - problem focused
+D0150    comprehensive oral evaluation - new or established patient
+D0210    intraoral - complete series of radiographic images
+D0274    bitewings - four radiographic images
+D0330    panoramic radiographic image
+D1000    preventive procedure D1000
+D1001    preventive procedure D1001
+D1002    preventive procedure D1002
+D1003    preventive procedure D1003
+D1004    preventive procedure D1004
+D1005    preventive procedure D1005
+D1006    preventive procedure D1006
+D1007    preventive procedure D1007
+D1008    preventive procedure D1008
+D1009    preventive procedure D1009
+D1010    preventive procedure D1010
+D1011    preventive procedure D1011
+D1012    preventive procedure D1012
+D1013    preventive procedure D1013
+D1014    preventive procedure D1014
+D1015    preventive procedure D1015
+D1016    preventive procedure D1016
+D1017    preventive procedure D1017
+D1018    preventive procedure D1018
+D1019    preventive procedure D1019
+D1020    preventive procedure D1020
+D1021    preventive procedure D1021
+D1022    preventive procedure D1022
+D1023    preventive procedure D1023
+D1024    preventive procedure D1024
+D1025    preventive procedure D1025
+D1026    preventive procedure D1026
+D1027    preventive procedure D1027
+D1028    preventive procedure D1028
+D1029    preventive procedure D1029
+D1030    preventive procedure D1030
+D1031    preventive procedure D1031
+D1032    preventive procedure D1032
+D1033    preventive procedure D1033
+D1034    preventive procedure D1034
+D1035    preventive procedure D1035
+D1036    preventive procedure D1036
+D1037    preventive procedure D1037
+D1038    preventive procedure D1038
+D1039    preventive procedure D1039
+D1110    prophylaxis - adult
+D1120    prophylaxis - child
+D1206    topical fluoride varnish
+D1351    sealant - per tooth
+D2000    restorative procedure D2000
+D2001    restorative procedure D2001
+D2002    restorative procedure D2002
+D2003    restorative procedure D2003
+D2004    restorative procedure D2004
+D2005    restorative procedure D2005
+D2006    restorative procedure D2006
+D2007    restorative procedure D2007
+D2008    restorative procedure D2008
+D2009    restorative procedure D2009
+D2010    restorative procedure D2010
+D2011    restorative procedure D2011
+D2012    restorative procedure D2012
+D2013    restorative procedure D2013
+D2014    restorative procedure D2014
+D2015    restorative procedure D2015
+D2016    restorative procedure D2016
+D2017    restorative procedure D2017
+D2018    restorative procedure D2018
+D2019    restorative procedure D2019
+D2020    restorative procedure D2020
+D2021    restorative procedure D2021
+D2022    restorative procedure D2022
+D2023    restorative procedure D2023
+D2024    restorative procedure D2024
+D2025    restorative procedure D2025
+D2026    restorative procedure D2026
+D2027    restorative procedure D2027
+D2028    restorative procedure D2028
+D2029    restorative procedure D2029
+D2030    restorative procedure D2030
+D2031    restorative procedure D2031
+D2032    restorative procedure D2032
+D2033    restorative procedure D2033
+D2034    restorative procedure D2034
+D2035    restorative procedure D2035
+D2036    restorative procedure D2036
+D2037    restorative procedure D2037
+D2038    restorative procedure D2038
+D2039    restorative procedure D2039
+D2140    amalgam - one surface, primary or permanent
+D2391    resin-based composite - one surface, posterior
+D2740    crown - porcelain/ceramic substrate
+D2750    crown - porcelain fused to high noble metal
+D3000    endodontics procedure D3000
+D3001    endodontics procedure D3001
+D3002    endodontics procedure D3002
+D3003    endodontics procedure D3003
+D3004    endodontics procedure D3004
+D3005    endodontics procedure D3005
+D3006    endodontics procedure D3006
+D3007    endodontics procedure D3007
+D3008    endodontics procedure D3008
+D3009    endodontics procedure D3009
+D3010    endodontics procedure D3010
+D3011    endodontics procedure D3011
+D3012    endodontics procedure D3012
+D3013    endodontics procedure D3013
+D3014    endodontics procedure D3014
+D3015    endodontics procedure D3015
+D3016    endodontics procedure D3016
+D3017    endodontics procedure D3017
+D3018    endodontics procedure D3018
+D3019    endodontics procedure D3019
+D3020    endodontics procedure D3020
+D3021    endodontics procedure D3021
+D3022    endodontics procedure D3022
+D3023    endodontics procedure D3023
+D3024    endodontics procedure D3024
+D3025    endodontics procedure D3025
+D3026    endodontics procedure D3026
+D3027    endodontics procedure D3027
+D3028    endodontics procedure D3028
+D3029    endodontics procedure D3029
+D3030    endodontics procedure D3030
+D3031    endodontics procedure D3031
+D3032    endodontics procedure D3032
+D3033    endodontics procedure D3033
+D3034    endodontics procedure D3034
+D3035    endodontics procedure D3035
+D3036    endodontics procedure D3036
+D3037    endodontics procedure D3037
+D3038    endodontics procedure D3038
+D3039    endodontics procedure D3039
+D3310    endodontic therapy, anterior tooth
+D3320    endodontic therapy, bicuspid tooth
+D3330    endodontic therapy, molar
+D4000    periodontics procedure D4000
+D4001    periodontics procedure D4001
+D4002    periodontics procedure D4002
+D4003    periodontics procedure D4003
+D4004    periodontics procedure D4004
+D4005    periodontics procedure D4005
+D4006    periodontics procedure D4006
+D4007    periodontics procedure D4007
+D4008    periodontics procedure D4008
+D4009    periodontics procedure D4009
+D4010    periodontics procedure D4010
+D4011    periodontics procedure D4011
+D4012    periodontics procedure D4012
+D4013    periodontics procedure D4013
+D4014    periodontics procedure D4014
+D4015    periodontics procedure D4015
+D4016    periodontics procedure D4016
+D4017    periodontics procedure D4017
+D4018    periodontics procedure D4018
+D4019    periodontics procedure D4019
+D4020    periodontics procedure D4020
+D4021    periodontics procedure D4021
+D4022    periodontics procedure D4022
+D4023    periodontics procedure D4023
+D4024    periodontics procedure D4024
+D4025    periodontics procedure D4025
+D4026    periodontics procedure D4026
+D4027    periodontics procedure D4027
+D4028    periodontics procedure D4028
+D4029    periodontics procedure D4029
+D4030    periodontics procedure D4030
+D4031    periodontics procedure D4031
+D4032    periodontics procedure D4032
+D4033    periodontics procedure D4033
+D4034    periodontics procedure D4034
+D4035    periodontics procedure D4035
+D4036    periodontics procedure D4036
+D4037    periodontics procedure D4037
+D4038    periodontics procedure D4038
+D4039    periodontics procedure D4039
+D4341    periodontal scaling and root planing - four or more teeth per quadrant
+D4342    periodontal scaling and root planing - one to three teeth per quadrant
+D4910    periodontal maintenance
+D5000    prosthodontics removable procedure D5000
+D5001    prosthodontics removable procedure D5001
+D5002    prosthodontics removable procedure D5002
+D5003    prosthodontics removable procedure D5003
+D5004    prosthodontics removable procedure D5004
+D5005    prosthodontics removable procedure D5005
+D5006    prosthodontics removable procedure D5006
+D5007    prosthodontics removable procedure D5007
+D5008    prosthodontics removable procedure D5008
+D5009    prosthodontics removable procedure D5009
+D5010    prosthodontics removable procedure D5010
+D5011    prosthodontics removable procedure D5011
+D5012    prosthodontics removable procedure D5012
+D5013    prosthodontics removable procedure D5013
+D5014    prosthodontics removable procedure D5014
+D5015    prosthodontics removable procedure D5015
+D5016    prosthodontics removable procedure D5016
+D5017    prosthodontics removable procedure D5017
+D5018    prosthodontics removable procedure D5018
+D5019    prosthodontics removable procedure D5019
+D5020    prosthodontics removable procedure D5020
+D5021    prosthodontics removable procedure D5021
+D5022    prosthodontics removable procedure D5022
+D5023    prosthodontics removable procedure D5023
+D5024    prosthodontics removable procedure D5024
+D5025    prosthodontics removable procedure D5025
+D5026    prosthodontics removable procedure D5026
+D5027    prosthodontics removable procedure D5027
+D5028    prosthodontics removable procedure D5028
+D5029    prosthodontics removable procedure D5029
+D5030    prosthodontics removable procedure D5030
+D5031    prosthodontics removable procedure D5031
+D5032    prosthodontics removable procedure D5032
+D5033    prosthodontics removable procedure D5033
+D5034    prosthodontics removable procedure D5034
+D5035    prosthodontics removable procedure D5035
+D5036    prosthodontics removable procedure D5036
+D5037    prosthodontics removable procedure D5037
+D5038    prosthodontics removable procedure D5038
+D5039    prosthodontics removable procedure D5039
+D5110    complete denture - maxillary
+D5120    complete denture - mandibular
+D6000    implant procedure D6000
+D6001    implant procedure D6001
+D6002    implant procedure D6002
+D6003    implant procedure D6003
+D6004    implant procedure D6004
+D6005    implant procedure D6005
+D6006    implant procedure D6006
+D6007    implant procedure D6007
+D6008    implant procedure D6008
+D6009    implant procedure D6009
+D6010    surgical placement of implant body: endosteal implant
+D6011    implant procedure D6011
+D6012    implant procedure D6012
+D6013    implant procedure D6013
+D6014    implant procedure D6014
+D6015    implant procedure D6015
+D6016    implant procedure D6016
+D6017    implant procedure D6017
+D6018    implant procedure D6018
+D6019    implant procedure D6019
+D6020    implant procedure D6020
+D6021    implant procedure D6021
+D6022    implant procedure D6022
+D6023    implant procedure D6023
+D6024    implant procedure D6024
+D6025    implant procedure D6025
+D6026    implant procedure D6026
+D6027    implant procedure D6027
+D6028    implant procedure D6028
+D6029    implant procedure D6029
+D6030    implant procedure D6030
+D6031    implant procedure D6031
+D6032    implant procedure D6032
+D6033    implant procedure D6033
+D6034    implant procedure D6034
+D6035    implant procedure D6035
+D6036    implant procedure D6036
+D6037    implant procedure D6037
+D6038    implant procedure D6038
+D6039    implant procedure D6039
+D6056    prefabricated abutment
+D7000    oral surgery procedure D7000
+D7001    oral surgery procedure D7001
+D7002    oral surgery procedure D7002
+D7003    oral surgery procedure D7003
+D7004    oral surgery procedure D7004
+D7005    oral surgery procedure D7005
+D7006    oral surgery procedure D7006
+D7007    oral surgery procedure D7007
+D7008    oral surgery procedure D7008
+D7009    oral surgery procedure D7009
+D7010    oral surgery procedure D7010
+D7011    oral surgery procedure D7011
+D7012    oral surgery procedure D7012
+D7013    oral surgery procedure D7013
+D7014    oral surgery procedure D7014
+D7015    oral surgery procedure D7015
+D7016    oral surgery procedure D7016
+D7017    oral surgery procedure D7017
+D7018    oral surgery procedure D7018
+D7019    oral surgery procedure D7019
+D7020    oral surgery procedure D7020
+D7021    oral surgery procedure D7021
+D7022    oral surgery procedure D7022
+D7023    oral surgery procedure D7023
+D7024    oral surgery procedure D7024
+D7025    oral surgery procedure D7025
+D7026    oral surgery procedure D7026
+D7027    oral surgery procedure D7027
+D7028    oral surgery procedure D7028
+D7029    oral surgery procedure D7029
+D7030    oral surgery procedure D7030
+D7031    oral surgery procedure D7031
+D7032    oral surgery procedure D7032
+D7033    oral surgery procedure D7033
+D7034    oral surgery procedure D7034
+D7035    oral surgery procedure D7035
+D7036    oral surgery procedure D7036
+D7037    oral surgery procedure D7037
+D7038    oral surgery procedure D7038
+D7039    oral surgery procedure D7039
+D7140    extraction, erupted tooth or exposed root
+D7210    extraction, erupted tooth requiring removal of bone and/or sectioning of tooth
+D8000    orthodontics procedure D8000
+D8001    orthodontics procedure D8001
+D8002    orthodontics procedure D8002
+D8003    orthodontics procedure D8003
+D8004    orthodontics procedure D8004
+D8005    orthodontics procedure D8005
+D8006    orthodontics procedure D8006
+D8007    orthodontics procedure D8007
+D8008    orthodontics procedure D8008
+D8009    orthodontics procedure D8009
+D8010    orthodontics procedure D8010
+D8011    orthodontics procedure D8011
+D8012    orthodontics procedure D8012
+D8013    orthodontics procedure D8013
+D8014    orthodontics procedure D8014
+D8015    orthodontics procedure D8015
+D8016    orthodontics procedure D8016
+D8017    orthodontics procedure D8017
+D8018    orthodontics procedure D8018
+D8019    orthodontics procedure D8019
+D8020    orthodontics procedure D8020
+D8021    orthodontics procedure D8021
+D8022    orthodontics procedure D8022
+D8023    orthodontics procedure D8023
+D8024    orthodontics procedure D8024
+D8025    orthodontics procedure D8025
+D8026    orthodontics procedure D8026
+D8027    orthodontics procedure D8027
+D8028    orthodontics procedure D8028
+D8029    orthodontics procedure D8029
+D8030    orthodontics procedure D8030
+D8031    orthodontics procedure D8031
+D8032    orthodontics procedure D8032
+D8033    orthodontics procedure D8033
+D8034    orthodontics procedure D8034
+D8035    orthodontics procedure D8035
+D8036    orthodontics procedure D8036
+D8037    orthodontics procedure D8037
+D8038    orthodontics procedure D8038
+D8039    orthodontics procedure D8039
+D8080    comprehensive orthodontic treatment of the adolescent dentition
+D9000    adjunctive procedure D9000
+D9001    adjunctive procedure D9001
+D9002    adjunctive procedure D9002
+D9003    adjunctive procedure D9003
+D9004    adjunctive procedure D9004
+D9005    adjunctive procedure D9005
+D9006    adjunctive procedure D9006
+D9007    adjunctive procedure D9007
+D9008    adjunctive procedure D9008
+D9009    adjunctive procedure D9009
+D9010    adjunctive procedure D9010
+D9011    adjunctive procedure D9011
+D9012    adjunctive procedure D9012
+D9013    adjunctive procedure D9013
+D9014    adjunctive procedure D9014
+D9015    adjunctive procedure D9015
+D9016    adjunctive procedure D9016
+D9017    adjunctive procedure D9017
+D9018    adjunctive procedure D9018
+D9019    adjunctive procedure D9019
+D9020    adjunctive procedure D9020
+D9021    adjunctive procedure D9021
+D9022    adjunctive procedure D9022
+D9023    adjunctive procedure D9023
+D9024    adjunctive procedure D9024
+D9025    adjunctive procedure D9025
+D9026    adjunctive procedure D9026
+D9027    adjunctive procedure D9027
+D9028    adjunctive procedure D9028
+D9029    adjunctive procedure D9029
+D9030    adjunctive procedure D9030
+D9031    adjunctive procedure D9031
+D9032    adjunctive procedure D9032
+D9033    adjunctive procedure D9033
+D9034    adjunctive procedure D9034
+D9035    adjunctive procedure D9035
+D9036    adjunctive procedure D9036
+D9037    adjunctive procedure D9037
+D9038    adjunctive procedure D9038
+D9039    adjunctive procedure D9039
+D9110    palliative treatment of dental pain - per visit
+D9222    deep sedation/general anesthesia - first 15 minutes

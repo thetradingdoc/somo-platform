@@ -8,7 +8,8 @@ const {
   argsFromMeta,
   resolveBookingSlot,
   parseProviderFromMessage,
-  bundleMatchesProvider
+  bundleMatchesProvider,
+  executeDeterministicTool
 } = require('./shared');
 
 async function runDeterministicBookingConflict(state, ctx) {
@@ -75,7 +76,9 @@ async function runDeterministicBookingConflict(state, ctx) {
   }
 
   const providerPref = state.flags.provider_preference || parseProviderFromMessage(ctx.message);
-  const slots = await KellyToolExecutor.execute(
+  const slots = await executeDeterministicTool(
+    state.active_lane,
+    state.step || 'schedule_visit',
     'get_available_slots',
     {
       date: targetDate,

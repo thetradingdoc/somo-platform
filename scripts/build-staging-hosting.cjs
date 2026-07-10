@@ -4,7 +4,7 @@
 /**
  * Assemble Firebase Hosting bundle for callsomo.com (Firebase somo-4ddf6):
  *   - Somo landing SPA (/)
- *   - Provider signup/login + business portal static HTML
+ *   - Provider signup/login + business portal static HTML (patients/ retired — redirects in firebase.json)
  *   - Health-video SPA at /health-video
  *   - Unified-dashboard assets at /assets and /unified-dashboard/assets
  *

@@ -26,7 +26,9 @@ function run() {
   const tables = [
     ['voice_call_log', 'created_at', retention.voice_call_log],
     ['llm_usage_log', 'created_at', retention.llm_usage_log],
-    ['function_call_log', 'created_at', retention.function_call_log]
+    ['function_call_log', 'created_at', retention.function_call_log],
+    ['kelly_conversation_history', 'created_at', retention.kelly_conversation_history],
+    ['triage_sessions', 'created_at', retention.triage_sessions]
   ];
 
   let totalDeleted = 0;

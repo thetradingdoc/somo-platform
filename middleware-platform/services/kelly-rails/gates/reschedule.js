@@ -48,7 +48,9 @@ async function runDeterministicReschedule(state, ctx) {
   toolsUsed.push('reschedule_appointment');
 
   if (out?.success === false) {
-    const slots = await KellyToolExecutor.execute(
+    const slots = await executeDeterministicTool(
+      KELLY_LANE.RESCHEDULE,
+      'move_or_cancel',
       'get_available_slots',
       { date: newDate, specialty: 'Dental', days_ahead: 7 },
       ctx

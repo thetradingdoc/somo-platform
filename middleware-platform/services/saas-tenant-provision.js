@@ -89,6 +89,20 @@ function seedPromptProfile(dbModule, { clinicId, customerId, useCase, clinicName
 }
 
 const SPECIALTY_PRICING_TYPES = {
+  Dental: [
+    'General Consult',
+    'D1110',
+    'D1120',
+    'D0120',
+    'D0150',
+    'D0140',
+    'D2391',
+    'D3310',
+    'D2740',
+    'D4341',
+    'D7140',
+    'D9110'
+  ],
   'General Medicine': ['General Consult', 'Mental Health Consultation'],
   Dermatology: ['General Consult'],
   'Mental Health': ['Therapy', 'Mental Health Consultation', 'Psychiatry Initial', 'Psychiatry Follow-up'],

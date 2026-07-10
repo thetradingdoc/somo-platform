@@ -173,6 +173,7 @@ const APPOINTMENT_TYPE_TO_SPECIALTY = {
 
 /** Dental CDT phrase → code (admin front-desk path). */
 const DENTAL_CDT_TRIGGERS = [
+  { patterns: [/\bdeep cleaning\b/i], code: 'D4341' },
   { patterns: [/\bcleaning\b/i, /\bprophylaxis\b/i, /\bhygiene\b/i], adult: 'D1110', child: 'D1120' },
   { patterns: [/\bnew patient\b/i, /\bfirst time\b/i], code: 'D0150' },
   { patterns: [/\bcheckup\b/i, /\bcheck.?up\b/i, /\bperiodic\b/i], code: 'D0120' },
@@ -211,9 +212,37 @@ function resolveDentalCdtFromReason(reasonText, opts = {}) {
     const code = entry.adult
       ? (isChild ? entry.child || entry.adult : entry.adult)
       : entry.code;
-    return { code, matched_phrase: reason };
+    return { code, matched_phrase: reason, code_source: 'phrase_map' };
   }
-  return { code: null, matched_phrase: null };
+
+  // Full codebook lookup (Phase 7.7) — phrase map is fast-path only
+  try {
+    const db = require('../database');
+    const hits = db.searchCdtCodes?.(reason, 5) || [];
+    if (hits.length > 0) {
+      const tokens = reason.split(/\s+/).filter((t) => t.length > 2);
+      let best = hits[0];
+      let bestScore = 0;
+      for (const row of hits) {
+        const desc = String(row.description || '').toLowerCase();
+        const score = tokens.reduce((n, t) => (desc.includes(t) ? n + 1 : n), 0);
+        if (score > bestScore) {
+          bestScore = score;
+          best = row;
+        }
+      }
+      if (best?.code) {
+        return {
+          code: best.code,
+          matched_phrase: reason,
+          code_source: 'cdt_codebook',
+          description: best.description
+        };
+      }
+    }
+  } catch (_) {}
+
+  return { code: null, matched_phrase: null, code_source: null };
 }
 
 function getDentalCdtForVisit(opts = {}) {

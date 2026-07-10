@@ -10,7 +10,8 @@ const ConversationMode = Object.freeze({
   TENANT_INBOUND_CLINICAL: 'tenant_inbound_clinical',
   TENANT_BILLING: 'tenant_billing',
   TENANT_RECORDS: 'tenant_records',
-  EMERGENCY_SAFETY: 'emergency_safety'
+  EMERGENCY_SAFETY: 'emergency_safety',
+  PLATFORM_SUPPORT: 'platform_support'
 });
 
 /** Within-rail subrails. */
@@ -66,6 +67,7 @@ function normalizeCallType(callType) {
   if (t === 'operator_outbound') return 'operator_outbound';
   if (t === 'inbound_tenant' || t === 'inbound') return 'inbound_tenant';
   if (t === 'consumer_navigation') return 'consumer_navigation';
+  if (t === 'platform_support') return 'platform_support';
   if (t === 'sequence_automation') return 'operator_outbound';
   return t || 'unknown';
 }

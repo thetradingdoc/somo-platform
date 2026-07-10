@@ -179,8 +179,6 @@ function resolveTenantVoiceConfig(db, { clinicId, customerId, merchantId } = {})
     triage_policy: policy?.triage_policy || 'disabled',
     policy,
     copay_quote_speak_enabled:
-      voiceSettings?.copay_quote_speak_enabled === 1 ||
-      voiceSettings?.copay_quote_speak_enabled === true ||
       parseJsonField(promptProfile?.policy_json, {})?.copay_quote_speak_enabled === true,
     customer_clinics_linked: customerClinicsLinked,
     enabled: voiceSettings?.enabled !== 0 && voiceSettings?.enabled !== false

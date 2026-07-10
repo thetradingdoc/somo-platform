@@ -14,6 +14,7 @@ try {
   console.warn('   Install with: npm install nodemailer');
   nodemailer = null;
 }
+const { validatePhiSafeMessage } = require('../utils/phi-safe-messaging');
 
 let azureEmailClient;
 try {
@@ -251,6 +252,18 @@ class EmailService {
 
   static async sendEmail({ to, subject, html, text, attachments, replyTo }) {
     try {
+      const bodyCheck = validatePhiSafeMessage(
+        [subject, text, html].filter(Boolean).join('\n')
+      );
+      if (!bodyCheck.safe) {
+        return {
+          success: false,
+          error: 'Email blocked: message contains potential PHI patterns',
+          error_code: 'PHI_SAFE_MESSAGE_BLOCKED',
+          violations: bodyCheck.violations
+        };
+      }
+
       const mode = this.getEmailProviderMode();
       const tryAzure = mode === 'azure' || mode === 'auto';
       const trySmtp = mode === 'smtp' || mode === 'auto';

@@ -4059,6 +4059,45 @@ function migrateLeadsPhase1() {
   }
 }
 
+// Migration: TCPA outbound consent basis on sales leads (Phase 10.5)
+function migrateLeadsOutboundConsent() {
+  try {
+    db.pragma('foreign_keys = OFF');
+    const tableInfo = db.prepare('PRAGMA table_info(leads)').all();
+    const columnNames = tableInfo.map((col) => col.name);
+
+    if (!columnNames.includes('outbound_consent_basis')) {
+      console.log('🔄 Migrating: Adding outbound_consent_basis column to leads table');
+      db.prepare('ALTER TABLE leads ADD COLUMN outbound_consent_basis TEXT').run();
+    }
+    if (!columnNames.includes('consent_recorded_at')) {
+      console.log('🔄 Migrating: Adding consent_recorded_at column to leads table');
+      db.prepare('ALTER TABLE leads ADD COLUMN consent_recorded_at DATETIME').run();
+    }
+
+    db.prepare(`
+      UPDATE leads
+      SET outbound_consent_basis = 'inbound_platform',
+          consent_recorded_at = COALESCE(consent_recorded_at, datetime('now'))
+      WHERE source = 'inbound_platform'
+        AND (outbound_consent_basis IS NULL OR TRIM(outbound_consent_basis) = '')
+    `).run();
+
+    db.prepare(`
+      UPDATE leads
+      SET outbound_consent_basis = 'scrape_public_listing'
+      WHERE source IN ('jsearch', 'craigslist', 'google_search', 'job_search', 'scrape', 'debug_seed')
+        AND (outbound_consent_basis IS NULL OR TRIM(outbound_consent_basis) = '')
+    `).run();
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: outbound consent columns on leads');
+  } catch (error) {
+    console.warn('⚠️  Leads outbound consent migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Migration: Add password_hash column to customers table
 function migrateCustomersPasswordHash() {
   try {
@@ -5834,6 +5873,7 @@ runStartupMigrations(
     migrateMerchantOrderCommerceIdempotency,
     migrateLeadsPipeline,
     migrateLeadsPhase1,
+    migrateLeadsOutboundConsent,
     migrateSequences,
     migrateQualificationRules,
     migrateCustomersTable,
@@ -10588,10 +10628,16 @@ module.exports = {
   // Create FHIR Patient
   // RULE: Each patient must have a unique phone number (when phone is provided and not deleted)
   createFHIRPatient(patientResource) {
-    const phone = patientResource.telecom?.find(t => t.system === 'phone')?.value;
-    const email = patientResource.telecom?.find(t => t.system === 'email')?.value;
-    const name = patientResource.name?.[0]
-      ? `${patientResource.name[0].given?.join(' ')} ${patientResource.name[0].family}`.trim()
+    let resourceId = String(patientResource.id || '').trim();
+    if (resourceId.startsWith('Patient/')) {
+      resourceId = resourceId.slice('Patient/'.length);
+    }
+    const normalizedResource = { ...patientResource, id: resourceId };
+
+    const phone = normalizedResource.telecom?.find(t => t.system === 'phone')?.value;
+    const email = normalizedResource.telecom?.find(t => t.system === 'email')?.value;
+    const name = normalizedResource.name?.[0]
+      ? `${normalizedResource.name[0].given?.join(' ')} ${normalizedResource.name[0].family}`.trim()
       : null;
 
     // RULE ENFORCEMENT: Check for duplicate phone number (phone is unique identifier)
@@ -10613,14 +10659,14 @@ module.exports = {
       SELECT resource_id, name, phone FROM fhir_patients 
       WHERE resource_id = ? AND is_deleted = 0 
       LIMIT 1
-    `).get(patientResource.id);
+    `).get(resourceId);
 
     if (existingById) {
-      throw new Error(`Patient with ID ${patientResource.id} already exists (Name: ${existingById.name || 'Unknown'}, Phone: ${existingById.phone || 'N/A'}). Patient IDs must be unique.`);
+      throw new Error(`Patient with ID ${resourceId} already exists (Name: ${existingById.name || 'Unknown'}, Phone: ${existingById.phone || 'N/A'}). Patient IDs must be unique.`);
     }
 
     // Extract merchant_id from patientResource if provided (for tenant linking)
-    const merchantId = patientResource.merchant_id || null;
+    const merchantId = normalizedResource.merchant_id || null;
 
     const stmt = db.prepare(`
       INSERT INTO fhir_patients (
@@ -10630,8 +10676,8 @@ module.exports = {
 
     try {
       return stmt.run(
-        patientResource.id,
-        JSON.stringify(patientResource),
+        resourceId,
+        JSON.stringify(normalizedResource),
         phone,
         email,
         name,
@@ -10678,9 +10724,19 @@ module.exports = {
     if (patientId == null || patientId === '') return null;
     let id = String(patientId).trim();
     if (!id) return null;
-    if (id.startsWith('Patient/')) id = id.slice('Patient/'.length);
-    const direct = this.getFHIRPatient(id);
-    if (direct) return direct;
+
+    const candidates = new Set([id]);
+    if (id.startsWith('Patient/')) {
+      candidates.add(id.slice('Patient/'.length));
+    } else {
+      candidates.add(`Patient/${id}`);
+    }
+
+    for (const candidate of candidates) {
+      const direct = this.getFHIRPatient(candidate);
+      if (direct) return direct;
+    }
+
     if (/^\d+$/.test(id)) {
       const pk = parseInt(id, 10);
       const row = db.prepare('SELECT * FROM fhir_patients WHERE id = ? AND is_deleted = 0').get(pk);
@@ -11479,7 +11535,15 @@ module.exports = {
         vals.push(patient_id || (resource_type === 'Patient' ? resource_id : null));
       }
       db.prepare(`INSERT INTO hipaa_access_log (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...vals);
-    } catch (_) {}
+    } catch (err) {
+      console.error('[HIPAA_ACCESS_LOG_FAILED]', {
+        resource_type,
+        resource_id,
+        action,
+        error: err.message
+      });
+      throw err;
+    }
   },
 
   // Get Audit Logs
@@ -18382,12 +18446,14 @@ module.exports = {
 
     // Determine lead_type: 'sales' for job search leads, 'customer' for signups
     const leadType = leadData.lead_type || (leadData.source === 'self_signup' ? 'customer' : 'sales');
+    const { consentPayloadForNewLead } = require('./services/lead-outbound-consent');
+    const consentFields = consentPayloadForNewLead(leadData);
 
     const result = db.prepare(`
       INSERT INTO leads (
         id, external_id, title, clinic_name, clinic_phone, clinic_email, opening_hours,
-        location, source_url, status, pipeline_stage, is_qualified, priority, lead_score, source, posted_at, notes, description, salary, specialty, required_languages, preferred_language, follow_up_date, next_action, estimated_value, owner_id, is_test, lead_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        location, source_url, status, pipeline_stage, is_qualified, priority, lead_score, source, posted_at, notes, description, salary, specialty, required_languages, preferred_language, follow_up_date, next_action, estimated_value, owner_id, is_test, lead_type, outbound_consent_basis, consent_recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       leadData.external_id || null,
@@ -18416,7 +18482,9 @@ module.exports = {
       leadData.estimated_value || null,
       leadData.owner_id || null,
       leadData.is_test || 0,
-      leadType
+      leadType,
+      consentFields.outbound_consent_basis,
+      consentFields.consent_recorded_at
     );
 
     // Return result with id for consistency (SQLite returns lastInsertRowid, but we use explicit id)
@@ -20120,26 +20188,53 @@ module.exports.getTriageMediaForSession = function getTriageMediaForSession(sess
   } catch (_) { return []; }
 };
 
-/** gap18: Get persisted preferred_language for Kelly session */
+/** Session language SSOT: kelly_rails_session_projection.flags_json.locale */
 module.exports.getKellySessionLanguage = function getKellySessionLanguage(sessionId) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) return null;
   try {
-    const row = db.prepare('SELECT preferred_language FROM kelly_session_meta WHERE session_id = ?').get(sessionId || '');
-    return row?.preferred_language || null;
-  } catch (_) { return null; }
+    const row = db.prepare(
+      'SELECT flags_json FROM kelly_rails_session_projection WHERE session_id = ?'
+    ).get(sid);
+    if (row?.flags_json) {
+      const parsed = JSON.parse(row.flags_json);
+      if (parsed.locale) return String(parsed.locale).slice(0, 2);
+    }
+  } catch (_) {}
+  // Legacy read path (pre–Phase 2.5 rows); not written on new updates.
+  try {
+    const row = db.prepare('SELECT preferred_language FROM kelly_session_meta WHERE session_id = ?').get(sid);
+    return row?.preferred_language ? String(row.preferred_language).slice(0, 2) : null;
+  } catch (_) {
+    return null;
+  }
 };
 
-/** gap18: Persist detected language for Kelly session */
+/** Persist session language to projection.flags_json.locale (SSOT). */
 module.exports.upsertKellySessionLanguage = function upsertKellySessionLanguage(sessionId, preferredLanguage) {
   if (!sessionId || !preferredLanguage) return;
+  const locale = String(preferredLanguage).slice(0, 2);
+  const sid = String(sessionId).trim();
   try {
-    db.prepare(`
-      INSERT INTO kelly_session_meta (session_id, preferred_language, updated_at)
-      VALUES (?, ?, datetime('now'))
-      ON CONFLICT(session_id) DO UPDATE SET
-        preferred_language = excluded.preferred_language,
-        updated_at = datetime('now')
-    `).run(sessionId, preferredLanguage);
-  } catch (_) {}
+    const { getRailsSessionProjection, persistRailsSessionState } = require('./services/kelly-rails/session-ssot');
+    const projection = getRailsSessionProjection(sid);
+    let existingFlags = {};
+    if (projection?.flags_json) {
+      try {
+        existingFlags = JSON.parse(projection.flags_json);
+      } catch (_) {}
+    }
+    persistRailsSessionState(sid, {
+      active_lane: projection?.active_lane || 'router',
+      step: projection?.step || 'await_intent',
+      locale,
+      flags: { ...existingFlags, locale }
+    });
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[kelly] upsertKellySessionLanguage failed:', e.message);
+    }
+  }
 };
 
 module.exports.updateMediaAiAnalysis = function updateMediaAiAnalysis(id, aiAnalysis) {
@@ -20148,14 +20243,19 @@ module.exports.updateMediaAiAnalysis = function updateMediaAiAnalysis(id, aiAnal
 
 module.exports.upsertTriageSession = function upsertTriageSession(session) {
   const { v4: uuidv4 } = require('uuid');
-  if (session?.session_id) {
-    try {
-      const { ensureUniqueTriageSessionId } = require('./services/kelly-rails/session-ssot');
-      ensureUniqueTriageSessionId(session.session_id);
-    } catch (_) {}
-  }
-  const existing = db.prepare(`SELECT id FROM triage_sessions WHERE session_id = ? LIMIT 1`).get(session.session_id);
-  const id = existing?.id || session.id || `triage-${uuidv4()}`;
+  const sid = session?.session_id;
+
+  const runUpsert = () => {
+    if (sid) {
+      try {
+        const { ensureUniqueTriageSessionId } = require('./services/kelly-rails/session-ssot');
+        ensureUniqueTriageSessionId(sid);
+      } catch (_) {}
+    }
+    const existing = sid
+      ? db.prepare(`SELECT id FROM triage_sessions WHERE session_id = ? LIMIT 1`).get(sid)
+      : null;
+    const id = existing?.id || session.id || `triage-${uuidv4()}`;
 
   const tenantCols = db.prepare(`PRAGMA table_info(triage_sessions)`).all();
   const hasClinicCol = tenantCols.some((c) => c.name === 'clinic_id');
@@ -20308,6 +20408,27 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
   }
 
   return id;
+  };
+
+  const execUpsert = () => {
+    try {
+      if (typeof db.transaction === 'function') {
+        return db.transaction(runUpsert)();
+      }
+      return runUpsert();
+    } catch (e) {
+      if (sid && /UNIQUE constraint failed/i.test(String(e.message))) {
+        try {
+          const { ensureUniqueTriageSessionId } = require('./services/kelly-rails/session-ssot');
+          ensureUniqueTriageSessionId(sid);
+        } catch (_) {}
+        return runUpsert();
+      }
+      throw e;
+    }
+  };
+
+  return execUpsert();
 };
 
 module.exports.getTriageSession = function getTriageSession(sessionId) {

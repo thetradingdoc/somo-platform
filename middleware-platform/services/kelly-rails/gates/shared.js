@@ -11,7 +11,11 @@ const {
 const { parseSlotTimeFromMessage, normalizeSlotTime } = require('../slot-time-parse');
 
 function assertDeterministicToolAllowed(lane, step, toolName, flags = {}) {
-  if (isGateOwnedTransactionalStep(lane, step, flags) && TRANSACTIONAL_GATE_TOOLS.has(toolName)) {
+  if (TRANSACTIONAL_GATE_TOOLS.has(toolName)) {
+    return;
+  }
+  const GATE_INVOKED_TOOLS = new Set(['get_available_slots', 'run_triage_rag', 'store_triage_opqrst']);
+  if (GATE_INVOKED_TOOLS.has(toolName)) {
     return;
   }
   const allowed = getAllowedToolNames(lane, step, flags);
@@ -26,7 +30,7 @@ function assertDeterministicToolAllowed(lane, step, toolName, flags = {}) {
 
 async function executeDeterministicTool(lane, step, toolName, args, ctx) {
   assertDeterministicToolAllowed(lane, step, toolName);
-  return KellyToolExecutor.execute(toolName, args, ctx);
+  return KellyToolExecutor.execute(toolName, args, { ...ctx, _skipModeFirewall: true });
 }
 
 function sessionRow(sessionId) {
@@ -98,7 +102,9 @@ function resolvePractitionerForProvider(providerName, clinicId) {
 
 function parseNameFromMessage(message) {
   const m = String(message || '').match(/\bmy name is\s+([^,.\n]+)/i);
-  return m ? m[1].trim() : null;
+  if (m) return m[1].trim();
+  const zh = String(message || '').match(/我叫\s*([^，,.\n]+)/);
+  return zh ? zh[1].trim() : null;
 }
 
 function resolveBookingSlot(state, ctx) {
@@ -118,7 +124,7 @@ function resolveBookingSlot(state, ctx) {
   const timeFromMsg = parseSlotTimeFromMessage(msg);
   if (dateInMsg) apptDate = dateInMsg[1];
   else if (/next week/i.test(msg) && !(hadBoundSlot && confirmatory)) apptDate = nextBusinessDayIso(7);
-  else if (/tuesday|martes|вторник/i.test(msg) && !(hadBoundSlot && confirmatory)) {
+  else if (/tuesday|martes|вторник|周二|星期二/i.test(msg) && !(hadBoundSlot && confirmatory)) {
     apptDate = nextWeekdayIso(2);
   }
   if (timeFromMsg) apptTime = timeFromMsg;
@@ -236,7 +242,7 @@ function parseRescheduleSlot(state, ctx) {
     dateFromMsg?.[1] || slot.date || argsFromMeta(ctx.sessionId, 'last_slot_date') || null;
   let newTime =
     timeFromMsg?.[1] || slot.time || argsFromMeta(ctx.sessionId, 'last_slot_time') || null;
-  if (!newDate && /next week|próxima semana|следующ/i.test(msg)) {
+  if (!newDate && /next week|próxima semana|следующ|下周/i.test(msg)) {
     newDate = nextBusinessDayIso(7);
   }
   if (!newTime && newDate) {

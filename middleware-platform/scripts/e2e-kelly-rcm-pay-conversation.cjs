@@ -749,7 +749,7 @@ async function main() {
         intent = await Promise.race([
           stripe.paymentIntents.confirm(ctx.stripeIntentId, {
             payment_method: 'pm_card_visa',
-            return_url: `${ctx.baseUrl}/patients/payment-success.html?rcm=1&token=${encodeURIComponent(ctx.payToken)}`,
+            return_url: `${ctx.baseUrl.replace(/\/$/, '')}/api/payment/success?rcm=1&token=${encodeURIComponent(ctx.payToken)}`,
           }),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Stripe confirm timed out after 60s')), 60000)

@@ -25,6 +25,9 @@ function main() {
   pass = check('pilot-scenario-matrix.md exists', fs.existsSync(DOC)) && pass;
   pass = check('dental-pstn-scenarios.cjs exists', fs.existsSync(path.join(ROOT, 'scripts/dental-pstn-scenarios.cjs'))) && pass;
   pass = check('scenario registry exists', fs.existsSync(path.join(ROOT, 'e2e/scenario-registry/dental-front-desk.cjs'))) && pass;
+  pass = check('dermatology registry exists', fs.existsSync(path.join(ROOT, 'e2e/scenario-registry/dermatology-clinical.cjs'))) && pass;
+  pass = check('healthcare_clinic registry exists', fs.existsSync(path.join(ROOT, 'e2e/scenario-registry/healthcare-clinic.cjs'))) && pass;
+  pass = check('small_business registry exists', fs.existsSync(path.join(ROOT, 'e2e/scenario-registry/small-business.cjs'))) && pass;
 
   const { scenarios } = require('./dental-pstn-scenarios.cjs');
   const registry = require('../e2e/scenario-registry/dental-front-desk.cjs');

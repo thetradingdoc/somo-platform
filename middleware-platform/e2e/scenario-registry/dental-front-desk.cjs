@@ -171,7 +171,7 @@ const MULTILANG_SCENARIOS = [
     utterances: [
       "Hi, I'd like to book a cleaning. I haven't been to a dentist in about two years.",
       'My name is Jennifer Walsh, and I have Cigna PPO insurance.',
-      'Yes, next Tuesday afternoon works great.'
+      'Yes, Tuesday at 12:00 works great.'
     ],
     expectedTools: ['schedule_appointment'],
     toolsMustNotInclude: ['run_triage_rag'],
@@ -271,7 +271,7 @@ const MULTILANG_SCENARIOS = [
     utterances: [
       'Hola, quisiera hacer una cita de limpieza para mi hijo.',
       'Mi nombre es Carmen Reyes. Es la primera vez que viene a esta oficina.',
-      'Sí, el martes por la tarde me viene bien.'
+      'Sí, el martes a las 12:00 me viene bien.'
     ],
     expectedTools: ['schedule_appointment'],
     expectAiDisclosure: true,
@@ -372,7 +372,7 @@ const MULTILANG_SCENARIOS = [
     utterances: [
       'Здравствуйте, я хотела бы записаться на осмотр.',
       'Меня зовут Ирина Волкова.',
-      'Да, вторник днём подходит.'
+      'Да, во вторник в 12:00 подходит.'
     ],
     expectedTools: ['schedule_appointment'],
     expectAiDisclosure: true,
@@ -456,6 +456,198 @@ const MULTILANG_SCENARIOS = [
     evalTags: ['inquiry']
   },
   {
+    id: 'ZH-1-booking',
+    lang: 'zh',
+    intent: 'booking',
+    language_mode: 'en_zh',
+    locale: 'zh-CN',
+    persona: 'Wei Zhang — books a dental cleaning in Mandarin',
+    utterances: [
+      '你好，我想预约洗牙。',
+      '我叫张伟，我是新患者。',
+      '好的，周二12点可以。'
+    ],
+    expectedTools: ['schedule_appointment'],
+    expectAiDisclosure: true,
+    expectedDisposition: 'booked',
+    skipIdentityAdmission: true,
+    evalTags: ['booking']
+  },
+  {
+    id: 'ZH-2-copay',
+    lang: 'zh',
+    intent: 'copay',
+    extends: 'DENTAL-003',
+    language_mode: 'en_zh',
+    locale: 'zh-CN',
+    persona: 'Li Mei — asks copay before booking in Mandarin',
+    utterances: ['你好，洗牙大概要自付多少钱？我有 Aetna 保险。'],
+    expectedTools: ['collect_insurance'],
+    noFakeCopayIfThin: true,
+    expectAiDisclosure: true,
+    expectedDisposition: 'insurance_verified',
+    skipIdentityAdmission: false,
+    copayScenario: true,
+    copayPayment: false,
+    evalTags: ['copay_eligibility']
+  },
+  {
+    id: 'ZH-2-payment',
+    lang: 'zh',
+    intent: 'copay',
+    extends: 'DENTAL-003',
+    language_mode: 'en_zh',
+    locale: 'zh-CN',
+    persona: 'Li Mei — copay quote then SMS payment link in Mandarin',
+    utterances: [
+      '你好，洗牙大概要自付多少钱？我有 Aetna 保险。',
+      '好的，请发短信给我支付链接。'
+    ],
+    expectedTools: ['collect_insurance', 'request_patient_payment'],
+    noFakeCopayIfThin: true,
+    expectAiDisclosure: true,
+    expectedDisposition: 'copay_pending',
+    skipIdentityAdmission: false,
+    copayScenario: true,
+    copayPayment: true,
+    checkSessionDeskParity: true,
+    evalTags: ['copay_payment']
+  },
+  {
+    id: 'ZH-3-cancellation',
+    lang: 'zh',
+    intent: 'cancellation',
+    language_mode: 'en_zh',
+    locale: 'zh-CN',
+    persona: 'Chen Wei — cancels then reschedules in Mandarin',
+    utterances: ['我需要取消预约。', '可以改到下周吗？'],
+    expectedTools: ['reschedule_appointment'],
+    optionalTools: ['search_appointments'],
+    expectReschedule: true,
+    expectAiDisclosure: true,
+    expectedDisposition: 'rescheduled',
+    requiresExistingAppointment: true,
+    skipIdentityAdmission: true,
+    evalTags: ['cancel']
+  },
+  {
+    id: 'EN-records-derm',
+    lang: 'en',
+    intent: 'records',
+    language_mode: 'en_only',
+    locale: 'en-US',
+    use_case: 'dermatology',
+    persona: 'Patient asks about last visit notes (dermatology clinical tenant)',
+    utterances: ['Can you tell me what my doctor noted from my last visit?'],
+    expectedTools: ['query_patient_records'],
+    toolsMustNotInclude: ['run_triage_rag', 'schedule_appointment'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
+    id: 'ES-records-derm',
+    lang: 'es',
+    intent: 'records',
+    language_mode: 'en_es',
+    locale: 'es-US',
+    use_case: 'dermatology',
+    persona: 'Paciente pregunta por resultados de la última visita',
+    utterances: ['¿Pueden decirme qué anotó el doctor en mi última visita?'],
+    expectedTools: ['query_patient_records'],
+    toolsMustNotInclude: ['schedule_appointment'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
+    id: 'RU-records-derm',
+    lang: 'ru',
+    intent: 'records',
+    language_mode: 'en_ru',
+    locale: 'ru-RU',
+    use_case: 'dermatology',
+    persona: 'Пациент спрашивает о последнем визите',
+    utterances: ['Можете сказать, что записал врач на моём последнем приёме?'],
+    expectedTools: ['query_patient_records'],
+    toolsMustNotInclude: ['schedule_appointment'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
+    id: 'ZH-records-derm',
+    lang: 'zh',
+    intent: 'records',
+    language_mode: 'en_zh',
+    locale: 'zh-CN',
+    use_case: 'dermatology',
+    persona: '患者询问上次就诊记录',
+    utterances: ['能告诉我上次就诊医生记录了什么吗？'],
+    expectedTools: ['query_patient_records'],
+    toolsMustNotInclude: ['schedule_appointment'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
+    id: 'EN-records-clinic',
+    lang: 'en',
+    intent: 'records',
+    language_mode: 'en_only',
+    locale: 'en-US',
+    use_case: 'healthcare_clinic',
+    persona: 'Patient asks about lab results at medical clinic',
+    utterances: ['What did my lab results show from my last visit?'],
+    expectedTools: ['query_patient_records'],
+    toolsMustNotInclude: ['run_triage_rag'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
+    id: 'ES-records-clinic',
+    lang: 'es',
+    intent: 'records',
+    language_mode: 'en_es',
+    locale: 'es-US',
+    use_case: 'healthcare_clinic',
+    persona: 'Paciente pregunta por resultados de laboratorio',
+    utterances: ['¿Qué mostraron mis resultados de laboratorio de la última visita?'],
+    expectedTools: ['query_patient_records'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
+    id: 'RU-records-clinic',
+    lang: 'ru',
+    intent: 'records',
+    language_mode: 'en_ru',
+    locale: 'ru-RU',
+    use_case: 'healthcare_clinic',
+    persona: 'Пациент спрашивает о результатах анализов',
+    utterances: ['Что показали мои анализы с последнего визита?'],
+    expectedTools: ['query_patient_records'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
+    id: 'ZH-records-clinic',
+    lang: 'zh',
+    intent: 'records',
+    language_mode: 'en_zh',
+    locale: 'zh-CN',
+    use_case: 'healthcare_clinic',
+    persona: '患者询问化验结果',
+    utterances: ['我上次的化验结果怎么样？'],
+    expectedTools: ['query_patient_records'],
+    expectAiDisclosure: true,
+    skipIdentityAdmission: true,
+    evalTags: ['records_qa']
+  },
+  {
     id: 'ZH-1-fallback',
     lang: 'zh',
     intent: 'fallback-handling',
@@ -468,7 +660,8 @@ const MULTILANG_SCENARIOS = [
     expectedDisposition: 'handoff',
     skipPhiScan: true,
     skipIdentityAdmission: true,
-    evalTags: ['inquiry']
+    evalTags: ['inquiry', 'handoff_only'],
+    evalOptional: true
   }
 ];
 
@@ -487,6 +680,12 @@ function getScenarioById(id) {
 
 function listMultilangScenarios(filters = {}) {
   let list = [...MULTILANG_SCENARIOS];
+  if (!filters.includeOptional) {
+    list = list.filter((s) => !s.evalOptional);
+  }
+  if (!filters.tag && !filters.includeRecords) {
+    list = list.filter((s) => !(s.evalTags || []).includes('records_qa'));
+  }
   if (filters.lang) list = list.filter((s) => s.lang === filters.lang);
   if (filters.intent) list = list.filter((s) => s.intent === filters.intent);
   if (filters.id) list = list.filter((s) => s.id === filters.id);

@@ -13,7 +13,7 @@
 | Replay pack (SSOT) | `middleware-platform/tests/fixtures/commerce-pstn-replay-100.json` | 100 calls |
 | Function coverage | `middleware-platform/tests/fixtures/commerce-pstn-function-coverage.json` | 34 functions |
 | Call schema | `middleware-platform/tests/fixtures/commerce-pstn-replay-schema.json` | JSON Schema |
-| Transcript book | `docs/qa/commerce-pstn-replay-100-TRANSCRIPT_BOOK.md` | Generated |
+| Transcript book | `docs/qa/archive/commerce-pstn/commerce-pstn-replay-100-TRANSCRIPT_BOOK.md` | Archived |
 | Block authors | `middleware-platform/scripts/lib/pstn-replay/block01–07` | 7 modules |
 | Generator | `middleware-platform/scripts/generate-commerce-pstn-replay-100.cjs` | JSON + coverage |
 | Validator | `middleware-platform/scripts/validate-commerce-pstn-replay.cjs` | Min turns, no brackets, coverage gate |

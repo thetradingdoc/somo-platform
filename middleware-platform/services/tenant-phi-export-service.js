@@ -60,8 +60,80 @@ function redactCustomer(customer) {
   };
 }
 
+function redactTriageSession(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    session_id: row.session_id,
+    patient_id: row.patient_id || null,
+    onset: row.onset || null,
+    provocation: row.provocation || null,
+    quality: row.quality || null,
+    radiation: row.radiation || null,
+    severity: row.severity ?? null,
+    timing: row.timing || null,
+    associated_sx: row.associated_sx || null,
+    safety_level: row.safety_level || null,
+    urgency: row.urgency || null,
+    target_specialty: row.target_specialty || null,
+    opqrst_complete: row.opqrst_complete === 1,
+    triage_complete: row.triage_complete === 1,
+    referred_to_911: row.referred_to_911 === 1,
+    detected_language: row.detected_language || null,
+    clinic_id: row.clinic_id || null,
+    customer_id: row.customer_id || null,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function redactConversationTurn(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    session_id: row.session_id,
+    role: row.role,
+    content: row.content,
+    created_at: row.created_at
+  };
+}
+
+function redactHealthTranscript(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    session_id: row.session_id,
+    room_id: row.room_id,
+    speaker: row.speaker,
+    text: row.text,
+    source: row.source || null,
+    ts: row.ts,
+    created_at: row.created_at
+  };
+}
+
+function tableExists(tableName) {
+  if (!db.db) return false;
+  const row = db.db
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`)
+    .get(tableName);
+  return Boolean(row);
+}
+
+function tenantSessionIds(customerId, clinicId) {
+  if (!db.db || !customerId) return [];
+  const rows = db.db
+    .prepare(
+      `SELECT DISTINCT call_id AS session_id FROM voice_call_log
+       WHERE customer_id = ? OR clinic_id = ?
+       ORDER BY created_at DESC LIMIT 10000`
+    )
+    .all(customerId, clinicId);
+  return rows.map((r) => r.session_id).filter(Boolean);
+}
+
 /**
- * Build tenant-scoped PHI export bundle for offboarding (redacted summaries).
+ * Build tenant-scoped PHI export bundle for offboarding (portability + redacted summaries).
  * @param {string} clinicId
  * @returns {object|null}
  */
@@ -104,46 +176,108 @@ function buildTenantPhiExport(clinicId) {
   let functionCalls = [];
   let eligibilityUsage = [];
   let monthlyUsage = [];
+  let triageSessions = [];
+  let conversationHistory = [];
+  let healthTranscripts = [];
 
-  if (db.db) {
-    if (customerId) {
-      calls = db.db
-        .prepare(
-          `SELECT id, call_id, call_duration_seconds, call_duration_minutes, status, caller_label,
-                  caller_phone, outcome, created_at
-           FROM voice_call_log WHERE customer_id = ? OR clinic_id = ?
-           ORDER BY created_at DESC LIMIT 5000`
-        )
-        .all(customerId, clinicId)
-        .map((c) => ({
-          ...c,
-          caller_phone: maskPhone(c.caller_phone)
-        }));
+  if (db.db && customerId) {
+    calls = db.db
+      .prepare(
+        `SELECT id, call_id, call_duration_seconds, call_duration_minutes, status, caller_label,
+                caller_phone, outcome, created_at
+         FROM voice_call_log WHERE customer_id = ? OR clinic_id = ?
+         ORDER BY created_at DESC LIMIT 5000`
+      )
+      .all(customerId, clinicId)
+      .map((c) => ({
+        ...c,
+        caller_phone: maskPhone(c.caller_phone)
+      }));
 
-      functionCalls = db.db
-        .prepare(
-          `SELECT id, call_id, function_name, success, created_at
-           FROM function_call_log WHERE customer_id = ?
-           ORDER BY created_at DESC LIMIT 5000`
-        )
-        .all(customerId);
+    functionCalls = db.db
+      .prepare(
+        `SELECT id, call_id, function_name, success, created_at
+         FROM function_call_log WHERE customer_id = ?
+         ORDER BY created_at DESC LIMIT 5000`
+      )
+      .all(customerId);
 
-      eligibilityUsage = db.db
-        .prepare(
-          `SELECT event_date, payer_id, source, quality, created_at
-           FROM eligibility_usage_events WHERE customer_id = ?
-           ORDER BY created_at DESC LIMIT 5000`
-        )
-        .all(customerId);
+    eligibilityUsage = db.db
+      .prepare(
+        `SELECT event_date, payer_id, source, quality, created_at
+         FROM eligibility_usage_events WHERE customer_id = ?
+         ORDER BY created_at DESC LIMIT 5000`
+      )
+      .all(customerId);
 
-      monthlyUsage = db.getAllMonthlyUsage
-        ? db.getAllMonthlyUsage(customerId)
-        : [];
+    monthlyUsage = db.getAllMonthlyUsage ? db.getAllMonthlyUsage(customerId) : [];
+
+    if (tableExists('triage_sessions')) {
+      const triageCols = db.db.prepare(`PRAGMA table_info(triage_sessions)`).all();
+      const hasClinic = triageCols.some((c) => c.name === 'clinic_id');
+      const hasCustomer = triageCols.some((c) => c.name === 'customer_id');
+      if (hasClinic && hasCustomer) {
+        triageSessions = db.db
+          .prepare(
+            `SELECT id, session_id, patient_id, onset, provocation, quality, radiation, severity, timing,
+                    associated_sx, safety_level, urgency, target_specialty, opqrst_complete, triage_complete,
+                    referred_to_911, detected_language, clinic_id, customer_id, created_at, updated_at
+             FROM triage_sessions
+             WHERE clinic_id = ? OR customer_id = ?
+             ORDER BY created_at DESC LIMIT 5000`
+          )
+          .all(clinicId, customerId)
+          .map(redactTriageSession);
+      } else {
+        const sessionIds = tenantSessionIds(customerId, clinicId);
+        if (sessionIds.length) {
+          const placeholders = sessionIds.map(() => '?').join(',');
+          triageSessions = db.db
+            .prepare(
+              `SELECT * FROM triage_sessions WHERE session_id IN (${placeholders})
+               ORDER BY created_at DESC LIMIT 5000`
+            )
+            .all(...sessionIds)
+            .map(redactTriageSession);
+        }
+      }
+    }
+
+    if (tableExists('kelly_conversation_history')) {
+      const sessionIds = tenantSessionIds(customerId, clinicId);
+      if (sessionIds.length) {
+        const placeholders = sessionIds.map(() => '?').join(',');
+        conversationHistory = db.db
+          .prepare(
+            `SELECT id, session_id, role, content, created_at
+             FROM kelly_conversation_history
+             WHERE session_id IN (${placeholders})
+             ORDER BY created_at ASC LIMIT 50000`
+          )
+          .all(...sessionIds)
+          .map(redactConversationTurn);
+      }
+    }
+
+    if (tableExists('health_session_transcripts')) {
+      const sessionIds = tenantSessionIds(customerId, clinicId);
+      if (sessionIds.length) {
+        const placeholders = sessionIds.map(() => '?').join(',');
+        healthTranscripts = db.db
+          .prepare(
+            `SELECT id, session_id, room_id, speaker, text, source, ts, created_at
+             FROM health_session_transcripts
+             WHERE session_id IN (${placeholders})
+             ORDER BY ts ASC LIMIT 50000`
+          )
+          .all(...sessionIds)
+          .map(redactHealthTranscript);
+      }
     }
   }
 
   return {
-    export_version: '1',
+    export_version: '2',
     exported_at: new Date().toISOString(),
     clinic: {
       clinic_id: clinic.clinic_id,
@@ -159,7 +293,10 @@ function buildTenantPhiExport(clinicId) {
       eligibility_checks: eligibility.length,
       voice_calls: calls.length,
       function_calls: functionCalls.length,
-      eligibility_usage_events: eligibilityUsage.length
+      eligibility_usage_events: eligibilityUsage.length,
+      triage_sessions: triageSessions.length,
+      conversation_turns: conversationHistory.length,
+      health_transcripts: healthTranscripts.length
     },
     patients,
     eligibility_checks: eligibility,
@@ -167,7 +304,10 @@ function buildTenantPhiExport(clinicId) {
     function_calls: functionCalls,
     eligibility_usage_events: eligibilityUsage,
     monthly_usage: monthlyUsage,
-    redaction_policy: 'strict_phi_redaction_export'
+    triage_sessions: triageSessions,
+    conversation_history: conversationHistory,
+    health_session_transcripts: healthTranscripts,
+    redaction_policy: 'tenant_portability_export_v2'
   };
 }
 
@@ -176,5 +316,8 @@ module.exports = {
   maskPhone,
   maskEmail,
   redactPatient,
-  redactEligibility
+  redactEligibility,
+  redactTriageSession,
+  redactConversationTurn,
+  redactHealthTranscript
 };

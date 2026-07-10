@@ -19,7 +19,7 @@
           <div>
             <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
             <div id="ppKellyNameplate" style="margin:4px 0"></div>
-            <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
+            <div class="pp-kelly-sub" id="ppKellySub">Loading status…</div>
             <div class="pp-kelly-phone" id="ppKellyPhone"></div>
           </div>
         </a>

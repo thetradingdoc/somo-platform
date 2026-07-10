@@ -1,7 +1,5 @@
 'use strict';
 
-const { isCommerceLegacyEnabled } = require('../../lib/commerce-legacy-flag');
-
 /**
  * Block legacy commerce tool paths when call metadata references a health session.
  */
@@ -14,7 +12,7 @@ function isHealthSessionContext(metadata = {}) {
 
 function shouldBlockCommerceTools(metadata = {}) {
   if (isHealthSessionContext(metadata)) return true;
-  if (!isCommerceLegacyEnabled() && metadata?.channel === 'commerce') return true;
+  if (metadata?.channel === 'commerce') return true;
   return false;
 }
 

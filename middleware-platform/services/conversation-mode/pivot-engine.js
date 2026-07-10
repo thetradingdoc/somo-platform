@@ -19,7 +19,8 @@ function isConversationModeRoutingShadow() {
 const OUTBOUND_MODES = new Set([
   ConversationMode.DEMO_QUAL,
   ConversationMode.OUTBOUND_SALES,
-  ConversationMode.OPERATOR_OUTBOUND
+  ConversationMode.OPERATOR_OUTBOUND,
+  ConversationMode.PLATFORM_SUPPORT
 ]);
 
 /**
@@ -210,7 +211,7 @@ function evaluateTurn(input = {}) {
   return result;
 }
 
-/** Apply pivot result to session state (preserves opqrst_accumulator on billing pivot). */
+/** Apply pivot result to session state (preserves opqrst_resume_field on billing/records/cancel pivots). */
 function applyPivotToSession(sessionState, pivotResult) {
   const next = { ...sessionState };
   if (pivotResult.prior_mode && pivotResult.mode !== pivotResult.prior_mode) {
@@ -222,7 +223,12 @@ function applyPivotToSession(sessionState, pivotResult) {
   next.pivot_event = pivotResult.pivot_event;
   next.pending_intent_queue = pivotResult.pending_intents || [];
 
-  if (pivotResult.pivot_event === PivotEvent.BILLING_INTENT_DETECTED) {
+  const preserveOpqrstResume = new Set([
+    PivotEvent.BILLING_INTENT_DETECTED,
+    PivotEvent.RECORDS_INTENT_DETECTED,
+    PivotEvent.CANCEL_INTENT_DETECTED
+  ]);
+  if (preserveOpqrstResume.has(pivotResult.pivot_event)) {
     const resume =
       sessionState.opqrst_resume_field ||
       sessionState.flags?.opqrst_resume_field ||
@@ -230,6 +236,9 @@ function applyPivotToSession(sessionState, pivotResult) {
       sessionState._opqrst_gate?.openField;
     if (resume) {
       next.opqrst_resume_field = resume;
+    }
+    if (sessionState.opqrst_accumulator && typeof sessionState.opqrst_accumulator === 'object') {
+      next.opqrst_accumulator = sessionState.opqrst_accumulator;
     }
   }
 

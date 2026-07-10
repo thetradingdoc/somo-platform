@@ -30,8 +30,15 @@ gcloud run services update-traffic "$SERVICE" \
   --project "$PROJECT"
 
 echo "==> Post-rollback smoke"
+START_TS=$(date +%s)
 UI_BASE_URL="${UI_BASE_URL:-https://callsomo.com}" \
 MIDDLEWARE_API_BASE="${MIDDLEWARE_API_BASE:-https://api.callsomo.com}" \
   npm run verify:prod:routing-smoke --prefix middleware-platform
+END_TS=$(date +%s)
+ELAPSED=$((END_TS - START_TS))
+echo "==> Smoke elapsed: ${ELAPSED}s (budget: 900s / 15 min)"
+if [[ "$ELAPSED" -gt 900 ]]; then
+  echo "WARN: smoke+rollback exceeded 15 minute drill budget"
+fi
 
 echo "==> Rollback complete."

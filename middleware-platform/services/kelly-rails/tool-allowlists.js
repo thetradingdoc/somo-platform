@@ -86,6 +86,48 @@ const ALLOWLISTS = {
   }
 };
 
+/** Per-use_case tool surface for prompt_profiles (SSOT for profile allowed_tools). */
+const PROFILE_ALLOWED_TOOLS = {
+  dental: [
+    'schedule_appointment',
+    'get_available_slots',
+    'collect_insurance',
+    'compute_visit_quote',
+    'end_call',
+    'transfer_call',
+    'query_patient_records',
+    'request_patient_payment',
+    'cancel_appointment',
+    'search_appointments',
+    'reschedule_appointment'
+  ],
+  healthcare_clinic: [
+    'schedule_appointment',
+    'get_available_slots',
+    'collect_insurance',
+    'compute_visit_quote',
+    'end_call',
+    'transfer_call',
+    'query_patient_records',
+    'request_patient_payment',
+    'cancel_appointment',
+    'search_appointments',
+    'reschedule_appointment'
+  ],
+  dermatology: [
+    'schedule_appointment',
+    'get_available_slots',
+    'get_triage_session',
+    'store_triage_opqrst',
+    'run_triage_rag',
+    'end_call',
+    'transfer_call',
+    'query_patient_records',
+    'request_patient_payment'
+  ],
+  small_business: ['schedule_appointment', 'get_available_slots', 'end_call', 'transfer_call']
+};
+
 function isGateOwnedTransactionalStep(lane, step, flags = {}) {
   if (lane === 'booking' && step === 'confirm_visit') return true;
   if (lane === 'payment' && step === 'pay_invoice') return true;
@@ -137,6 +179,7 @@ function getAllowedToolNames(lane, step, flags = {}, profileAllowedTools = null)
 
 module.exports = {
   ALLOWLISTS,
+  PROFILE_ALLOWED_TOOLS,
   SKINCARE_ROUTINE_TOOLS,
   PAYMENT_AND_SCHEDULE_TOOLS,
   TRANSACTIONAL_GATE_TOOLS,

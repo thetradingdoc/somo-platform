@@ -47,6 +47,12 @@ function main() {
     if (modeRouting !== 'enforce') {
       errors.push('CONVERSATION_MODE_ROUTING must be enforce in staging/production profile.');
     }
+    const fallbackPstn = String(process.env.CALLSOMO_OPERATOR_FALLBACK_PSTN || '').trim();
+    if (!fallbackPstn) {
+      errors.push(
+        'CALLSOMO_OPERATOR_FALLBACK_PSTN must be set in staging/production profile (transfer_call handoff target).'
+      );
+    }
   } else if (!truthy(railsV2)) {
     warnings.push('KELLY_RAILS_V2 is not 1 (OK for local dev; set for v2 E2E).');
   }
@@ -65,7 +71,10 @@ function main() {
         KELLY_RAILS_V2: railsV2 ?? '(unset)',
         KELLY_ALLOW_HYBRID_GRAPH: hybrid ?? '(unset)',
         KELLY_RAILS_ROLLOUT_PCT: rollout ?? '(default 1)',
-        CONVERSATION_MODE_ROUTING: process.env.CONVERSATION_MODE_ROUTING ?? '(unset)'
+        CONVERSATION_MODE_ROUTING: process.env.CONVERSATION_MODE_ROUTING ?? '(unset)',
+        CALLSOMO_OPERATOR_FALLBACK_PSTN: process.env.CALLSOMO_OPERATOR_FALLBACK_PSTN
+          ? '(set)'
+          : '(unset)'
       },
       null,
       2

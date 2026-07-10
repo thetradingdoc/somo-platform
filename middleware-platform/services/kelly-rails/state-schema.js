@@ -57,7 +57,9 @@ const PAYMENT_SIGNALS = [
   '付款',
   '支付',
   '付款链接',
-  '发短信'
+  '发短信',
+  '自付',
+  '多少钱'
 ];
 
 const BILLING_FAQ_SIGNALS = [

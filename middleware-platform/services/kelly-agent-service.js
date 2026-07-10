@@ -99,7 +99,7 @@ const GROQ_MODEL = process.env.KELLY_GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GROQ_FALLBACK_MODEL = process.env.KELLY_GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant';
 
 // Max history turns to send (token budget)
-const MAX_HISTORY_TURNS = parseInt(process.env.KELLY_MAX_HISTORY_TURNS || '12', 10);
+const MAX_HISTORY_TURNS = parseInt(process.env.KELLY_MAX_HISTORY_TURNS || '20', 10);
 
 // Hard cap to prevent large triage/RAG history from pushing the Groq request over TPM limits.
 const MAX_HISTORY_CONTENT_CHARS_VOICE = parseInt(process.env.KELLY_HISTORY_CONTENT_CHARS_VOICE || '1200', 10);
@@ -403,9 +403,14 @@ function _kellyDebugTurn(tag, payload) {
   } catch (_) {}
 }
 
-/** Slot/contact/inject/tool-payload traces. Set KELLY_DEBUG=1 — off in production by default. */
+/** Slot/contact/inject/tool-payload traces. Set KELLY_DEBUG=1 or KELLY_DEBUG_VERBOSE=1 — off in production by default. */
 function _kellyDebugVerbose() {
-  return process.env.KELLY_DEBUG === '1' || process.env.KELLY_DEBUG === 'true';
+  return (
+    process.env.KELLY_DEBUG === '1' ||
+    process.env.KELLY_DEBUG === 'true' ||
+    process.env.KELLY_DEBUG_VERBOSE === '1' ||
+    process.env.KELLY_DEBUG_VERBOSE === 'true'
+  );
 }
 
 /**
@@ -467,8 +472,8 @@ function _replyForTriageIncomplete(errorCode, channel, preferredLanguage, sessio
         FROM kelly_conversation_history
         WHERE session_id = ? AND role = 'user'
         ORDER BY created_at DESC
-        LIMIT 12
-      `).all(sid);
+        LIMIT ?
+      `).all(sid, MAX_HISTORY_TURNS);
       const corpus = rows.map((r) => String(r?.content || '').toLowerCase()).join('\n');
       return (
         /\b(no symptoms?|without symptoms?|don't have symptoms?|do not have symptoms?|routine visit|annual check|just routine)\b/i.test(corpus) ||
@@ -5654,10 +5659,10 @@ Antworten Sie durchgehend auf Deutsch.`,
     if (channel === 'voice') {
       let providerBlock = providerInstructions;
       if (!providerBlock && customerId && db.getCustomer) {
-        const cust = db.getCustomer(customerId);
-        if (cust?.custom_prompt && String(cust.custom_prompt).trim()) {
-          providerBlock = String(cust.custom_prompt).trim();
-        }
+        try {
+          const { getTenantSystemPrompt } = require('./prompt-profile-service');
+          providerBlock = getTenantSystemPrompt(db, { customerId, clinicId: context.clinicId });
+        } catch (_) {}
       }
       if (providerBlock) {
         systemContent =

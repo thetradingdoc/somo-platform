@@ -82,6 +82,14 @@ function main() {
     'fd-ops-pilot-env-prod'
   );
 
+  check(
+    report,
+    'CALLSOMO_OPERATOR_FALLBACK_PSTN set',
+    Boolean(String(process.env.CALLSOMO_OPERATOR_FALLBACK_PSTN || '').trim()),
+    process.env.CALLSOMO_OPERATOR_FALLBACK_PSTN ? '(set)' : 'missing — transfer_call will fail',
+    'fd-ops-transfer-fallback'
+  );
+
   const retellKey = (process.env.RETELL_API_KEY || '').trim();
   check(report, 'RETELL_API_KEY set', Boolean(retellKey), retellKey ? 'configured' : 'missing', 'fd-prod-retell-sync');
 

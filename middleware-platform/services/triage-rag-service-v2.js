@@ -85,7 +85,10 @@ class TriageRAGServiceV2 {
     combinedText = normalizeForRAG(combinedText);
 
     let queryForRAG = combinedText;
-    const hydeEnabled = String(process.env.TRIAGE_HYDE_ENABLED ?? '1').trim() !== '0';
+    const channel = params.channel || params.source || 'chat';
+    const ragOpts = require('./voice-rag-config').resolveRagRuntimeOptions(channel);
+    const hydeEnabled = params.hydeEnabled ?? ragOpts.hydeEnabled;
+    const remoteTimeoutMs = params.remoteTimeoutMs ?? ragOpts.remoteTimeoutMs;
     if (hydeEnabled && process.env.OPENAI_API_KEY) {
       const hypothetical = await generateHypotheticalDocument(combinedText);
       queryForRAG = blendQuery(combinedText, hypothetical);
@@ -96,8 +99,6 @@ class TriageRAGServiceV2 {
     let cptCodes = [];
     /** True if at least one knowledge call completed without throw (empty arrays OK). */
     let knowledgeFetchSucceeded = false;
-    const remoteTimeoutMs = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
-
     let codingProvenance = params._codingProvenance || null;
 
     if (useDualSource) {

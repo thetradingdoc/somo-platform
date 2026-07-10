@@ -20,45 +20,8 @@
   <script src="/assets/js/sfd-nameplate.js"></script>
 </head>
 <body class="provider-portal provider-portal--scroll" data-page="agent">
-  <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">☰</button>
-
-  <div class="pp-app">
-    <aside class="pp-sidebar" id="ppSidebar">
-      <div class="pp-clinic-header">
-        <div class="pp-sb-av" id="ppClinicAv">CL</div>
-        <div>
-          <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
-          <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
-        </div>
-      </div>
-      <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
-      <div class="pp-sb-footer">
-        <a class="pp-sb-clinic" href="settings.html">
-          <div class="pp-sb-av">CL</div>
-          <div>
-            <div class="pp-sb-cn">Settings</div>
-            <div class="pp-sb-cr">Account & billing</div>
-          </div>
-        </a>
-      </div>
-    </aside>
-
-    <div class="pp-main">
-      <header class="pp-topbar pp-topbar--page">
-        <div class="pp-topbar-left">
-          <p class="pp-page-eyebrow">Kelly</p>
-          <h1 class="pp-page-title">Kelly control center</h1>
-          <p class="pp-page-sub">Pause, coverage hours, and shadow week — your front desk at a glance.</p>
-        </div>
-        <div class="pp-topbar-right">
-          <div id="vaHeaderNameplate" style="margin-right:8px"></div>
-          <div class="pp-date-chip" id="ppDateChip"></div>
-        </div>
-      </header>
-
       <main class="pp-content pp-content--agent" id="ppMainContent">
         <div class="pp-page-shell">
-        <div class="va-toast error hidden" id="vaToast" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="va-kelly-grid">
           <section class="sfd-card" id="zoneStatus">
             <h3 style="margin:0 0 8px">Current status</h3>
@@ -161,8 +124,6 @@
         </section>
         </div>
       </main>
-    </div>
-  </div>
 
     <script>
     (function () {
@@ -180,13 +141,11 @@
       }
 
       function showVaToast(message, type) {
-        const el = document.getElementById('vaToast');
-        if (!el) return;
-        el.textContent = message;
-        el.className = 'va-toast ' + (type || 'error');
-        el.classList.remove('hidden');
-        clearTimeout(showVaToast._t);
-        showVaToast._t = setTimeout(() => el.classList.add('hidden'), 5000);
+        if (typeof window.ppToast === 'function') {
+          window.ppToast(message, type || 'error');
+          return;
+        }
+        console.warn('[agent]', message);
       }
 
       function showRetellSyncFailure(e) {
@@ -217,7 +176,7 @@
         }
         if (!customer?.id) {
           window.location.href =
-            '/login?redirect=' + encodeURIComponent('/unified-dashboard/business/agent.html');
+            '/login?redirect=' + encodeURIComponent('/business/agent.html');
           return;
         }
         const onboardingRedirect = await VoiceAgentPage.resolveOnboardingRedirect();
@@ -251,7 +210,7 @@
         if (!status || !window.SfdNameplate) return;
         const label = status.nameplate || status.label || (status.enabled ? 'LIVE' : 'PAUSED');
         const np = SfdNameplate.renderNameplate(label);
-        ['vaStatusNameplate', 'vaHeaderNameplate'].forEach((id) => {
+        ['vaStatusNameplate', 'vaHeaderNameplate', 'ppTopVoiceNameplate'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.innerHTML = np;
         });

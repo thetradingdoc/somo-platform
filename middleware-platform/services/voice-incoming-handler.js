@@ -21,13 +21,28 @@ function createVoiceIncomingHandler(deps) {
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
-    const { isPlatformNavigationDid } = require('./navigation/navigation-config');
+    const { isPlatformNavigationDid, isNavigationEnabled } = require('./navigation/navigation-config');
+    const {
+      isPlatformInboundSupportMode,
+      isPlatformCompanyDid
+    } = require('./platform-line-config');
 
     const normalizedToNumber = normalizePhoneNumber(req.body.To);
 
     const isOutboundSalesEarly = isOutboundRequest(req);
-    const platformNavigationDid = !isOutboundSalesEarly && isPlatformNavigationDid(normalizedToNumber);
-    if (platformNavigationDid) {
+    const platformCompanyDid =
+      !isOutboundSalesEarly && isPlatformCompanyDid(normalizedToNumber);
+    const platformNavigationDid =
+      !isOutboundSalesEarly &&
+      isNavigationEnabled() &&
+      !isPlatformInboundSupportMode() &&
+      (isPlatformNavigationDid(normalizedToNumber) ||
+        (platformCompanyDid && !isPlatformInboundSupportMode()));
+    const platformSupportDid =
+      !isOutboundSalesEarly && isPlatformInboundSupportMode() && platformCompanyDid;
+    if (platformSupportDid) {
+      console.log('📞 Inbound call to platform company DID (operator / platform_support)');
+    } else if (platformNavigationDid) {
       console.log('📞 Inbound call to platform navigation DID');
     }
 
@@ -57,7 +72,20 @@ function createVoiceIncomingHandler(deps) {
     const { CALL_TYPE_CONSUMER_NAVIGATION } = require('./voice-call-context');
     const { navigationCustomerId } = require('./navigation/navigation-config');
 
-    if (platformNavigationDid && !isNavigationCustomer(matchedCustomer)) {
+    let isPlatformSupportInbound = false;
+
+    if (platformSupportDid) {
+      const opId = getOperatorCustomerId();
+      const opRow = opId ? db.getCustomer(opId) : null;
+      if (opRow) {
+        customerId = opRow.id;
+        matchedCustomer = opRow;
+        isPlatformSupportInbound = true;
+        console.log(`✅ Platform support DID → operator ${customerId}`);
+      } else {
+        console.warn(`⚠️  Platform support DID but operator row missing (${opId || 'unset'})`);
+      }
+    } else if (platformNavigationDid && !isNavigationCustomer(matchedCustomer)) {
       const navRow = db.getCustomer(navigationCustomerId());
       if (navRow) {
         customerId = navRow.id;
@@ -68,6 +96,7 @@ function createVoiceIncomingHandler(deps) {
 
     const isNavigationInbound =
       !isOutboundSales &&
+      !isPlatformSupportInbound &&
       (platformNavigationDid || isNavigationCustomer(matchedCustomer));
     if (isNavigationInbound) {
       resolvedCallType = CALL_TYPE_CONSUMER_NAVIGATION;
@@ -99,6 +128,8 @@ function createVoiceIncomingHandler(deps) {
     if (isNavigationInbound) {
       const { resolveNavigationRetellAgentId } = require('./navigation/navigation-config');
       retellAgentId = resolveNavigationRetellAgentId();
+    } else if (isPlatformSupportInbound && matchedCustomer?.retell_agent_id) {
+      retellAgentId = matchedCustomer.retell_agent_id;
     } else if (customerId && !isOutboundSales && matchedCustomer?.retell_agent_id) {
       retellAgentId = matchedCustomer.retell_agent_id;
     }
@@ -196,6 +227,15 @@ function createVoiceIncomingHandler(deps) {
     }
 
     if (matchedCustomer && !isOutboundSales) {
+      if (String(matchedCustomer.status || '').toLowerCase() === 'archived') {
+        console.warn(`⚠️  Inbound blocked — archived tenant ${matchedCustomer.id}`);
+        const archivedTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">This number is not currently in service. Please contact your provider directly or visit callsomo.com.</Say>
+  <Hangup/>
+</Response>`;
+        return res.type('text/xml').send(archivedTwiml);
+      }
       try {
         const VoiceAgentRuntime = require('./voice-agent-runtime');
         const runtime = VoiceAgentRuntime.loadProviderVoiceRuntime(db, {
@@ -339,6 +379,9 @@ function createVoiceIncomingHandler(deps) {
     } else if (isNavigationInbound) {
       metadata.call_type = CALL_TYPE_CONSUMER_NAVIGATION;
       metadata.direction = 'inbound';
+    } else if (isPlatformSupportInbound) {
+      metadata.call_type = 'platform_support';
+      metadata.direction = 'inbound';
     } else {
       metadata.call_type = resolvedCallType === 'operator_outbound' ? 'operator_outbound' : 'inbound_tenant';
       metadata.direction = 'inbound';
@@ -468,6 +511,10 @@ function createVoiceIncomingHandler(deps) {
       dynamicVariables.call_type = CALL_TYPE_CONSUMER_NAVIGATION;
       dynamicVariables.direction = 'inbound';
       dynamicVariables.routing_world = 'navigation';
+    } else if (isPlatformSupportInbound) {
+      dynamicVariables.call_type = 'platform_support';
+      dynamicVariables.direction = 'inbound';
+      dynamicVariables.routing_world = 'platform_support';
     }
     if (appointmentIdFromQuery) {
       dynamicVariables.appointment_id = appointmentIdFromQuery;
@@ -479,7 +526,7 @@ function createVoiceIncomingHandler(deps) {
       dynamicVariables.call_type = 'operator_outbound';
       dynamicVariables.direction = 'outbound';
     }
-    if (!isOutboundSales && !isNavigationInbound) {
+    if (!isOutboundSales && !isNavigationInbound && !isPlatformSupportInbound) {
       dynamicVariables.call_type = metadata.call_type || 'inbound_tenant';
       dynamicVariables.direction = 'inbound';
     }
@@ -491,7 +538,7 @@ function createVoiceIncomingHandler(deps) {
       clinicId: dynamicVariables.clinic_id || clinicId,
       callType: dynamicVariables.call_type || metadata.call_type
     });
-    if (!varCheck.ok && matchedCustomer && !isOutboundSales && !isNavigationInbound) {
+    if (!varCheck.ok && matchedCustomer && !isOutboundSales && !isNavigationInbound && !isPlatformSupportInbound) {
       console.warn(
         `⚠️  Healthcare voice vars missing (${(varCheck.missing || []).join(', ')}) customer=${customerId}`
       );
@@ -641,18 +688,41 @@ function createVoiceIncomingHandler(deps) {
             const { resolveRoutingWorld, ROUTING_WORLD_NAVIGATION } = require('./voice-routing-world');
             const callTypeForMode = isNavigationInbound
               ? CALL_TYPE_CONSUMER_NAVIGATION
-              : isOutboundSales
-                ? resolvedCallType
-                : 'tenant';
+              : isPlatformSupportInbound
+                ? 'platform_support'
+                : isOutboundSales
+                  ? resolvedCallType
+                  : 'tenant';
             const routingWorld = isNavigationInbound
               ? ROUTING_WORLD_NAVIGATION
-              : resolveRoutingWorld({
-                  call_type: callTypeForMode,
-                  direction: callDirection,
-                  to_number: normalizedToNumber,
-                  customer_id: customerId,
-                  customer: matchedCustomer
-                });
+              : isPlatformSupportInbound
+                ? 'platform_support'
+                : resolveRoutingWorld({
+                    call_type: callTypeForMode,
+                    direction: callDirection,
+                    to_number: normalizedToNumber,
+                    customer_id: customerId,
+                    customer: matchedCustomer
+                  });
+            if (isPlatformSupportInbound && req.body.From) {
+              try {
+                const { resolvePlatformCallerContext } = require('./platform-caller-lookup');
+                const callerCtx = resolvePlatformCallerContext(db, req.body.From);
+                if (callerCtx) {
+                  db.insertKellyCallEvent?.({
+                    session_id: callId,
+                    call_id: callId,
+                    customer_id: customerId,
+                    event_type: 'platform_caller_resolved',
+                    payload_json: callerCtx
+                  });
+                  if (callerCtx.lead_id) metadata.lead_id = callerCtx.lead_id;
+                  if (callerCtx.tenant_customer_id) metadata.tenant_customer_id = callerCtx.tenant_customer_id;
+                }
+              } catch (callerErr) {
+                console.warn('⚠️  platform caller lookup:', callerErr.message);
+              }
+            }
             seedModeAtCallStart({
               sessionId: callId,
               db,

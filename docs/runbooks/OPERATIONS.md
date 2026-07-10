@@ -1,7 +1,10 @@
-# OPERATIONS
+# OPERATIONS — cutover & incidents
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-07-05
 
+**Scope (SSOT for this file):** GCP/Firebase cutover, deploy rollback, incident playbooks, tenant wipe order, monitoring workflows.
+
+**Companion (not duplicate):** [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md) — Cloud Run deploy commands, live verify script matrix, Retell inventory.
 
 ---
 

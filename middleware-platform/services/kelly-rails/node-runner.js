@@ -5,7 +5,7 @@ const KellyToolExecutor = require('../kelly-tool-executor');
 const { getAllowedToolNames, TRANSACTIONAL_GATE_TOOLS, isGateOwnedTransactionalStep } = require('./tool-allowlists');
 const { laneSystemPrompt } = require('./prompts');
 const { getDeterministicReply } = require('./prompts/deterministic');
-const { loadHistory, appendHistory } = require('./history');
+const { loadHistory } = require('./history');
 const { formatVoiceReply } = require('../voice-reply-formatter');
 const { isToolAllowedForMode, logModeViolation } = require('../conversation-mode/mode-tool-firewall');
 const { isOpqrstFieldGateEnabled } = require('./config');
@@ -77,6 +77,28 @@ function filterTools(allTools, allowedNames) {
   return allTools.filter((t) => set.has(t?.function?.name));
 }
 
+const FRONT_DESK_TOOL_DESCRIPTIONS = {
+  collect_insurance:
+    'Verify patient insurance and return coverage quote using the visit type from scheduling context.',
+  compute_visit_quote:
+    'Compute visit copay from plan rules and visit type. Front-desk visits do not require clinical triage.',
+  get_available_slots:
+    'Get available appointment slots for a date and visit type. When the result includes kelly_script, say that exact script to the patient.'
+};
+
+function adaptToolsForTriagePolicy(tools, triagePolicy) {
+  if (String(triagePolicy || '').toLowerCase() !== 'disabled') return tools;
+  return tools.map((tool) => {
+    const name = tool?.function?.name;
+    const override = FRONT_DESK_TOOL_DESCRIPTIONS[name];
+    if (!override) return tool;
+    return {
+      ...tool,
+      function: { ...tool.function, description: override }
+    };
+  });
+}
+
 function _loadProviderCtx(ctx) {
   const { db, clinicId, customerId, providerInstructions } = ctx;
   const providerCtx = {};
@@ -115,8 +137,10 @@ function _loadProviderCtx(ctx) {
     }
     if (customerId && typeof db.getCustomer === 'function') {
       const customer = db.getCustomer(customerId);
-      if (customer?.custom_prompt && !providerCtx.profilePrompt) {
-        providerCtx.customPrompt = customer.custom_prompt;
+      if (!providerCtx.profilePrompt && customer?.id) {
+        const { getTenantSystemPrompt } = require('../prompt-profile-service');
+        const profilePrompt = getTenantSystemPrompt(db, { customerId, clinicId });
+        if (profilePrompt) providerCtx.customPrompt = profilePrompt;
       }
       if (!providerCtx.clinicName && customer?.name) {
         providerCtx.clinicName = customer.name;
@@ -181,10 +205,10 @@ async function runNodeStep(state, ctx) {
   }
   if (allowedNames.length === 0) allowedNames = ['get_triage_session'];
   const allTools = getKellyTools();
-  const tools = filterTools(allTools, allowedNames);
+  let tools = filterTools(allTools, allowedNames);
+  tools = adaptToolsForTriagePolicy(tools, providerCtx.triage_policy || providerCtx.tenantConfig?.triage_policy);
 
-  appendHistory(sessionId, 'user', message);
-  const history = loadHistory(sessionId);
+  const history = [...loadHistory(sessionId), { role: 'user', content: message }];
   const tenantLanguages = providerCtx.supported_languages || providerCtx.tenantConfig?.supported_languages;
   const systemContent = laneSystemPrompt(lane, step, { ...state, locale: state.locale || ctx.locale }, providerCtx, null, tenantLanguages);
   const maxTok = channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS;
@@ -282,8 +306,14 @@ async function runNodeStep(state, ctx) {
   reply = repairRescheduleOverCancel(reply, state, toolsUsed, ctx);
   reply = enforceScopeGuardrail(reply, state, { ...ctx, db: ctx.db });
 
-  appendHistory(sessionId, 'assistant', reply);
   return { reply, toolsUsed, endCall };
 }
 
-module.exports = { runNodeStep, filterTools, getKellyTools, enforceScopeGuardrail, stripInventedTransactionalConfirmation };
+module.exports = {
+  runNodeStep,
+  filterTools,
+  getKellyTools,
+  adaptToolsForTriagePolicy,
+  enforceScopeGuardrail,
+  stripInventedTransactionalConfirmation
+};

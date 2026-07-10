@@ -1,13 +1,14 @@
 # Platform number inbound spec
 
-**Status:** Active (patient navigator P1)  
-**Primary platform DID:** `+13639990205` (Twilio `TWILIO_PHONE_NUMBER` / `CALLSOMO_OPERATOR_TWILIO_NUMBER`)
+**Status:** Active — **platform support** on +13639990205 (navigation PSTN disabled)  
+**SSOT:** [VOICE_ROUTING_SSOT.md](./VOICE_ROUTING_SSOT.md)  
+**Primary platform DID:** `+13639990205` (`CALLSOMO_OPERATOR_TWILIO_NUMBER`)
 
 ## Purpose
 
-The platform inbound line is the **consumer-facing Somo Health patient navigator** PSTN entry. Callers get need-first navigation: care need → plan → ZIP → one ranked in-network recommendation with copay in context → contact info only.
+The platform inbound line is Somo's **company / operator** line: inbound sales leads, tenant support, and human handoff. `PLATFORM_INBOUND_MODE=support` and `NAVIGATION_ENABLED=0`.
 
-Kelly Rails clinical intake (`store_triage_opqrst`, `triage_sessions`) must **never** run on this line. Legacy Somo demo qualification and somo-landing outbound demos are retired.
+Consumer navigation PSTN is **disabled** until a separate navigation DID exists. Kelly Rails clinical intake must **never** run on this line.
 
 ## Routing worlds
 

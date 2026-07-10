@@ -152,12 +152,22 @@ describe('extractLikelyName rejects intents/commands but keeps real names', () =
 describe('voice schedule_appointment emits provider activity-feed event', () => {
   afterEach(() => jest.clearAllMocks());
 
-  test('successful booking emits appointment_booked kelly_call_event', async () => {
-    const events = [];
-    const db = {
-      insertKellyCallEvent: (e) => events.push(e)
-    };
-    const handler = new RetellWebSocketHandler(db, { apiBaseUrl: 'http://localhost:4000' });
+  test('handleScheduleAppointment delegates to KellyToolExecutor (no legacy emergency bypass)', async () => {
+    const KellyToolExecutor = require('../services/kelly-tool-executor');
+    const executeSpy = jest.spyOn(KellyToolExecutor, 'execute').mockResolvedValue({
+      success: true,
+      appointment: {
+        id: 'appt-123',
+        confirmation_number: 'CONF-1',
+        patient_id: 'pat-1',
+        appointment_type: 'Therapy Session'
+      }
+    });
+
+    const handler = new RetellWebSocketHandler(
+      { insertKellyCallEvent: () => {}, getVoiceAgentSettingsForProvider: () => null },
+      { apiBaseUrl: 'http://localhost:4000' }
+    );
     const callId = 'call-book-1';
     handler.activeConnections.set(
       callId,
@@ -165,21 +175,14 @@ describe('voice schedule_appointment emits provider activity-feed event', () => 
         callId,
         clinic_id: 'clinic-test',
         customer_id: 'cust-test',
-        customerName: 'Jane Doe'
+        customerName: 'Jane Doe',
+        conversation_mode: 'tenant_inbound_admin',
+        active_subrail: 'booking',
+        triage_policy: 'disabled',
+        use_case: 'dental',
+        site_context_status: 'verified'
       })
     );
-
-    axios.post.mockResolvedValue({
-      data: {
-        success: true,
-        appointment: {
-          id: 'appt-123',
-          confirmation_number: 'CONF-1',
-          patient_id: 'pat-1',
-          appointment_type: 'Therapy Session'
-        }
-      }
-    });
 
     const res = await handler.handleScheduleAppointment(callId, {
       patient_name: 'Jane Doe',
@@ -187,17 +190,20 @@ describe('voice schedule_appointment emits provider activity-feed event', () => 
       patient_phone: '+15551234567',
       appointment_type: 'Therapy Session',
       date: '2026-07-01',
-      time: '10:00',
-      provider_override_emergency: true
+      time: '10:00'
     });
 
     expect(res.success).toBe(true);
-    const booked = events.find((e) => e.event_type === 'appointment_booked');
-    expect(booked).toBeTruthy();
-    expect(booked.clinic_id).toBe('clinic-test');
-    expect(booked.session_id).toBe(callId);
-    expect(booked.payload_json.tool_name).toBe('schedule_appointment');
-    expect(booked.payload_json.appointment_id).toBe('appt-123');
-    expect(booked.payload_json.patient_name).toBe('Jane Doe');
+    expect(executeSpy).toHaveBeenCalledWith(
+      'schedule_appointment',
+      expect.objectContaining({ patient_name: 'Jane Doe' }),
+      expect.objectContaining({
+        sessionId: callId,
+        clinicId: 'clinic-test',
+        triage_policy: 'disabled',
+        use_case: 'dental'
+      })
+    );
+    executeSpy.mockRestore();
   });
 });

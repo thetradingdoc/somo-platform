@@ -168,6 +168,7 @@ class AdminAIAssistantService {
     const { leads, total } = facade.querySalesLeads({
       contact_status: filters.contact_status,
       callable_only: filters.callable_only === true,
+      source: filters.source,
       limit: filters.limit || 20,
       offset: 0,
     });
@@ -229,6 +230,8 @@ class AdminAIAssistantService {
     return {
       last_scrape: scrapeResult,
       last_run_at: scheduler.scrape?.last_run_at,
+      craigslist_enabled: process.env.CRAIGSLIST_ENABLED === '1',
+      jsearch_configured: !!(process.env.JOB_SEARCH_API_URL && process.env.JOB_SEARCH_API_KEY),
       leads: counts,
     };
   }

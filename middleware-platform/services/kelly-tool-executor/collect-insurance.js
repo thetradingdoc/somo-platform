@@ -136,6 +136,11 @@ async function collectInsurance(KellyToolExecutor, executor, args, { sessionId, 
     primary_cpt: serviceCode,
     session_id: sessionId
   });
+  console.log(
+    '[coding_resolve] layer=kelly_executor phase=pre_http authoritative=true session_id=%s primary_cpt=%s',
+    sessionId,
+    serviceCode
+  );
   KellyToolExecutor._logCodingProvenance(sessionId, {
     tool: 'collect_insurance',
     code_source: resolved.code_source,

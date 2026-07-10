@@ -8,33 +8,55 @@
 const db = require('../../database');
 const KellyToolExecutor = require('../kelly-tool-executor');
 const { isCommerceMetaKey } = require('./meta-kv-policy');
+const { laneToOrchestratorPhase } = require('./lane-orchestrator-phase');
 
-function laneToOrchestratorPhase(lane) {
-  const map = {
-    clinical: 'TRIAGE_ACTIVE',
-    booking: 'BOOKING',
-    payment: 'BILLING',
-    basic_intake: 'TRIAGE_DISCOVERY',
-    education: 'ROUTINE_INTAKE',
-    support: 'BILLING',
-    account: 'BILLING',
-    records: 'BILLING',
-    reschedule: 'BOOKING'
-  };
-  return map[String(lane || '').toLowerCase()] || 'TRIAGE_DISCOVERY';
-}
+/** Mid-turn meta_kv mirrors for consumers not yet on projection-only reads. */
+const MIRROR_META_FROM_PAYLOAD_KEYS = new Set([
+  'last_appointment_id',
+  'appointment_id',
+  'payment_token',
+  'copay_amount',
+  'payment_complete',
+  'basic_intake_complete',
+  'booking_intent_seen',
+  'pending_human_handoff',
+  'safety_blocked',
+  'post_visit_confirmation_pending',
+  'quote_delivered',
+  'last_quote_status',
+  'schedule_appointment_success',
+  'lookup_complete',
+  'cancel_complete',
+  'reschedule_pending',
+  'reschedule_complete',
+  'opqrst_resume_field'
+]);
 
 function mirrorMetaFromPayload(sessionId, payload = {}) {
   const sid = String(sessionId || '').trim();
   if (!sid) return;
   const mirrorOpts = { fromMirror: true };
   try {
-    const commerceEntries = [];
+    const entries = [];
     if (payload.last_appointment_id) {
-      commerceEntries.push(['last_appointment_id', payload.last_appointment_id]);
+      entries.push(['last_appointment_id', payload.last_appointment_id]);
+    } else if (payload.appointment_id) {
+      entries.push(['last_appointment_id', payload.appointment_id]);
     }
-    for (const [key, value] of commerceEntries) {
-      if (value != null && isCommerceMetaKey(key)) {
+    for (const key of MIRROR_META_FROM_PAYLOAD_KEYS) {
+      if (key === 'last_appointment_id' || key === 'appointment_id') continue;
+      const value = payload[key];
+      if (value == null) continue;
+      if (typeof value === 'boolean') {
+        entries.push([key, value ? '1' : '0']);
+      } else if (typeof value === 'object') {
+        entries.push([key, JSON.stringify(value)]);
+      } else {
+        entries.push([key, String(value)]);
+      }
+    }
+    for (const [key, value] of entries) {
+      if (value != null && (isCommerceMetaKey(key) || MIRROR_META_FROM_PAYLOAD_KEYS.has(key))) {
         KellyToolExecutor._setSessionMeta(sid, key, String(value), mirrorOpts);
       }
     }
@@ -445,5 +467,6 @@ module.exports = {
   mirrorMetaFromPayload,
   mergeConversationStateUpdates,
   ensureUniqueTriageSessionId,
-  syncTriageFieldsToProjection
+  syncTriageFieldsToProjection,
+  laneToOrchestratorPhase
 };

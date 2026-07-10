@@ -10,7 +10,7 @@ const { applyLaneStepFromL2Handoff } = require('./lane-handoff-mapper');
 const { opqrstCompleteForSession } = require('./gates/shared');
 const OpqrstFieldGate = require('../opqrst-field-gate');
 const { isOpqrstFieldGateEnabled } = require('./config');
-const { getLastAssistantText } = require('./history');
+const { appendHistory, getLastAssistantText } = require('./history');
 
 function shouldReroute(state, message) {
   if (state.flags?.coding_hitl_resume_active) return false;
@@ -156,21 +156,6 @@ async function promoteBookingWhenReady(state, ctx) {
   try {
     persistRailsSessionState(ctx.sessionId, state);
   } catch (_) {}
-}
-
-function laneToOrchestratorPhase(lane) {
-  const map = {
-    clinical: 'TRIAGE_ACTIVE',
-    booking: 'BOOKING',
-    payment: 'BILLING',
-    basic_intake: 'TRIAGE_DISCOVERY',
-    education: 'ROUTINE_INTAKE',
-    support: 'BILLING',
-    account: 'BILLING',
-    records: 'BILLING',
-    reschedule: 'BOOKING'
-  };
-  return map[String(lane || '').toLowerCase()] || 'TRIAGE_DISCOVERY';
 }
 
 /**
@@ -537,6 +522,24 @@ async function executeTurn(input = {}) {
       state.active_lane = KELLY_LANE.ROUTER;
       state.step = 'await_intent';
     }
+    persistRailsSessionState(ctx.sessionId, {
+      ...state,
+      active_lane: state.active_lane,
+      step: state.step,
+      gate_matched: state.gate_matched,
+      gate_outcome: state.gate_outcome,
+      active_subrail_step: state.active_subrail_step || state.flags?.active_subrail_step,
+      flags: {
+        ...state.flags,
+        conversation_mode: state.conversation_mode,
+        active_subrail: state.active_subrail,
+        active_subrail_step: state.active_subrail_step || state.flags?.active_subrail_step,
+        active_lane: state.active_lane,
+        step: state.step,
+        locale: state.locale || state.flags?.locale || null
+      },
+      locale: state.locale || state.flags?.locale || null
+    });
   }
 
   let transferNumber = null;
@@ -565,6 +568,18 @@ async function executeTurn(input = {}) {
         transferNumber = esc.transfer_number;
         reply = esc.reply || reply;
       }
+    } catch (_) {}
+  }
+
+  // Single writer for kelly_conversation_history (Phase 2.1) — covers gate + LLM paths.
+  if (ctx.sessionId && ctx.message) {
+    try {
+      appendHistory(ctx.sessionId, 'user', ctx.message);
+    } catch (_) {}
+  }
+  if (ctx.sessionId && reply) {
+    try {
+      appendHistory(ctx.sessionId, 'assistant', reply);
     } catch (_) {}
   }
 

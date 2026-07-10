@@ -1,6 +1,7 @@
 'use strict';
 
 const RetellService = require('./retell-service');
+const { normalizeUseCase, getDefaultCustomPrompt } = require('./voice-prompt-templates');
 
 /**
  * Ensure a SaaS customer has a Retell agent (lazy create on settings/prompt save).
@@ -19,11 +20,21 @@ async function ensureCustomerRetellAgent(db, customerId, options = {}) {
     return { agentId: customer.retell_agent_id, created: false, error: null };
   }
 
+  const rawUseCase = customer.use_case || customer.signup_persona || customer.persona || null;
+  if (!rawUseCase || !String(rawUseCase).trim()) {
+    const err = 'use_case is required to create a Retell agent';
+    console.warn(`[ensureRetellAgent] customer ${customerId}: ${err}`);
+    return { agentId: null, created: false, error: err };
+  }
+  const useCase = normalizeUseCase(rawUseCase);
+
   const retellService = options.retellService || new RetellService();
   try {
     const agentResult = await retellService.createAgent({
       name: customer.company_name || customer.name,
-      phone_number: customer.phone_number || customer.twilio_phone_number || null
+      phone_number: customer.phone_number || customer.twilio_phone_number || null,
+      use_case: useCase,
+      general_prompt: getDefaultCustomPrompt(customer)
     });
 
     if (agentResult.success && agentResult.agent_id) {

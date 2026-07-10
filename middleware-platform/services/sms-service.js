@@ -8,8 +8,19 @@ const twilio = require('twilio');
 const UsageMonitor = require('./usage-monitor');
 const db = require('../database');
 const { normalizeToE164 } = require('../utils/phone-e164');
+const { validatePhiSafeMessage } = require('../utils/phi-safe-messaging');
 
 class SMSService {
+    static _assertPhiSafeOutbound(message) {
+        const check = validatePhiSafeMessage(message);
+        if (!check.safe) {
+            const err = new Error('SMS blocked: message contains potential PHI patterns');
+            err.code = 'PHI_SAFE_MESSAGE_BLOCKED';
+            err.violations = check.violations;
+            throw err;
+        }
+    }
+
     static _testNumbers() {
         const raw = String(process.env.SMS_TEST_NUMBERS || process.env.TEST_SMS_NUMBERS || '').trim();
         if (!raw) return new Set();
@@ -25,6 +36,11 @@ class SMSService {
         const formatted = this.formatPhoneNumber(phoneNumber);
         if (!formatted) return false;
         if (formatted === '+15555555555' || formatted === '+15005550006') return true;
+        // E.164 test harness (+1555 + 7 digits) and NANP 555 exchange — never hit live Twilio.
+        if (/^\+1555\d{7}$/.test(formatted)) return true;
+        if (process.env.SMS_FORCE_SIMULATE === '1' || process.env.VOICE_EVAL_SIMULATE_SMS === '1') {
+            return true;
+        }
         return this._testNumbers().has(formatted);
     }
     /**
@@ -103,7 +119,8 @@ class SMSService {
         const templates = {
             en: `${clinic}: Your estimated copay is $${formatted}. Pay securely: ${paymentLink}`,
             es: `${clinic}: Su copago estimado es $${formatted}. Pague de forma segura: ${paymentLink}`,
-            ru: `${clinic}: Ваш ориентировочный копай — $${formatted}. Оплатите по ссылке: ${paymentLink}`
+            ru: `${clinic}: Ваш ориентировочный копай — $${formatted}. Оплатите по ссылке: ${paymentLink}`,
+            zh: `${clinic}：您的预估自付额为 $${formatted}。安全支付链接：${paymentLink}`
         };
         return templates[loc] || templates.en;
     }
@@ -121,6 +138,7 @@ class SMSService {
     /** @private */
     static async _dispatchPaymentLinkSms(phoneNumber, message, orderDetails, customerId, merchantId) {
         try {
+            this._assertPhiSafeOutbound(message);
             const client = this.getTwilioClient();
             const fromNumber = process.env.TWILIO_PHONE_NUMBER;
             const formattedPhone = this.formatPhoneNumber(phoneNumber);
@@ -215,6 +233,7 @@ class SMSService {
      */
     static async sendSMS(phoneNumber, message, fromOverride = null) {
         try {
+            this._assertPhiSafeOutbound(message);
             const client = this.getTwilioClient();
             const fromNumber = fromOverride || process.env.TWILIO_PHONE_NUMBER;
             const formattedPhone = this.formatPhoneNumber(phoneNumber);

@@ -9,6 +9,35 @@ const { resolveDentalCdtFromReason, isDentalCdt } = require('../utils/cpt-helper
 
 /** Default ICD-10 for routine dental administrative eligibility (encounter for dental exam). */
 const DEFAULT_DENTAL_ICD10 = 'Z01.20';
+const DEFAULT_CLINIC_ICD10 = 'Z00.00';
+
+const CLINIC_TRIGGER_MAP = [
+  { patterns: [/\bnew patient\b/i, /\bfirst time\b/i, /\bfirst visit\b/i], code: '99203' },
+  { patterns: [/\bfollow.?up\b/i, /\bestablished\b/i, /\breturning\b/i], code: '99213' },
+  { patterns: [/\bphysical\b/i, /\bwellness\b/i, /\bannual\b/i, /\bcheckup\b/i, /\bwell visit\b/i], code: '99395' },
+  { patterns: [/\burgent\b/i, /\bsick visit\b/i, /\bnot feeling well\b/i], code: '99213' },
+  { patterns: [/\bgeneral\b/i, /\bconsult\b/i, /\boffice visit\b/i, /\bappointment\b/i], code: '99213' }
+];
+
+function isClinicAdminUseCase(tenantSpecialty) {
+  const s = String(tenantSpecialty || '').trim().toLowerCase();
+  return (
+    s === 'healthcare_clinic' ||
+    s === 'small_business' ||
+    s === 'primary care' ||
+    s === 'primarycare' ||
+    s === 'general practice'
+  );
+}
+
+function isSupportedAdminServiceCode(code) {
+  const c = String(code || '').trim();
+  if (!c) return false;
+  if (isDentalCdt(c) || /^D\d{4}$/.test(c)) return true;
+  if (/^99[0-9]{3}$/.test(c)) return true;
+  if (/^90471$/.test(c)) return true;
+  return false;
+}
 
 const TRIGGER_MAP = [
   { patterns: [/\bcleaning\b/i, /\bprophylaxis\b/i, /\bhygiene\b/i, /\blimpieza\b/i], code: 'D1110', childCode: 'D1120' },
@@ -70,6 +99,22 @@ function resolveAdminVisitCodes(visitReasonText, tenantSpecialty = 'Dental', opt
         target_specialty: 'Dental',
         match_phrase: dental.matched_phrase || null
       };
+    }
+  }
+
+  if (isClinicAdminUseCase(specialty)) {
+    for (const entry of CLINIC_TRIGGER_MAP) {
+      if (entry.patterns.some((re) => re.test(reason))) {
+        return {
+          ok: true,
+          status: 'OK',
+          primary_cpt: entry.code,
+          primary_icd10: opts.primary_icd10 || DEFAULT_CLINIC_ICD10,
+          code_source: 'admin_clinic_em',
+          target_specialty: specialty,
+          match_phrase: entry.patterns.find((re) => re.test(reason))?.source || null
+        };
+      }
     }
   }
 
@@ -139,7 +184,7 @@ function resolveAdminInsuranceCodes(opts = {}) {
   if (!resolved.ok) return resolved;
 
   const serviceCode = resolved.primary_cpt;
-  if (!isDentalCdt(serviceCode) && !/^D\d{4}$/.test(serviceCode)) {
+  if (!isSupportedAdminServiceCode(serviceCode)) {
     return {
       ok: false,
       status: 'UNSUPPORTED_ADMIN_CODE',
@@ -167,5 +212,9 @@ module.exports = {
   resolveAdminInsuranceCodes,
   emitCodingStarterSetMiss,
   DEFAULT_DENTAL_ICD10,
+  DEFAULT_CLINIC_ICD10,
+  CLINIC_TRIGGER_MAP,
+  isClinicAdminUseCase,
+  isSupportedAdminServiceCode,
   TRIGGER_MAP
 };

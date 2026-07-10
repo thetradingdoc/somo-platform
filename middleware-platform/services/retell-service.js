@@ -207,6 +207,11 @@ Rules:
    * Get default prompt if template fails
    */
   getDefaultPrompt(clinicData) {
+    try {
+      const { getDefaultCustomPrompt } = require('./voice-prompt-templates');
+      const fromUseCase = getDefaultCustomPrompt(clinicData);
+      if (fromUseCase) return fromUseCase;
+    } catch (_) {}
     return `You are Kelly, the AI voice receptionist for ${clinicData.name || 'the clinic'}.
 
 You are friendly, professional, and helpful. Your role is to:
@@ -275,8 +280,21 @@ Always be polite, patient, and professional. If you don't know something, ask fo
       };
     }
 
+    const useCase = clinicData?.use_case ? String(clinicData.use_case).trim() : '';
+    if (!useCase) {
+      return {
+        success: false,
+        error: 'use_case is required to create a Retell agent'
+      };
+    }
+
     try {
-      const prompt = this.generateClinicPrompt(clinicData);
+      const { getDefaultCustomPrompt } = require('./voice-prompt-templates');
+      const prompt =
+        clinicData.general_prompt ||
+        clinicData.system_prompt ||
+        getDefaultCustomPrompt(clinicData) ||
+        this.generateClinicPrompt({ ...clinicData, use_case: useCase });
       const functions = this.loadRetellFunctions();
 
       const agentPayload = {
@@ -300,48 +318,17 @@ Always be polite, patient, and professional. If you don't know something, ask fo
       console.log(`   Agent name: ${agentPayload.agent_name}`);
       console.log(`   WebSocket URL: ${agentPayload.llm_websocket_url}`);
 
-      // Try multiple possible Retell API endpoints
-      const possibleEndpoints = [
-        '/v2/create-agent',
-        '/create-agent',
-        '/v2/agents',
-        '/v2/agent'
-      ];
-
-      let lastError = null;
-      let response = null;
-
-      for (const endpoint of possibleEndpoints) {
-        try {
-          console.log(`   Trying endpoint: ${this.apiBaseUrl}${endpoint}`);
-          response = await axios.post(
-            `${this.apiBaseUrl}${endpoint}`,
+      const response = await axios.post(
+        `${this.apiBaseUrl}/v2/create-agent`,
         agentPayload,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 30000 // 30 second timeout
+          timeout: 30000
         }
       );
-
-          // If we got a response, break out of the loop
-          if (response && response.status < 400) {
-            console.log(`✅ Successfully used endpoint: ${endpoint}`);
-            break;
-          }
-        } catch (endpointError) {
-          lastError = endpointError;
-          // If it's a 404, try next endpoint
-          if (endpointError.response && endpointError.response.status === 404) {
-            console.log(`   Endpoint ${endpoint} returned 404, trying next...`);
-            continue;
-          }
-          // If it's a different error (auth, validation, etc.), break and report
-          break;
-        }
-      }
 
       if (response && response.data && response.data.agent_id) {
         console.log(`✅ Retell agent created successfully: ${response.data.agent_id}`);
@@ -350,13 +337,12 @@ Always be polite, patient, and professional. If you don't know something, ask fo
           agent_id: response.data.agent_id,
           agent_data: response.data
         };
-      } else if (response && response.data) {
-        // Response received but no agent_id - might be different response format
+      }
+      if (response && response.data) {
         console.warn('⚠️  Retell API response received but format unexpected:', response.data);
         throw new Error('Invalid response from Retell API: unexpected response format');
-      } else {
-        throw lastError || new Error('All Retell API endpoints failed');
       }
+      throw new Error('Retell create-agent failed');
     } catch (error) {
       console.error('❌ Failed to create Retell agent:', error.message);
       if (error.response) {
@@ -723,7 +709,7 @@ Always be polite, patient, and professional. If you don't know something, ask fo
 
     try {
       const resp = await axios.patch(
-        `${this.apiBaseUrl}/v2/agents/${agentId}`,
+        `${this.apiBaseUrl}/update-agent/${agentId}`,
         payload,
         {
           headers: {

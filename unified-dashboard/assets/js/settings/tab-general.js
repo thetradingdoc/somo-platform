@@ -67,6 +67,7 @@ const SP = window.SettingsPage;
                 subtitle: 'Manage your AI voice receptionist platform settings'
             });
             setupSettingsTabs();
+            bindSettingsClickHandlers();
             const tabParam = new URLSearchParams(window.location.search).get('tab');
             if (tabParam === 'voice' || tabParam === 'kelly') {
                 setSettingsTab('kelly');
@@ -116,6 +117,8 @@ const SP = window.SettingsPage;
                 setSettingsTab('connected');
             } else if (hash === 'voice' || hash === 'kelly') {
                 setSettingsTab('kelly');
+            } else if (hash === 'billing') {
+                setSettingsTab('billing');
             } else {
                 setSettingsTab(SP.activeSettingsTab);
             }
@@ -147,6 +150,61 @@ const SP = window.SettingsPage;
             if (SP.activeSettingsTab === 'advanced' && typeof loadCredentialsSettings === 'function') {
                 loadCredentialsSettings();
             }
+        }
+
+        function bindSettingsClickHandlers() {
+            const root = document.getElementById('ppMainContent') || document.body;
+            const actions = {
+                editBusinessName,
+                editEmail,
+                editPhone,
+                editProviderDisplayName,
+                manageStripe,
+                manageTwilio,
+                connectPmsSomo,
+                connectGoogleCalendar,
+                loadProviderBookingReadiness,
+                viewPlans,
+                paymentMethodAction,
+                viewInvoices,
+                copyMerchantId,
+                editMerchantName,
+                importRosterCsv,
+                savePracticeSettings,
+                navigateConnected: () => setSettingsTab('connected'),
+                viewApiKey,
+                regenerateApiKey,
+                editWebhook,
+                testWebhook,
+                editPlatforms,
+                viewTwilioPhone,
+                saveCredentialsSettings,
+                viewApiDocs,
+                changePassword,
+                enable2FA,
+                viewSessions,
+                revokeOtherSessions,
+                exportData,
+                closeAccount,
+                openCalendar: () => { window.location.href = 'calendar.html'; }
+            };
+            if (root.dataset.settingsActionsBound) return;
+            root.dataset.settingsActionsBound = '1';
+            root.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('[data-settings-action]');
+                if (!btn) return;
+                const action = btn.dataset.settingsAction;
+                const fn = actions[action];
+                if (typeof fn === 'function') {
+                    ev.preventDefault();
+                    fn();
+                }
+            });
+            root.addEventListener('change', (ev) => {
+                const input = ev.target.closest('[data-notif-toggle]');
+                if (!input) return;
+                toggleNotification(input.dataset.notifToggle);
+            });
         }
 
         function providerLabelFromCustomer(customer) {

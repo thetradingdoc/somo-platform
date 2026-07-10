@@ -1,6 +1,6 @@
 'use strict';
 
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const http = require('http');
 
@@ -25,12 +25,27 @@ function waitForHealth(timeoutMs = 120_000) {
   });
 }
 
-module.exports = async () => {
+function killAuditPort() {
   try {
-    await waitForHealth(3000);
-    console.log('[tenant-audit setup] Reusing existing audit middleware');
-    return;
+    const port = new URL(AUDIT_URL).port || '4001';
+    execSync(`lsof -ti :${port} | xargs kill -9 2>/dev/null || true`, { stdio: 'ignore' });
   } catch (_) {}
+}
+
+module.exports = async () => {
+  const forceRestart =
+    process.env.TENANT_AUDIT_FORCE_RESTART === '1' || process.argv.includes('--force-restart');
+
+  if (forceRestart) {
+    killAuditPort();
+    await new Promise((r) => setTimeout(r, 800));
+  } else {
+    try {
+      await waitForHealth(3000);
+      console.log('[tenant-audit setup] Reusing existing audit middleware');
+      return;
+    } catch (_) {}
+  }
 
   const cwd = path.join(__dirname, '..');
   const child = spawn('node', ['scripts/start-audit-middleware.cjs'], {

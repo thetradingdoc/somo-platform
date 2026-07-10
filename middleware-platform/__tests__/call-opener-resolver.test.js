@@ -219,6 +219,17 @@ describe('call-opener-resolver', () => {
     expect(known.text).toContain('Somo');
   });
 
+  test('platform_support opener branch asksName false', () => {
+    const { resolveCallOpeners, buildPlatformSalesInboundGreeting } = require('../services/call-opener-resolver');
+    const bundle = resolveCallOpeners({
+      callType: 'platform_support',
+      direction: 'inbound',
+      routingWorld: 'platform_support'
+    });
+    expect(bundle.activeOpener.asksName).toBe(false);
+    expect(bundle.activeOpener.text).toBe(buildPlatformSalesInboundGreeting());
+  });
+
   test('isManagedDefaultGreeting flags old intent-first defaults but not custom greetings', () => {
     expect(
       isManagedDefaultGreeting(

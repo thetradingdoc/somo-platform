@@ -133,6 +133,9 @@
         mainEl.classList.add('pp-content');
         if (mainEl.id !== 'ppMainContent') mainEl.id = 'ppMainContent';
         ppMain.appendChild(mainEl);
+        if (typeof window.ppEnsureAlertStrip === 'function') {
+          window.ppEnsureAlertStrip();
+        }
       } else {
         const content = document.createElement('main');
         content.className = 'pp-content';

@@ -6,7 +6,6 @@
     { id: 'board', href: '/admin/', label: 'Control board', group: 'workspace', icon: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>' },
     { id: 'tenants', href: '/admin/tenants.html', label: 'Tenants', group: 'workspace', badgeKey: 'tenants', icon: '<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17" cy="8" r="2.6"/><path d="M16 14.2c2.8.6 5 2.7 5 5.8"/>' },
     { id: 'pipeline', href: '/admin/pipeline.html', label: 'Pipeline', group: 'workspace', badgeKey: 'pipeline', icon: '<path d="M4 6h16M4 12h16M4 18h10"/>' },
-    { id: 'leads', href: '/admin/leads.html', label: 'Leads', group: 'workspace', icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>' },
     { id: 'feature-flags', href: '/admin/feature-flags.html', label: 'Feature flags', group: 'workspace', capability: 'platform.feature_flags', icon: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>' },
     { id: 'sales-agent', href: '/admin/sales-agent.html', label: 'Sales agent', group: 'workspace', icon: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M9 22h6"/>' },
     { id: 'coding-reviews', href: '/admin/coding-reviews.html', label: 'Coding reviews', group: 'workspace', icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>' },
@@ -331,8 +330,82 @@
     }
   }
 
-  function confirmAction(message) {
-    return window.confirm(message);
+  function ensureConfirmModal() {
+    let el = document.getElementById('adminConfirmModal');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'adminConfirmModal';
+    el.className = 'admin-crm-modal-overlay admin-crm-confirm-overlay';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.innerHTML = `
+      <div class="admin-crm-modal admin-crm-confirm-modal">
+        <h3 class="admin-crm-title" id="adminConfirmTitle">Confirm action</h3>
+        <p class="admin-crm-confirm-message" id="adminConfirmMessage"></p>
+        <div class="admin-crm-modal-foot admin-crm-confirm-foot">
+          <button type="button" class="admin-crm-btn-outline" id="adminConfirmCancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="adminConfirmOk">Confirm</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    return el;
+  }
+
+  /**
+   * @param {string} message
+   * @param {{ title?: string, confirmLabel?: string, destructive?: boolean }} [opts]
+   * @returns {Promise<boolean>}
+   */
+  function confirmAction(message, opts = {}) {
+    const title = opts.title || 'Confirm action';
+    const confirmLabel = opts.confirmLabel || 'Confirm';
+    const destructive = opts.destructive === true;
+    const overlay = ensureConfirmModal();
+    const titleEl = overlay.querySelector('#adminConfirmTitle');
+    const msgEl = overlay.querySelector('#adminConfirmMessage');
+    const cancelBtn = overlay.querySelector('#adminConfirmCancel');
+    const okBtn = overlay.querySelector('#adminConfirmOk');
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    okBtn.textContent = confirmLabel;
+    okBtn.classList.toggle('admin-crm-btn-danger', destructive);
+    okBtn.classList.toggle('btn-primary', !destructive);
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        overlay.classList.remove('open');
+        document.removeEventListener('keydown', onKey);
+        resolve(value);
+      };
+      const onKey = (e) => {
+        if (e.key === 'Escape') finish(false);
+      };
+      cancelBtn.onclick = () => finish(false);
+      okBtn.onclick = () => finish(true);
+      overlay.onclick = (e) => {
+        if (e.target === overlay) finish(false);
+      };
+      document.addEventListener('keydown', onKey);
+      overlay.classList.add('open');
+      cancelBtn.focus();
+    });
+  }
+
+  function mountMobileDesktopNotice() {
+    if (window.matchMedia('(min-width: 769px)').matches) return;
+    if (document.getElementById('adminMobileNotice')) return;
+    const banner = document.createElement('div');
+    banner.id = 'adminMobileNotice';
+    banner.className = 'admin-crm-mobile-notice';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+      <span><strong>Desktop recommended.</strong> Admin CRM is optimized for desktop — switch to a larger screen for pipeline and dialer workflows.</span>`;
+    document.body.insertBefore(banner, document.body.firstChild);
   }
 
   async function callLead(id, name, opts = {}) {
@@ -343,7 +416,7 @@
     const msg = opts.skipConfirm
       ? null
       : `Place outbound sales call to ${name}?`;
-    if (msg && !confirmAction(msg)) return null;
+    if (msg && !(await confirmAction(msg, { title: 'Place outbound call' }))) return null;
 
     callsInFlight.add(String(id));
     const btn = opts.buttonEl;
@@ -452,6 +525,7 @@
 
   function initAdminShell(activeId, opts = {}) {
     document.body.classList.add('shell', 'admin-portal-body');
+    mountMobileDesktopNotice();
     renderSidebar(activeId);
     renderEnvBadge();
     if (localStorage.getItem('api_base')) {

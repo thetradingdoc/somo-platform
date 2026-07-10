@@ -8,7 +8,7 @@ const CONFIRM_PATTERNS = [
 ];
 
 const LOCALIZED_BOOK_CONFIRM_RE =
-  /book|confirm|works|yes|please|email|@|sí|si\b|por favor|reservar|хорошо|подходит|да|martes|tarde|вторник|днём|днем|funciona|me funciona|me viene bien/i;
+  /book|confirm|works|yes|please|email|@|sí|si\b|por favor|reservar|хорошо|подходит|да|martes|tarde|вторник|днём|днем|funciona|me funciona|me viene bien|周二|12点|可以|预约/i;
 
 const DENY_PATTERNS = [
   /\b(no|nope|don't|do not|cancel that|not that|wrong)\b/i,

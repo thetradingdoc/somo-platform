@@ -342,6 +342,10 @@
                 return;
             }
             await new Promise((r) => setTimeout(r, 150));
+            const searchParams = new URLSearchParams(window.location.search);
+            if (searchParams.get('focus') === 'search' || searchParams.has('search')) {
+                setTimeout(() => document.getElementById('searchInput')?.focus(), 100);
+            }
             if (typeof mountProviderPage === 'function') {
                 mountProviderPage({
                     activeId: 'patients',

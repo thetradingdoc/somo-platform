@@ -1,8 +1,8 @@
 'use strict';
 
-/** Prefer sticky preferred_language over ephemeral state.locale for deterministic replies. */
+/** Prefer projection.flags_json.locale (SSOT) for deterministic replies. */
 function resolveStickyLocale(state = {}) {
-  return state.flags?.preferred_language || state.preferred_language || state.locale || 'en';
+  return state.flags?.locale || state.locale || 'en';
 }
 
 function withStickyLocale(state = {}) {

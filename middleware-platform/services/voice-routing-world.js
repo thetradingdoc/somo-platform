@@ -74,10 +74,10 @@ function isTenantResolvedForMode(customerIdOrOpts, clinicIdLegacy) {
   return false;
 }
 
-/** Kelly Rails must not run for navigation or unidentified inbound. */
+/** Kelly Rails must not run for navigation, platform support, or unidentified inbound. */
 function shouldBlockKellyTurn(routingWorld) {
   const world = routingWorld || 'unidentified';
-  return world === ROUTING_WORLD_NAVIGATION || world === 'unidentified';
+  return world === ROUTING_WORLD_NAVIGATION || world === 'platform_support' || world === 'unidentified';
 }
 
 function emitRoutingWorldEvent(db, { session_id, call_id, routing_world, extra = {} }) {

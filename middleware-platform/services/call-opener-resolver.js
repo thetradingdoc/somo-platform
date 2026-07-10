@@ -98,18 +98,23 @@ function prependAiDisclosure(text, { enabled = true, locale = 'en' } = {}) {
 }
 
 function resolveGreetingWithDisclosure(settings, customer, opts = {}) {
-  let base;
-  if (settings?.greeting && String(settings.greeting).trim()) {
-    base = String(settings.greeting).trim();
-  } else {
-    const company = customer?.company_name || customer?.name || 'our office';
-    base = buildDefaultInboundGreeting(company, settings?.tone_preset || 'warm');
-  }
-  const enabled =
-    opts.aiDisclosureEnabled !== false &&
-    settings?.ai_disclosure_enabled !== 0 &&
-    settings?.ai_disclosure_enabled !== false;
-  return prependAiDisclosure(base, { enabled, locale: opts.locale || 'en' });
+  const bundle = resolveCallOpeners({
+    settings: {
+      ...settings,
+      ai_disclosure_enabled:
+        opts.aiDisclosureEnabled !== false && settings?.ai_disclosure_enabled !== 0
+    },
+    customer,
+    direction: 'inbound',
+    locale: opts.locale || 'en',
+    now: opts.now || new Date()
+  });
+  return bundle.activeOpener?.text || '';
+}
+
+function buildPlatformSalesInboundGreeting() {
+  const { buildPlatformSalesOpener } = require('./conversation-mode/rails/somo-sales-inbound-rail');
+  return buildPlatformSalesOpener();
 }
 
 function buildDefaultInboundGreeting(practiceName, tonePreset = 'warm') {
@@ -180,6 +185,7 @@ function resolveCallOpeners(params = {}) {
     practiceName = null,
     callType = null,
     direction = null,
+    routingWorld = null,
     locale = null,
     now = new Date()
   } = params;
@@ -200,10 +206,18 @@ function resolveCallOpeners(params = {}) {
     ? String(settings.outbound_opener).trim()
     : null;
 
-  const inboundDefault = buildDefaultInboundGreeting(displayName, tone);
+  const callTypeNorm = String(callType || '').toLowerCase();
+  const routingWorldNorm = String(routingWorld || '').toLowerCase();
+  const isPlatformSalesInbound =
+    !isOutboundCallType(callType) &&
+    String(direction || '').toLowerCase() !== 'outbound' &&
+    (callTypeNorm === 'platform_support' || routingWorldNorm === 'platform_support');
+
+  const inboundDefault = isPlatformSalesInbound
+    ? buildPlatformSalesInboundGreeting()
+    : buildDefaultInboundGreeting(displayName, tone);
   const outboundDefault = buildDefaultOutboundOpener(displayName, tone);
   const outboundEnabled = settings.outbound_enabled === 1 || settings.outbound_enabled === true;
-  const callTypeNorm = String(callType || '').toLowerCase();
   // Operator/sales outbound scripts bypass tenant outbound_enabled toggle
   const systemOutboundCall =
     callTypeNorm === 'operator_outbound' ||
@@ -211,8 +225,13 @@ function resolveCallOpeners(params = {}) {
     callTypeNorm === 'rcm_follow_up';
   const outboundSpeakAllowed = outboundEnabled || systemOutboundCall;
 
-  const inboundSource = inboundCustom ? 'tenant_setting' : 'default';
-  let inboundText = inboundCustom || inboundDefault;
+  const inboundSource = isPlatformSalesInbound
+    ? 'platform_sales'
+    : inboundCustom
+      ? 'tenant_setting'
+      : 'default';
+  let inboundText =
+    isPlatformSalesInbound ? inboundDefault : inboundCustom || inboundDefault;
   const disclosureOn =
     settings?.ai_disclosure_enabled !== 0 && settings?.ai_disclosure_enabled !== false;
   if (inboundSource === 'default' && withinHours && disclosureOn) {
@@ -224,7 +243,9 @@ function resolveCallOpeners(params = {}) {
   // Name-first only applies when the opener actually asks for the caller's name.
   // Our defaults always do; a custom tenant greeting only counts if it asks.
   const inboundAsksName =
-    withinHours && (inboundSource === 'default' || greetingAsksForName(inboundText));
+    !isPlatformSalesInbound &&
+    withinHours &&
+    (inboundSource === 'default' || greetingAsksForName(inboundText));
   const inbound = {
     text: inboundText,
     source: inboundSource,
@@ -380,6 +401,7 @@ module.exports = {
   sanitizePracticeName,
   resolvePracticeDisplayName,
   buildDefaultInboundGreeting,
+  buildPlatformSalesInboundGreeting,
   buildDefaultOutboundOpener,
   buildAiDisclosureLine,
   prependAiDisclosure,

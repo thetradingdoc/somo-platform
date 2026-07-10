@@ -37,4 +37,40 @@ describe('OPQRST pivot survival (T-3)', () => {
     });
     expect(next.opqrst_resume_field).toBe('quality');
   });
+
+  test('records pivot preserves opqrst_resume_field', () => {
+    const session = {
+      conversation_mode: 'tenant_inbound_clinical',
+      active_subrail: 'opqrst',
+      opqrst_resume_field: 'severity',
+      opqrst_accumulator: { quality: 'rash' }
+    };
+    const next = applyPivotToSession(session, {
+      mode: 'tenant_records',
+      subrail: 'records_qa',
+      prior_mode: 'tenant_inbound_clinical',
+      pivot_event: PivotEvent.RECORDS_INTENT_DETECTED,
+      pivot_reason: 'records_pivot',
+      pending_intents: []
+    });
+    expect(next.opqrst_resume_field).toBe('severity');
+    expect(next.opqrst_accumulator).toEqual({ quality: 'rash' });
+  });
+
+  test('cancel pivot preserves opqrst_resume_field', () => {
+    const session = {
+      conversation_mode: 'tenant_inbound_clinical',
+      active_subrail: 'opqrst',
+      flags: { _opqrst_gate: { openField: 'onset' } }
+    };
+    const next = applyPivotToSession(session, {
+      mode: 'tenant_inbound_clinical',
+      subrail: 'cancellation',
+      prior_mode: 'tenant_inbound_clinical',
+      pivot_event: PivotEvent.CANCEL_INTENT_DETECTED,
+      pivot_reason: 'cancel_subrail',
+      pending_intents: []
+    });
+    expect(next.opqrst_resume_field).toBe('onset');
+  });
 });

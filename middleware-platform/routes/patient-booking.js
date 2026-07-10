@@ -367,8 +367,9 @@ app.post(
     const ttlMinutes = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_MINUTES || '30', 10);
     const expiresAt = Math.floor(Date.now() / 1000) + Math.max(10, ttlMinutes) * 60;
 
-    const successUrl = `${baseUrl}/unified-dashboard/patients/payment-success.html?checkout_id=${encodeURIComponent(checkoutId)}&appointment_id=${encodeURIComponent(appointmentId)}`;
-    const cancelUrl = `${baseUrl}/unified-dashboard/patients/wallet.html`;
+    const successUrl = `${baseUrl.replace(/\/$/, '')}/api/payment/success?checkout_id=${encodeURIComponent(checkoutId)}&appointment_id=${encodeURIComponent(appointmentId)}`;
+    const portalBase = (process.env.PORTAL_BASE_URL || process.env.FIREBASE_HOSTING_URL || 'https://callsomo.com').replace(/\/$/, '');
+    const cancelUrl = `${portalBase}/business/today.html`;
 
     // Phase 4.2: Pre-auth for sync_video (capture at case report); capture immediately for async_review
     const visitMode = (appt.visit_mode || 'sync_video').toString();

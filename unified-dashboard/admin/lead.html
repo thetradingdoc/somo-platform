@@ -57,6 +57,7 @@
             <div class="admin-crm-kv-row"><dt>Languages</dt><dd id="iLanguages">—</dd></div>
             <div class="admin-crm-kv-row"><dt>Website</dt><dd id="iWebsite">—</dd></div>
             <div class="admin-crm-kv-row"><dt>Contact status</dt><dd id="iContactStatus">—</dd></div>
+            <div class="admin-crm-kv-row"><dt>Outbound consent</dt><dd id="iConsent">—</dd></div>
           </dl>
           <div class="admin-crm-input-row" style="padding:0 18px 18px;">
             <input type="url" class="admin-crm-text-input" id="websiteOverride" placeholder="Paste a website URL to re-enrich…">
@@ -167,7 +168,11 @@
         (lead.pipeline_stage === 'won' || lead.pipeline_stage === 'closed_won') && '<span class="sfd-nameplate sfd-nameplate--live sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>WON</span>',
         lead.location && `<span class="admin-crm-chip">${esc(lead.location)}</span>`,
         lead.specialty && `<span class="admin-crm-chip">${esc(lead.specialty)}</span>`,
-        lead.lead_source && `<span class="admin-crm-chip">Source: ${esc(String(lead.lead_source).split(':')[0])}</span>`,
+        lead.source === 'inbound_platform'
+          ? '<span class="admin-crm-chip admin-crm-chip-accent">363 inbound</span>'
+          : null,
+        (lead.lead_source || lead.source) &&
+          `<span class="admin-crm-chip">Source: ${esc(String(lead.lead_source || lead.source).split(':')[0])}</span>`,
       ].filter(Boolean).join('');
 
       document.getElementById('iPhone').textContent = lead.clinic_phone || '—';
@@ -194,6 +199,15 @@
         ? '<span class="admin-crm-pill admin-crm-pill-success">Verified</span>'
         : esc(status);
 
+      const consentEl = document.getElementById('iConsent');
+      const consentBasis = lead.outbound_consent_basis || 'none';
+      const canDial = lead.outbound_call_allowed === true;
+      consentEl.innerHTML = canDial
+        ? `<span class="admin-crm-pill admin-crm-pill-success">${esc(consentBasis)}</span>`
+        : `<span class="admin-crm-pill admin-crm-pill-warning">${esc(consentBasis)} — dial blocked</span>
+           <button type="button" class="admin-crm-btn-outline admin-crm-btn-sm" id="btnRecordConsent" style="margin-left:8px;">Record express consent</button>`;
+      document.getElementById('btnRecordConsent')?.addEventListener('click', recordExpressConsent);
+
       const inviteBtn = document.getElementById('inviteBtn');
       if (lead.pipeline_stage === 'won' || lead.pipeline_stage === 'closed_won' || lead.status === 'converted') {
         inviteBtn.textContent = 'View tenant portal';
@@ -210,8 +224,10 @@
 
       const callBtn = document.getElementById('callBtn');
       const callable = lead.callable === true || String(lead.clinic_phone || '').replace(/\D/g, '').length >= 10;
-      callBtn.disabled = !callable;
-      callBtn.style.opacity = callable ? '1' : '0.5';
+      const dialOk = callable && lead.outbound_call_allowed !== false;
+      callBtn.disabled = !dialOk;
+      callBtn.style.opacity = dialOk ? '1' : '0.5';
+      callBtn.title = dialOk ? '' : (callable ? 'TCPA consent required before outbound dial' : 'Add a callable phone first');
 
       const banner = document.getElementById('suggestionBanner');
       if (lead.suggested_stage) {
@@ -253,7 +269,7 @@
       try {
         const r = await apiFetch(`/api/admin/leads/calls/${callId}/transcript`);
         if (r.lines?.length) {
-          body.innerHTML = r.lines.map((l) => `<div style="margin-bottom:6px;"><strong>${l.role === 'agent' ? 'Alex' : 'Contact'}:</strong> ${esc(l.text)}</div>`).join('');
+          body.innerHTML = r.lines.map((l) => `<div style="margin-bottom:6px;"><strong>${l.role === 'agent' ? 'Kelly' : 'Contact'}:</strong> ${esc(l.text)}</div>`).join('');
         } else {
           body.textContent = r.raw || 'Transcript not available.';
         }
@@ -288,8 +304,26 @@
       return convertLeadToTenant();
     }
 
+    async function recordExpressConsent() {
+      if (!(await confirmAction(
+        'Record express written consent for outbound sales calls to this lead? Only do this if you have documented permission.',
+        { title: 'Record TCPA consent', confirmLabel: 'Record consent' }
+      ))) return;
+      try {
+        await apiFetch(`/api/admin/leads/${leadId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ outbound_consent_basis: 'express_written' }),
+        });
+        showToast('Outbound consent recorded', 'success');
+        loadLead(true);
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
     async function deleteLead() {
-      if (!confirmAction(`Permanently delete "${leadData?.clinic_name}"? Audit log will be kept.`)) return;
+      if (!(await confirmAction(
+        `Permanently delete "${leadData?.clinic_name}"? Audit log will be kept.`,
+        { title: 'Delete lead', confirmLabel: 'Delete', destructive: true }
+      ))) return;
       try {
         await apiFetch(`/api/admin/leads/${leadId}`, { method: 'DELETE' });
         showToast('Lead deleted', 'success');

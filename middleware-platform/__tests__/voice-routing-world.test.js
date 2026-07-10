@@ -48,10 +48,23 @@ describe('voice-routing-world', () => {
     ).toBe(true);
   });
 
-  test('shouldBlockKellyTurn blocks navigation and unidentified', () => {
+  test('shouldBlockKellyTurn blocks navigation, platform_support, and unidentified', () => {
     expect(shouldBlockKellyTurn('navigation')).toBe(true);
+    expect(shouldBlockKellyTurn('platform_support')).toBe(true);
     expect(shouldBlockKellyTurn('unidentified')).toBe(true);
     expect(shouldBlockKellyTurn('tenant')).toBe(false);
+  });
+
+  test('operator customer on platform DID resolves to platform_support', () => {
+    expect(
+      resolveRoutingWorld({
+        call_type: 'platform_support',
+        direction: 'inbound',
+        to_number: '+13639990205',
+        customer_id: 'cust-operator',
+        customer: { customer_type: 'operator' }
+      })
+    ).toBe('platform_support');
   });
 
   test('navigation customer resolves to navigation world', () => {

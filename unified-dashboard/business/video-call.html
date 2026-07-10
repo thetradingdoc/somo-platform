@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <title>Somo Provider - Video Call</title>
   <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/provider-portal.css">
   <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/auth-utils.js"></script>
@@ -707,16 +708,31 @@
       <div id="status" class="status" style="display: none;"></div>
     </main>
 
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof mountProviderPage === 'function' && !document.getElementById('ppSidebarNav')) {
+        mountProviderPage({
+          activeId: 'calendar',
+          eyebrow: 'Telehealth',
+          title: 'Video call',
+          subtitle: 'Start or join a telehealth video room'
+        });
+      }
+    });
+  </script>
+
   <script type="module">
     import { createWebVoiceTurnController } from '../shared/webVoiceTurnController.js';
     const API_BASE = window.API_BASE || 'http://localhost:4000';
 
     document.addEventListener('DOMContentLoaded', () => {
-      mountProviderPage({
-        activeId: 'calendar',
-        eyebrow: 'Telehealth',
-        title: 'Video call'
-      });
+      if (typeof mountProviderPage === 'function' && !document.getElementById('ppSidebarNav')) {
+        mountProviderPage({
+          activeId: 'calendar',
+          eyebrow: 'Telehealth',
+          title: 'Video call'
+        });
+      }
       const userData = (window.requireAuth && window.requireAuth()) || null;
       if (userData) {
         const nameEl = document.getElementById('userName');

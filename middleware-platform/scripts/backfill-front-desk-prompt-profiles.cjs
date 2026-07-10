@@ -19,26 +19,16 @@ const profiles = db.db.prepare(`
 `).all();
 
 let updated = 0;
-let skipped = 0;
 
 for (const row of profiles) {
   const useCase = row.use_case || row.customer_use_case || 'healthcare_clinic';
   const template = resolveUseCaseTemplate(useCase);
   const policy = getEffectiveTenantPolicy(row);
-  const isFrontDesk =
-    policy?.triage_policy === TriagePolicy.DISABLED ||
-    useCase === 'dental' ||
-    useCase === 'healthcare_clinic';
 
-  if (!isFrontDesk) {
-    skipped++;
-    continue;
-  }
-
-  const policyJson = JSON.stringify(template.policy || { triage_policy: TriagePolicy.DISABLED });
+  const policyJson = JSON.stringify(template.policy || policy || { triage_policy: TriagePolicy.DISABLED });
   const metadata = JSON.stringify({
     use_case: useCase,
-    tenant_policy: template.policy || { triage_policy: TriagePolicy.DISABLED },
+    tenant_policy: template.policy || policy || { triage_policy: TriagePolicy.DISABLED },
     backfilled_at: new Date().toISOString()
   });
 
@@ -65,4 +55,4 @@ for (const row of profiles) {
   console.log(`✅ Updated profile ${row.id} (${useCase})`);
 }
 
-console.log(`\nDone. Updated: ${updated}, Skipped (clinical): ${skipped}`);
+console.log(`\nDone. Updated: ${updated}`);

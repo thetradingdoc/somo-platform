@@ -2,6 +2,7 @@
 
 const { parseSlotTimeFromMessage } = require('./slot-time-parse');
 const { isConfirmatoryUtterance } = require('./confirm-utterance');
+const { isCancelFeeInquiry } = require('../conversation-mode/intent-detector');
 
 /** L2 booking intents — subrails emit; L4 gates consume. */
 const BookingIntentType = {
@@ -50,12 +51,12 @@ function detectBookingIntents(message, step) {
 
   if (
     isConfirmatoryUtterance(msg) ||
-    /book|confirm|go ahead|please book|schedule|reservar|por favor/.test(lower)
+    /book|confirm|go ahead|please book|schedule|reservar|por favor|预约|确认/.test(lower)
   ) {
     intents.push({ type: BookingIntentType.CONFIRM_BOOK });
   }
 
-  if (/available|what times|openings|horarios|disponib|какое время|свободн/i.test(lower)) {
+  if (/available|what times|openings|horarios|disponib|какое время|свободн|可预约|有空|时间/.test(lower)) {
     intents.push({ type: BookingIntentType.ASK_AVAILABILITY });
   }
 
@@ -69,7 +70,7 @@ function detectBookingIntents(message, step) {
 function detectCancelIntents(message, step) {
   const intents = [];
   const lower = String(message || '').toLowerCase();
-  if (/cancel|cancellation|no longer need|can't make|cannot make|no puedo|отмен|нужно отменить/.test(lower)) {
+  if (/cancel|cancellation|no longer need|can't make|cannot make|no puedo|отмен|нужно отменить|取消/.test(lower)) {
     intents.push({ type: CancelIntentType.CANCEL_REQUESTED });
   }
   if (
@@ -85,7 +86,10 @@ function detectRescheduleIntents(message, step) {
   const intents = [];
   const msg = String(message || '');
   const lower = msg.toLowerCase();
-  if (/reschedule|move my appointment|change my appointment|different time|reprogramar|move it|move to|instead|next week|another time|próxima semana|cambiarla|la próxima|перенести|на следующ/i.test(lower)) {
+  if (isCancelFeeInquiry(msg)) {
+    return intents;
+  }
+  if (/reschedule|move my appointment|change my appointment|different time|reprogramar|move it|move to|next week|another time|próxima semana|proxima semana|cambiarla|la próxima|podemos cambiar|перенести|на следующ|改到|改期|下周|换一个时间/.test(lower)) {
     intents.push({ type: RescheduleIntentType.RESCHEDULE_REQUESTED });
   }
   const time = parseSlotTimeFromMessage(msg);
@@ -171,7 +175,7 @@ function planTurnOwner({ subrail, flags = {}, intents = [], step = null, message
     const slotsReady =
       flags.slots_offered ||
       !!(flags.current_booking_slot?.date && flags.current_booking_slot?.time);
-    const nameGiven = !!parseNameFromMessage(msg) || /\bmy name is\b/i.test(msg);
+    const nameGiven = !!parseNameFromMessage(msg) || /\bmy name is\b/i.test(msg) || /我叫/.test(msg);
     const insuranceGiven =
       /\b(cigna|aetna|delta|ppo|insurance|seguro|metlife|humana|anthem)\b/i.test(msg);
 

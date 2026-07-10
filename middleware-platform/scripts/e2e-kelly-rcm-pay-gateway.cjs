@@ -111,7 +111,7 @@ async function stripeLiveSettle(token, amount) {
   const piId = intentRes.json.payment_intent_id;
   const confirmed = await stripe.paymentIntents.confirm(piId, {
     payment_method: 'pm_card_visa',
-    return_url: `${API_BASE}/patients/payment-success.html?rcm=1&token=${encodeURIComponent(token)}`,
+    return_url: `${API_BASE.replace(/\/$/, '')}/api/payment/success?rcm=1&token=${encodeURIComponent(token)}`,
   });
   if (confirmed.status !== 'succeeded') {
     throw new Error(`Stripe PI not succeeded: ${confirmed.status}`);

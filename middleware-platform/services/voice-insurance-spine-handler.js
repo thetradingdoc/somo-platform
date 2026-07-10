@@ -39,6 +39,15 @@ function resolveInsuranceSpineForRequest(sessionId, args, opts = {}) {
     useAdminPath: opts.useAdminPath === true || args.use_admin_path === true
   });
 
+  const preResolved =
+    args.primary_cpt && args.primary_icd10 && args.code_source && !args.service_code;
+  console.log(
+    '[coding_resolve] layer=http_spine phase=collect_route authoritative=%s session_id=%s primary_cpt=%s',
+    preResolved ? 'false (kelly pre-resolved)' : 'true',
+    sessionId,
+    spineResolved.ok ? spineResolved.primary_cpt : '(blocked)'
+  );
+
   if (spineResolved.ok) {
     return { ok: true, spineResolved };
   }

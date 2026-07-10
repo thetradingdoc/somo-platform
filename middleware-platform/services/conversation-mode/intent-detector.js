@@ -32,7 +32,10 @@ const BILLING_PIVOT_PHRASES = [
   'оплат',
   '付款',
   '支付',
-  '诊费'
+  '诊费',
+  '多少钱',
+  '费用',
+  '自付'
 ];
 
 const APPT_LOOKUP_PHRASES = [
@@ -55,11 +58,15 @@ const CANCEL_PHRASES = [
   'cancel the appointment',
   'cancelar mi cita',
   'cancelar cita',
+  'necesito cancelar',
   'отменить',
   'отмена',
   'отмену',
   'нужно отменить',
-  'отмен'
+  'отмен',
+  '取消预约',
+  '取消',
+  '我要取消'
 ];
 
 const RESCHEDULE_PHRASES = [
@@ -68,8 +75,22 @@ const RESCHEDULE_PHRASES = [
   'change my appointment',
   'different time',
   'reprogramar',
-  'cambiar mi cita'
+  'cambiar mi cita',
+  'cambiarla',
+  'próxima semana',
+  'proxima semana',
+  'la próxima',
+  'podemos cambiar',
+  'перенести',
+  'на следующ',
+  '改期',
+  '改到',
+  '换个时间'
 ];
+
+/** Fee/policy questions during cancel flow — not reschedule (RU-3, ES fee follow-ups). */
+const CANCEL_FEE_INQUIRY_RE =
+  /\b(cancellation fee|cancel fee|fee for cancel|late cancel|cargo por cancel|penalidad)\b|штраф|платн.*отмен/i;
 
 const BOOK_PHRASES = [
   'book appointment',
@@ -99,7 +120,12 @@ const BOOK_PHRASES = [
   'записаться',
   'осмотр',
   'приём',
-  'прием'
+  'прием',
+  '预约',
+  '洗牙',
+  '挂号',
+  '我想预约',
+  '想预约'
 ];
 
 const CANCEL_REBOOK_PHRASES = [
@@ -195,10 +221,14 @@ function isInsuranceAcceptanceInquiry(msg) {
 function isCostOrCopayInquiry(msg) {
   const m = normalizeMsg(msg);
   return (
-    /how much|what would.*cost|cost me|out of pocket|copay|copago|cuánto|cuanto|сколько|before i book|antes de reservar|antes de agendar/i.test(
+    /how much|what would.*cost|cost me|out of pocket|copay|copago|cuánto|cuanto|сколько|多少钱|费用|自付|before i book|antes de reservar|antes de agendar/i.test(
       m
     ) || matchesAny(m, ['coverage', 'seguro', 'страховка', 'оплат'])
   );
+}
+
+function isCancelFeeInquiry(msg) {
+  return CANCEL_FEE_INQUIRY_RE.test(normalizeMsg(msg));
 }
 
 function isAdminBookingPhrase(msg) {
@@ -250,7 +280,8 @@ function detectIntents(utterance) {
     intents.push({ intent: UserIntent.APPT_LOOKUP, confidence: 0.88 });
   }
 
-  if (matchesAny(msg, RESCHEDULE_PHRASES)) {
+  const cancelFeeInquiry = CANCEL_FEE_INQUIRY_RE.test(msg);
+  if (!cancelFeeInquiry && matchesAny(msg, RESCHEDULE_PHRASES)) {
     intents.push({ intent: UserIntent.RESCHEDULE, confidence: 0.85 });
   }
 
@@ -332,5 +363,7 @@ module.exports = {
   hasSymptomEvidence,
   isAdminBookingPhrase,
   isCostOrCopayInquiry,
-  isInsuranceAcceptanceInquiry
+  isInsuranceAcceptanceInquiry,
+  isCancelFeeInquiry,
+  CANCEL_FEE_INQUIRY_RE
 };

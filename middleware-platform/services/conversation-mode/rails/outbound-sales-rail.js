@@ -6,7 +6,7 @@ function stageReply(stage, ctx) {
   const name = ctx.leadName || ctx.patientName || 'there';
   switch (stage) {
     case 'intro':
-      return `Hi ${name}, this is Alex from Somo. Is now still a good time to talk about how we help clinics?`;
+      return `Hi ${name}, this is Kelly from Somo. Is now still a good time to talk about how we help clinics?`;
     case 'qualify':
       return 'Great. Are you currently handling patient calls and scheduling in-house, or using another vendor?';
     case 'demo_pitch':

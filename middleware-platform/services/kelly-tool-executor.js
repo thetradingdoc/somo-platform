@@ -291,7 +291,11 @@ class KellyToolExecutor {
         INSERT OR REPLACE INTO kelly_session_meta_kv (session_id, meta_key, value, updated_at)
         VALUES (?, ?, ?, datetime('now'))
       `).run(sessionId, key, String(value));
-    } catch (_) {}
+    } catch (err) {
+      if (String(err?.message || '').includes('meta_kv_orchestration_write_blocked')) {
+        throw err;
+      }
+    }
   }
 
   static _getSessionMeta(sessionId, key) {
@@ -721,6 +725,7 @@ class KellyToolExecutor {
       const v = KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms');
       const meta = String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
       if (!meta) return false;
+      if (KellyToolExecutor._kellyE2eSkipTriageForSession(sessionId)) return true;
       if (KellyToolExecutor._triageRowHasConcernOrOnsetStored(sessionId)) return false;
       return true;
     } catch (_) {
@@ -740,6 +745,7 @@ class KellyToolExecutor {
         event_type: 'gate_bypass',
         payload_json: JSON.stringify({ bypass, at: new Date().toISOString(), ...detail })
       });
+      db.incrementOpsCounter?.(`gate_bypass_${String(bypass || 'unknown').replace(/[^a-z0-9_]+/gi, '_')}`);
     } catch (_) {}
   }
 
@@ -829,6 +835,20 @@ class KellyToolExecutor {
       patient_id: patientId || null,
       channel: channel || null
     });
+
+    if (!context._skipModeFirewall) {
+      const { isToolAllowedForMode, logModeViolation, buildFirewallContext } = require('./conversation-mode/mode-tool-firewall');
+      const fwCtx = buildFirewallContext(context, toolName);
+      if (!isToolAllowedForMode(toolName, fwCtx)) {
+        logModeViolation(db, { ...fwCtx, toolName });
+        return {
+          success: false,
+          error: 'MODE_FIREWALL_BLOCKED',
+          error_code: 'MODE_FIREWALL_BLOCKED',
+          message: `Tool ${toolName} not allowed in current conversation mode`
+        };
+      }
+    }
 
     if (toolName === 'cancel_appointment' && sessionId) {
       const utterance = String(
@@ -1797,7 +1817,7 @@ class KellyToolExecutor {
           return this._storeTriageRichIntake(args, sessionId, patientId);
 
         case 'run_triage_rag':
-          return await this._runTriageRAG(args, sessionId, patientId, clinicId);
+          return await this._runTriageRAG(args, sessionId, patientId, clinicId, channel);
 
         case 'request_document_upload':
           return await this._requestDocumentUpload(args, sessionId, patientId, callerPhone, channel);
@@ -1878,6 +1898,18 @@ class KellyToolExecutor {
 
         case 'end_call':
           return { success: true, end_call: true };
+
+        case 'collect_contact_info': {
+          const { collectContactInfo } = require('./sales-crm-tools');
+          const leadId = args.lead_id || context.lead_id || context.leadId || null;
+          return collectContactInfo(db, { leadId, args });
+        }
+
+        case 'schedule_demo': {
+          const { scheduleDemo } = require('./sales-crm-tools');
+          const leadId = args.lead_id || context.lead_id || context.leadId || null;
+          return scheduleDemo(db, { leadId, args });
+        }
 
         case 'transfer_call': {
           const { attemptEscalation } = require('./escalation-service');
@@ -3792,7 +3824,7 @@ class KellyToolExecutor {
   // ─────────────────────────────────────────────────────────────
   // Triage RAG — gap10+12: merge session state, include media
   // ─────────────────────────────────────────────────────────────
-  static async _runTriageRAG(args, sessionId, patientId, clinicId) {
+  static async _runTriageRAG(args, sessionId, patientId, clinicId, channel = 'chat') {
     try {
       const forceRerun = args?.force_rerun === true || args?.force_rerun === 'true';
       if (!forceRerun && KellyToolExecutor._triageLockedForRerag(sessionId)) {
@@ -3883,6 +3915,7 @@ class KellyToolExecutor {
         richIntake,
         patientId,
         clinicId,
+        channel,
         force_rerun: forceRerun
       });
 

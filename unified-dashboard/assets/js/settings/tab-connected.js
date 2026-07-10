@@ -58,10 +58,24 @@
 
   async function loadConnectedAccounts() {
     const mount = document.getElementById('connectedAccountsMount');
-    if (!mount || !window.VoiceAgentPage?.fetchIntegrationsStatus) return;
+    if (!mount) return;
+    const fetchStatus = async function fetchIntegrationsStatus() {
+        const base = SP.API_BASE || window.API_BASE || window.location.origin;
+        const res = await (window.ppFetch || fetch)(`${base}/api/tenant/integrations/status`, {
+          credentials: 'include',
+          headers:
+            typeof window.ppGetAuthHeaders === 'function'
+              ? window.ppGetAuthHeaders()
+              : { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`Integrations status unavailable (${res.status})`);
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || 'Integrations status failed');
+        return json;
+      };
     mount.innerHTML = '<div class="sfd-skeleton"><div class="sfd-skeleton-line"></div></div>';
     try {
-      const status = await VoiceAgentPage.fetchIntegrationsStatus();
+      const status = await fetchStatus();
       const g = status.google_calendar || {};
       const d = status.dentrix || {};
       const s = status.stripe || {};

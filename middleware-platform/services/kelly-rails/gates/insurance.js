@@ -34,7 +34,7 @@ function hasCarrierMention(message) {
   const lower = String(message || '').toLowerCase();
   return (
     !!extractPayerName(message) ||
-    /i have |i've got |my insurance|tengo |у меня |seguro |страхов/i.test(lower)
+    /i have |i've got |my insurance|tengo |у меня |seguro |страхов|我有|保险/.test(lower)
   );
 }
 

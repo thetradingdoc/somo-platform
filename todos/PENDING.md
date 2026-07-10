@@ -1,7 +1,105 @@
 # Somo — all pending work
 
-**Last updated:** 2026-06-18  
-**Engineering status:** Demo Phase 1, RS-0/1, most CR gates complete. Open: operator prod verify, Kelly Phase C, RS-2 deferred refactors, P2 polish.
+**Last updated:** 2026-07-06  
+**Engineering status SSOT:** This file is the **sole** entry point for open engineering work.  
+**Production execution:** [`docs/plans/CURSOR_PRODUCTION_PLAN.md`](../docs/plans/CURSOR_PRODUCTION_PLAN.md) · audit [`PRODUCTION_PLAN_LOG.md`](../PRODUCTION_PLAN_LOG.md)  
+**CR/FE detail archive:** [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_READY_BACKLOG.md) (historical ticket IDs only — do not update status here)
+
+## Production plan closure — pending ([`CURSOR_PRODUCTION_PLAN`](../docs/plans/CURSOR_PRODUCTION_PLAN.md))
+
+**Status:** Phases 0–5, 11–12 code-complete · **All automatable gates green** (`npm run operator:plan-closure` — **10/10** local, 2026-07-06) · **14 operator/legal items** remain · Phase 9 + 5.17 deferred.
+
+**Local closure runner:** `cd middleware-platform && npm run operator:plan-closure` → `test-results/operator-plan-closure.json`  
+**Audit middleware:** `npm run dev:audit` then `TENANT_AUDIT_FORCE_RESTART=1 TENANT_AUDIT_STRICT=1 npm run test:e2e:tenant-audit:strict`
+
+### Close-all-non-blockers code closure (2026-07-06)
+
+Source: production code review inventory (excludes Stedi 6.10 + Dentrix live API only).
+
+- [x] **F1** — `reset-password.html` uses `window.API_BASE || window.location.origin`
+- [x] **D5** — `seed-demo-accounts.js` `customer_clinics` INSERT (no `updated_at`)
+- [x] **F2** — `createFHIRPatient` bare `resource_id`; audit seed + `seedPatient` lookup fix
+- [x] **F3/S2** — `case-report.js` merchant deny when missing/mismatch + Jest (`case-report-merchant-scope.test.js`)
+- [x] **G4/5.19** — `/patients/*` → `/signup`; `portal.html` provider-only; `patient-portal-retirement.test.js`
+- [x] **F5/F6/UX1** — `ppFetchAppointmentsToday` throws; appointment helpers use `ppFetch` + `getAuthHeaders`; Today error UX
+- [x] **F4/S3** — `tenant-integrations` route comment + `tenant-integrations-clinic-scope.test.js`
+- [x] **D1/D2** — `ci-local.sh` strict tenant audit; `npm run dev:audit`
+- [x] **FE3–FE5** — Audit: `a.portal-choice`, calendar view-tab anchors, revenue journey seed
+- [x] **AI2–AI5** — `+1555` E.164 test numbers simulate SMS (no Twilio stderr); `KELLY_DEBUG_VERBOSE`; default `LOCAL_DEV_ROOT=signup`
+- [x] **G2/12.3 eng** — [`docs/compliance/RETENTION_COUNSEL_REVIEW.md`](../docs/compliance/RETENTION_COUNSEL_REVIEW.md); BAA tracker evidence columns
+- [x] **P5-AUDIT-08** — Strict audit: **157 pass / 0 fail / 21 skip** ([`tenant-front-desk-audit.md`](../middleware-platform/test-results/tenant-front-desk-audit.md))
+- [x] **ACC-13** — Multilang strict **19/19** (`VOICE_EVAL_SIMULATE_SMS=1`)
+- [x] **ACC-16** — Patient portal retired (G4)
+
+### P0 — Code fixes (blocks Phase 5 + acceptance 17)
+
+Source: [`tenant-front-desk-audit.md`](../middleware-platform/test-results/tenant-front-desk-audit.md) (157 pass / 0 fail / 21 skip, 2026-07-06 strict).
+
+- [x] **P5-AUDIT-01** — `calendar.html`: `refresh` hoisted to outer scope (List/Week/Month)
+- [x] **P5-AUDIT-02** — `today.html` appointment tabs: `ppFetchAppointmentsToday` soft-fail via `ppFetch`
+- [x] **P5-AUDIT-03** — Kelly toggle: re-login per audit page + session cookie sync
+- [x] **P5-AUDIT-04** — Settings Connected Accounts: `requireCustomerAuth` + anchor probe
+- [x] **P5-AUDIT-05** — payor-review / merge-review: `platform.leads` caps seeded
+- [x] **P5-AUDIT-06** — `video-call.html` provider shell nav fixed
+- [x] **P5-AUDIT-07** — signup / reset-password / portal auth-shell parity
+- [x] **P5-AUDIT-08** — Strict audit green: `TENANT_AUDIT_STRICT=1 PW_API_BASE_URL=http://127.0.0.1:4001 npm run test:e2e:tenant-audit:strict`
+- [x] **P5-AUDIT-09** — `tenant-front-desk-audit:safe` wired in `scripts/ci-local.sh`
+
+### P0 — Automatable local gates (closed 2026-07-06)
+
+- [x] **7.8-local** — `npm run phase7:release-smoke` — pass
+- [x] **7.9-local** — `npm run verify:phase7-deploy-gate` (no `LIVE=1`) — pass
+- [x] **7.6-dry** — `npm run rollback:drill` — pass (&lt;15 min budget)
+- [x] **7.1-local** — `verify-postgres-gcs-reconciliation.cjs` sqlite mode — pass
+- [x] **7.2-local** — `verify-postgres-mirror-lag.cjs` (POSTGRES_URL unset skip) — pass
+- [x] **7.10-structural** — `verify-tenant-provisioning.cjs --structural` — 4 verticals
+- [x] **LOG-01** — Phase 1 (1.1–1.13) entries in `PRODUCTION_PLAN_LOG.md`
+
+### P0 — Gate / compliance (not blocking code merge)
+
+- [ ] **G2** `operator` — Counsel sign-off on [`docs/compliance/RETENTION_COUNSEL_REVIEW.md`](../docs/compliance/RETENTION_COUNSEL_REVIEW.md) (engineering export ready; dry-run attached in log)
+- [ ] **12.3-OPS** `operator` — Legal signature rows in [`docs/compliance/VENDOR_BAA_TRACKER.md`](../docs/compliance/VENDOR_BAA_TRACKER.md) (engineering evidence columns complete)
+
+### P0 — Blocked on credentials
+
+- [ ] **6.10** `blocked` — Stedi 271 multilingual live sign-off: `npm run test:eval:multilang:stedi-live` (`VOICE_ELIGIBILITY_SIMULATE=0` + payer sandbox)
+
+### P0 — Operator live prod (Phase 7)
+
+- [ ] **7.1** `operator` — Postgres vs GCS reconciliation on prod (`GCS_DB_BUCKET` + `RETELL_API_KEY` or `POSTGRES_URL`)
+- [ ] **7.2** `operator` — Mirror lag gate on prod (`POSTGRES_URL` + `STRICT=1`)
+- [ ] **7.3** `operator` — Live PSTN matrix per vertical (`VERTICAL_PSTN_LIVE=1`, `VERTICAL_*_DID`)
+- [ ] **7.4** `operator` — Site context all verticals on prod GCS DB (`SITE_CTX_*`)
+- [ ] **7.5** `operator` — Cloud Run Kelly Rails env: `npm run verify:kelly-rails-cloudrun` (**blocked:** `gcloud auth login` — token refresh failed 2026-07-06)
+- [ ] **7.6** `operator` — Timed rollback drill <15 min: `bash scripts/rollback-gcp-release.sh`
+- [ ] **7.8** `operator` — Full `phase7-release-smoke` on staging (portal + PSTN where applicable)
+- [ ] **7.9** `operator` — `LIVE=1 npm run verify:phase7-deploy-gate` after deploy
+- [ ] **7.10** `operator` — Tenant provisioning per vertical on prod (`PROVISION_*`, Twilio, GCS pull)
+
+### P0 — Operator live prod (Phase 10)
+
+- [ ] **10.1** `operator` — Bind +363 operator DID on prod; live inbound → `platform_support` ([`PLATFORM_SALES_363_DEPLOY.md`](../docs/deployment/PLATFORM_SALES_363_DEPLOY.md))
+- [ ] **10.2** `operator` — Live +363 call → lead tier in `/admin/pipeline.html`
+
+### P0 — Final acceptance (17 steps)
+
+- [ ] **ACC-01–08** `operator` — Dental: signup → voice-setup → PSTN book / cancel / quote / pay on real phone
+- [ ] **ACC-09–11** `operator` — Cross-vertical + Mandarin live PSTN (derm, healthcare_clinic, small_business)
+- [x] **ACC-12** — Tool firewall Jest green
+- [x] **ACC-13** — Multilang strict 19/19
+- [ ] **ACC-14** — N/A (Phase 9 deferred)
+- [ ] **ACC-15** `operator` — Live +363 → CRM pipeline tiering
+- [x] **ACC-16** — Patient portal retired (G4 Path A)
+- [ ] **ACC-17** `operator` — Second-person UI walkthrough without engineer
+
+### Deferred — not required to close provider plan
+
+- [ ] **5.17** `deferred` — health-video Firebase rewrite (with Phase 9)
+- [ ] **9.1–9.5** `deferred` — Somo Health consumer product (out of active scope)
+
+### P2 — Stretch / hygiene
+
+- [ ] **7.7-EXT** `open` — Expand CDT import 427 → full ADA ~900+ codes
 
 **Active epic:** [VOICE-SITE-ESC-EPIC.md](./VOICE-SITE-ESC-EPIC.md) — CallSiteContext (L1.5), escalation ladder, migrations 061–074, post-epic review train.
 
@@ -17,7 +115,7 @@ Code landed in post-review train; operator gates still open:
 - **T-015 / T-016** — Staging + prod deploy per OPERATIONS.md
 - **Deferred:** SITE-12 full location resolver; meta_kv phase 2 (all call sites)
 
-**SSOT:** This file is the single entry point for open work.
+**SSOT:** This file is the single entry point for open work. Do not maintain parallel status in `CUSTOMER_READY_BACKLOG.md`.
 
 ---
 
@@ -55,7 +153,7 @@ These require live prod/staging access, human QA, or clinical sign-off:
 
 ## P0 — Revenue (demo Phase 1 conversion)
 
-**Plan:** `~/.cursor/plans/demo_phase1_hitl_conversion.plan.md`
+**Plan:** [`docs/plans/CURSOR_PRODUCTION_PLAN.md`](../docs/plans/CURSOR_PRODUCTION_PLAN.md) Phase 10 (demo conversion items complete)
 
 ### Landing form (L)
 
@@ -139,7 +237,7 @@ These require live prod/staging access, human QA, or clinical sign-off:
 
 ## P0 — Customer-ready prod gates
 
-Full detail + file paths: [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_READY_BACKLOG.md)
+Full detail + file paths: archived in [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_READY_BACKLOG.md) (CR ticket index only).
 
 ### P0-A Production enforcement
 
@@ -230,8 +328,8 @@ Full detail + file paths: [`docs/CUSTOMER_READY_BACKLOG.md`](../docs/CUSTOMER_RE
 - [x] **CR-062** Nightly `.github/workflows/kelly-rails-prod-nightly.yml`
 - [x] **CR-063** `verify:gcs-sqlite-contention` in nightly workflow + OPERATIONS.md
 - [x] **CR-064** `done` — Post-call owner email (booked / cancelled / payment link)
-- [ ] **CR-065** `partial` — Rollback runbook tested (<15 min)
-- [ ] **FE-016** `open` — Split `settings.html` into tab modules
+- [ ] **CR-065** `partial` — Rollback runbook tested (<15 min) — see [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md)
+- [x] **FE-016** `done` — Split `settings.html` into tab modules (Phase 5.4)
 - [x] **FE-017** Patient notes composer on `patient-case.html` + `PATCH /api/provider/appointments/:id/notes`
 - [ ] **FE-018** `open` — Mobile responsive pass (calendar + revenue)
 - [ ] **FE-020** `open` — Remove 15 redirect stub HTML after Firebase rewrite rules
@@ -432,7 +530,7 @@ Azure sections in legacy checklist are historical; use GCP runbooks: [`docs/depl
 
 ## BRAND-PRUNE-2026 — Pre-Phase 3 (healthcare financial agent)
 
-**SSOT:** `~/.cursor/plans/pre-phase_3_repaint_d9512be7.plan.md` · Master plan: `somo_health_session_architecture_723cc4d3.plan.md`
+**SSOT:** [`docs/plans/CURSOR_PRODUCTION_PLAN.md`](../docs/plans/CURSOR_PRODUCTION_PLAN.md) · Master plan (deferred consumer): [`docs/architecture/HEALTH_SESSION_ARCHITECTURE.md`](../docs/architecture/HEALTH_SESSION_ARCHITECTURE.md)
 
 **Stop line:** Do not start P3 finance rails until all items below are green.
 
@@ -483,6 +581,7 @@ Commerce routes, PSTN replay fixtures, skincare services — master plan `later-
 
 | Priority | Workstream | ~Open items |
 |----------|------------|-------------|
+| **P0** | **Production plan closure** (see section above) | **14 operator/legal** (+ 1 blocked Stedi live + 1 stretch CDT) |
 | **P0** | Demo Phase 1 conversion | **0** (complete) |
 | **P0** | Codebase & DB structure (RS-0, RS-1) | **0** (complete) |
 | **P0** | RS-2 refactors | **6** (deferred) |

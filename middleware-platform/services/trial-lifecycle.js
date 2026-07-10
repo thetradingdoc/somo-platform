@@ -355,8 +355,18 @@ async function startTrialTenant(db, customerId, options = {}) {
         final.id
       );
       const defaultPrompt = VoicePromptTemplates.getDefaultCustomPrompt(final);
-      if (defaultPrompt && !final.custom_prompt) {
-        db.updateCustomer(final.id, { custom_prompt: defaultPrompt });
+      if (defaultPrompt) {
+        try {
+          const { savePromptProfileAndSyncRetell } = require('./prompt-profile-service');
+          await savePromptProfileAndSyncRetell(db, {
+            customerId: final.id,
+            merchantId: final.merchant_id,
+            systemPrompt: defaultPrompt,
+            syncRetell: false
+          });
+        } catch (promptErr) {
+          console.warn('[TrialLifecycle] prompt_profile seed:', promptErr.message);
+        }
       }
     } catch (seedErr) {
       console.warn('[TrialLifecycle] voice_agent_settings seed:', seedErr.message);

@@ -30,10 +30,6 @@
           "payer_id": {
             "type": "string",
             "description": "Insurance payer ID (if known)"
-          },
-          "service_code": {
-            "type": "string",
-            "description": "CPT code for specific service type (e.g., 90834 for therapy)"
           }
         },
         "required": ["member_id"]

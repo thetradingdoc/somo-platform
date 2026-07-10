@@ -149,9 +149,15 @@ router.get('/config', (req, res) => {
     const featureFlags = require('../utils/feature-flags');
     const flagsConfig = featureFlags.getConfig ? featureFlags.getConfig() : {};
     let effectivePolicy = null;
+    let customerIdForProfile = null;
     try {
-      if (clinic?.clinic_id || merchant?.id) {
-        const profile = db.getClinicPromptProfile?.(clinic?.clinic_id || null, merchant?.id || null);
+      const sessionId = req.cookies?.customer_session;
+      const session = sessionId ? db.getCustomerSession(sessionId) : null;
+      customerIdForProfile = session?.customer_id || null;
+    } catch (_) {}
+    try {
+      if (clinic?.clinic_id || customerIdForProfile) {
+        const profile = db.getClinicPromptProfile?.(clinic?.clinic_id || null, customerIdForProfile);
         if (profile) {
           effectivePolicy = getEffectiveTenantPolicy(profile);
         }

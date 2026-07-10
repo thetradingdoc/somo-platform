@@ -2305,6 +2305,16 @@ app.get('/api/admin/patients/:id/insurance', async (req, res) => {
 app.get('/api/admin/patients/:id/eligibility', async (req, res) => {
   try {
     const patientId = req.params.id;
+    if (typeof db.logHipaaAccess === 'function') {
+      db.logHipaaAccess({
+        user_id: req.adminUser?.id || req.user?.uid || 'admin',
+        resource_type: 'eligibility',
+        resource_id: patientId,
+        patient_id: patientId,
+        action: 'read',
+        ip_address: req.ip || req.headers['x-forwarded-for'] || null
+      });
+    }
     let rows = db.getEligibilityChecksByPatient(patientId) || [];
 
     // Fallback: if no eligibility_checks, use patient_insurance (same source as patient portal)

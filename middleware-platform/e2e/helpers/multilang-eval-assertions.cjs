@@ -25,13 +25,12 @@ const ENGLISH_SUCCESS_ON_NON_EN_RE =
 const LOCALE_HINTS = {
   es: /[áéíóúñ¿¡]|cita|copago|envié|verifiqu|confirmad|limpieza|gracias/i,
   ru: /[а-яё]/i,
+  zh: /[\u4e00-\u9fff]|预约|取消|谢谢|付款|链接/i,
   en: /\b(the|your|appointment|coverage|verified|link)\b/i
 };
 
 function localeFromScenario(scenario) {
-  const loc = String(scenario.locale || scenario.lang || 'en').slice(0, 2);
-  if (loc === 'zh' && scenario.expectForceLanguageHandoff) return 'zh';
-  return loc === 'zh' ? 'en' : loc;
+  return String(scenario.locale || scenario.lang || 'en').slice(0, 2);
 }
 
 function transcriptText(result) {
@@ -132,7 +131,8 @@ const SMS_COMMERCE_RE = /complete your order/i;
 const SMS_LOCALE_MARKERS = {
   en: /\b(copay|pay securely|payment)\b/i,
   es: /\b(copago|enlace|pagar|segura)\b/i,
-  ru: /(копай|оплат|ссылк)/i
+  ru: /(копай|оплат|ссылк)/i,
+  zh: /(自付|支付|链接|安全)/
 };
 
 function checkPaymentSmsCoherence(scenario, sessionId, dbModule) {
@@ -266,7 +266,11 @@ function checkReplyLocale(scenario, result) {
 
   const pass =
     !englishOnly &&
-    (lang === 'ru' ? LOCALE_HINTS.ru.test(finalReply) || LOCALE_HINTS.ru.test(opener) : hint?.test(finalReply));
+    (lang === 'ru'
+      ? LOCALE_HINTS.ru.test(finalReply) || LOCALE_HINTS.ru.test(opener)
+      : lang === 'zh'
+        ? LOCALE_HINTS.zh.test(finalReply) || LOCALE_HINTS.zh.test(opener)
+        : hint?.test(finalReply));
 
   return {
     pass,

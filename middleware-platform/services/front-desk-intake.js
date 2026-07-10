@@ -35,8 +35,17 @@ function metaSet(sessionId, field, value) {
 
 function readFrontDeskState(sessionId) {
   const state = {};
+  let projectionFlags = {};
+  try {
+    const { getRailsSessionProjection } = require('./kelly-rails/session-ssot');
+    const projection = getRailsSessionProjection(sessionId);
+    if (projection?.flags_json) {
+      projectionFlags = JSON.parse(projection.flags_json);
+    }
+  } catch (_) {}
   for (const field of FIELD_ORDER) {
-    state[field] = metaGet(sessionId, field);
+    const metaKey = META_KEYS[field];
+    state[field] = projectionFlags[metaKey] || metaGet(sessionId, field);
   }
   return state;
 }

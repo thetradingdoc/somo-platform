@@ -12,6 +12,20 @@ const EmailService = require('./email-service');
 const constants = require('../utils/constants');
 
 class PaymentOrchestrator {
+    /** Stripe metadata — opaque IDs only; no raw email/phone (Phase 0.2). */
+    static _stripePaymentMetadata(checkout, merchant, extra = {}) {
+        const meta = {
+            checkout_id: String(checkout?.id || ''),
+            merchant_id: String(merchant?.id || checkout?.merchant_id || ''),
+            ...extra
+        };
+        if (checkout?.appointment_id) meta.appointment_id = String(checkout.appointment_id);
+        if (checkout?.call_id) meta.call_id = String(checkout.call_id);
+        if (checkout?.commerce_quote_id) meta.commerce_quote_id = String(checkout.commerce_quote_id);
+        if (checkout?.customer_id) meta.customer_id = String(checkout.customer_id);
+        return meta;
+    }
+
     static async createCheckout(requestData, tenantContext = null) {
         const quietReplay =
             String(process.env.PSTN_REPLAY_QUIET_LOGS || '').trim() === '1' &&
@@ -310,14 +324,10 @@ class PaymentOrchestrator {
                 amount: amountCents,
                 currency: 'usd',
                 automatic_payment_methods: { enabled: true },
-                metadata: {
-                    checkout_id: checkout.id,
-                    merchant_id: String(merchant?.id || ''),
+                metadata: PaymentOrchestrator._stripePaymentMetadata(checkout, merchant, {
                     transaction_id: paymentRequest.transaction_id || '',
-                    customer_email: checkout.customer_email || '',
-                    customer_phone: checkout.customer_phone || '',
                     ...metaExtra
-                }
+                })
             };
 
             if (paymentMethodId) {
@@ -677,15 +687,9 @@ class PaymentOrchestrator {
         try {
             const stripe = require('stripe')(stripeSecret);
             const baseUrl = (process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
-            const piMeta = {
-                checkout_id: checkout.id,
-                merchant_id: String(merchant?.id || checkout.merchant_id || '')
-            };
+            const piMeta = PaymentOrchestrator._stripePaymentMetadata(checkout, merchant);
             if (checkout.commerce_quote_id) {
                 piMeta.commerce_quote_id = String(checkout.commerce_quote_id);
-            }
-            if (checkout.customer_email) {
-                piMeta.customer_email = String(checkout.customer_email);
             }
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: amountCents,

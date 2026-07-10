@@ -11,6 +11,11 @@ const {
   matchesLocationFilter,
   sortStatesWithPin,
 } = require('./lead-location-utils');
+const {
+  isOutboundCallAllowed,
+  leadScoreTier,
+  resolveOutboundConsentBasis,
+} = require('./lead-outbound-consent');
 
 const STAGE_TO_UI = {
   qualified: 'contacted',
@@ -106,6 +111,7 @@ function formatLeadForApi(lead, enrichingIds = new Set()) {
   const website_url = getDisplayWebsiteUrl(lead);
   const safeSource = lead.source_url && !isJobBoardUrl(lead.source_url) ? lead.source_url : null;
   const language_labels = parseRequiredLanguages(lead.required_languages);
+  const consent = isOutboundCallAllowed(lead);
   return {
     ...lead,
     source_url: safeSource,
@@ -119,6 +125,9 @@ function formatLeadForApi(lead, enrichingIds = new Set()) {
     contact_status: getContactStatus(lead, enrichingIds),
     callable: hasValidPhone(lead.clinic_phone),
     lead_source: lead.source || lead.lead_source || null,
+    outbound_consent_basis: resolveOutboundConsentBasis(lead),
+    outbound_call_allowed: consent.ok,
+    score_tier: leadScoreTier(lead.lead_score),
     location: lead.location || null,
     last_called_at: lead.last_called_at || lead.last_call_at || null,
   };
@@ -165,6 +174,7 @@ function querySalesLeads(filters = {}) {
     pipeline_stage,
     call_ready,
     callable_only,
+    source,
   } = filters;
 
   const requireCallable =
@@ -191,6 +201,11 @@ function querySalesLeads(filters = {}) {
 
   if (call_ready) {
     sql += ` AND (pipeline_stage IS NULL OR pipeline_stage IN ('new', 'call_ready'))`;
+  }
+
+  if (source) {
+    sql += ' AND LOWER(COALESCE(source, "")) = LOWER(?)';
+    params.push(String(source).trim());
   }
 
   sql += ' ORDER BY lead_score DESC, priority DESC, created_at DESC';

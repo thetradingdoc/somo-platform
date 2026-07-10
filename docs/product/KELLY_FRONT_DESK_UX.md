@@ -1,6 +1,6 @@
 # Kelly Front Desk UX
 
-**Last updated:** 2026-07-02
+**Last updated:** 2026-07-05
 
 ## Mental model
 
@@ -23,13 +23,19 @@
 
 ## Onboarding state machines
 
-### Self-serve (deferred during pilot)
+### Self-serve (live)
 
-`signup_started` → `line_assigned` → `terms_accepted` → `activation_shown` → `voice_setup_incomplete` → `voice_setup_complete` → `live`
+`signup.html` → email verify → `voice-setup.html` (7 steps) → `trial-activation.html` / `today.html` → `live`
 
-### Operator-invite pilot (active)
+States: `signup_started` → `line_assigned` → `terms_accepted` → `voice_setup_incomplete` → `voice_setup_complete` → `live`
+
+API: `POST /api/signup/assign-line` binds Twilio DID + Retell agent after wizard completion.
+
+### Operator-invite (alternate path)
 
 Admin pipeline → **Send pilot invite** → `invite.html` → `voice-setup.html` → `agent.html` / `today.html`
+
+Active when `PILOT_INVITE_ONLY=1`; otherwise self-serve is the default onboarding path.
 
 API: `GET /api/voice-agent/onboarding` returns `onboarding_state`, `destination.path`, and blockers.
 
@@ -39,11 +45,16 @@ Docs: [`phase4-pilot-checklist.md`](../voice-agent/phase4-pilot-checklist.md)
 
 | Surface | Path | Notes |
 |---------|------|-------|
-| Invite accept | `invite.html` | Operator-invite only when `PILOT_INVITE_ONLY=1` |
-| Setup wizard | `voice-setup.html` (5 steps) | Dental fields, transfer #, NPI, coverage hours |
+| Signup | `signup.html` | Self-serve tenant provisioning (persona + practice details) |
+| Invite accept | `invite.html` | Operator-invite when `PILOT_INVITE_ONLY=1` |
+| Setup wizard | `voice-setup.html` (7 steps) | Greeting, hours, languages, transfer #, NPI, coverage |
 | Agent dashboard | `agent.html` | Greeting, overflow, porting, kill switch, latency KPI |
 | Today | `today.html` | Go-live checklist, ROI panel, voice activity |
-| Trial activation | `trial-activation.html` | Signup marketing (blocked during pilot) |
+| Trial activation | `trial-activation.html` | Post-signup activation; gates "Call my line" on Kelly ready |
+
+## Retired consumer surfaces (Gate G4, 2026-07)
+
+The legacy **Skin & Care patient portal** (`unified-dashboard/patients/*`) is **retired** from Firebase hosting. Bookmarks to `/patients/*` redirect to the Somo marketing landing (`/`). Provider-facing Kelly remains the active product surface. A future direct-to-patient product would be a separately scoped build — not a resurrection of these pages.
 
 ## Preview parity
 

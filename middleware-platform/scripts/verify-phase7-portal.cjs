@@ -33,7 +33,11 @@ function main() {
   pass = check('outbound opener default helper', voicePage.includes('defaultOutboundOpener')) && pass;
 
   const agent = fs.readFileSync(path.join(UI, 'business/agent.html'), 'utf8');
-  pass = check('agent applies outbound default', agent.includes('applyOutboundOpenerDefault')) && pass;
+  pass =
+    check(
+      'agent outbound via Kelly settings',
+      agent.includes('settings.html#kelly') && voicePage.includes('applyOutboundOpenerDefault')
+    ) && pass;
 
   const invoice = fs.readFileSync(path.join(UI, 'business/invoice-detail.html'), 'utf8');
   pass = check('invoice back nav dental-aware', invoice.includes('invoiceBackHref')) && pass;

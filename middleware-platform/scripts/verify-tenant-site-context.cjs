@@ -21,6 +21,10 @@ const {
 } = require('./lib/stamp-tenant-site-context.cjs');
 
 const jsonOut = process.argv.includes('--json');
+const useCase =
+  (process.argv.find((a) => a.startsWith('--use_case=')) || '').split('=')[1] ||
+  (process.argv.find((a) => a.startsWith('--tenant=')) || '').split('=')[1] ||
+  null;
 const did =
   (process.argv.find((a) => a.startsWith('--did=')) || '').split('=')[1] ||
   process.env.CAPSTONE_TENANT_DID ||
@@ -82,6 +86,7 @@ function main() {
 
   const summary = {
     success,
+    use_case: useCase,
     db_path: dbPath,
     integrity,
     did,

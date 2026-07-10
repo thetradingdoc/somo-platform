@@ -31,6 +31,15 @@
             <option value="">Any city</option>
           </select>
           <div class="admin-crm-filter-specialty">
+            <span class="admin-crm-filter-label">Source</span>
+            <select class="admin-crm-select-filter admin-crm-filter-select" id="sourceSelect" aria-label="Filter by lead source">
+              <option value="">All sources</option>
+              <option value="inbound_platform">Inbound platform (363)</option>
+              <option value="scrape">Scrape</option>
+              <option value="outbound">Outbound</option>
+            </select>
+          </div>
+          <div class="admin-crm-filter-specialty">
             <span class="admin-crm-filter-label">Specialty</span>
             <div class="admin-crm-pills admin-crm-pills--segmented" id="specialtyPills">
               <span class="admin-crm-pill active" data-specialty="">All</span>
@@ -109,6 +118,7 @@
   <script>
     const { apiFetch, esc, init, showToast, callLead: shellCallLead, confirmAction } = AdminShell;
     let currentSpecialty = '';
+    let currentSource = '';
     let currentLocation = '';
     let currentLocationMode = '';
     let currentPage = 0;
@@ -146,18 +156,37 @@
           loadKanban();
         };
       });
+      document.getElementById('sourceSelect').onchange = () => {
+        currentSource = document.getElementById('sourceSelect').value;
+        currentPage = 0;
+        needsPhoneOffset = 0;
+        updateActiveFilters();
+        refreshAll();
+      };
       document.getElementById('queueSearch').oninput = () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => { currentPage = 0; loadQueue(); }, 300);
       };
       document.getElementById('btnCall10').onclick = callNext10;
-      document.getElementById('btnEnrich').onclick = () => {
+      document.getElementById('btnEnrich').onclick = async () => {
+        if (!(await confirmAction(
+          'Re-attempt phone and email lookup on all leads missing contact info? This may call external enrichment APIs.',
+          { title: 'Enrich contacts', confirmLabel: 'Start enrichment' }
+        ))) return;
         AdminJobModal.open({ title: 'Enriching contacts...', url: '/api/admin/enrich/batch', method: 'POST', onComplete: refreshAll });
       };
-      document.getElementById('btnEnrichNeeds').onclick = () => {
+      document.getElementById('btnEnrichNeeds').onclick = async () => {
+        if (!(await confirmAction(
+          'Enrich all leads in the “Needs phone” queue? This may call external enrichment APIs.',
+          { title: 'Enrich queue', confirmLabel: 'Start enrichment' }
+        ))) return;
         AdminJobModal.open({ title: 'Enriching contacts...', url: '/api/admin/enrich/batch', method: 'POST', onComplete: refreshAll });
       };
-      document.getElementById('btnScrape').onclick = () => {
+      document.getElementById('btnScrape').onclick = async () => {
+        if (!(await confirmAction(
+          'Start a new lead scrape job? This queries job boards and saves new clinics to the CRM.',
+          { title: 'Scrape leads', confirmLabel: 'Start scrape' }
+        ))) return;
         AdminJobModal.open({ title: 'Scraping leads...', url: '/api/admin/scrape/run', method: 'POST', body: {}, onComplete: refreshAll });
       };
       document.getElementById('btnBulkDelete').onclick = bulkDeleteSelected;
@@ -261,6 +290,8 @@
       citySelect.innerHTML = '<option value="">Any city</option>';
       document.getElementById('locationSearchInput').value = '';
       currentSpecialty = '';
+      currentSource = '';
+      document.getElementById('sourceSelect').value = '';
       document.querySelectorAll('#specialtyPills .admin-crm-pill').forEach((x) => {
         x.classList.toggle('active', !x.dataset.specialty);
       });
@@ -283,10 +314,17 @@
       return '';
     }
 
+    function sourceFilterLabel() {
+      if (currentSource === 'inbound_platform') return 'Inbound platform (363)';
+      if (currentSource === 'scrape') return 'Scrape';
+      if (currentSource === 'outbound') return 'Outbound';
+      return '';
+    }
+
     function updateActiveFilters() {
       const row = document.getElementById('activeFiltersRow');
       const label = document.getElementById('activeFiltersLabel');
-      const parts = [locationFilterLabel(), specialtyFilterLabel()].filter(Boolean);
+      const parts = [locationFilterLabel(), specialtyFilterLabel(), sourceFilterLabel()].filter(Boolean);
       if (!parts.length) {
         row.hidden = true;
         return;
@@ -423,6 +461,7 @@
         offset: String(needsPhoneOffset),
       });
       if (currentSpecialty) params.set('specialty', currentSpecialty);
+      if (currentSource) params.set('source', currentSource);
       Object.entries(locationQueryParams()).forEach(([k, v]) => params.set(k, v));
       try {
         const r = await apiFetch(`/api/admin/scrape/leads?${params}`);
@@ -486,7 +525,10 @@
         showToast('Select leads to delete', 'warning');
         return;
       }
-      if (!confirmAction(`Delete ${selectedNeedsPhone.size} lead(s)? This cannot be undone.`)) return;
+      if (!(await confirmAction(
+        `Delete ${selectedNeedsPhone.size} lead(s)? This cannot be undone.`,
+        { title: 'Delete leads', confirmLabel: 'Delete', destructive: true }
+      ))) return;
       let deleted = 0;
       for (const id of selectedNeedsPhone) {
         try {
@@ -506,6 +548,7 @@
       const search = document.getElementById('queueSearch').value.trim();
       const params = new URLSearchParams({ contact_status: 'verified', callable_only: '1', limit: 15, offset: page * 15 });
       if (currentSpecialty) params.set('specialty', currentSpecialty);
+      if (currentSource) params.set('source', currentSource);
       Object.entries(locationQueryParams()).forEach(([k, v]) => params.set(k, v));
       if (search) params.set('search', search);
 
@@ -543,6 +586,13 @@
       return parts.map((p) => esc(p)).join(' · ');
     }
 
+    function sourceBadge(l) {
+      const src = l.source || l.lead_source || '';
+      if (!src) return '';
+      const label = src === 'inbound_platform' ? '363 inbound' : String(src).split(':')[0];
+      return `<span class="admin-crm-badge admin-crm-badge-muted">${esc(label)}</span>`;
+    }
+
     function renderRow(l) {
       const scoreCls = l.lead_score >= 70 ? ' high' : '';
       const canCall = isCallableLead(l);
@@ -553,6 +603,7 @@
             <div class="admin-crm-lead-meta">${leadMetaLine(l)}</div>
           </div>
           <div class="admin-crm-lead-actions">
+            ${sourceBadge(l)}
             <span class="admin-crm-score${scoreCls}">${l.lead_score || 0}</span>
             ${canCall
               ? `<button type="button" class="btn btn-primary admin-crm-btn-sm" data-action="call-lead" data-lead-id="${esc(l.id)}" data-lead-name="${esc(l.clinic_name)}">Call</button>`
@@ -595,6 +646,7 @@
     async function loadKanban() {
       const params = new URLSearchParams();
       if (currentSpecialty) params.set('specialty', currentSpecialty);
+      if (currentSource) params.set('source', currentSource);
       Object.entries(locationQueryParams()).forEach(([k, v]) => params.set(k, v));
       const qs = params.toString() ? `?${params}` : '';
       try {
@@ -632,7 +684,10 @@
         return;
       }
       const batchSize = Math.min(10, callsRemaining);
-      if (!confirmAction(`Call top ${batchSize} call-ready leads? (${callsRemaining} calls remaining)`)) return;
+      if (!(await confirmAction(
+        `Call top ${batchSize} call-ready leads? (${callsRemaining} calls remaining)`,
+        { title: 'Batch outbound calls', confirmLabel: 'Start calling' }
+      ))) return;
       try {
         const r = await apiFetch(`/api/admin/scrape/leads/call-ready?limit=${batchSize}`);
         const callable = (r.leads || []).filter(isCallableLead);

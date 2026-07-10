@@ -54,12 +54,13 @@ assert(
   resolveRoutingWorld({
     to_number: '+13639990205',
     direction: 'inbound',
-    call_type: 'consumer_navigation',
-    customer_id: 'cust-navigation-demo',
-    customer: { customer_type: 'navigation' }
-  }) === 'navigation',
-  'platform line → navigation world'
+    call_type: 'platform_support',
+    customer_id: 'cust-operator',
+    customer: { customer_type: 'operator' }
+  }) === 'platform_support',
+  'platform line → platform_support world'
 );
+assert(shouldBlockKellyTurn('platform_support') === true, 'platform_support blocks Kelly');
 assert(isTenantResolvedForMode(null) === false, 'no customer_id → tenant unresolved');
 assert(shouldBlockKellyTurn('unidentified') === true, 'unidentified blocks Kelly');
 assert(shouldBlockKellyTurn('tenant') === false, 'tenant allows Kelly');
@@ -96,6 +97,7 @@ const platformSupport = resolveConversationMode({
   firstUtterance: 'I need help'
 });
 assert(platformSupport.reason === 'platform_support_inbound', 'platform_support mode seed');
+assert(platformSupport.mode === 'platform_support', 'platform_support conversation mode');
 
 assert(
   !isToolAllowedForMode('store_triage_opqrst', {

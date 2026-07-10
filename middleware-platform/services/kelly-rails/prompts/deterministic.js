@@ -116,7 +116,14 @@ const ZH = {
   reschedule_need_slot: '您希望将预约改到哪一天、什么时间？',
   records_failed: '我目前无法检索这些记录。我可以为您转接前台协助。',
   post_payment_confirmed:
-    '一切就绪——您的{specialty}预约已确认{when}。{paid_note}如有存档，我们将通过邮件或短信发送详情。如需更改，请说改期或致电诊所。'
+    '一切就绪——您的{specialty}预约已确认{when}。{paid_note}如有存档，我们将通过邮件或短信发送详情。如需更改，请说改期或致电诊所。',
+  insurance_verified: '谢谢——我已核实您的保险。',
+  insurance_quote: '根据您的保险计划，本次就诊预估自付额为 ${amount}。',
+  insurance_need_dob: '我需要您的出生日期才能向保险公司核实。',
+  insurance_pending: '暂时无法核实保险。我们的团队可以跟进报价。',
+  payment_defer: '发送付款链接前，我需要先确认自付金额。',
+  slots_preview: '以下是近期可预约的{specialty}时间：\n{slots}\n哪个时间对您最合适？',
+  slot_confirm_contact: '我可以为您预约该时间。请确认您的姓名以及最佳联系邮箱或电话。'
 };
 
 const RU = {

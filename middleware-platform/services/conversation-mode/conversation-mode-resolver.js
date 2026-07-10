@@ -60,14 +60,13 @@ function resolveConversationMode(input = {}) {
     };
   }
 
-  if (routingWorld === 'platform_support') {
+  if (callType === 'somo_demo' || routingWorld === 'platform_support') {
     return {
-      mode: ConversationMode.TENANT_INBOUND_ADMIN,
-      subrail: Subrail.HANDOFF,
-      reason: 'platform_support_inbound',
+      mode: ConversationMode.PLATFORM_SUPPORT,
+      subrail: null,
+      reason: callType === 'somo_demo' ? 'somo_demo_platform_sales' : 'platform_support_inbound',
       call_type: callType,
-      direction,
-      triage_policy_override: TriagePolicy.DISABLED
+      direction
     };
   }
 

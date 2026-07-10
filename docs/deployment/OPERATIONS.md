@@ -1,7 +1,10 @@
-# OPERATIONS
+# OPERATIONS — deployment & live verify
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-07-05
 
+**Scope (SSOT for this file):** Cloud Run deploy commands, env gates, live PSTN verify scripts, signup→live-line runbooks, Retell agent inventory.
+
+**Companion (not duplicate):** [`docs/runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md) — GCP cutover checklist, incident playbooks, rollback drills, day-2 ops.
 
 ---
 

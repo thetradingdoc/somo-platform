@@ -18,6 +18,12 @@ const router = express.Router();
 const requireLeads = requireAdminOrCapability('platform.leads');
 
 function isScrapeConfigured() {
+  const jsearch = !!(process.env.JOB_SEARCH_API_URL && process.env.JOB_SEARCH_API_KEY);
+  const craigslist = process.env.CRAIGSLIST_ENABLED === '1';
+  return jsearch || craigslist;
+}
+
+function isJSearchConfigured() {
   return !!(process.env.JOB_SEARCH_API_URL && process.env.JOB_SEARCH_API_KEY);
 }
 
@@ -73,12 +79,18 @@ router.get('/status', requireLeads, adminLimiter, async (req, res) => {
     const usage = db.getCallUsageStats();
     const dbTotal = db.db.prepare(`SELECT COUNT(*) as n FROM leads WHERE (lead_type IS NULL OR lead_type = 'sales')`).get().n;
     const scrapeConfigured = isScrapeConfigured();
+    const craigslistEnabled = process.env.CRAIGSLIST_ENABLED === '1';
+    const jsearchConfigured = isJSearchConfigured();
     const scrapeResult = parseJobResultJson(scheduler.scrape);
     const enrichResult = parseJobResultJson(scheduler.enrich);
 
     res.json({
       scrape_configured: scrapeConfigured,
-      setup_hint: scrapeConfigured ? null : 'Set JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY in server .env (see .env.example)',
+      craigslist_enabled: craigslistEnabled,
+      jsearch_configured: jsearchConfigured,
+      setup_hint: scrapeConfigured
+        ? null
+        : 'Set CRAIGSLIST_ENABLED=1 or JOB_SEARCH_API_URL + JOB_SEARCH_API_KEY (see .env.example)',
       db_total: dbTotal,
       job_search_provider: detectJobSearchProvider(),
       scrape_cron_enabled: process.env.SCRAPE_CRON_ENABLED === '1',
@@ -186,6 +198,7 @@ router.get('/leads', requireLeads, adminLimiter, async (req, res) => {
       location: req.query.location || undefined,
       location_mode: req.query.location_mode || undefined,
       search: req.query.search || undefined,
+      source: req.query.source || undefined,
       callable_only: req.query.contact_status === 'verified' || req.query.callable_only === '1',
       limit,
       offset,
@@ -353,11 +366,15 @@ function resolveScrapeLocations(req) {
 }
 
 function resolveScrapeEngines() {
+  const engines = [];
   const fromEnv = (process.env.JOB_SEARCH_ENGINE || '').trim();
-  if (fromEnv) return [fromEnv];
-  const provider = detectJobSearchProvider();
-  if (provider === 'serpapi') return ['google_jobs'];
-  return ['jsearch'];
+  if (process.env.CRAIGSLIST_ENABLED === '1') engines.push('craigslist');
+  if (fromEnv && fromEnv !== 'craigslist') engines.push(fromEnv);
+  else if (isJSearchConfigured()) {
+    const provider = detectJobSearchProvider();
+    engines.push(provider === 'serpapi' ? 'google_jobs' : 'jsearch');
+  }
+  return [...new Set(engines)];
 }
 
 /**
@@ -370,7 +387,7 @@ router.post('/run', requireLeads, adminLimiter, async (req, res) => {
   jobTracker.sseWrite(res, { type: 'start', job_search_provider: detectJobSearchProvider(), engines });
 
   if (!isScrapeConfigured()) {
-    const msg = 'JOB_SEARCH_API_URL and JOB_SEARCH_API_KEY are not configured in server .env';
+    const msg = 'No scrape engines configured — set CRAIGSLIST_ENABLED=1 or JOB_SEARCH_API_*';
     jobTracker.finishJob('scrape', null, new Error(msg));
     jobTracker.sseWrite(res, { type: 'error', error: msg });
     return res.end();
@@ -402,6 +419,49 @@ router.post('/run', requireLeads, adminLimiter, async (req, res) => {
       jobTracker.sseWrite(res, { msg: `Searching ${scrapeLocation}…` });
 
       for (const engine of engines) {
+        if (engine === 'craigslist') {
+          const { searchCraigslistJobs } = require('../services/craigslist-scraper');
+          jobTracker.sseWrite(res, { type: 'progress', source: 'craigslist', msg: 'Searching Craigslist RSS…' });
+          const clJobs = await searchCraigslistJobs({ maxPerRun: maxSave - saved });
+          rawFound += clJobs.length;
+          for (const job of clJobs) {
+            if (saved >= maxSave) break locationLoop;
+            enrichAttempts++;
+            const outcome =
+              job.clinic_phone || job.clinic_email
+                ? scrapeIngestion.persistScrapedJob(job, job, { source: 'craigslist' })
+                : await scrapeIngestion.enrichAndPersist(job, { source: 'craigslist' });
+            if (outcome.enriched?.clinic_phone || outcome.enriched?.clinic_email || job.clinic_phone) {
+              enrichHits++;
+            }
+            if (outcome.status === 'duplicate') {
+              skippedDupes++;
+              continue;
+            }
+            if (outcome.status === 'error') {
+              jobTracker.sseWrite(res, { msg: `Skip: ${outcome.error}` });
+              continue;
+            }
+            const ext = outcome.external_id;
+            if (ext && seenExternal.has(ext)) {
+              skippedDupes++;
+              continue;
+            }
+            if (ext) seenExternal.add(ext);
+            saved++;
+            if (outcome.callable || job.clinic_phone) {
+              savedCallable++;
+              jobTracker.sseWrite(res, { msg: `Saved (callable): ${job.clinic_name || 'Unknown'}` });
+            } else {
+              savedNeedsPhone++;
+              jobTracker.sseWrite(res, { msg: `Saved (needs phone): ${job.clinic_name || 'Unknown'}` });
+            }
+          }
+          continue;
+        }
+
+        if (!isJSearchConfigured()) continue;
+
         for (const query of queries) {
           if (saved >= maxSave) break locationLoop;
           jobTracker.sseWrite(res, {

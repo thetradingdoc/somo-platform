@@ -20,8 +20,15 @@ const {
   resolveBookingSlot,
   opqrstComplete,
   parseProviderFromMessage,
-  bundleMatchesProvider
+  bundleMatchesProvider,
+  executeDeterministicTool
 } = require('./shared');
+
+function execScheduleTool(state, toolName, args, ctx) {
+  const lane = state.active_lane || KELLY_LANE.BOOKING;
+  const step = state.step || 'schedule_visit';
+  return executeDeterministicTool(lane, step, toolName, args, ctx);
+}
 
 function resolveScheduleSpecialty(ctx, row) {
   const visit =
@@ -53,7 +60,7 @@ async function runDeterministicSchedule(state, ctx) {
   }
   const row = sessionRow(ctx.sessionId);
   if (!row?.rag_result_id && opqrstComplete(row)) {
-    const rag = await KellyToolExecutor.execute('run_triage_rag', {}, ctx);
+    const rag = await execScheduleTool(state, 'run_triage_rag', {}, ctx);
     if (rag && !rag.error) {
       toolsUsed.push('run_triage_rag');
       state.flags.has_rag = true;
@@ -105,7 +112,7 @@ async function runDeterministicSchedule(state, ctx) {
           argsFromMeta(ctx.sessionId, 'last_slot_time'))) &&
         confirmatory) ||
       (conflictActive && hasBookingSlot && confirmatory) ||
-      /@|please book|works for me|funciona|me funciona|me viene bien|reservar|por favor|хорошо|подходит|да\b|martes|tarde|вторник|днём|днем/.test(msg));
+      /@|please book|works for me|funciona|me funciona|me viene bien|reservar|por favor|хорошо|подходит|да\b|martes|tarde|вторник|днём|днем|周二|12点|可以|预约/.test(msg));
 
   if (onBookingPath && wantsBookConfirm && passesLocalizedBookConfirm(ctx.message)) {
     const existingApptId =
@@ -148,7 +155,8 @@ async function runDeterministicSchedule(state, ctx) {
     let apptTime = apptTimeFromSlot;
     if (isSyntheticSlotId(slotId)) slotId = null;
     if (!slotId && !(apptDate && apptTime)) {
-      const slots = await KellyToolExecutor.execute(
+      const slots = await execScheduleTool(
+        state,
         'get_available_slots',
         { specialty: resolveScheduleSpecialty(ctx, row) || 'Dental', days_ahead: 14 },
         ctx
@@ -187,7 +195,8 @@ async function runDeterministicSchedule(state, ctx) {
       const providerPrefEarly =
         state.flags.provider_preference || parseProviderFromMessage(ctx.message);
       if (providerPrefEarly) {
-        const slotsProbe = await KellyToolExecutor.execute(
+        const slotsProbe = await execScheduleTool(
+          state,
           'get_available_slots',
           { specialty: resolveScheduleSpecialty(ctx, row) || 'Dental', days_ahead: 14 },
           ctx
@@ -247,7 +256,8 @@ async function runDeterministicSchedule(state, ctx) {
     let bookedTime = apptTime;
     for (let attempt = 0; attempt < 21; attempt++) {
       const tryDate = attempt === 0 ? apptDate : addBusinessDaysIso(apptDate, attempt);
-      sched = await KellyToolExecutor.execute(
+      sched = await execScheduleTool(
+        state,
         'schedule_appointment',
         {
           ...scheduleBase,
@@ -343,7 +353,8 @@ async function runDeterministicSchedule(state, ctx) {
       )
     ) {
       const specialty = resolveScheduleSpecialty(ctx, row);
-      const slots = await KellyToolExecutor.execute(
+      const slots = await execScheduleTool(
+        state,
         'get_available_slots',
         { specialty, days_ahead: 14, appointment_type: specialty },
         ctx

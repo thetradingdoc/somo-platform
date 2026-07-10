@@ -15,6 +15,10 @@ function parseSlotTimeFromMessage(message) {
     if (ampm === 'am' && h === 12) h = 0;
     return `${String(h).padStart(2, '0')}:00`;
   }
+  const zhHour = msg.match(/(\d{1,2})\s*点/);
+  if (zhHour) {
+    return `${String(parseInt(zhHour[1], 10)).padStart(2, '0')}:00`;
+  }
   return null;
 }
 

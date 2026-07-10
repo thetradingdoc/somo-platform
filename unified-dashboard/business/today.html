@@ -15,72 +15,12 @@
   <script src="/assets/js/provider-api.js"></script>
   <script src="/assets/js/provider-shell.js"></script>
   <script src="/assets/js/provider-shell-chrome.js"></script>
+  <script src="/assets/js/provider-layout.js"></script>
   <script src="/assets/js/voice-agent-page.js"></script>
   <script src="/assets/js/sfd-nameplate.js"></script>
 </head>
 <body class="provider-portal provider-portal--today" data-page="today">
-  <button type="button" class="pp-mobile-toggle" id="ppMobileToggle" aria-label="Open menu">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-  </button>
-
-  <div class="pp-app">
-    <aside class="pp-sidebar" id="ppSidebar">
-      <div class="pp-clinic-header">
-        <a class="pp-sb-brand pp-sb-brand--icon" href="today.html">
-          <img src="/assets/brand/somo-icon.png" alt="Somo" class="pp-sb-logo-img" width="36" height="36" />
-        </a>
-        <div class="pp-sb-clinic-meta">
-          <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
-          <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
-          <div class="pp-sb-av pp-sb-av--sm" id="ppClinicAv" aria-hidden="true">CL</div>
-        </div>
-      </div>
-      <a class="pp-kelly-live kelly-provisioning" id="ppKellyLive" href="agent.html">
-        <span class="pp-kelly-dot" aria-hidden="true"></span>
-        <div>
-          <div class="pp-kelly-label" id="ppKellyLabel">Somo front desk</div>
-          <div id="ppKellyNameplate" style="margin:4px 0"></div>
-          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · copay</div>
-          <div class="pp-kelly-phone" id="ppKellyPhone"></div>
-        </div>
-        <button type="button" class="pp-kelly-toggle" id="ppKellyToggle">Activate</button>
-      </a>
-      <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
-      <div class="pp-sb-footer">
-        <a class="pp-sb-clinic" id="ppClinicCard" href="settings.html">
-          <div class="pp-sb-av">CL</div>
-          <div>
-            <div class="pp-sb-cn">Clinic profile</div>
-            <div class="pp-sb-cr">Manage provider details</div>
-          </div>
-        </a>
-      </div>
-    </aside>
-
-    <div class="pp-main">
-      <header class="pp-topbar pp-topbar--page">
-        <div class="pp-topbar-left">
-          <p class="pp-page-eyebrow">Dashboard</p>
-          <h1 class="pp-page-title">Today</h1>
-          <p class="pp-page-sub" id="ppHeroSubtitle">Welcome back — here's what needs attention today.</p>
-        </div>
-        <div class="pp-topbar-right">
-          <div id="ppTodayNameplate" style="margin-right:8px"></div>
-          <div class="pp-date-chip" id="ppDateChip"></div>
-          <a class="pp-btn pp-btn-outline pp-btn-sm pp-topbar-search" href="patients.html" id="ppSearchBtn">
-            <span class="pp-inline-icon" aria-hidden="true"></span>
-            <span class="pp-topbar-label">Search</span>
-          </a>
-          <a class="pp-btn pp-btn-primary pp-btn-sm" href="calendar.html" id="ppNewApptBtn" aria-label="New appointment">
-            <span class="pp-inline-icon" aria-hidden="true"></span>
-            <span class="pp-topbar-cta-label">New Appointment</span>
-          </a>
-        </div>
-      </header>
-
-      <main class="pp-content pp-content--today" id="ppMainContent">
+  <main class="pp-content pp-content--today" id="ppMainContent">
         <div class="pp-page-shell">
         <div class="pp-alert-strip pp-alert-strip--compact" id="ppAlertStrip" hidden aria-live="polite"></div>
 
@@ -127,7 +67,7 @@
                   <div class="pp-panel-title">Needs action</div>
                   <div class="pp-panel-sub" id="journeyStripSub">Open payment follow-ups</div>
                 </div>
-                <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline">Pipeline</a>
+                <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline" data-revenue-cta>Pipeline</a>
               </div>
               <div class="pp-panel-body pp-panel-body--compact" id="ppJourneyStrip"></div>
             </section>
@@ -193,14 +133,12 @@
             </section>
 
             <p class="pp-rail-footer">
-              <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline">Revenue pipeline</a>
+              <a class="pp-btn pp-btn-link" href="revenue.html?tab=pipeline" data-revenue-cta>Revenue pipeline</a>
             </p>
           </div>
         </div>
         </div>
       </main>
-    </div>
-  </div>
 
   <script>
     const API_BASE = window.API_BASE || 'http://localhost:4000';
@@ -548,6 +486,7 @@
         })
         .slice(0, 3);
       rows.forEach((p, i) => {
+        if (window.ppIsDentalPortal?.()) return;
         if (typeof window.ppPushAlert === 'function') {
           window.ppPushAlert({
             id: `payment-${p.id || i}`,
@@ -556,7 +495,8 @@
             icon: 'credit-card',
             message: `Payment link sent · ${p.patient_name || p.patient_id || 'Patient'} · $${Number(p.amount || 0).toFixed(2)}`,
             href: 'revenue.html?tab=payments',
-            ctaLabel: 'Open payments'
+            ctaLabel: 'Open payments',
+            revenueCta: true
           });
         }
       });
@@ -679,6 +619,10 @@
       const el = document.getElementById('ppJourneyStrip');
       const sub = document.getElementById('journeyStripSub');
       if (!el || !panel) return;
+      if (window.ppIsDentalPortal?.()) {
+        panel.hidden = true;
+        return;
+      }
       const open = (journeys || []).filter((j) => String(j.status || 'open') === 'open');
       if (!open.length) {
         panel.hidden = true;
@@ -836,6 +780,12 @@
       if (apptsTodayRes.status === 'rejected') {
         document.getElementById('scheduleList').innerHTML =
           window.ppPanelState('error', `Could not load appointments: ${escapeHtml(apptsTodayRes.reason?.message || 'unknown error')}`, { retry: 'dashboard' });
+      } else if (apptsUpcomingRes.status === 'rejected') {
+        const scheduleEl = document.getElementById('scheduleList');
+        if (scheduleEl && !scheduleEl.querySelector('[data-retry]')) {
+          scheduleEl.innerHTML =
+            window.ppPanelState('error', `Could not load upcoming schedule: ${escapeHtml(apptsUpcomingRes.reason?.message || 'unknown error')}`, { retry: 'dashboard' });
+        }
       }
     }
 
@@ -862,6 +812,15 @@
       renderSchedule();
     });
 
+    function applyDentalRevenueGate() {
+      if (!window.ppIsDentalPortal?.()) return;
+      document.querySelectorAll('[data-revenue-cta]').forEach((el) => {
+        el.hidden = true;
+      });
+      const panel = document.getElementById('ppJourneyStripPanel');
+      if (panel) panel.hidden = true;
+    }
+
     function wireTopbarIcons() {
       const searchIcon = document.querySelector('#ppSearchBtn .pp-inline-icon');
       const calIcon = document.querySelector('#ppNewApptBtn .pp-inline-icon');
@@ -870,7 +829,7 @@
     }
 
     function renderHeroSubtitle() {
-      const el = document.getElementById('ppHeroSubtitle');
+      const el = document.getElementById('ppPageSub') || document.getElementById('ppHeroSubtitle');
       if (el && typeof window.ppGreetingSubtitle === 'function') {
         el.textContent = window.ppGreetingSubtitle();
       }
@@ -1182,9 +1141,30 @@
     (async function init() {
       if (typeof window.requireAuth === 'function') window.requireAuth();
       await new Promise((r) => setTimeout(r, 150));
-      window.initProviderShell({ activeId: 'today', useGreeting: false });
+      if (typeof window.mountProviderPage === 'function') {
+        window.mountProviderPage({
+          activeId: 'today',
+          eyebrow: 'Dashboard',
+          title: 'Today',
+          subtitle: 'Welcome back — here\'s what needs attention today.',
+          useGreeting: false,
+          voiceNameplate: true,
+          voiceNameplateHost: 'ppTodayNameplate',
+          topbarActions: `<a class="pp-btn pp-btn-outline pp-btn-sm pp-topbar-search" href="patients.html?focus=search" id="ppSearchBtn" aria-label="Search patients">
+            <span class="pp-inline-icon" aria-hidden="true"></span>
+            <span class="pp-topbar-label">Search</span>
+          </a>
+          <a class="pp-btn pp-btn-primary pp-btn-sm" href="calendar.html?new=1" id="ppNewApptBtn" aria-label="New appointment">
+            <span class="pp-inline-icon" aria-hidden="true"></span>
+            <span class="pp-topbar-cta-label">New Appointment</span>
+          </a>`
+        });
+      } else {
+        window.initProviderShell({ activeId: 'today', useGreeting: false });
+      }
       renderHeroSubtitle();
       wireTopbarIcons();
+      applyDentalRevenueGate();
       loadOnboardingNudge();
       loadOnboardingChecklist();
       loadShadowWeekBanner();

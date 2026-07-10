@@ -1,0 +1,107 @@
+name: Portal E2E gate
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      step:
+        description: 'Orchestrator step (staging, prod-reuse, gates, trend, all)'
+        required: false
+        default: 'prod-reuse'
+  push:
+    branches: [main]
+    paths:
+      - 'middleware-platform/e2e/**'
+      - 'middleware-platform/scripts/portal-e2e*.cjs'
+      - 'middleware-platform/playwright.portal.config.cjs'
+      - '.github/workflows/portal-e2e-gate.yml'
+
+jobs:
+  staging-portal-e2e:
+    name: Staging portal P0+P1
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.step == 'staging')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: middleware-platform/package-lock.json
+      - name: Install dependencies
+        working-directory: middleware-platform
+        run: npm ci
+      - name: Install Playwright
+        working-directory: middleware-platform
+        run: PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers npx playwright install chromium --with-deps
+      - name: Run staging portal E2E
+        working-directory: middleware-platform
+        env:
+          PW_ENV: staging
+          PW_MODE: create
+          PW_TIER: p0+p1
+        run: node scripts/portal-e2e-run.cjs --step=staging --continue-on-fail
+      - name: Upload portal E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portal-e2e-staging
+          path: middleware-platform/test-results/portal-e2e/
+
+  prod-portal-p0:
+    name: Production portal P0 (reuse)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.step == 'prod-reuse' || github.event.inputs.step == 'all'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: middleware-platform/package-lock.json
+      - name: Install dependencies
+        working-directory: middleware-platform
+        run: npm ci
+      - name: Install Playwright
+        working-directory: middleware-platform
+        run: PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers npx playwright install chromium --with-deps
+      - name: Prod gates + P0 reuse
+        working-directory: middleware-platform
+        env:
+          PW_ENV: production
+          PW_MODE: reuse
+          PW_TIER: p0
+          CLOUDRUN_VERIFY: '1'
+          PW_SOMO_PROD_EMAIL: ${{ secrets.PW_SOMO_PROD_EMAIL }}
+          PW_SOMO_PROD_PASS: ${{ secrets.PW_SOMO_PROD_PASS }}
+          PORTAL_E2E_ALERT_SLACK_WEBHOOK: ${{ secrets.PORTAL_E2E_ALERT_SLACK_WEBHOOK }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          node scripts/portal-e2e-run.cjs --step=gates
+          node scripts/portal-e2e-run.cjs --step=prod-reuse
+          node scripts/portal-e2e-run.cjs --step=trend
+      - name: Upload portal E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portal-e2e-prod
+          path: middleware-platform/test-results/portal-e2e/
+
+  weekly-cleanup:
+    name: Somo e2e data cleanup (dry-run)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: middleware-platform/package-lock.json
+      - name: Install dependencies
+        working-directory: middleware-platform
+        run: npm ci
+      - name: Dry-run cleanup
+        working-directory: middleware-platform
+        run: node scripts/portal-e2e-cleanup-somo.cjs || true

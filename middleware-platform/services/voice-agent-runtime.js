@@ -260,6 +260,9 @@ function loadProviderVoiceRuntime(db, ids = {}) {
   const agentEnabled = !kellyPaused && settingsEnabled;
 
   const { resolveGreetingWithDisclosure } = require('./call-opener-resolver');
+  const { getTenantSystemPrompt } = require('./prompt-profile-service');
+
+  const profilePrompt = getTenantSystemPrompt(db, { customerId, clinicId });
 
   return {
     merchantId,
@@ -267,9 +270,7 @@ function loadProviderVoiceRuntime(db, ids = {}) {
     clinicId,
     customer,
     settings,
-    customPrompt: customer?.custom_prompt
-      ? String(customer.custom_prompt).trim()
-      : null,
+    customPrompt: profilePrompt || null,
     kellyStatus,
     agentEnabled,
     greeting: resolveGreetingWithDisclosure(settings, customer, { aiDisclosureEnabled }),

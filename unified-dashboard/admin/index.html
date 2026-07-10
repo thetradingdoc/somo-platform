@@ -112,7 +112,11 @@
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('dateline').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
       window.addEventListener('admin:job-complete', () => loadAll());
-      document.getElementById('btnScrape').onclick = () => {
+      document.getElementById('btnScrape').onclick = async () => {
+        if (!(await AdminShell.confirmAction(
+          'Start a new lead scrape job? This queries job boards and saves new clinics to the CRM.',
+          { title: 'Scrape leads', confirmLabel: 'Start scrape' }
+        ))) return;
         AdminJobModal.open({
           title: 'Scraping new leads...',
           url: '/api/admin/scrape/run',
@@ -397,8 +401,11 @@
     }
     window.doCall = doCall;
 
-    function triggerEnrich() {
-      if (!AdminShell.confirmAction('Run contact enrichment on all unprocessed leads?')) return;
+    async function triggerEnrich() {
+      if (!(await AdminShell.confirmAction(
+        'Run contact enrichment on all unprocessed leads? This may call external enrichment APIs.',
+        { title: 'Enrich contacts', confirmLabel: 'Start enrichment' }
+      ))) return;
       AdminJobModal.open({
         title: 'Enriching contacts...',
         url: '/api/admin/enrich/batch',

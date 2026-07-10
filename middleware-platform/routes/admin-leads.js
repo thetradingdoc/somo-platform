@@ -26,6 +26,17 @@ const facade = require('../services/admin-lead-facade');
 const router = express.Router();
 const retellService = new RetellService();
 
+function logAdminTranscriptAccess(req, callId) {
+  if (typeof db.logHipaaAccess !== 'function') return;
+  db.logHipaaAccess({
+    user_id: req.adminUser?.id || req.user?.uid || req.auth?.userId || 'admin',
+    resource_type: 'call_transcript',
+    resource_id: callId,
+    action: 'read',
+    ip_address: req.ip || req.headers['x-forwarded-for'] || null
+  });
+}
+
 /**
  * GET /api/admin/leads/search
  *
@@ -261,6 +272,18 @@ router.post('/:id/call', requireAdminOrCapability('platform.leads'), adminLimite
         success: false,
         error: 'Clinic phone number not callable for this lead. Need a valid 10-digit US phone before outbound call.',
         code: 'LEAD_NOT_CALLABLE',
+      });
+    }
+
+    const { isOutboundCallAllowed } = require('../services/lead-outbound-consent');
+    const consent = isOutboundCallAllowed(lead);
+    if (!consent.ok) {
+      return res.status(403).json({
+        success: false,
+        error: consent.message,
+        code: consent.code,
+        consent_basis: consent.basis,
+        requires_review: consent.requires_review === true,
       });
     }
 
@@ -596,6 +619,7 @@ router.get('/calls/:callId/transcript', requireAdminOrCapability('platform.leads
         const resp = await axios.get(call.transcript_url, { timeout: 15000 });
         const data = resp.data;
         if (Array.isArray(data)) {
+          logAdminTranscriptAccess(req, callId);
           return res.json({
             lines: data.map((line) => ({
               role: line.role || line.speaker || 'user',
@@ -604,9 +628,11 @@ router.get('/calls/:callId/transcript', requireAdminOrCapability('platform.leads
           });
         }
         if (typeof data === 'string') {
+          logAdminTranscriptAccess(req, callId);
           return res.json({ raw: data });
         }
         if (data?.transcript) {
+          logAdminTranscriptAccess(req, callId);
           return res.json({ raw: data.transcript });
         }
       } catch (fetchErr) {
@@ -619,6 +645,7 @@ router.get('/calls/:callId/transcript', requireAdminOrCapability('platform.leads
         const retellData = await retellService.getCall(call.call_id);
         const transcript = retellData?.transcript || retellData?.transcript_object;
         if (Array.isArray(transcript)) {
+          logAdminTranscriptAccess(req, callId);
           return res.json({
             lines: transcript.map((line) => ({
               role: line.role === 'agent' ? 'agent' : 'user',
@@ -627,6 +654,7 @@ router.get('/calls/:callId/transcript', requireAdminOrCapability('platform.leads
           });
         }
         if (typeof retellData?.transcript === 'string') {
+          logAdminTranscriptAccess(req, callId);
           return res.json({ raw: retellData.transcript });
         }
       } catch (retellErr) {
@@ -1769,6 +1797,21 @@ router.put('/:id', requireAdminOrCapability('platform.leads'), adminLimiter, asy
           success: false,
           error: 'Job-board URLs cannot be saved as clinic website. Enter the clinic site directly.',
         });
+      }
+    }
+
+    if (updates.outbound_consent_basis !== undefined) {
+      const { ALLOWED_OUTBOUND_CONSENT } = require('../services/lead-outbound-consent');
+      const basis = String(updates.outbound_consent_basis || '').trim();
+      if (basis && !ALLOWED_OUTBOUND_CONSENT.has(basis)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid outbound_consent_basis. Allowed: ${[...ALLOWED_OUTBOUND_CONSENT].join(', ')}`,
+          code: 'INVALID_CONSENT_BASIS',
+        });
+      }
+      if (ALLOWED_OUTBOUND_CONSENT.has(basis) && !updates.consent_recorded_at) {
+        updates.consent_recorded_at = new Date().toISOString();
       }
     }
 

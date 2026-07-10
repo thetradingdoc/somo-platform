@@ -67,10 +67,11 @@ function assertMetaKvWriteAllowed(key, { fromMirror = false, sessionId = null } 
   if (!isOrchestrationMetaKey(key)) return true;
 
   const msg = `[meta_kv_orchestration_write_blocked] key=${key} session=${sessionId || 'n/a'}`;
-  if (process.env.NODE_ENV === 'test' || process.env.META_KV_POLICY_STRICT === '1') {
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!isProd || process.env.META_KV_POLICY_STRICT === '1') {
     throw new Error(msg);
   }
-  console.warn(msg);
+  console.error(msg);
   return false;
 }
 

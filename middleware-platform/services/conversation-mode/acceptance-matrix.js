@@ -13,7 +13,7 @@ const ACCEPTANCE_SCENARIOS = [
     name: 'somo_demo isolation',
     call_type: 'somo_demo',
     direction: 'inbound',
-    mode: ConversationMode.DEMO_QUAL,
+    mode: ConversationMode.PLATFORM_SUPPORT,
     forbidden_tools: ['store_triage_opqrst', 'schedule_appointment', 'request_patient_payment']
   },
   {

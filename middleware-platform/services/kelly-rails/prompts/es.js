@@ -70,7 +70,7 @@ function laneSystemPrompt(lane, step, state, providerCtx = {}) {
 
   const identityBlock = identityParts.length ? identityParts.join(' ') + '\n\n' : '';
 
-  const bounded = buildBoundedPromptContext({ ...state, locale: state.flags?.preferred_language || state.locale || 'es' });
+  const bounded = buildBoundedPromptContext({ ...state, locale: state.flags?.locale || state.locale || 'es' });
   const pmsBlock = providerCtx.pmsContextBlock ? `\n\n${providerCtx.pmsContextBlock}` : '';
   return `${identityBlock}${BASE}\n\n${hint}${pmsBlock}${bounded.promptSuffix}\nSesión: ${state.session_id || ''}`;
 }

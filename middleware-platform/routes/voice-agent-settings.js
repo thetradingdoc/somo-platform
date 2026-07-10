@@ -37,6 +37,12 @@ const {
   resolveClinicForCustomer,
   syncVoiceHoursToClinic
 } = require('../services/tenant-voice-config');
+const {
+  savePromptProfileAndSyncRetell,
+  resolvePromptProfileScope,
+  getTenantSystemPrompt
+} = require('../services/prompt-profile-service');
+const { getDefaultCustomPrompt } = require('../services/voice-prompt-templates');
 
 const retellService = new RetellService();
 
@@ -519,7 +525,10 @@ async function handleSettingsSave(req, res) {
             settings_version: syncResult.settings_version,
             sync_status: syncResult.sync_status,
             synced_at: syncResult.synced_at,
-            prompt_synced_at: syncResult.synced_at
+            prompt_synced_at:
+                syncResult.prompt_synced_at ||
+                (customerId && db.getCustomer(customerId)?.prompt_synced_at) ||
+                null
         });
     } catch (error) {
         if (error.code === 'settings_conflict') {
@@ -583,16 +592,23 @@ router.post('/setup-complete', optionalCustomerAuth, requireVoiceSettingsAccess,
         const updates = {
             voice_setup_completed_at: new Date().toISOString()
         };
-        if (!customer.custom_prompt) {
-            try {
-                const VoicePromptTemplates = require('../services/voice-prompt-templates');
-                const defaultPrompt = VoicePromptTemplates.getDefaultCustomPrompt(customer);
-                if (defaultPrompt) {
-                    updates.custom_prompt = defaultPrompt;
-                }
-            } catch (_) {}
-        }
         db.updateCustomer(customer.id, updates);
+
+        const scope = resolvePromptProfileScope(db, { customerId: customer.id, merchantId: customer.merchant_id });
+        if (!scope.profile?.system_prompt?.trim()) {
+            const defaultPrompt = getDefaultCustomPrompt(customer);
+            if (defaultPrompt) {
+                await savePromptProfileAndSyncRetell(db, {
+                    customerId: customer.id,
+                    clinicId: scope.clinicId,
+                    merchantId: customer.merchant_id,
+                    systemPrompt: defaultPrompt,
+                    userId: customer.id,
+                    retellService,
+                    syncRetell: !!customer.retell_agent_id
+                });
+            }
+        }
 
         const markLive = req.body?.mark_live === true;
         transitionState(db, customer.id, markLive ? 'live' : 'voice_setup_complete', {
@@ -609,6 +625,83 @@ router.post('/setup-complete', optionalCustomerAuth, requireVoiceSettingsAccess,
         });
     } catch (error) {
         console.error('Voice setup complete error:', error);
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+router.get('/prompt-profile', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const ctx = resolveVoiceSettingsContext(req);
+        if (!ctx.customerId) {
+            return res.status(400).json({ success: false, error: 'tenant_required' });
+        }
+        const scope = resolvePromptProfileScope(db, {
+            customerId: ctx.customerId,
+            merchantId: ctx.merchantId,
+            clinicId: req.query.clinic_id || null
+        });
+        const profile = scope.profile;
+        return res.json({
+            success: true,
+            prompt_profile: profile
+                ? {
+                    id: profile.id,
+                    clinic_id: profile.clinic_id,
+                    customer_id: profile.customer_id,
+                    use_case: profile.use_case || scope.useCase,
+                    specialty: profile.specialty,
+                    system_prompt: profile.system_prompt,
+                    allowed_tools: profile.allowed_tools,
+                    policy_json: profile.policy_json,
+                    status: profile.status,
+                    updated_at: profile.updated_at
+                  }
+                : null,
+            use_case: scope.useCase
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+    }
+});
+
+router.put('/prompt-profile', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
+    try {
+        const ctx = resolveVoiceSettingsContext(req);
+        if (!ctx.customerId) {
+            return res.status(400).json({ success: false, error: 'tenant_required' });
+        }
+        const systemPrompt = req.body?.system_prompt ?? req.body?.prompt;
+        if (!systemPrompt || !String(systemPrompt).trim()) {
+            return res.status(400).json({ success: false, error: 'system_prompt required' });
+        }
+        const scope = resolvePromptProfileScope(db, {
+            customerId: ctx.customerId,
+            merchantId: ctx.merchantId,
+            clinicId: req.body?.clinic_id || req.query.clinic_id || null
+        });
+        const syncResult = await savePromptProfileAndSyncRetell(db, {
+            customerId: ctx.customerId,
+            clinicId: scope.clinicId,
+            merchantId: ctx.merchantId,
+            systemPrompt: String(systemPrompt).trim(),
+            userId: ctx.customerId,
+            retellService,
+            syncRetell: true
+        });
+        return res.json({
+            success: true,
+            prompt_profile_id: syncResult.profile_id,
+            prompt_synced_at: syncResult.prompt_synced_at,
+            retell_synced: syncResult.retell_synced
+        });
+    } catch (error) {
+        if (error.code === 'retell_sync_failed') {
+            return res.status(502).json({
+                success: false,
+                error: 'retell_sync_failed',
+                message: error.message
+            });
+        }
         return res.status(500).json({ success: false, error: 'server_error', message: error.message });
     }
 });

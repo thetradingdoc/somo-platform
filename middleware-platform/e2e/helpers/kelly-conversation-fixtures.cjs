@@ -574,7 +574,7 @@ function seedPatient(opts = {}) {
     } catch (_) {}
   }
   if (!patient) {
-    const resourceId = `Patient/e2e-golden-${crypto.randomBytes(6).toString('hex')}`;
+    const resourceId = `e2e-golden-${crypto.randomBytes(6).toString('hex')}`;
     dbModule.createFHIRPatient({
       resourceType: 'Patient',
       id: resourceId,
@@ -585,7 +585,9 @@ function seedPatient(opts = {}) {
       ],
       birthDate: opts.birthDate || '1990-01-15',
     });
-    patient = dbModule.getFHIRPatient(resourceId);
+    patient =
+      (dbModule.resolveFHIRPatient && dbModule.resolveFHIRPatient(resourceId)) ||
+      dbModule.getFHIRPatient(resourceId);
   }
 
   if (!patient?.resource_id) {
@@ -1250,37 +1252,38 @@ function seedTenantPolicyJson(clinicId, policyJson = {}, opts = {}) {
 function seedDentalFrontDeskSession(sessionId, clinicId, scenario = {}) {
   const { dbModule } = loadDb();
   const { TriagePolicy } = require(path.join(__dirname, '..', '..', 'services', 'conversation-mode', 'tenant-policy'));
+  const { USE_CASE_PROFILES } = require(path.join(__dirname, '..', '..', 'services', 'prompt-profile-templates'));
   const KellyToolExecutor = getKellyToolExecutor();
   const resolvedClinicId = clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
+  const useCaseKey = scenario.use_case || 'dental';
+  const profileTemplate = USE_CASE_PROFILES[useCaseKey] || USE_CASE_PROFILES.dental;
 
   if (dbModule.db) {
-    const profileId = `prof_dental_e2e_${resolvedClinicId}`;
+    const profileId = `prof_${useCaseKey}_e2e_${resolvedClinicId}`;
     dbModule.db
       .prepare(
         `INSERT OR REPLACE INTO prompt_profiles (
           id, clinic_id, name, specialty, system_prompt, allowed_tools, status, use_case, policy_json, updated_at
-        ) VALUES (?, ?, 'Dental E2E', 'Dental', 'dental e2e', ?, 'active', 'dental', ?, datetime('now'))`
+        ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, datetime('now'))`
       )
       .run(
         profileId,
         resolvedClinicId,
-        JSON.stringify([
-          'collect_insurance',
-          'request_patient_payment',
-          'schedule_appointment',
-          'transfer_call',
-          'cancel_appointment',
-          'search_appointments',
-          'reschedule_appointment',
-          'get_available_slots'
-        ]),
-        JSON.stringify({ triage_policy: TriagePolicy.DISABLED })
+        `${useCaseKey} E2E`,
+        profileTemplate.specialty,
+        profileTemplate.system_prompt,
+        JSON.stringify(profileTemplate.allowed_tools || []),
+        useCaseKey,
+        JSON.stringify(profileTemplate.policy || { triage_policy: TriagePolicy.DISABLED })
       );
   }
 
   if (scenario.seedProvider !== false) {
     try {
-      seedE2eBookableProvider(resolvedClinicId, { specialty: 'Dental', targetSpecialty: 'Dental' });
+      seedE2eBookableProvider(resolvedClinicId, {
+        specialty: profileTemplate.specialty,
+        targetSpecialty: profileTemplate.specialty
+      });
     } catch (e) {
       if (!scenario.allowProviderSeedFailure) throw e;
     }
@@ -1306,11 +1309,11 @@ function seedDentalFrontDeskSession(sessionId, clinicId, scenario = {}) {
       direction: 'inbound',
       firstUtterance: scenario.utterances?.[0] || '',
       tenantResolved: true,
-      tenantPolicy: { triage_policy: TriagePolicy.DISABLED, billing_enabled: true }
+      tenantPolicy: profileTemplate.policy || { triage_policy: TriagePolicy.DISABLED, billing_enabled: true }
     });
   } catch (_) {}
 
-  return { clinicId: resolvedClinicId, profileId: `prof_dental_e2e_${resolvedClinicId}` };
+  return { clinicId: resolvedClinicId, profileId: `prof_${useCaseKey}_e2e_${resolvedClinicId}` };
 }
 
 /**

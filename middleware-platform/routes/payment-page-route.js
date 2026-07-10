@@ -32,9 +32,13 @@ function getStripe() {
 function getSessionIdForToken(token) {
   try {
     const row = db.db.prepare(`
-      SELECT session_id FROM kelly_session_meta WHERE key = 'payment_token' AND value = ? LIMIT 1
+      SELECT session_id FROM kelly_session_meta_kv WHERE meta_key = 'payment_token' AND value = ? LIMIT 1
     `).get(token);
-    return row?.session_id || null;
+    if (row?.session_id) return row.session_id;
+    const rcm = db.db.prepare(`
+      SELECT session_id FROM kelly_session_meta_kv WHERE meta_key = 'rcm_pay_token' AND value = ? LIMIT 1
+    `).get(token);
+    return rcm?.session_id || null;
   } catch (_) {
     return null;
   }

@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-tokens.css">
-  <link rel="stylesheet" href="/unified-dashboard/assets/css/somo-front-desk-components.css">
-  <link rel="stylesheet" href="/unified-dashboard/assets/css/auth-somo.css">
+  <link rel="stylesheet" href="/assets/css/somo-tokens.css">
+  <link rel="stylesheet" href="/assets/css/somo-front-desk-components.css">
+  <link rel="stylesheet" href="/assets/css/auth-somo.css">
   <style>
     .portal-grid { display: grid; gap: 12px; margin-top: 16px; }
     a.portal-choice {
@@ -33,29 +33,29 @@
   <div class="login-shell">
     <div class="login-main sfd-device-card">
       <a href="/" class="signup-logo-link" aria-label="Somo home">
-        <img class="signup-logo-img" src="/unified-dashboard/assets/brand/somo-logo.png" alt="Somo" width="199" height="68" />
+        <img class="signup-logo-img" src="/assets/brand/somo-logo.png" alt="Somo" width="199" height="68" />
       </a>
       <p class="signup-eyebrow">Welcome</p>
       <h1 class="signup-title">Sign in or create an account</h1>
-      <p class="signup-sub">Choose your portal to continue.</p>
+      <p class="signup-sub">Kelly front desk for licensed providers and small businesses.</p>
 
       <div class="portal-grid">
-        <a class="portal-choice" href="./patients/patient-login.html">
-          <div class="portal-choice-title">
-            <span class="sfd-nameplate sfd-nameplate--connected sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>Patient</span>
-            <span>Sign in / Create account</span>
-          </div>
-          <div class="portal-choice-desc">Email → secure 6-digit code → appointments, payments, records.</div>
-        </a>
-
-        <a class="portal-choice" href="/login">
+        <a class="portal-choice sfd-card" href="/login">
           <div class="portal-choice-title">
             <span class="sfd-nameplate sfd-nameplate--live sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>Provider</span>
             <span>Sign in</span>
           </div>
           <div class="portal-choice-desc">Licensed providers. Email + password.</div>
+        </a>
+
+        <a class="portal-choice sfd-card" href="/signup">
+          <div class="portal-choice-title">
+            <span class="sfd-nameplate sfd-nameplate--connected sfd-nameplate--sm"><span class="sfd-nameplate__led"></span>New practice</span>
+            <span>Create account</span>
+          </div>
+          <div class="portal-choice-desc">Start your Kelly trial — voice agent, scheduling, and revenue tools.</div>
           <div class="portal-choice-desc">
-            <span class="portal-secondary-link">Create provider account →</span>
+            <span class="portal-secondary-link">Start free trial →</span>
           </div>
         </a>
       </div>

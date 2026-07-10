@@ -37,8 +37,10 @@ router.get('/api/patient/:patientId/case-report', requireCustomerAuth, async (re
 
     const merchantId = req.merchant_id || req.customer?.merchant_id;
     const patientMerchant = patientRow.merchant_id || patientRow.resource_data?.managingOrganization?.reference?.replace('Organization/', '');
-    if (merchantId && patientMerchant && patientMerchant !== merchantId) {
-      return res.status(403).json({ success: false, error: 'Forbidden' });
+    if (merchantId) {
+      if (!patientMerchant || patientMerchant !== merchantId) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+      }
     }
 
     const canonicalPatientId = patientRow.resource_id || patientId;

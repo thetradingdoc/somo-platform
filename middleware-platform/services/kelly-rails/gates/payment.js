@@ -6,8 +6,6 @@ const { withStickyLocale } = require('../resolve-locale');
 const { KellyToolExecutor, executeDeterministicTool } = require('./shared');
 
 async function runDeterministicPayment(state, ctx) {
-  if (state.active_lane !== KELLY_LANE.PAYMENT) return null;
-
   const { sessionId, clinicId, patientId, callerPhone, channel, message } = ctx;
   const msg = String(message || '').toLowerCase();
   const quoteDelivered =
@@ -15,6 +13,12 @@ async function runDeterministicPayment(state, ctx) {
     state.flags.quote_delivered === '1' ||
     state.flags.last_quote_status === 'hard_number' ||
     KellyToolExecutor._getSessionMeta(sessionId, 'quote_delivered') === '1';
+  const onPaymentPath =
+    state.active_lane === KELLY_LANE.PAYMENT ||
+    state.active_subrail === 'copay_link' ||
+    quoteDelivered;
+  if (!onPaymentPath) return null;
+
   const onPayStep = state.step === 'pay_invoice';
   const paySignal = PAYMENT_SIGNALS.some((s) => msg.includes(s));
   if (!paySignal && !onPayStep) return null;
