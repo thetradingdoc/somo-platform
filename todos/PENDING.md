@@ -70,10 +70,10 @@ Source: [`tenant-front-desk-audit.md`](../middleware-platform/test-results/tenan
 - [ ] **7.2** `operator` — Mirror lag gate on prod (`POSTGRES_URL` + `STRICT=1`)
 - [ ] **7.3** `operator` — Live PSTN matrix per vertical (`VERTICAL_PSTN_LIVE=1`, `VERTICAL_*_DID`)
 - [ ] **7.4** `operator` — Site context all verticals on prod GCS DB (`SITE_CTX_*`)
-- [ ] **7.5** `operator` — Cloud Run Kelly Rails env: `npm run verify:kelly-rails-cloudrun` (**blocked:** `gcloud auth login` — token refresh failed 2026-07-06)
+- [x] **7.5** `operator` — Cloud Run Kelly Rails env OK on revision `somo-middleware-00157-pnf` (`npm run verify:kelly-rails-cloudrun`, 2026-07-10)
 - [ ] **7.6** `operator` — Timed rollback drill <15 min: `bash scripts/rollback-gcp-release.sh`
 - [ ] **7.8** `operator` — Full `phase7-release-smoke` on staging (portal + PSTN where applicable)
-- [ ] **7.9** `operator` — `LIVE=1 npm run verify:phase7-deploy-gate` after deploy
+- [x] **7.9** `operator` — `LIVE=1 npm run verify:phase7-deploy-gate` pass after deploy `00157-pnf` (2026-07-10); hosting redeployed (demo form retired)
 - [ ] **7.10** `operator` — Tenant provisioning per vertical on prod (`PROVISION_*`, Twilio, GCS pull)
 
 ### P0 — Operator live prod (Phase 10)

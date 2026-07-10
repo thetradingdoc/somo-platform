@@ -615,6 +615,20 @@ Each entry:
   - `RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs` — `{"success":true,"dry_run":true,...}`
 - **Notes:** Stedi 6.10 + Dentrix live API remain sole code-review blockers. Phase 8 live prod (`LIVE=1`, PSTN, +363, ACC walkthrough) requires interactive `gcloud auth login` and physical phone — not run in this session.
 
+### [PROD-DEPLOY] Push main + Firebase hosting + Cloud Run production
+- **Completed:** 2026-07-10T01:15:00Z (approx)
+- **Commits:** `925cf8a` (production closure), `ee97b05` (ci:phase0 Jest mode-firewall context)
+- **Hosting:** Firebase `somo-4ddf6` — landing bundle `index-FiH2W1t6.js` (retired demo form; CTA = Start free trial). Fixes live 404 on `/api/public/somo-demo/request-call`.
+- **Cloud Run:** `somo-middleware` revision **`somo-middleware-00157-pnf`** (image `gcr.io/somo-callsomo/somo-middleware:ee97b05`), 100% traffic, region `us-central1`
+- **Verification:**
+  - `curl https://api.callsomo.com/health` → 200
+  - `curl https://api.callsomo.com/health/live` → 200
+  - `curl https://callsomo.com/portal` → 200
+  - Live landing JS: `Start free trial` present; no `request-call` / `Get my demo call`
+  - `LIVE=1 npm run verify:phase7-deploy-gate` → `pass: true` (revision 00157-pnf)
+  - `npm run verify:kelly-rails-cloudrun` → Cloud Run Kelly env OK
+- **Notes:** IAM invoker warning on deploy (existing public mapping via domain); demo outbound API remains retired by design — use `/signup` or +363 platform line.
+
 ### [7.9-local] Operator plan closure — automatable gates
 - **Completed:** 2026-07-06
 - **Files:** middleware-platform/scripts/operator-plan-closure.cjs, middleware-platform/scripts/verify-phase7-portal.cjs, middleware-platform/e2e/global-setup-tenant-audit.cjs
@@ -650,10 +664,10 @@ All non-blocker code review items closed. See `[CLOSE-NB]` above and `test-resul
 | 7.2 | Mirror lag gate | `verify-postgres-mirror-lag.cjs` + `STRICT=1` |
 | 7.3 | PSTN matrix per vertical | `VERTICAL_PSTN_LIVE=1` |
 | 7.4 | Site context all verticals | `verify-tenant-site-context-all-verticals.cjs` on prod DB |
-| 7.5 | Cloud Run Kelly Rails env | `npm run verify:kelly-rails-cloudrun` |
+| 7.5 | Cloud Run Kelly Rails env | **DONE** `somo-middleware-00157-pnf` (2026-07-10) |
 | 7.6 | Rollback drill <15 min | `bash scripts/rollback-gcp-release.sh` |
 | 7.8 | Full release smoke (local) | `npm run phase7:release-smoke` — **pass local** |
-| 7.9 | Production deploy gate (local) | `npm run verify:phase7-deploy-gate` — **pass local**; `LIVE=1` needs gcloud |
+| 7.9 | Production deploy gate | **DONE** `LIVE=1` pass + Firebase hosting (2026-07-10) |
 | 7.10 | Tenant provisioning per vertical | `verify-tenant-provisioning.cjs` on prod (`PROVISION_*`) |
 | 10.1 | +363 prod bind + inbound verify | `PLATFORM_SALES_363_DEPLOY.md` |
 | 10.2 | Live +363 → CRM pipeline tier | `verify-crm-pipeline` + manual call |
