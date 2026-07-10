@@ -67,9 +67,15 @@ const keyGenerator = (req) => {
 // Note: trust proxy must be set in server.js before this middleware is used
 // In development, use a much higher limit to avoid 429s from dashboard polling + PDF processing
 const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev';
+const apiRateMaxEnv = parseInt(process.env.API_RATE_LIMIT_MAX || '', 10);
+const apiLimiterMax = Number.isFinite(apiRateMaxEnv) && apiRateMaxEnv > 0
+  ? apiRateMaxEnv
+  : isDev
+    ? 2000
+    : 100;
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 2000 : 100, // Dev: 2000/15min to avoid 429s; Prod: 100
+  max: apiLimiterMax, // Dev: 2000/15min; Prod: 100; override with API_RATE_LIMIT_MAX (CI E2E)
   message: {
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: '15 minutes'

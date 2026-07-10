@@ -57,6 +57,9 @@ jobs:
           DB_PATH: var/db/middleware-dev.db
           ADMIN_PORTAL_SECRET: ci-test-admin-secret
           DEV_LIGHT_START: '1'
+          # Playwright suites share one IP; prod 100/15min bucket trips mid-run.
+          API_RATE_LIMIT_MAX: '5000'
+          SIGNUP_FLOW_RATE_MAX: '500'
           CATALOG_MASTER_SYNC_ENABLED: '0'
           EHR_SYNC_ENABLED: '0'
           NOTIFICATION_QUEUE_ENABLED: '0'

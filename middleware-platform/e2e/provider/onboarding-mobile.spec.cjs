@@ -34,19 +34,35 @@ test.describe('@onboarding Mobile auth shells (FD-143)', () => {
     await assertNoHorizontalOverflow(page);
   });
 
-  test('invite shell fits 390px viewport', async ({ page }) => {
+  test('invite shell fits 390px viewport', async ({ page, request }) => {
     const { invite } = createPendingInvite();
+    // Confirm invite is readable via the running server (same DB) before asserting UI.
+    const probe = await request.get(`/api/invites/${encodeURIComponent(invite.code)}`);
+    expect(probe.ok(), `invite probe ${probe.status()}`).toBeTruthy();
     await page.goto(`${API_BASE}/business/invite.html?code=${encodeURIComponent(invite.code)}`, {
-      waitUntil: 'domcontentloaded'
+      waitUntil: 'networkidle'
     });
-    await expect(page.locator('#inviteForm')).toBeVisible();
+    await expect(page.locator('#inviteForm')).toBeVisible({ timeout: 20_000 });
     await expect(page.locator('.sfd-device-card')).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 
   test('voice-setup step 1 stepper visible at 390px', async ({ page, request }) => {
     const { email, password } = await createConvertedLead();
-    await loginProvider(page, request, { email, password });
+    // Retry login once — CI can briefly 429 after earlier onboarding suites.
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await loginProvider(page, request, { email, password });
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (!/too many/i.test(String(err?.message || ''))) throw err;
+        await page.waitForTimeout(1500 * (attempt + 1));
+      }
+    }
+    if (lastErr) throw lastErr;
 
     await page.goto(`${API_BASE}/business/voice-setup.html?step=1`, { waitUntil: 'networkidle' });
     await expect(page.locator('#setupPracticeName')).toBeVisible();
