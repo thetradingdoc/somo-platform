@@ -103,6 +103,10 @@ async function invokeRequestPatientPayment(ctx, opts = {}) {
   const sessionId = ctx.sessionId;
   const clinicId = ctx.clinicId || process.env.TEST_CLINIC_ID || 'clinic-default';
   const patientId = ctx.patientId || KellyToolExecutor._getSessionMeta(sessionId, 'resolved_patient_id');
+  const {
+    ConversationMode,
+    Subrail
+  } = require('../../services/conversation-mode/conversation-mode-types');
 
   return KellyToolExecutor.execute(
     'request_patient_payment',
@@ -118,7 +122,9 @@ async function invokeRequestPatientPayment(ctx, opts = {}) {
       clinicId,
       patientId,
       callerPhone: ctx.callerPhone || '+15551234567',
-      channel: 'voice'
+      channel: 'voice',
+      conversation_mode: ctx.conversation_mode || ConversationMode.TENANT_BILLING,
+      active_subrail: ctx.active_subrail || Subrail.COPAY_LINK
     }
   );
 }

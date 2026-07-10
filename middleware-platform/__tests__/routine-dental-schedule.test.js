@@ -3,6 +3,10 @@
 process.env.RCM_E2E_DIRECT_TOOLS = '1';
 
 const KellyToolExecutor = require('../services/kelly-tool-executor');
+const {
+  ConversationMode,
+  Subrail
+} = require('../services/conversation-mode/conversation-mode-types');
 
 jest.mock('../database', () => ({
   getTriageSession: jest.fn(() => ({
@@ -56,7 +60,9 @@ describe('routine dental schedule_appointment', () => {
         sessionId: 'sess_dental_routine',
         clinicId: 'clinic-default',
         patientId: 'Patient/test',
-        channel: 'chat'
+        channel: 'chat',
+        conversation_mode: ConversationMode.TENANT_INBOUND_ADMIN,
+        active_subrail: Subrail.BOOKING
       }
     );
     expect(postSpy).toHaveBeenCalled();
