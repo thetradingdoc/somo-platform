@@ -495,8 +495,8 @@ Preloaded in `index.html`: logo + hero phone.
 
 ## Copy (current)
 
-- Headline: “Never answer business calls again.”
-- Sub: “Somo is your smartest assistant. It answers calls, books appointments, and handles billing so you can focus on what matters.”
+- Headline: “Let Somo handle your front desk.”
+- Sub: “Somo is your smartest assistant. It answers calls, books appointments, and handles billing for dental and medical practices.”
 - Hero CTAs: “Try live demo” (scroll to `#demo`), “Sign Up” (`VITE_SIGNUP_URL`).
 - Nav CTA: “Try for $0” (signup).
 

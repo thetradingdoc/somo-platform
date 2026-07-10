@@ -18,7 +18,7 @@
 | Consumer health | **Somo Health** — Safe VideoGPT for Healthcare |
 | Voice / receptionist (B2B) | **Somo front desk** |
 | RCM / billing | **Somo pay** |
-| B2B tagline | **Somo — never answer business calls again.** (front desk only — not consumer health) |
+| B2B tagline | **Let Somo handle your front desk.** Sub: smartest assistant — calls, booking, billing for dental/medical. |
 | Consumer Somo (spoken) | "Hi, I'm Somo" — AI health assistant for health chat |
 | B2B Kelly (spoken) | "Hi, I'm Kelly, Somo's front desk receptionist" |
 | Legal / invoices | **Somo** in product UI; registered entity name may differ on contracts |

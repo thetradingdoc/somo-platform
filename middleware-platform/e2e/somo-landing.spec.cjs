@@ -22,7 +22,7 @@ test.describe('Somo demo landing', () => {
     expect(await page.locator('.somo-logo-img').evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
     await expect(page.locator('.somo-hero-phone')).toBeVisible();
     expect(await page.locator('.somo-hero-phone').evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
-    await expect(page.getByRole('heading', { name: /never answer business calls again/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /let somo handle your front desk/i })).toBeVisible();
     await expect(page.locator('.somo-nav').getByRole('link', { name: /Try for \$0/i })).toBeVisible();
     await expect(page.locator('.somo-nav').getByRole('link', { name: /Try for \$0/i })).toHaveAttribute('href', /\/login\?/);
     await expect(page.locator('.somo-nav').getByRole('link', { name: /Sign in/i })).toHaveCount(0);

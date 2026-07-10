@@ -51,7 +51,7 @@ export default function Hero() {
             <span>AI Front Desk | 24/7 Calls &amp; Scheduling</span>
           </div>
 
-          <h1>Never answer business calls again.</h1>
+          <h1>Let Somo handle your front desk.</h1>
           <p className="somo-hero-sub">
             Somo is your smartest assistant. It answers calls, books appointments, and handles billing for dental and medical practices.
           </p>
