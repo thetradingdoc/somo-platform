@@ -6,6 +6,10 @@
  * - Dual-source RAG: getCodeCandidatesDualSource (Colab + local) with useSemantic
  * - Optional rerank: rerankByPerceptualRelevance when candidates available
  *
+ * **CP-06 SSOT boundary:** v2 retrieves + reranks candidates only. Primary ICD/CPT/HCPCS
+ * selection is delegated to v1 via TriageRAGService, which calls `select-primary-codes.js`.
+ * Do not add primary ranking logic in v2 — keep retrieval and ranking SSOT separate.
+ *
  * When OPENAI_API_KEY set, generates hypothetical document and blends with raw query.
  */
 

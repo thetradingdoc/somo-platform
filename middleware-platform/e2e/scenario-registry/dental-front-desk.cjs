@@ -24,7 +24,8 @@ const DENTAL_PSTN_SCENARIOS = [
     ],
     expectedTools: ['schedule_appointment'],
     assertions: ['FRONT_DESK_INTAKE', 'BOOKING_OFFER'],
-    skipIdentityAdmission: true
+    skipIdentityAdmission: true,
+    visit_reason: 'new patient cleaning'
   },
   {
     id: 'DENTAL-002',
@@ -169,7 +170,8 @@ const DENTAL_PSTN_SCENARIOS = [
     expectedTools: ['collect_insurance'],
     assertions: ['COPAY_QUOTE', 'ENDO_CDT'],
     skipIdentityAdmission: true,
-    evalTags: ['endo', 'cdt']
+    evalTags: ['endo', 'cdt'],
+    visit_reason: 'root canal'
   },
   {
     id: 'DENTAL-013',
@@ -184,7 +186,8 @@ const DENTAL_PSTN_SCENARIOS = [
     expectedTools: ['collect_insurance'],
     assertions: ['PERIO_CDT', 'PAYER_COLLECT'],
     skipIdentityAdmission: true,
-    evalTags: ['perio', 'cdt']
+    evalTags: ['perio', 'cdt'],
+    visit_reason: 'deep cleaning gum disease'
   },
   {
     id: 'DENTAL-014',
@@ -199,7 +202,8 @@ const DENTAL_PSTN_SCENARIOS = [
     expectedTools: ['schedule_appointment'],
     assertions: ['ORTHO_CONSULT', 'BOOKING_OFFER'],
     skipIdentityAdmission: true,
-    evalTags: ['ortho', 'cdt']
+    evalTags: ['ortho', 'cdt'],
+    visit_reason: 'consultation for braces'
   },
   {
     id: 'DENTAL-015',

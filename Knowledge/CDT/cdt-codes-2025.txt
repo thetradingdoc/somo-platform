@@ -426,3 +426,31 @@ D9038    adjunctive procedure D9038
 D9039    adjunctive procedure D9039
 D9110    palliative treatment of dental pain - per visit
 D9222    deep sedation/general anesthesia - first 15 minutes
+D9223    deep sedation/general anesthesia - each additional 15 minutes
+D9230    inhalation of nitrous oxide/analgesia, anxiolysis
+D9310    consultation - diagnostic service provided by dentist or physician other than requesting dentist or physician
+D7240    removal of impacted tooth - completely bony
+D7953    bone replacement graft - first site in quadrant
+D8210    removable appliance therapy
+D8680    orthodontic retention (removal of appliances, construction and placement of retainer(s))
+D2950    core buildup, including any pins when required
+D3120    pulp cap - indirect (excluding final restoration)
+D3220    therapeutic pulpotomy (excluding final restoration) - primary tooth
+D3410    apicoectomy - anterior
+D4210    gingivectomy or gingivoplasty - four or more contiguous teeth or tooth bounded spaces per quadrant
+D4249    clinical crown lengthening - hard tissue
+D4355    full mouth debridement to enable a comprehensive periodontal evaluation and diagnosis on a subsequent visit
+D2799    interim prosthesis
+D2962    labial veneer (porcelain laminate) - indirect
+D6240    pontic - porcelain/ceramic, high noble metal
+D5211    maxillary partial denture - resin base (including any conventional clasps, rests and teeth)
+D5730    reline maxillary partial denture (chairside)
+D1510    space maintainer - fixed, unilateral - per quadrant
+D0431    adjunctive pre-diagnostic test that aids in detection of mucosal abnormalities
+D9972    external bleaching - per arch - performed in office
+D9944    occlusal guard - hard appliance, full arch
+D7899    unspecified orthodontic procedure, by report
+D0171    re-evaluation - post-operative office visit
+D7510    incision and drainage of abscess - intraoral soft tissue
+D2642    inlay - porcelain/ceramic - two surfaces
+D0180    comprehensive periodontal evaluation - new or established patient

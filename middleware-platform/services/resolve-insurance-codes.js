@@ -12,6 +12,7 @@ const { resolveAdminInsuranceCodes } = require('./resolve-admin-visit-codes');
 const { CODING_CONFIDENCE_THRESHOLD, isConfidenceNearThreshold } = require('../config/coding-thresholds');
 const { TriagePolicy } = require('./conversation-mode/tenant-policy');
 const { resolveVisitCodingPath } = require('./resolve-visit-codes');
+const { selectPrimaryProcedure } = require('./select-primary-codes');
 const { persistCodingProvenanceRow, logCodingProvenanceEvent } = require('./coding-provenance-store');
 
 function attachModifiers(primaryIcd10, serviceCode, extraCpt = []) {
@@ -185,8 +186,19 @@ function resolveInsuranceCodesCore(sessionId, opts = {}) {
     };
   }
 
+  let spineCpt = triageResult.primary_cpt || null;
+  if (!spineCpt && (triageResult.cpt_codes?.length || triageResult.hcpcs_codes?.length)) {
+    const pick = selectPrimaryProcedure({
+      cptCandidates: triageResult.cpt_codes || [],
+      hcpcsCandidates: triageResult.hcpcs_codes || [],
+      primaryIcd10: triageResult.primary_icd10,
+      telehealthIntent: Boolean(opts.telehealthIntent)
+    });
+    spineCpt = pick.code_type === 'cpt' ? pick.code : spineCpt;
+  }
+
   const cptResolution = resolveCptForVisit({
-    spineCpt: triageResult.primary_cpt || triageResult.cpt_codes?.[0]?.code || null,
+    spineCpt,
     confidence,
     specialty: triageResult.target_specialty || 'PrimaryCare',
     isNewPatient: opts.isNewPatient !== false,

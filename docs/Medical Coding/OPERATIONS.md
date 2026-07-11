@@ -113,3 +113,39 @@ If an import corrupts prod mid-cutover:
 4. Run `verify:prod-codebook` on restored DB
 
 See ARCHITECTURE.md rollback section and [../compliance/CODEBOOK_LICENSING.md](../compliance/CODEBOOK_LICENSING.md).
+
+---
+
+## Appendix — PSTN tenant isolation spot-check (MT-09)
+
+Optional prod evidence after deploy (Appendix A Step 4 style). Confirms voice/PSTN paths pass `clinicId` into dual-source retrieval and exclude cross-tenant Pinecone chunks.
+
+### Prerequisites
+
+- Two provisioned clinics with distinct DIDs (`clinic-a`, `clinic-b` or prod equivalents)
+- Pinecone tenant overlays ingested per [PINECONE_TENANT_INGEST.md](./PINECONE_TENANT_INGEST.md)
+- `npm run verify:pinecone-deploy-env` exit 0
+
+### Spot-check steps
+
+1. **Place test call to clinic A DID** — use a coding-eligible reason (e.g. "annual checkup" for primary care or "cleaning" for dental).
+2. **Inspect call log** — confirm `voice_call_log.clinic_id` matches clinic A and `customer_id` links via `customer_clinics`.
+3. **Query triage projection** — `triage_sessions` / `kelly_rails_session_projection` rows for the call session show the same `clinic_id`.
+4. **Pinecone isolation** — in logs or debug, confirm retrieval used clinic A's `clinicId`; no clinic B CPT/ICD from tenant-tagged chunks.
+5. **Repeat for clinic B DID** — different starter set / codes; no bleed from clinic A tenant vectors.
+6. **SQLite boundary audit** (local or prod snapshot):
+   ```bash
+   DB_PATH=./var/db/middleware-prod.db npm run verify:sqlite-tenant-boundary
+   ```
+
+### Pass criteria
+
+| Check | Expected |
+|-------|----------|
+| Session `clinic_id` | Matches called DID's clinic |
+| `customer_clinics` link | No cross-tenant bleed rows |
+| Pinecone matches | Global chunks OK; tenant chunks match query clinic only |
+| Admin starter set | Per-clinic profile from `CLINIC_STARTER_SET_MAP` when admin path |
+
+**Verified by:** _______________ **Date:** _______________  
+**Evidence path / link:** _______________

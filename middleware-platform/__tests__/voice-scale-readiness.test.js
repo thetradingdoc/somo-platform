@@ -122,6 +122,27 @@ describe('voice scale readiness (Interpretation C evidence)', () => {
     }, 15000);
   });
 
+  describe('redis missing fallback', () => {
+    test('checkAsync falls back to memory when VOICE_RATE_LIMIT_BACKEND=redis but REDIS_URL unset', async () => {
+      const prevBackend = process.env.VOICE_RATE_LIMIT_BACKEND;
+      const prevRedis = process.env.REDIS_URL;
+      const prevVoiceRedis = process.env.VOICE_REDIS_URL;
+      delete process.env.REDIS_URL;
+      delete process.env.VOICE_REDIS_URL;
+      process.env.VOICE_RATE_LIMIT_BACKEND = 'redis';
+
+      const tenant = `redis-fallback-${Date.now()}`;
+      const result = await checkAsync(tenant, 30);
+
+      expect(result.allowed).toBe(true);
+      expect(result.backend).toBe('memory');
+
+      process.env.VOICE_RATE_LIMIT_BACKEND = prevBackend || 'memory';
+      if (prevRedis) process.env.REDIS_URL = prevRedis;
+      if (prevVoiceRedis) process.env.VOICE_REDIS_URL = prevVoiceRedis;
+    });
+  });
+
   describe('Redis shared admission (when REDIS_URL set)', () => {
     test('parent and child share admission budget via Redis', (done) => {
       if (!process.env.REDIS_URL) {

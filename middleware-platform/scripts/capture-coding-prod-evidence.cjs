@@ -18,21 +18,26 @@ const mp = path.join(__dirname, '..');
 const outDir = path.join(mp, 'var', 'evidence', 'coding-prod');
 fs.mkdirSync(outDir, { recursive: true });
 
-const env = {
+const prodDb = process.env.PROD_DB_PATH || './var/db/middleware-prod.db';
+const devDb = process.env.DEV_DB_PATH || './var/db/middleware-dev.db';
+
+const baseEnv = {
   ...process.env,
-  DB_PATH: './var/db/middleware-dev.db',
   SKIP_STARTUP_MIGRATIONS: '1',
   USE_TRIAGE_RAG_V2: process.env.USE_TRIAGE_RAG_V2 || '1',
   EVAL_USE_SEMANTIC: process.env.EVAL_USE_SEMANTIC ?? 'false',
   REMOTE_RAG_TIMEOUT_MS: process.env.REMOTE_RAG_TIMEOUT_MS || '8000'
 };
 
+const devEnv = { ...baseEnv, DB_PATH: devDb };
+const prodEnv = { ...baseEnv, DB_PATH: prodDb };
+
 function hasLlmKey() {
-  return !!(env.GROQ_API_KEY || env.OPENAI_API_KEY || env.ANTHROPIC_API_KEY);
+  return !!(baseEnv.GROQ_API_KEY || baseEnv.OPENAI_API_KEY || baseEnv.ANTHROPIC_API_KEY);
 }
 
 function run(label, cmd, opts = {}) {
-  const { optional = false, timeout = 120000, skip = false, skipReason = null } = opts;
+  const { optional = false, timeout = 120000, skip = false, skipReason = null, env = devEnv } = opts;
   const logPath = path.join(outDir, `${label}.log`);
   if (skip) {
     const msg = `SKIPPED: ${skipReason || 'precondition not met'}`;
@@ -53,8 +58,8 @@ function run(label, cmd, opts = {}) {
 const steps = {
   verify_db_path: run('verify_db_path', 'node scripts/verify-db-path.cjs'),
   verify_threshold_ssot: run('verify_threshold_ssot', 'node scripts/verify-threshold-ssot.cjs'),
-  verify_live_spine: run('verify_live_spine', 'node scripts/verify-live-spine.cjs', { timeout: 180000 }),
-  verify_triage_spine: run('verify_triage_spine', 'node scripts/verify-triage-spine.cjs', { timeout: 180000 }),
+  verify_live_spine: run('verify_live_spine', 'node scripts/verify-live-spine.cjs', { timeout: 180000, env: prodEnv }),
+  verify_triage_spine: run('verify_triage_spine', 'node scripts/verify-triage-spine.cjs', { timeout: 180000, env: prodEnv }),
   verify_coding_hitl: run('verify_coding_hitl', 'node scripts/verify-coding-hitl.cjs'),
   verify_no_hardcoded_coding: run('verify_no_hardcoded_coding', 'node scripts/verify-no-hardcoded-coding.cjs'),
   verify_routine_path: run('verify_routine_path', 'node scripts/verify-routine-path.cjs'),
@@ -91,7 +96,8 @@ const skipped = Object.entries(steps)
 const summary = {
   generated_at: new Date().toISOString(),
   out_dir: outDir,
-  note: 'Production coding orchestration DoD — live spine, HITL, terminal runKellyTurn (no harness seed).',
+  db_paths: { harness: devDb, prod_spine: prodDb },
+  note: 'Production coding orchestration DoD — prod spine + dev harness verifies.',
   steps,
   success: requiredFailed.length === 0,
   required_failed: requiredFailed,

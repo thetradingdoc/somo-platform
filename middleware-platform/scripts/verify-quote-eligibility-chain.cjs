@@ -46,7 +46,7 @@ async function main() {
     return { success: true, quote };
   };
   const result = await KellyToolExecutor._collectInsurance(
-    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', member_id: 'MBR123' },
+    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', date_of_birth: '1990-01-15', member_id: 'MBR123' },
     { sessionId, patientId: 'p_qc', callerPhone: '+15555550111' }
   );
 

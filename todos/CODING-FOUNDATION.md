@@ -1,7 +1,7 @@
 # CODING-FOUNDATION Epic — Full Task Backlog (Medical + Dental)
 
-**Last updated:** 2026-07-10 (gap-closure honesty pass)  
-**Status:** Eng complete; **operator closeout pending** (D-01 deploy env on Cloud Run, K-02 nightly green, F-09 sign-off)  
+**Last updated:** 2026-07-11 (§6 eng + D-01 evidence complete; K-02 2/7 + F-09 clinical pending)  
+**Status:** Eng + §6 + D-01 evidence complete; **operator closeout blocked** on K-02 (5 nights) + F-09 clinical — see [KELLY_CODING_MASTER_EXECUTION_PLAN.md](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md)  
 **Related:** [PENDING.md](./PENDING.md) · [CODING_PATH_MATRIX.md](../docs/Medical%20Coding/CODING_PATH_MATRIX.md) · [VOICE_CODING_SPINE.md](../docs/Medical%20Coding/VOICE_CODING_SPINE.md)
 
 **Scope:** ICD-10, CPT (MPFS), HCPCS, CDT, Pinecone/RAG (medical), phrase maps (dental + medical admin), triage spine, resolver/validation — production-grade for both medical and dental tenants.
@@ -62,7 +62,7 @@
 
 | ID | Owner | Status | Task | Acceptance |
 |----|-------|--------|------|------------|
-| D-01 | eng/ops | operator_pending | Prod env: `PINECONE_*`, `RAG_API_URL=disabled` | `generate-cloudrun-env-yaml.cjs` |
+| D-01 | eng/ops | **done** | Prod env: `PINECONE_*`, `RAG_API_URL=disabled` | Appendix A A1–A11 complete 2026-07-11; GCS evidence `evidence/coding-prod/` |
 | D-02 | eng | done | Pinecone index health gate on deploy | `production-readiness-gate.cjs` min vectors |
 | D-03 | eng | done | Document code-metadata index provenance + re-index procedure | ARCHITECTURE §5.3 |
 | D-04 | eng | done | Tune `PINECONE_MIN_SCORE` / `PINECONE_FALLBACK_MIN_SCORE` | Documented in `.env.staging.example` |
@@ -99,7 +99,7 @@
 | F-06 | eng | done | Eval cases for two-pass RAG upsert | No primary code corruption |
 | F-07 | eng | done | Alcohol/CAGE confidence cap regression | HITL at 0.65 |
 | F-08 | eng | done | `coding_provenance_json` on every triage write | pinecone \| local \| admin \| preventive |
-| F-09 | operator | operator_pending | Kelly Phase C OPQRST sign-off C-P0-01–07 | Clinical depth claims blocked |
+| F-09 | operator | operator_pending | Kelly Phase C OPQRST sign-off C-P0-01–07 | [Master Plan Appendix C](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md#appendix-c--f-09-kelly-phase-c-clinical-sign-off) |
 
 ---
 
@@ -162,7 +162,7 @@
 | ID | Owner | Status | Task | Acceptance |
 |----|-------|--------|------|------------|
 | K-01 | eng | done | `eval:coding:fast` keyword-only on PR | `npm run eval:coding:fast`; wire ci-local.sh |
-| K-02 | eng | operator_pending | `eval:coding:prod` Pinecone+semantic nightly | `npm run eval:coding:prod`; nightly job pending |
+| K-02 | eng | operator_pending | `eval:coding:prod` Pinecone+semantic nightly | [Master Plan Appendix B](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md#appendix-b--k-02-nightly-evalcodingprod-tracking-log) |
 | K-03 | eng | done | Golden cases 61 → 150+ | voice-agent-test-cases.json |
 | K-04 | eng | done | `audit-eval-cpt-coverage.cjs` in CI | Per-specialty CPT prefixes |
 | K-05 | eng | done | `capture-coding-prod-evidence` after voice deploy | Script + OPERATIONS deploy checklist; run post-deploy for evidence |
@@ -200,7 +200,7 @@
 |----|-------|--------|------|------------|
 | N-01 | legal | done | CDT licensing review (ADA) | CODEBOOK_LICENSING.md |
 | N-02 | eng/compliance | done | PHI audit: Pinecone metadata + triage_rag_results | CODING_PHI_RETENTION.md |
-| N-03 | eng | done | Cross-tenant Pinecone isolation test | Tenant A ≠ Tenant B chunks |
+| N-03 | eng | done | Cross-tenant Pinecone isolation — `allowsPineconeMatchForClinic` + caller audit + CI gate (`pinecone-tenant-isolation.test.js`) | [`KELLY_CODING_MASTER_EXECUTION_PLAN.md`](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md) §0.C |
 | N-04 | eng | done | Pin embedding model version index vs query | Doc in ARCHITECTURE.md |
 | N-05 | eng | done | Rollback procedure for codebook imports | ARCHITECTURE.md runbook |
 | N-06 | eng | done | End-to-end latency SLA p95 for code resolution | `coding_resolution_latency` events + `CODING_RESOLUTION_P95_MS` |
@@ -259,5 +259,7 @@ Ongoing — Observability & governance
 **PR:** `verify-codebook-parity` (+ CDT), `verify-pair-validation`, `verify-kelly-http-collect`, `coding-layer-leaks`, `coverage-matrix-copay`, `eval:coding:fast`, `terminal-coding-call --no-assist`
 
 **Nightly:** `eval:coding:prod`, `verify-live-spine` (staging), `capture-coding-prod-evidence`
+
+**Operator closeout SSOT:** [KELLY_CODING_MASTER_EXECUTION_PLAN.md](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md)
 
 **Deploy:** `verify:prod-codebook`, `verify:kelly-rails-cloudrun`, Pinecone vector gate, `KELLY_RAILS_FAST_RAG=0`

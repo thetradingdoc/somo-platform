@@ -75,7 +75,7 @@ async function runCase(name, confidence, expectSource, expectReason, testInsuran
     return { success: true, data: body };
   };
   const result = await KellyToolExecutor._collectInsurance(
-    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x' },
+    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', date_of_birth: '1990-01-15' },
     { sessionId, patientId: 'patient_cpt_route', callerPhone: '+15555550100' }
   );
   KellyToolExecutor._post = origPost;

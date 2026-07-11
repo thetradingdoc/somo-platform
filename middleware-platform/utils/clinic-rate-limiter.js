@@ -108,7 +108,13 @@ async function checkAsync(tenantKey, limitOverride) {
     return { ...result, backend: 'redis' };
   }
   if (mode === 'redis' && !voiceRedis.isRedisConfigured()) {
-    throw new Error('VOICE_RATE_LIMIT_BACKEND=redis but REDIS_URL is missing');
+    console.warn(JSON.stringify({
+      component: 'voice_limit',
+      event: 'redis_fallback',
+      reason: 'REDIS_URL missing',
+      backend: 'memory'
+    }));
+    return { ...checkMemory(key, limitOverride), backend: 'memory' };
   }
   return { ...checkMemory(key, limitOverride), backend: 'memory' };
 }

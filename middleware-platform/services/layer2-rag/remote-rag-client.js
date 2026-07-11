@@ -50,7 +50,7 @@ function withTimeout(promise, timeoutMs, label = 'remote') {
 
 /**
  * Primary remote retrieval: live Pinecone metadata, optional Colab fill gaps.
- * @param {Object} params - { query, specialty, region, exclusion_terms, top_k }
+ * @param {Object} params - { query, specialty, region, exclusion_terms, top_k, clinicId }
  * @param {Object} options - { timeoutMs }
  */
 async function retrieveRemoteCodeKnowledge(params, options = {}) {
@@ -73,7 +73,10 @@ async function retrieveRemoteCodeKnowledge(params, options = {}) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const pinecone = await withTimeout(
-          retrieveCodesFromPineconeMetadata(payload.query, { top_k: payload.top_k }),
+          retrieveCodesFromPineconeMetadata(payload.query, {
+            top_k: payload.top_k,
+            clinicId: params.clinicId || params.clinic_id
+          }),
           timeoutMs,
           'pinecone'
         );
@@ -231,7 +234,8 @@ async function retrieveFromColabRAGInternal(params, RAG_API_URL) {
 
     if (needFallback) {
       const pineconeFallback = await retrieveCodesFromPineconeMetadata(payload.query, {
-        top_k: payload.top_k
+        top_k: payload.top_k,
+        clinicId: params.clinicId || params.clinic_id
       });
       if (pineconeFallback) {
         if (outCpt.length === 0 && pineconeFallback.cpt?.length) {

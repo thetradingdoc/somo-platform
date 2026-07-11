@@ -213,9 +213,12 @@ flowchart LR
 
 ---
 
-## 7. Navigation path (platform inbound)
+## 7. Navigation path (platform inbound) — **disabled in production**
 
-**Entry:** `routing_world=navigation` when `NAVIGATION_ENABLED=1` and inbound `To` matches platform DID (`resolveNavigationInboundByDid`).
+> **Status (2026-07-10):** `NAVIGATION_ENABLED=0` on Cloud Run.
+> Platform DID `+13639990205` uses **`platform_support`** (sales rail); consumer-nav path disabled. See [VOICE_ROUTING_SSOT.md](./VOICE_ROUTING_SSOT.md).
+
+**Entry (when enabled):** `routing_world=navigation` when `NAVIGATION_ENABLED=1` and inbound `To` matches platform DID (`resolveNavigationInboundByDid`).
 
 **Handler:** `webhooks/consumer-navigation-handler.js` + `services/navigation/navigation-orchestrator.js`
 

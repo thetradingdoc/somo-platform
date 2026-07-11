@@ -40,14 +40,15 @@ function buildTranscriptContext(transcript, maxChars = 2500) {
   return joined.slice(0, maxChars);
 }
 
-async function getRagCodes(clinicalText, specialtyTag, visionMap = null) {
+async function getRagCodes(clinicalText, specialtyTag, visionMap = null, clinicId = null) {
   try {
     const retrievalInput = [clinicalText, visionMap?.retrieval_text].filter(Boolean).join('\n');
     const dual = await knowledgeService.getCodeCandidatesDualSource(retrievalInput || clinicalText, {
       specialty: specialtyTag || 'general',
       maxIcd10: 15,
       maxCpt: 10,
-      maxHcpcs: 8
+      maxHcpcs: 8,
+      clinicId: clinicId || null
     });
     return {
       icd10: gateIcdSuggestionsByVisionConfidence(dual.icd10 || [], visionMap),
@@ -337,7 +338,11 @@ async function getAssistantView(roomId) {
   }
 
   const specialtyTag = findings?.specialty_tag || 'general';
-  const codes = mergedCodesFromSession || (await getRagCodes(ragInputText || transcriptText, specialtyTag, visionSymptomMap));
+  const encounter = await videoConsultService.resolveRoomToEncounter(roomId);
+  const clinicId = encounter?.clinic_id || null;
+  const codes =
+    mergedCodesFromSession ||
+    (await getRagCodes(ragInputText || transcriptText, specialtyTag, visionSymptomMap, clinicId));
   const llmView = await summarizeWithGroq(transcriptText, codes, preVisit, { status, roomId });
 
   const lastMessages = transcript.slice(-4).map((t) => ({

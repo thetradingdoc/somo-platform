@@ -1,7 +1,8 @@
 'use strict';
 
 jest.mock('../services/knowledge-service', () => ({
-  getCodeCandidatesDualSource: jest.fn()
+  getCodeCandidatesDualSource: jest.fn(),
+  validateCodePair: jest.fn(() => ({ valid: true }))
 }));
 
 const knowledgeService = require('../services/knowledge-service');

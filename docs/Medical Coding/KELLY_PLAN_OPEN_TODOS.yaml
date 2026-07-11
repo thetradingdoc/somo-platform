@@ -1,0 +1,30 @@
+# Kelly Master Plan — open todos inventory (2026-07-11)
+# All eng + automatable operator work complete; blockers only
+
+summary:
+  eng_phases_complete: true
+  d01_eng_complete: true
+  evid01_gcs_uploaded: true
+  operator_open: 13
+  gates_closed: 0
+  k02_nights: "2/7"
+
+blockers_only:
+  cf_op_5_f09: clinical signatures on Appendix C (7 items)
+  cf_op_8_gov06: product must name clinical lead in KELLY_F09_GOVERNANCE.md
+  cf_op_7_k02: nights 3-7 consecutive green (calendar time)
+  phase4_cf_close: CODING-FOUNDATION final sign-off after K-02 + F-09
+  optional_dp_02: Pinecone Secret Manager migration (ops)
+  optional_mt_09: live PSTN tenant isolation evidence (ops)
+
+eng_complete:
+  phase5_mt: [MT-01, MT-02, MT-04, MT-05, MT-06, MT-07, MT-08, MT-09]
+  phase6_cp: [CP-01, CP-02, CP-03, CP-04, CP-05, CP-06, CP-07, CP-08, CP-09, CP-10, CP-11, CP-12, CP-13, CP-14]
+  phase7_bl: [BL-01, BL-02, BL-03, BL-04, BL-05, BL-06, BL-07, BL-08]
+  phase7_dn: [DN-01, DN-02, DN-03, DN-04, DN-05, DN-06, DN-07, DN-08, DN-09]
+  phase8_py: [PY-01, PY-02, PY-03, PY-04, PY-05]
+  phase8_ad: [AD-01, AD-02, AD-03, AD-04, AD-05, AD-06, AD-07, AD-08]
+  phase8_dp: [DP-02, DP-03, DP-04, DP-05, DP-06, DP-07, DP-08, DP-09]
+  d01_a01_a11: complete
+  k02_b01_b04: complete
+  opt_2b_04: complete

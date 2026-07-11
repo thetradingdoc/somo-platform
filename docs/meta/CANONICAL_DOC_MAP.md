@@ -1,6 +1,6 @@
 # Canonical documentation map
 
-**Last updated:** 2026-07-05
+**Last updated:** 2026-07-11
 
 Use this table to find the **one** doc to edit per topic. Each folder keeps at most **two** markdown files (`README.md` + one companion); historical merges live under `archive/`. See [`meta/README.md` § Engineering doc hygiene](./README.md#engineering-doc-hygiene).
 
@@ -15,7 +15,13 @@ Use this table to find the **one** doc to edit per topic. Each folder keeps at m
 | **Cutover / incidents** | [`runbooks/OPERATIONS.md`](../runbooks/OPERATIONS.md) | [`runbooks/README.md`](../runbooks/README.md) (pointer only) |
 | **Retell agent contract** | [`voice/VOICE_RETELL_AGENT_CONTRACT.md`](../voice/VOICE_RETELL_AGENT_CONTRACT.md) | [`deployment/retell-agent-inventory.json`](../deployment/retell-agent-inventory.json), `npm run verify:agent-config` |
 | **Retell agent inventory** | [`deployment/OPERATIONS.md`](../deployment/OPERATIONS.md#retell-agent-inventory) | [`retell-agent-inventory.json`](../deployment/retell-agent-inventory.json) |
-| **Architecture snapshot** | [`architecture/LIVE.md`](../architecture/LIVE.md) | [`architecture/README.md`](../architecture/README.md) (pointer; history in `archive/`) |
+| **Architecture snapshot** | [`architecture/PLATFORM_SNAPSHOT.md`](../architecture/PLATFORM_SNAPSHOT.md) | [`architecture/LIVE.md`](../architecture/LIVE.md) (route depth), [`reviews/SOLUTION_ARCHITECTURE_REPORT.md`](../reviews/SOLUTION_ARCHITECTURE_REPORT.md) (deep dive) |
+| **Full solution architecture** | [`reviews/SOLUTION_ARCHITECTURE_REPORT.md`](../reviews/SOLUTION_ARCHITECTURE_REPORT.md) | [`architecture/PLATFORM_SNAPSHOT.md`](../architecture/PLATFORM_SNAPSHOT.md), [`reviews/CODEBASE_REVIEW_VOICE_MULTILINGUAL.md`](../reviews/CODEBASE_REVIEW_VOICE_MULTILINGUAL.md) |
+| **Medical coding** | [`Medical Coding/README.md`](../Medical%20Coding/README.md) | [`KELLY_CODING_MASTER_EXECUTION_PLAN.md`](../Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md), [`ARCHITECTURE.md`](../Medical%20Coding/ARCHITECTURE.md), [`COVERAGE_MATRIX.md`](../Medical%20Coding/COVERAGE_MATRIX.md), [`KELLY_F09_GOVERNANCE.md`](../clinical/KELLY_F09_GOVERNANCE.md) |
+| **Prod DB / codebook parity** | [`deployment/PROD_DB_PARITY.md`](../deployment/PROD_DB_PARITY.md) | [`Medical Coding/OPERATIONS.md`](../Medical%20Coding/OPERATIONS.md) § GCS |
+| **Coding spine outage** | [`runbooks/CODING_SPINE_OUTAGE.md`](../runbooks/CODING_SPINE_OUTAGE.md) | [`Medical Coding/OPERATIONS.md`](../Medical%20Coding/OPERATIONS.md) |
+| **Platform +363 deploy** | [`deployment/PLATFORM_SALES_363_DEPLOY.md`](../deployment/PLATFORM_SALES_363_DEPLOY.md) | [`voice/VOICE_ROUTING_SSOT.md`](../voice/VOICE_ROUTING_SSOT.md) |
+| **Post-epic copay (P0.5)** | [`todos/PENDING.md`](../../todos/PENDING.md#p05--post-epic-copay-gaps) | `payer-class-routing.js`, `coding-deferral-copy.json`, `import-plan-rules-benefits.cjs` |
 | **Routes & call paths** | [`architecture/LIVE.md`](../architecture/LIVE.md#runtime-entrypoints-and-route-ownership) | [`middleware-platform/server.js`](../../middleware-platform/server.js) |
 | **Environment variables** | [`setup/README.md`](../setup/README.md) | Former `ENVIRONMENT_VARIABLES_BY_SURFACE` merged into setup README |
 | **Brand / logo / email HTML** | [`Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md) | [`Brand/README.md`](../Brand/README.md) |

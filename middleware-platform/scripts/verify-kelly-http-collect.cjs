@@ -14,7 +14,7 @@ const KellyToolExecutor = require('../services/kelly-tool-executor');
 const { openAppDb } = require('./lib/verify-db.cjs');
 const { seedTriage } = require('./lib/seed-triage.cjs');
 const { seedPayerRules } = require('./lib/seed-payer-rules.cjs');
-const { withMockPost } = require('./lib/kelly-test-harness.cjs');
+const { withMockPost, HARNESS_COLLECT_ARGS } = require('./lib/kelly-test-harness.cjs');
 
 const { db } = openAppDb();
 
@@ -40,7 +40,7 @@ async function main() {
     },
     () =>
       KellyToolExecutor._collectInsurance(
-        { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', member_id: 'MBR123' },
+        HARNESS_COLLECT_ARGS,
         { sessionId, patientId: 'p_http', callerPhone: '+15555550199' }
       )
   );

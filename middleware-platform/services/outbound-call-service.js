@@ -151,7 +151,7 @@ async function initiateSomoDemoDemoCall({
     to: phone_number,
     url: webhookUrl.toString(),
     statusCallback,
-    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed', 'busy', 'no-answer', 'failed', 'canceled'],
+    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
     machineDetection: 'Enable',
     asyncAmd: true,
     asyncAmdStatusCallback: amdCallback,

@@ -80,6 +80,20 @@ flowchart LR
 - Prod live PSTN copay still operator-gated (`CR-036` in `todos/PENDING.md`).
 - Without Stripe keys, link creation may succeed but charge page fails.
 
+### Eligibility precedence (M-01 / architecture Fix #1) — CLOSED
+
+**Gov-01 / Ver-01 (2026-07-10):** The simulate-vs-`plan_rules` override bug described in the external architecture PDF is **closed in code**.
+
+**Live `collect_insurance` path:**
+
+1. Kelly executor [`collect-insurance.js`](../../middleware-platform/services/kelly-tool-executor/collect-insurance.js) → POST `/voice/insurance/collect` → [`PaymentFlowService.resolveAmountDue`](../../middleware-platform/routes/voice-appointments.js) on the HTTP route.
+2. After HTTP success, Kelly executor calls [`resolveAmountDue`](../../middleware-platform/services/resolve-amount-due.js) again for session meta / journey gates.
+3. In `resolve-amount-due.js`, when `eligibility_quality === 'simulate'`, the resolver **does not** return the flat simulate copay — it **falls through** to `computeVisitQuote` / seeded **`plan_rules`**. Non-simulate hard copays (Stedi 271 / `hard_copay`) still win first.
+
+**Ver-02:** This document never claimed an open simulate-over-`plan_rules` bug; it correctly describes copay dollars as **`plan_rules` seeds**. The PDF Fix #1 was **pre-fix / stale** relative to current code.
+
+**Evidence:** `npm test -- simulate-eligibility-precedence.test.js` (3/3 pass); code trace 2026-07-10. See [KELLY_CODING_MASTER_EXECUTION_PLAN.md](../Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md) §0.A.
+
 ---
 
 ## 1. Voice Orchestration

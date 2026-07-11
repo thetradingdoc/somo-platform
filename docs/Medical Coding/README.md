@@ -7,15 +7,18 @@
 
 | Document | Purpose |
 |----------|---------|
+| **[KELLY_CODING_MASTER_EXECUTION_PLAN.md](./KELLY_CODING_MASTER_EXECUTION_PLAN.md)** | **Operator closeout SSOT** — D-01, K-02, F-09 appendices + 12-week program |
+| **[COVERAGE_MATRIX.md](./COVERAGE_MATRIX.md)** | Patient-facing copay grid (PY-01 living doc) |
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | End-to-end architecture: data layer, retrieval, voice, billing, env vars, quality metrics |
 | **[OPERATIONS.md](./OPERATIONS.md)** | Import, embeddings, prod parity, eval commands (links to deployment runbooks) |
-| **[PENDING.md § CODING-FOUNDATION](../../todos/PENDING.md#p0--coding-foundation-epic-medical--dental-coding-layer)** | Active engineering backlog (CF-A..N, 98 tasks) |
+| **[CODING-FOUNDATION.md](../../todos/CODING-FOUNDATION.md)** | Epic backlog — **eng complete**; operator closeout (D-01, K-02, F-09) |
+| **[PENDING.md § P0.5 copay](../../todos/PENDING.md)** | Post-epic deferral, plan_rules, payer-class routing |
 
 ## Related deployment docs (do not duplicate here)
 
-- [MEDICAL_CODEBOOK_SETUP.md](../deployment/MEDICAL_CODEBOOK_SETUP.md) — CMS file paths, import order, Pinecone, Stedi 837P
+- [OPERATIONS.md](./OPERATIONS.md) — CMS file paths, import order, Pinecone, Stedi 837P
 - [PROD_DB_PARITY.md](../deployment/PROD_DB_PARITY.md) — prod row counts and MPFS migration
-- [RENDER_PRODUCTION_CHECKLIST.md](../deployment/RENDER_PRODUCTION_CHECKLIST.md) — Render env vars and webhook registration
+- [deployment OPERATIONS.md](../deployment/OPERATIONS.md) — Cloud Run env and deploy gates
 
 ## Code entry points (middleware)
 

@@ -53,7 +53,7 @@ async function scenarioLowConfidence() {
   const sessionId = `hitl_low_${Date.now()}`;
   seedTriage(sessionId, { icd: 'K29.70', cpt: '99213', confidence: 0.50 });
   const result = await KellyToolExecutor._collectInsurance(
-    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x' },
+    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', date_of_birth: '1990-01-15' },
     { sessionId, patientId: 'p_hitl', callerPhone: '+15555550199' }
   );
   const review = db.prepare(
@@ -77,7 +77,7 @@ async function scenarioHighConfidence() {
   seedTriage(sessionId, { icd: 'K29.70', cpt: '99213', confidence: 0.85 });
   KellyToolExecutor._post = async () => ({ success: true });
   const result = await KellyToolExecutor._collectInsurance(
-    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x' },
+    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', date_of_birth: '1990-01-15' },
     { sessionId, patientId: 'p_hitl2', callerPhone: '+15555550198' }
   );
   const review = db.prepare(
@@ -94,7 +94,7 @@ async function scenarioApproveResume() {
   const sessionId = `hitl_resume_${Date.now()}`;
   seedTriage(sessionId, { icd: 'K29.70', cpt: '99213', confidence: 0.50 });
   await KellyToolExecutor._collectInsurance(
-    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x' },
+    { payer_id: 'BCBS_PILOT', plan_id: 'plan_x', date_of_birth: '1990-01-15' },
     { sessionId, patientId: 'p_hitl3', callerPhone: '+15555550197' }
   );
   const review = db.prepare(

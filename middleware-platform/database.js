@@ -2559,6 +2559,20 @@ db.exec(`
     payer_type TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS pair_rules (
+    id TEXT PRIMARY KEY,
+    column1_code TEXT NOT NULL,
+    column2_code TEXT NOT NULL,
+    modifier_indicator INTEGER DEFAULT 1,
+    reason TEXT,
+    rule_type TEXT DEFAULT 'ncci_ptp',
+    effective_date TEXT,
+    source_file TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_pair_rules_column1 ON pair_rules(column1_code);
+  CREATE INDEX IF NOT EXISTS idx_pair_rules_column2 ON pair_rules(column2_code);
+
   CREATE TABLE IF NOT EXISTS code_embeddings (
     id TEXT PRIMARY KEY,
     code TEXT NOT NULL,

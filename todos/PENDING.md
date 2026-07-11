@@ -1,11 +1,26 @@
 # Somo — all pending work
 
-**Last updated:** 2026-07-10  
+**Last updated:** 2026-07-11  
 **Engineering status SSOT:** This file is the **sole** entry point for open engineering work.
+
+## Kelly Master Plan — open inventory (honest, 2026-07-11)
+
+**SSOT:** [`KELLY_CODING_MASTER_EXECUTION_PLAN.md`](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md)
+
+| Bucket | Open count | IDs / location |
+|--------|------------|----------------|
+| P0 operator closeout | **2** | CF-OP-5 (F-09 clinical) · CF-OP-8 (name clinical lead) |
+| Appendix B (K-02) | **1** | **3/7** nights — nights 4–7 remain |
+| Appendix C (F-09) | **7** | C-P0-01..C-P0-07 clinical signatures *(blocked on CF-OP-8)* |
+| Phase 4 closeout bookkeeping | **1** | D-01/K-02/F-09 → `done` in CODING-FOUNDATION *(blocked on K-02 + F-09)* |
+| Optional follow-ups | **2** | DP-02 Secret Manager migration; MT-09 live PSTN evidence |
+| **Kelly plan total open** | **13** | **Blockers only** — all eng + automatable operator work complete |
+
+**Gates:** G0 eng prereqs met (D-01 evidence + spine on prod); **G0–G5 fully closed** blocked on K-02 (5 nights) + F-09 clinical sign-off.
 
 ## P0 — CODING-FOUNDATION closeout (operator)
 
-**SSOT:** [`todos/CODING-FOUNDATION.md`](./CODING-FOUNDATION.md) · [`docs/Medical Coding/OPERATIONS.md`](../docs/Medical%20Coding/OPERATIONS.md)
+**SSOT:** [`todos/CODING-FOUNDATION.md`](./CODING-FOUNDATION.md) · [`docs/Medical Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md`](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md) · [`docs/Medical Coding/OPERATIONS.md`](../docs/Medical%20Coding/OPERATIONS.md)
 
 Eng tracks A–N complete on dev. **Operator closeout pending:**
 
@@ -13,9 +28,15 @@ Eng tracks A–N complete on dev. **Operator closeout pending:**
 - [x] **CF-OP-2** Embeddings `--until-done` + specialty backfill (C-01, C-02, C-03) — 110,017 on prod GCS
 - [x] **CF-OP-3** Pinecone env + K-06 staging spine (`verify-live-spine`, `verify-triage-spine`) — green 2026-07-10
 - [x] **CF-OP-4** K-02 nightly workflow wired (`ci-coding-db-fixture` + secrets); K-05 evidence script in deploy checklist
-- [ ] **CF-OP-5** F-09 Kelly Phase C clinical sign-off *(eng-ready; operator signature pending)*
+- [ ] **CF-OP-5** F-09 — Eng attestation ready: [`F09_ENG_ATTESTATION.md`](../docs/Medical%20Coding/F09_ENG_ATTESTATION.md); **clinical C-P0 signatures pending** *(blocked: CF-OP-8)*
+- [x] **CF-OP-6** D-01 — *(**eng complete** 2026-07-11)* A1–A11 + `capture:coding-prod-evidence` SUMMARY success; prod spine on `middleware-prod.db`; evidence at `gs://somo-staging-db-somo-callsomo/evidence/coding-prod/`
+- [ ] **CF-OP-7** K-02 — **3/7** consecutive green nights logged *(2026-07-11, 64% fast eval after eng sweep)* — [`k02-nightly-log.json`](../middleware-platform/var/evidence/k02-nightly-log.json) — **4 nights remain**
+- [ ] **CF-OP-8** Gov-06 — Clinical lead registry: [`KELLY_F09_GOVERNANCE.md`](../docs/clinical/KELLY_F09_GOVERNANCE.md) *(accountable: Jay; **name clinical lead** — product blocker)*
+- [x] **CF-OP-9** Evid-01 — Durable evidence uploaded 2026-07-11 — `gs://somo-staging-db-somo-callsomo/evidence/coding-prod/` (22 files); local `SUMMARY.json` success
 
-**Honesty fixes (eng):** B-05 partial (synthetic CDT documented), L-03 done, M-02 CDT-aware simulate tested.
+**ID audit (2026-07-10):** CF-OP-5 was F-09 only in earlier drafts; CF-OP-6/7 added for D-01/K-02 — no duplicate IDs.
+
+**Honesty fixes (eng):** B-05 partial (hot-code CDT descriptions + tier-2 quality flag; licensed ADA deferred), L-03 done, M-02 CDT-aware simulate tested. **2026-07-11 eng sweep:** lay-language phrase map, preventive eval admin path, dental ortho_consult D9310, Jest codebook seed, `skip_fast_eval` filler hygiene, TENANT_MATRIX eng complete.
 
 ## P0.5 — Copay product gaps (post-epic)
 
@@ -615,6 +636,45 @@ Commerce routes, PSTN replay fixtures, skincare services — master plan `later-
 
 ---
 
+## P1 — Kelly coding program (MT–PY backlog)
+
+**SSOT:** [`docs/Medical Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md`](../docs/Medical%20Coding/KELLY_CODING_MASTER_EXECUTION_PLAN.md) §6
+
+Scheduled eng backlog after CODING-FOUNDATION closeout. **Do not parallelize** per risk register (CP-05 before BL; MT-02 before DN; MT-03 + D-01 before AD-01).
+
+### Phase 5 — Multitenant (G0) — eng complete 2026-07-11
+
+- [x] **MT-01** Tenant SSOT schema — `pinecone-code-metadata-ingest.cjs` + [`PINECONE_TENANT_INGEST.md`](../docs/Medical%20Coding/PINECONE_TENANT_INGEST.md)
+- [x] **MT-03** Pinecone tenant filter + caller audit + CI gate *(2026-07-10)*
+- [x] **MT-02** Unified benefits — [`BENEFITS_PRECEDENCE.md`](../docs/Medical%20Coding/BENEFITS_PRECEDENCE.md)
+- [x] **MT-04** SQLite tenant-boundary audit — `verify-sqlite-tenant-boundary.cjs`
+- [x] **MT-05** Pinecone ingest tenant tagging — export hook in `populate-code-embeddings.js`
+- [x] **MT-06** Cross-tenant filter metrics — `pinecone_tenant_filter_reject`
+- [x] **MT-07** Per-clinic starter sets — `CLINIC_STARTER_SET_MAP` in `resolve-admin-visit-codes.js`
+- [x] **MT-08** Multitenant eval fixture — `ci-coding-db-fixture.cjs` clinic-a/b + isolation tests
+- [x] **MT-09** PSTN spot-check runbook — OPERATIONS.md Appendix
+
+### Phase 6 — Conversation pipeline (G1) — eng complete 2026-07-11
+
+- [x] **CP-01..CP-04** OPQRST registry, triage v2 default, voice/chat asymmetry doc, mode audit scripts
+- [x] **CP-05** Ranking SSOT — `select-primary-codes` + `verify-ranking-ssot.cjs` + eval primary ranking
+- [x] **CP-06..CP-14** v2 SSOT boundary, collect spine, specialty/latency tests, nightly `EVAL_PRIMARY_RANKING`
+
+### Phase 7 — Billing + dental (G2–G3) — eng complete 2026-07-11
+
+- [x] **BL-01..BL-08** NCCI expanded (58 rules), modifier/E/M tests, pair eval threshold
+- [x] **DN-01..DN-09** CDT `--licensed`, 50 phrase map, 24 dental eval cases, PSTN eval, G3 checklist doc
+
+### Phase 8 — Admin + payment + deploy (G4–G5) — eng complete 2026-07-11
+
+- [x] **AD-01..AD-08** RAG ADR, tenant matrix draft, starter sets, provenance store *(clinical sign-off AD-08 pending)*
+- [x] **PY-01..PY-05** `plan-rules-benefits-scale.json` + populated [`COVERAGE_MATRIX.md`](../docs/Medical%20Coding/COVERAGE_MATRIX.md)
+- [x] **DP-02..DP-09** `--cloudrun` verify, GCS upload script, nightly failure notify, operator appendix-a-local
+
+**Link gate:** `node scripts/check-coding-ssot-links.cjs` (Gov-03)
+
+---
+
 ## Summary
 
 | Priority | Workstream | ~Open items |
@@ -625,6 +685,8 @@ Commerce routes, PSTN replay fixtures, skincare services — master plan `later-
 | **P0** | RS-2 refactors | **6** (deferred) |
 | **P0** | Customer-ready CR/FE (engineering) | **~12** operator + **~5** deferred |
 | **P1** | Demo operator sign-off | **3** (operator) |
-| **P1** | Kelly Phase C sign-off | **~24** (clinical/operator) |
+| **P1** | Kelly coding program (MT–PY) | **0** eng *(operator/clinical gates above)* |
+| **P1** | Kelly Phase C sign-off | **24** (clinical/operator; overlaps CF-OP-5 / F-09) |
+| **Kelly Master Plan only** | Operator + appendix + optional | **25** (see inventory above) |
 | **P2** | RCM, telemedicine, payor, GCP, photo-to-bill, UI polish | **~40** (deferred) |
 | **P3** | Commerce checkout, LangGraph, derm Q&A, legacy funnel | deferred |

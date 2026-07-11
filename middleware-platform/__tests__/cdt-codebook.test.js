@@ -112,9 +112,9 @@ describe('CDT codebook (Phase 7.7)', () => {
       expect(resolveDentalCdtFromReason('need a new retainer').code).toBe('D8680');
     });
 
-    it('resolves invisalign (ortho)', () => {
+    it('resolves invisalign consult (ortho)', () => {
       const { resolveDentalCdtFromReason } = require('../utils/cpt-helper');
-      expect(resolveDentalCdtFromReason('invisalign consult').code).toBe('D8080');
+      expect(resolveDentalCdtFromReason('invisalign consult').code).toBe('D9310');
     });
 
     it('resolves child prophylaxis code', () => {

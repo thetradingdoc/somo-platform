@@ -25,6 +25,30 @@ const DEFERRAL_COPY = loadDeferralCopy();
 const DEFAULT_DENTAL_ICD10 = 'Z01.20';
 const DEFAULT_CLINIC_ICD10 = 'Z00.00';
 
+/**
+ * MT-07 — Per-clinic starter set profiles (clinic_id → specialty + optional trigger overrides).
+ * Documented profiles:
+ *   clinic-a — dental pilot (CDT phrase map via Dental specialty)
+ *   clinic-b — primary care (healthcare_clinic E/M starter set)
+ */
+const CLINIC_STARTER_SET_MAP = {
+  'clinic-a': {
+    profile: 'dental_pilot',
+    tenantSpecialty: 'Dental',
+    description: 'Pilot dental practice — CDT admin path, D1110 cleaning default',
+    extraTriggers: []
+  },
+  'clinic-b': {
+    profile: 'primary_care',
+    tenantSpecialty: 'healthcare_clinic',
+    description: 'Primary care clinic — E/M starter set with telehealth 99213 default',
+    extraTriggers: [
+      { patterns: [/\bmental health intake\b/i, /\bpsych intake\b/i], code: '90791' },
+      { patterns: [/\bdiabetes follow up\b/i], code: '99214' }
+    ]
+  }
+};
+
 const CLINIC_TRIGGER_MAP = [
   { patterns: [/\bpsychiatry\b/i, /\bpsych eval\b/i, /\b90791\b/i], code: '90791' },
   { patterns: [/\btherapy\b/i, /\bcounseling\b/i, /\bpsychotherapy\b/i, /\b90834\b/i], code: '90834' },
@@ -34,8 +58,8 @@ const CLINIC_TRIGGER_MAP = [
   { patterns: [/\burgent care\b/i, /\bwalk.?in\b/i, /\bacute visit\b/i], code: '99213' },
   { patterns: [/\bnew patient\b/i, /\bfirst time\b/i, /\bfirst visit\b/i], code: '99203' },
   { patterns: [/\bfollow.?up\b/i, /\bestablished patient\b/i, /\breturning patient\b/i], code: '99213' },
-  { patterns: [/\bphysical\b/i, /\bwellness\b/i, /\bannual\b/i, /\bcheckup\b/i, /\bwell visit\b/i], code: '99395' },
   { patterns: [/\bmedicare wellness\b/i, /\bawv\b/i, /\bg0438\b/i], code: 'G0438' },
+  { patterns: [/\bphysical\b/i, /\bwellness\b/i, /\bannual\b/i, /\bcheckup\b/i, /\bwell visit\b/i], code: '99395' },
   { patterns: [/\bsick visit\b/i, /\bnot feeling well\b/i, /\bcold symptoms\b/i], code: '99213' },
   { patterns: [/\burgent\b/i, /\bsame day\b/i], code: '99213' },
   { patterns: [/\boffice visit\b/i, /\bgeneral visit\b/i, /\bappointment\b/i], code: '99213' },
@@ -67,7 +91,7 @@ const CLINIC_TRIGGER_MAP = [
   { patterns: [/\bphysical therapy eval\b/i], code: '97161' },
   { patterns: [/\boccupational therapy\b/i], code: '97165' },
   { patterns: [/\bdermatology\b/i, /\bmole check\b/i], code: '99213' },
-  { patterns: [/\bpediatric visit\b/i, /\bchild checkup\b/i], code: '99391' },
+  { patterns: [/\bpediatric visit\b/i, /\bchild checkup\b/i, /\bwell child\b/i], code: '99391' },
   { patterns: [/\bsports physical\b/i], code: '99395' },
   { patterns: [/\binjection\b/i, /\bsteroid shot\b/i], code: '96372' },
   { patterns: [/\bsti screening\b/i, /\bstd test\b/i], code: '99213' },
@@ -118,8 +142,16 @@ function isChildVisit(opts = {}) {
  * @param {object} [opts]
  * @returns {{ ok: boolean, primary_cpt?: string, primary_icd10?: string, code_source?: string, message?: string }}
  */
+function resolveClinicProfile(clinicId, tenantSpecialty) {
+  const id = String(clinicId || '').trim();
+  if (id && CLINIC_STARTER_SET_MAP[id]) return CLINIC_STARTER_SET_MAP[id];
+  return { tenantSpecialty: String(tenantSpecialty || 'Dental').trim(), extraTriggers: [] };
+}
+
 function resolveAdminVisitCodes(visitReasonText, tenantSpecialty = 'Dental', opts = {}) {
-  const specialty = String(tenantSpecialty || 'Dental').trim();
+  const clinicId = opts.clinicId || opts.clinic_id || null;
+  const profile = resolveClinicProfile(clinicId, tenantSpecialty);
+  const specialty = profile.tenantSpecialty || String(tenantSpecialty || 'Dental').trim();
   const reason = normalizeReason(visitReasonText || opts.visit_reason);
 
   if (!reason) {
@@ -158,7 +190,8 @@ function resolveAdminVisitCodes(visitReasonText, tenantSpecialty = 'Dental', opt
   }
 
   if (isClinicAdminUseCase(specialty)) {
-    for (const entry of CLINIC_TRIGGER_MAP) {
+    const triggerList = [...(profile.extraTriggers || []), ...CLINIC_TRIGGER_MAP];
+    for (const entry of triggerList) {
       if (entry.patterns.some((re) => re.test(reason))) {
         return {
           ok: true,
@@ -167,6 +200,8 @@ function resolveAdminVisitCodes(visitReasonText, tenantSpecialty = 'Dental', opt
           primary_icd10: opts.primary_icd10 || DEFAULT_CLINIC_ICD10,
           code_source: 'admin_clinic_em',
           target_specialty: specialty,
+          clinic_id: clinicId || null,
+          clinic_profile: profile.profile || null,
           match_phrase: entry.patterns.find((re) => re.test(reason))?.source || null
         };
       }
@@ -284,9 +319,11 @@ module.exports = {
   resolveAdminVisitCodes,
   resolveAdminInsuranceCodes,
   emitCodingStarterSetMiss,
+  resolveClinicProfile,
   DEFAULT_DENTAL_ICD10,
   DEFAULT_CLINIC_ICD10,
   CLINIC_TRIGGER_MAP,
+  CLINIC_STARTER_SET_MAP,
   isClinicAdminUseCase,
   isSupportedAdminServiceCode
 };
