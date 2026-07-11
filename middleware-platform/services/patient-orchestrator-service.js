@@ -1003,7 +1003,8 @@ async function orchestrate(input) {
       const icdCandidates = typeof knowledgeService.getCodeCandidatesDualSource === 'function'
         ? await knowledgeService.getCodeCandidatesDualSource(opqrstText, fetchOpts)
         : await knowledgeService.getCodeCandidates(opqrstText, fetchOpts);
-      state.suggested_icd10 = icdCandidates?.icd10?.[0]?.code || null;
+      const { selectPrimaryIcd10 } = require('./select-primary-codes');
+      state.suggested_icd10 = selectPrimaryIcd10(icdCandidates?.icd10 || [], []) || null;
     } catch (e) {
       console.warn('[orchestrator] getCodeCandidates failed:', e?.message || e);
     }

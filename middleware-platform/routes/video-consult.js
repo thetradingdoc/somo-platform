@@ -94,10 +94,13 @@ async function fetchAndBroadcastRealtimeCodes(roomId) {
     const transcript = state.transcript || [];
     const text = transcript.map(t => (typeof t === 'string' ? t : t.text || t.content || '')).filter(Boolean).join(' ').slice(0, 2000);
     if (!text.trim() || text.length < 50) return;
+    const encounter = await videoConsultService.resolveRoomToEncounter(roomId);
+    const clinicId = encounter?.clinic_id || null;
     const dual = await knowledgeService.getCodeCandidatesDualSource(text, {
       maxIcd10: 10,
       maxCpt: 8,
-      maxHcpcs: 5
+      maxHcpcs: 5,
+      clinicId
     });
     videoConsultSse.broadcastCodesUpdated(roomId, {
       codes: { icd10: dual.icd10 || [], cpt: dual.cpt || [], hcpcs: dual.hcpcs || [] },

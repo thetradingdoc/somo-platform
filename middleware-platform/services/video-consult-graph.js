@@ -179,7 +179,8 @@ async function processEvent(roomId, eventType, payload, options = {}) {
         useSemantic: true,
         maxIcd10: 20,
         maxCpt: 15,
-        maxHcpcs: 10
+        maxHcpcs: 10,
+        clinicId: state.clinic_id || null
       });
 
       const remote = dual.remote_knowledge || { icd10: [], cpt: [], hcpcs: [] };

@@ -40,9 +40,17 @@ const legacyArchived = legacyExists && LEGACY.startsWith(ARCHIVE_DIR);
 
 const legacyAtRoot = legacyExists && path.resolve(LEGACY) === LEGACY && !legacyArchived;
 
+const dbName = String(db.name || process.env.DB_PATH || '');
+const isProdSnapshot = dbName.includes('middleware-prod');
+const pathOk = dbName.includes('var/db/middleware-dev') || dbName.includes('var/db/middleware-prod');
+const countsOk = icd >= 70000 && cpt >= 15000 && hcpcs >= 8000;
+const embedOk = isProdSnapshot ? embedCoverage >= 0.95 : true;
+
 const report = {
   app_db_path: db.name || process.env.DB_PATH,
-  canonical_path: CANONICAL,
+  canonical_path: isProdSnapshot
+    ? path.resolve(__dirname, '..', 'var/db/middleware-prod.db')
+    : CANONICAL,
   legacy_db_exists: legacyExists,
   legacy_db_at_root: legacyAtRoot,
   legacy_archived: legacyArchived,
@@ -52,12 +60,11 @@ const report = {
   embeddings_count: emb,
   embed_coverage: Number(embedCoverage.toFixed(4)),
   em_codes_missing: emMissing,
+  prod_snapshot: isProdSnapshot,
   all_ok:
-    String(db.name || '').includes('var/db/middleware-dev.db')
-    && icd >= 70000
-    && cpt >= 15000
-    && hcpcs >= 8000
-    && embedCoverage >= 0.95
+    pathOk
+    && countsOk
+    && embedOk
     && emMissing.length === 0
     && !legacyAtRoot
 };

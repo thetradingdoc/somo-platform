@@ -1,6 +1,6 @@
 # OPERATIONS — deployment & live verify
 
-**Last updated:** 2026-07-05
+**Last updated:** 2026-07-10
 
 **Scope (SSOT for this file):** Cloud Run deploy commands, env gates, live PSTN verify scripts, signup→live-line runbooks, Retell agent inventory.
 
@@ -47,6 +47,8 @@ gcloud config set project somo-callsomo
 
 Production deploy preserves existing service env vars (image-only) and targets whichever Cloud Run service owns `api.callsomo.com`. Remap the domain to **`somo-middleware`** when ready: [GCP_SOMO_SERVICE_CUTOVER.md](GCP_SOMO_SERVICE_CUTOVER.md).
 
+**Memory (prod):** Deploy scripts default `CLOUDRUN_MEMORY=2Gi`. Live prod runs **8 Gi / 4 CPU** because the GCS SQLite snapshot (~3.1 GB with 110k embedding rows) OOMs at lower limits. See [PROD_DB_PARITY.md](PROD_DB_PARITY.md).
+
 ## Post-deploy verification
 
 ```bash
@@ -57,16 +59,26 @@ npm run verify:prod:routing-smoke --prefix middleware-platform
 npm run test:prod:smoke --prefix middleware-platform
 ```
 
-## Consumer navigation (platform DID)
+## Platform company DID (+363) — retired navigation path
 
-`+13639990205` (`TWILIO_PHONE_NUMBER`) routes to **consumer navigation** when `NAVIGATION_ENABLED=1`. Deploy + seed:
+> **Production (2026-07-10):** `NAVIGATION_ENABLED=0`. `+13639990205` routes to **`platform_support`** (sales/CRM rail), not consumer navigation.
+
+| Setting | Value |
+|---------|-------|
+| `NAVIGATION_ENABLED` | `0` |
+| `PLATFORM_INBOUND_MODE` | `support` |
+| Operator customer | `cust_b7c7d3e1-31e6-4fbb-b6fd-8e306a79fad8` |
+
+Deploy + bind:
 
 ```bash
-npm run phase1:pull-db
-cd middleware-platform && npm run navigation:gcs-seed
+DB_PATH=./var/db/middleware-prod.db node scripts/seed-operator-customer.cjs
+DB_PATH=./var/db/middleware-prod.db node scripts/bind-operator-platform-did.cjs
 ```
 
-Operator runbook: [`docs/runbooks/NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md).
+SSOT: [`docs/voice/VOICE_ROUTING_SSOT.md`](../voice/VOICE_ROUTING_SSOT.md) · [`PLATFORM_SALES_363_DEPLOY.md`](PLATFORM_SALES_363_DEPLOY.md).
+
+**Archived:** Consumer navigation when `NAVIGATION_ENABLED=1` — [`NAVIGATION_OPERATOR_RUNBOOK.md`](../runbooks/NAVIGATION_OPERATOR_RUNBOOK.md) (deprecated unless explicitly re-enabled).
 
 ## Landing demo (somo-demo / somo-landing)
 

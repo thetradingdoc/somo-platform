@@ -41,6 +41,8 @@ Kelly must **not** pass client `service_code` on internal HTTP collect — the r
 | [`coding-review-service.js`](../../middleware-platform/services/coding-review-service.js) | HITL queue, approve/reject, resume meta |
 | [`coding-hitl-resume.js`](../../middleware-platform/services/coding-hitl-resume.js) | Post-approval Kelly turn hints; cleared after successful collect |
 | [`preventive-visit-spine.js`](../../middleware-platform/services/preventive-visit-spine.js) | Routine/no-symptoms Z00.x + preventive CPT |
+| [`select-primary-codes.js`](../../middleware-platform/services/select-primary-codes.js) | **CP-05 SSOT** — ranked primary ICD/CPT/HCPCS (billing + suggest paths) |
+| [`visit-codes-service.js`](../../middleware-platform/services/visit-codes-service.js) | Shared suggest path; delegates primaries to `select-primary-codes` |
 
 ---
 

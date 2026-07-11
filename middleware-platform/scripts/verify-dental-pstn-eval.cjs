@@ -114,9 +114,9 @@ function main() {
     env: { ...process.env, DENTAL_PSTN_HTTP: '0', DENTAL_PSTN_STRUCTURAL: '1' }
   });
   if (inline.status === 0) {
-    pass(report, 'inline dental PSTN replay passed');
+    pass(report, 'structural dental PSTN firewall passed');
   } else {
-    fail(report, `inline dental PSTN replay failed: ${inline.stdout || inline.stderr}`);
+    fail(report, `structural dental PSTN firewall failed: ${inline.stdout || inline.stderr}`);
   }
 
   console.log(JSON.stringify(report, null, 2));

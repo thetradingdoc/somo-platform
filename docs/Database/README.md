@@ -1,12 +1,14 @@
 # Database documentation index
 
-> **Last reviewed:** 2026-05-30
+> **Last reviewed:** 2026-07-10
 
 ## Somo voice foundation (start here)
 
 | Document | Purpose |
 |----------|---------|
-| [ENV_AND_DB_SSOT.md](./ENV_AND_DB_SSOT.md) | `DB_PATH`, `NODE_ENV`, Postgres, voice env checklist |
+| [ENV_AND_DB_SSOT.md](./ENV_AND_DB_SSOT.md) | `DB_PATH`, `NODE_ENV`, Postgres optional mirror, voice env checklist |
+| [PROD_DB_PARITY.md](../deployment/PROD_DB_PARITY.md) | Prod row counts, ~3.1 GB GCS snapshot, 8 Gi Cloud Run note |
+| [Medical Coding OPERATIONS](../Medical%20Coding/OPERATIONS.md) | Codebook import, embeddings, GCS pull/push |
 | [TENANT_MODEL.md](./TENANT_MODEL.md) | `merchants` / `customers` / `clinics` / `users` |
 | [PHONE_NUMBERS.md](./PHONE_NUMBERS.md) | Contact vs inbound vs clinic routing |
 | [VOICE_AGENT_STATE.md](./VOICE_AGENT_STATE.md) | Settings vs per-call tables, Retell/Kelly |

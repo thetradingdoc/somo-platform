@@ -227,6 +227,10 @@ const DEFAULT_STOPWORDS = new Set([
  */
 function normalizeMedicalTerms(text) {
   if (!text || typeof text !== 'string') return text;
+  let normalized = text
+    .replace(/\bblurred\b/gi, 'blurry')
+    .replace(/\blower back\b/gi, 'low back')
+    .replace(/\bsugar has been running high\b/gi, 'sugar running high');
   const entities = loadMedicalEntities();
   const symptoms = entities.symptoms || {};
   const synonymToCanonical = new Map();
@@ -241,17 +245,17 @@ function normalizeMedicalTerms(text) {
     }
     synonymToCanonical.set(key.replace(/_/g, ' ').toLowerCase(), canonical);
   }
-  if (synonymToCanonical.size === 0) return text;
-  let normalized = text;
+  if (synonymToCanonical.size === 0) return normalized;
+  let result = normalized;
   const entries = Array.from(synonymToCanonical.entries())
     .filter(([syn, canonical]) => syn !== canonical.toLowerCase())
     .sort((a, b) => b[0].length - a[0].length); // longer phrases first to avoid partial overwrites
   for (const [syn, canonical] of entries) {
     if (canonical.length < syn.length && syn.includes(canonical)) continue; // avoid "low back pain" → "back pain"
     const regex = new RegExp(`\\b${syn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-    normalized = normalized.replace(regex, canonical);
+    result = result.replace(regex, canonical);
   }
-  return normalized;
+  return result;
 }
 
 /**
@@ -525,6 +529,9 @@ function extractMedicalPhrases(note) {
   const found = new Set();
   for (const phrase of allPhrases) {
     if (lower.includes(phrase.toLowerCase())) found.add(phrase);
+  }
+  for (const key of Object.keys(PHRASE_EXPANSIONS)) {
+    if (lower.includes(key.toLowerCase())) found.add(key);
   }
   for (const phrase of found) {
     for (const extra of (PHRASE_EXPANSIONS[phrase] || [])) found.add(extra);
@@ -958,7 +965,12 @@ async function getCodeCandidatesDualSource(clinicalText, options = {}) {
   const remoteTimeoutMs = options.remoteTimeoutMs ?? parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '8000', 10);
   const [remoteSettled, localSettled] = await Promise.allSettled([
     retrieveRemoteCodeKnowledge(
-      { query: text, specialty, top_k: Math.max(maxIcd10, maxCpt, maxHcpcs) },
+      {
+        query: text,
+        specialty,
+        top_k: Math.max(maxIcd10, maxCpt, maxHcpcs),
+        clinicId: options.clinicId || options.clinic_id
+      },
       { timeoutMs: remoteTimeoutMs }
     ),
     _getCodeCandidatesImpl(text, { ...options, maxIcd10, maxCpt, maxHcpcs, useSemantic: options.useSemantic !== false })
@@ -968,9 +980,10 @@ async function getCodeCandidatesDualSource(clinicalText, options = {}) {
     ? remoteSettled.value
     : { icd10: [], cpt: [], hcpcs: [], metadata: { source: 'remote_error' } };
   remote = applyRemoteIcdCorrections(remote, text);
-  const local = localSettled.status === 'fulfilled' && localSettled.value
+  const localRaw = localSettled.status === 'fulfilled' && localSettled.value
     ? localSettled.value
     : { icd10: [], cpt: [], hcpcs: [], metadata: { source: 'local_error' } };
+  const local = enrichCandidatesFromExport(localRaw, text, options);
 
   let merged = _mergeRemoteAndLocalCodes(remote, local, { maxIcd10, maxCpt, maxHcpcs });
 
@@ -1108,9 +1121,23 @@ function _mergeRemoteAndLocalCodes(remote, local, limits = {}) {
   };
 }
 
-const PHRASE_MATCH_BOOST = 2;
+const PHRASE_MATCH_BOOST = 3;
 const ICD10_PER_TERM = 25;
 const CPT_PER_TERM = 10;
+const INJURY_CONTEXT_CUES = /\b(injur|trauma|fracture|fall|accident|wound|lacerat|burn|struck|hit by|motor vehicle|mva|exposure)\b/i;
+
+function rankIcdByClinicalContext(icdList, note) {
+  if (!Array.isArray(icdList) || !icdList.length) return icdList;
+  const injuryContext = INJURY_CONTEXT_CUES.test(note || '');
+  const score = (c) => {
+    const code = String(c.code || '');
+    const ch = code.charAt(0);
+    let s = c._matchCount || 0;
+    if (!injuryContext && /^[VWXYST]/.test(ch)) s -= 2;
+    return s;
+  };
+  return [...icdList].sort((a, b) => score(b) - score(a));
+}
 
 const EM_SET = new Set(['99202', '99203', '99204', '99205', '99211', '99212', '99213', '99214', '99215']);
 
@@ -1220,7 +1247,7 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
 
   const sortByMatch = (a, b) => (b._matchCount || 0) - (a._matchCount || 0);
 
-  let icd10 = Array.from(icd10Results.values())
+  let icd10 = rankIcdByClinicalContext(Array.from(icd10Results.values()), note)
     .sort(sortByMatch)
     .slice(0, maxIcd10)
     .map(({ _matchCount, ...r }) => ({ ...r, confidence: Math.min(1, 0.5 + (_matchCount || 0) * 0.1) }));
@@ -1596,6 +1623,57 @@ function getPhiTimeCap() {
   return rules.phi_time_cap ?? 0.6;
 }
 
+const EM_ROUTING_SET = new Set(['99213', '99214', '99215']);
+
+/**
+ * Downgrade established E/M level when encounter duration is below CMS time threshold (BL-04).
+ * @param {string} requestedCode - e.g. 99215, 99214
+ * @param {number} durationMinutes - documented encounter minutes
+ * @returns {{ code: string, original: string, downgraded: boolean, reason: string|null }}
+ */
+function routeEmByDuration(requestedCode, durationMinutes) {
+  const original = String(requestedCode || '').trim();
+  if (!EM_ROUTING_SET.has(original)) {
+    return { code: original, original, downgraded: false, reason: null };
+  }
+
+  const rules = loadTimeBasedCptRules();
+  const levels = Array.isArray(rules.em_routing_levels) && rules.em_routing_levels.length
+    ? rules.em_routing_levels
+    : [
+      { code: '99215', min_minutes: rules.min_duration_minutes?.['99215'] ?? 40 },
+      { code: '99214', min_minutes: rules.min_duration_minutes?.['99214'] ?? 30 },
+      { code: '99213', min_minutes: 0 }
+    ];
+
+  const duration = typeof durationMinutes === 'number' ? durationMinutes : 0;
+  const sorted = [...levels].sort((a, b) => (b.min_minutes || 0) - (a.min_minutes || 0));
+  const requestedIdx = sorted.findIndex((l) => l.code === original);
+  const startIdx = requestedIdx >= 0 ? requestedIdx : 0;
+
+  for (let i = startIdx; i < sorted.length; i++) {
+    const level = sorted[i];
+    if (duration >= (level.min_minutes || 0)) {
+      return {
+        code: level.code,
+        original,
+        downgraded: level.code !== original,
+        reason: level.code !== original
+          ? `Duration ${duration}m below ${original} threshold — routed to ${level.code}`
+          : null
+      };
+    }
+  }
+
+  const fallback = sorted[sorted.length - 1]?.code || '99213';
+  return {
+    code: fallback,
+    original,
+    downgraded: fallback !== original,
+    reason: `Duration ${duration}m below ${original} threshold — routed to ${fallback}`
+  };
+}
+
 /**
  * Expand ICD-10 codes using Colab export parent→children mappings.
  * @param {string[]} codes - ICD-10 codes from DB search
@@ -1678,5 +1756,6 @@ module.exports = {
   loadTimeBasedCptRules,
   validateCptDuration,
   computeTimeConfidence,
-  getPhiTimeCap
+  getPhiTimeCap,
+  routeEmByDuration
 };

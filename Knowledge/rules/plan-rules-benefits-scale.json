@@ -1,0 +1,19 @@
+[
+  {"payer_id": "BCBS_NY", "plan_id": "ppo_2025", "service_code": "99203", "copay_due_now": 40, "visit_type": "new_em"},
+  {"payer_id": "BCBS_NY", "plan_id": "ppo_2025", "service_code": "99213", "copay_due_now": 25, "visit_type": "est_em"},
+  {"payer_id": "BCBS_NY", "plan_id": "ppo_2025", "service_code": "90834", "copay_due_now": 30, "visit_type": "mh"},
+  {"payer_id": "BCBS_NY", "plan_id": "ppo_2025", "service_code": "G0438", "copay_due_now": 0, "visit_type": "wellness"},
+  {"payer_id": "AETNA", "plan_id": "commercial", "service_code": "99203", "copay_due_now": 45, "visit_type": "new_em"},
+  {"payer_id": "AETNA", "plan_id": "commercial", "service_code": "99213", "copay_due_now": 30, "visit_type": "est_em"},
+  {"payer_id": "AETNA", "plan_id": "commercial", "service_code": "90834", "copay_due_now": 35, "visit_type": "mh"},
+  {"payer_id": "AETNA", "plan_id": "commercial", "service_code": "G0438", "copay_due_now": 0, "visit_type": "wellness"},
+  {"payer_id": "UHC", "plan_id": "choice_plus", "service_code": "99203", "copay_due_now": 50, "visit_type": "new_em"},
+  {"payer_id": "UHC", "plan_id": "choice_plus", "service_code": "99213", "copay_due_now": 35, "visit_type": "est_em"},
+  {"payer_id": "UHC", "plan_id": "choice_plus", "service_code": "90834", "copay_due_now": 40, "visit_type": "mh"},
+  {"payer_id": "UHC", "plan_id": "choice_plus", "service_code": "G0438", "copay_due_now": 0, "visit_type": "wellness"},
+  {"payer_id": "DELTA_DENTAL_NY", "plan_id": "dental_ppo", "service_code": "D1110", "copay_due_now": 0, "visit_type": "dental"},
+  {"payer_id": "DELTA_DENTAL_NY", "plan_id": "dental_ppo", "service_code": "D3310", "copay_due_now": 150, "visit_type": "dental"},
+  {"payer_id": "AETNA_DENTAL", "plan_id": "dental_ppo", "service_code": "D4341", "copay_due_now": 75, "visit_type": "dental"},
+  {"payer_id": "METLIFE_DENTAL", "plan_id": "dental_ppo", "service_code": "D8080", "copay_due_now": 35, "visit_type": "dental"},
+  {"payer_id": "CIGNA_DENTAL", "plan_id": "dental_ppo", "service_code": "D1110", "copay_due_now": 0, "visit_type": "dental"}
+]

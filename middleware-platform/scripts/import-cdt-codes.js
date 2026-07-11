@@ -14,6 +14,7 @@ const { isCdtPlaceholderDescription, cdtQualityFromRows } = require('./lib/cdt-d
 
 const CDT_TXT = path.resolve(__dirname, '../../Knowledge/CDT/cdt-codes-2025.txt');
 const SOURCE_FILE = 'cdt-codes-2025.txt';
+const licensedOnly = process.argv.includes('--licensed');
 
 function categoryForCode(code) {
   const n = parseInt(String(code).slice(1), 10);
@@ -126,9 +127,13 @@ function synthesizeAdaCdtRange(byCode) {
 function main() {
   console.log('📥 CDT Import: Starting...');
   console.log(`   Source: ${CDT_TXT}`);
+  if (licensedOnly) {
+    console.log('   Mode: --licensed (real ADA descriptions from source file only)');
+  }
   const parsedMap = new Map(parseCdtFile(CDT_TXT).map((c) => [c.code, c]));
-  const synthesized = synthesizeAdaCdtRange(parsedMap);
-  const parsed = synthesized;
+  const parsed = licensedOnly
+    ? Array.from(parsedMap.values()).filter((c) => !isCdtPlaceholderDescription(c.description))
+    : synthesizeAdaCdtRange(parsedMap);
   const parsedQuality = cdtQualityFromRows(parsed);
   console.log(`   Parsed ${parsed.length} codes`);
   console.log(
@@ -140,6 +145,9 @@ function main() {
   if (parsed.length === 0) {
     console.error('❌ No codes parsed. Aborting.');
     process.exit(1);
+  }
+  if (licensedOnly && parsed.length < 50) {
+    console.warn(`   ⚠️  --licensed mode: only ${parsed.length} non-placeholder codes in ${SOURCE_FILE}`);
   }
 
   const sqlite = db.db || db;

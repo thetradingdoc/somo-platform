@@ -23,16 +23,20 @@ Downstream systems apply **pair validation**, **modifiers**, **POS codes**, and 
 
 ## 2. Status snapshot
 
-| Metric | Dev (reference) | Production |
-|--------|-----------------|------------|
-| `cpt_codes` | ~17,170 (MPFS) | Run MPFS import — may still be ~1,299 DHS until migrated |
-| CPT embeddings | Full coverage | Same as prod import |
-| Eval accuracy | **92%** (56/61), threshold 60% | Re-run after prod parity |
-| Eval mode | `EVAL_USE_SEMANTIC=false`, `RAG_API_URL=disabled` | Recommended for regression |
-
-**Eval by category (2026-05-26):** lay_language 14/15, telehealth_em 13/13, specialty 10/10, abbreviation 13/15, pair_validation 6/8.
-
-Remaining eval misses (ICD recall@5): lay-05, pair-03, pair-05, abbr-14, abbr-15.
+| Metric | Dev (reference) | Production (GCS 2026-07-10) |
+|--------|-----------------|----------------------------|
+| `icd10_codes` | ~74,260 | **74,260** |
+| `cpt_codes` | ~17,170 (MPFS) | **16,851** (MPFS — not DHS ~1,299) |
+| `hcpcs_codes` | ~9,006 | **9,006** |
+| `fee_schedules` | ~30,586 | **30,586** |
+| `code_embeddings` | ~110k+ | **110,017** (specialty backfill + CDT) |
+| DB file size | varies | **~3.1 GB** — see [PROD_DB_PARITY.md](../deployment/PROD_DB_PARITY.md) |
+| Eval golden cases | 150+ | `eval:coding:fast` (CI) / `eval:coding:prod` (nightly) |
+| Eval mode | `EVAL_USE_SEMANTIC=false`, `RAG_API_URL=disabled` | Fast for PR; prod profile uses semantic + Pinecone |
+| **MT-03 tenant filter** | Client + callers + CI gate | **Done** — see [KELLY_CODING_MASTER_EXECUTION_PLAN.md](./KELLY_CODING_MASTER_EXECUTION_PLAN.md) §0.C |
+| **CP-05 ranking SSOT** | `select-primary-codes.js` + CI gate | **Done** 2026-07-11 — `verify-ranking-ssot.cjs` |
+| **§6 MT–PY backlog** | Phases 5–8 | **Eng complete** 2026-07-11 |
+| **Coverage matrix (copay $)** | Pilot `plan_rules` sample | [COVERAGE_MATRIX.md](./COVERAGE_MATRIX.md) placeholder — refresh on PY-01 |
 
 ---
 
@@ -99,8 +103,8 @@ flowchart TB
 | `icd10_codes` | ICD-10-CM descriptions | ~74,260 |
 | `cpt_codes` | CPT/HCPCS procedure codes for search | ~17,170 (MPFS) |
 | `hcpcs_codes` | HCPCS Level II | ~9,006 |
-| `code_embeddings` | `text-embedding-3-small` vectors per code (see [§ Embedding model version](#embedding-model-version)) | ~100k+ total |
-| `fee_schedules` | Medicare allowed amounts (MPFS import) | ~15,272 |
+| `code_embeddings` | `text-embedding-3-small` vectors per code (see [§ Embedding model version](#embedding-model-version)) | ~110,017 |
+| `fee_schedules` | Medicare allowed amounts (MPFS import) | ~30,586 |
 | `code_acceptance_rates` | Payer outcomes for confidence (Stedi webhook) | grows with claims |
 
 ### CPT source: MPFS vs DHS
@@ -240,7 +244,7 @@ Rollback: restore GCS DB backup; revert Pinecone namespace to prior snapshot if 
 
 Coding supports **PA detection** and a confidence cap (φ_auth_cap), but it does not implement the full PA case lifecycle. The canonical PA workflow (detect → request → decision → auth number on claim) is documented in:
 
-- [`docs/RCM/PA_ARCHITECTURE.md`](../RCM/PA_ARCHITECTURE.md)
+- [`docs/RCM/ARCHITECTURE.md`](../RCM/ARCHITECTURE.md)
 
 ## 7. Voice and API entry points
 
@@ -328,7 +332,7 @@ sequenceDiagram
 | `STEDI_CLAIM_SUBMISSION_MODE` | `professional` | 837P |
 | `STEDI_WEBHOOK_SECRET` | from Stedi | HMAC on claim-status webhook |
 
-See [OPERATIONS.md](./OPERATIONS.md) and [RENDER_PRODUCTION_CHECKLIST.md](../deployment/RENDER_PRODUCTION_CHECKLIST.md).
+See [OPERATIONS.md](./OPERATIONS.md) and [deployment OPERATIONS.md](../deployment/OPERATIONS.md).
 
 ---
 
@@ -381,7 +385,7 @@ Reference diagrams often show ElasticSearch, FAISS, Cohere rerank, and a six-mod
 - [OPERATIONS.md](./OPERATIONS.md) — commands
 - [middleware-platform/ARCHITECTURE.md](../../middleware-platform/ARCHITECTURE.md) — middleware layout
 - [docs/voice-agent/README.md](../voice-agent/README.md) — Retell/Kelly setup
-- [docs/deployment/MEDICAL_CODEBOOK_SETUP.md](../deployment/MEDICAL_CODEBOOK_SETUP.md) — imports
+- [OPERATIONS.md](./OPERATIONS.md) — imports and deploy gates
 
 
 ---
@@ -395,19 +399,19 @@ Reference diagrams often show ElasticSearch, FAISS, Cohere rerank, and a six-mod
 # Medical coding — operations
 
 > **Last reviewed:** 2026-05-25  
-> Thin runbook. Full import and CMS file paths live in [MEDICAL_CODEBOOK_SETUP.md](../deployment/MEDICAL_CODEBOOK_SETUP.md).
+> Thin runbook. Full import and CMS file paths live in [OPERATIONS.md](./OPERATIONS.md) and [CODEBOOK_REFRESH_CALENDAR.md](./CODEBOOK_REFRESH_CALENDAR.md).
 
 ## Production checklist (before trusting live coding)
 
 1. **Prod DB** — MPFS CPT (~17k rows) + CPT embeddings on production SQLite. See [PROD_DB_PARITY.md](../deployment/PROD_DB_PARITY.md).
 2. **Verify counts** — on prod host: `npm run verify:prod-codebook`
-3. **Render env** — [RENDER_PRODUCTION_CHECKLIST.md](../deployment/RENDER_PRODUCTION_CHECKLIST.md):
+3. **Cloud Run env** — [deployment OPERATIONS.md](../deployment/OPERATIONS.md) and Appendix A in [KELLY_CODING_MASTER_EXECUTION_PLAN.md](./KELLY_CODING_MASTER_EXECUTION_PLAN.md):
    - `SEMANTIC_SEARCH_ENABLED=true`
    - `RAG_API_URL=disabled` (use Pinecone via `PINECONE_*`; do not leave unset → old localhost default in some tools)
    - `REMOTE_RAG_TIMEOUT_MS=2000`
    - `STEDI_CLAIM_SUBMISSION_MODE=professional`
    - `STEDI_WEBHOOK_SECRET` + register `/webhooks/stedi/claim-status`
-4. **Stedi webhook** — steps in MEDICAL_CODEBOOK_SETUP.md § Stedi claim-status webhook
+4. **Stedi webhook** — steps in [OPERATIONS.md](./OPERATIONS.md) and RCM docs
 
 ## Dev codebook build (reference)
 
@@ -503,7 +507,7 @@ gsutil cp gs://somo-staging-db-somo-callsomo/backups/middleware-pre-codebook-YYY
 6. **Pinecone** — if index was partially re-built on bad corpus, re-sync or revert namespace per D-03; local SQLite rollback does not auto-revert Pinecone.
 7. **Document** — incident note + root cause (wrong CMS file, DHS import, partial embed).
 
-**Do not** roll back middleware Cloud Run revision alone for codebook issues — app code and DB codebook are independent. For service rollback see [GCP_DEPLOY_ROLLBACK_RUNBOOK.md](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md).
+**Do not** roll back middleware Cloud Run revision alone for codebook issues — app code and DB codebook are independent. For service rollback see [ROLLBACK_DRILL.md](../runbooks/ROLLBACK_DRILL.md).
 
 Annual refresh checklist: [CODEBOOK_REFRESH_CALENDAR.md](./CODEBOOK_REFRESH_CALENDAR.md).
 

@@ -93,10 +93,23 @@ else
   echo "ℹ️  Skipping Athena gate — ATHENA_CLIENT_ID not set"
 fi
 
+step "Coding SSOT link check (Gov-03)"
+node "$ROOT/scripts/check-coding-ssot-links.cjs"
+
 step "Coding prod gates"
+cd "$MP"
+npm test -- --runInBand pinecone-tenant-isolation.test.js || { echo "❌ pinecone-tenant-isolation failed"; exit 1; }
+node scripts/verify-sqlite-tenant-boundary.cjs || { echo "❌ verify-sqlite-tenant-boundary failed"; exit 1; }
 node scripts/verify-no-hardcoded-coding.cjs || { echo "❌ verify-no-hardcoded-coding failed"; exit 1; }
 node scripts/verify-threshold-ssot.cjs || { echo "❌ verify-threshold-ssot failed"; exit 1; }
 node scripts/verify-coding-spine-tool-order.cjs || { echo "❌ verify-coding-spine-tool-order failed"; exit 1; }
+node scripts/verify-opqrst-column-registry.cjs || { echo "❌ verify-opqrst-column-registry failed"; exit 1; }
+node scripts/verify-conversation-mode-audit.cjs || { echo "❌ verify-conversation-mode-audit failed"; exit 1; }
+npm test -- --runInBand visit-codes-ranking-ssot.test.js select-primary-codes.test.js || {
+  echo "❌ ranking SSOT unit tests failed"; exit 1;
+}
+node scripts/verify-ranking-ssot.cjs --freeze || { echo "❌ verify-ranking-ssot failed"; exit 1; }
+node scripts/verify-ranking-ssot.cjs || { echo "❌ verify-ranking-ssot baseline drift"; exit 1; }
 SKIP_STARTUP_MIGRATIONS=1 RAG_API_URL=disabled EVAL_USE_SEMANTIC=false npm run eval:coding:fast || {
   echo "❌ eval:coding:fast failed"; exit 1;
 }
@@ -112,6 +125,7 @@ if [[ -f var/db/middleware-dev.db ]]; then
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-voice-http-spine.cjs || { echo "❌ verify-voice-http-spine failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-coding-hitl.cjs || { echo "❌ verify-coding-hitl failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-pair-validation.cjs || { echo "❌ verify-pair-validation failed"; exit 1; }
+  DB_PATH=./var/db/middleware-dev.db npm run verify:dental-pstn-eval || { echo "❌ verify:dental-pstn-eval failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db node scripts/verify-quote-eligibility-chain.cjs || { echo "❌ verify-quote-eligibility-chain failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-cpt-routing.cjs || { echo "❌ verify-cpt-routing failed"; exit 1; }
   DB_PATH=./var/db/middleware-dev.db SKIP_STARTUP_MIGRATIONS=1 node scripts/verify-payer-model.cjs || { echo "❌ verify-payer-model failed"; exit 1; }

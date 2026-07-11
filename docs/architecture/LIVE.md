@@ -1,6 +1,8 @@
 # LIVE
 
-**Last updated:** 2026-07-02
+**Last updated:** 2026-07-10
+
+> **Current architecture summary:** [`PLATFORM_SNAPSHOT.md`](./PLATFORM_SNAPSHOT.md) — voice, coding, copay, deploy topology. This file retains route depth and historical merge content.
 
 <a id="route-ownership-pre-phase-3"></a>
 
@@ -65,6 +67,13 @@ Master gate: `npm run verify:unblocked-phases` (chains phase 2–9 + ops alerts)
 | Phase 9 deploy | `verify:phase9-deploy` |
 
 Ops index: [`unblocked-phases-ops.md`](../voice-agent/unblocked-phases-ops.md)
+
+## 2026-07-10 changelog
+
+- Added pointer to [`PLATFORM_SNAPSHOT.md`](./PLATFORM_SNAPSHOT.md) as current full-architecture SSOT.
+- CODING-FOUNDATION eng complete: prod GCS codebook parity (110k embeddings, ~3.1 GB DB).
+- Prod Cloud Run: 8 Gi / 4 CPU for embedding-heavy SQLite cold start.
+- +363 platform DID: `platform_support` with `NAVIGATION_ENABLED=0`.
 
 ## 2026-07-02 changelog
 

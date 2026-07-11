@@ -1,5 +1,8 @@
 # Navigation operator runbook
 
+> **Deprecated in production (2026-07-10):** `NAVIGATION_ENABLED=0`.
+> Platform DID `+13639990205` routes to **`platform_support`** (consumer-nav path retired). Re-enable only with explicit ops approval. SSOT: [VOICE_ROUTING_SSOT.md](../voice/VOICE_ROUTING_SSOT.md).
+
 ## DIDs
 
 | Number | Role |

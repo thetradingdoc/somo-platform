@@ -20,11 +20,13 @@ router.get('/search', searchLimiter, async (req, res) => {
   }
 
   try {
+    const clinicId = String(req.query.clinic_id || req.query.clinicId || '').trim() || null;
     const results = await knowledgeService.getCodeCandidatesDualSource(q, {
       maxIcd10: 12,
       maxCpt: 6,
       maxHcpcs: 4,
-      useSemantic: true
+      useSemantic: true,
+      clinicId
     });
 
     const icd10 = results?.icd10 || results?.merged_codes?.icd10 || [];

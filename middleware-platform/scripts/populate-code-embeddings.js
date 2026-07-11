@@ -8,7 +8,9 @@
  *   node scripts/populate-code-embeddings.js --until-done [--batch-size 5000]
  */
 
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const path = require('path');
+
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const dbModule = require('../database');
 const sqlite = dbModule.db || dbModule;
@@ -303,6 +305,24 @@ async function main() {
   const batchSize = batchIdx >= 0 ? parseInt(args[batchIdx + 1], 10) || 5000 : 5000;
   const effectiveLimit = limit ?? (batchIdx >= 0 && !untilDoneFlag ? batchSize : null);
   const backfillSpecialty = args.includes('--backfill-specialty');
+  const exportPinecone = args.includes('--export-pinecone-chunks');
+  const outIdx = args.indexOf('--out');
+  const outPath = outIdx >= 0 ? args[outIdx + 1] : null;
+  const chunkKindIdx = args.indexOf('--chunk-kind');
+  const chunkKind = chunkKindIdx >= 0 ? args[chunkKindIdx + 1] : 'global';
+  const clinicIdx = args.indexOf('--clinic-id');
+  const clinicId = clinicIdx >= 0 ? args[clinicIdx + 1] : process.env.PINECONE_INGEST_CLINIC_ID || null;
+
+  if (exportPinecone) {
+    exportPineconeChunks({
+      limit: effectiveLimit,
+      typeFilter,
+      chunkKind,
+      clinicId,
+      outPath
+    });
+    return;
+  }
 
   if (backfillSpecialty) {
     const result = dbModule.backfillCodeEmbeddingSpecialty?.();
@@ -325,6 +345,43 @@ async function main() {
   }
   const total = await runTypes(types, { limit: effectiveLimit, incremental });
   console.log(`✅ Populated ${total} code embeddings`);
+}
+
+function exportPineconeChunks({ limit, typeFilter, chunkKind, clinicId, outPath }) {
+  const fs = require('fs');
+  const kind = chunkKind === 'tenant' ? 'tenant' : 'global';
+  if (kind === 'tenant' && !clinicId) {
+    console.error('❌ --clinic-id required for tenant chunk export');
+    process.exit(1);
+  }
+  const cfg = typeFilter ? [typeFilter] : ['icd10', 'cpt', 'hcpcs'];
+  const rows = [];
+  for (const type of cfg) {
+    const batchLimit = limit || TYPE_CONFIG[type]?.defaultBatch || 5000;
+    const sql = `SELECT id, code, code_type, description_text, embedding_json
+                 FROM code_embeddings
+                 WHERE code_type = ? AND embedding_json IS NOT NULL
+                 LIMIT ?`;
+    const batch = sqlite.prepare(sql).all(type, batchLimit);
+    for (const row of batch) {
+      rows.push({
+        ...row,
+        chunk_kind: kind,
+        ...(kind === 'tenant' ? { clinic_id: String(clinicId).trim() } : {})
+      });
+    }
+  }
+  const abs = path.resolve(outPath || path.join(__dirname, '../tmp/pinecone-chunks.jsonl'));
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length ? '\n' : ''));
+  console.log(JSON.stringify({
+    ok: true,
+    exported: rows.length,
+    chunk_kind: kind,
+    clinic_id: kind === 'tenant' ? clinicId : null,
+    out: abs,
+    ingest: `node scripts/pinecone-code-metadata-ingest.cjs --from-export ${abs}`
+  }, null, 2));
 }
 
 main().catch((e) => {

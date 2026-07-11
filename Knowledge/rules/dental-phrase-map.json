@@ -103,6 +103,14 @@
       "code": "D8210"
     },
     {
+      "id": "ortho_consult",
+      "patterns": [
+        "\\b(?:braces|invisalign|orthodont).{0,40}\\b(?:consult|consultation)\\b",
+        "\\b(?:consult|consultation).{0,40}\\b(?:braces|invisalign|orthodont)\\b"
+      ],
+      "code": "D9310"
+    },
+    {
       "id": "ortho_comprehensive",
       "patterns": ["\\bortho\\b", "\\bbraces\\b", "\\binvisalign\\b", "\\bfrenillos\\b", "\\borthodontics\\b"],
       "code": "D8080"
@@ -257,6 +265,32 @@
       "id": "post_op_visit",
       "patterns": ["\\bpost.?op\\b", "\\bfollow up after\\b", "\\bpost operative\\b"],
       "code": "D0171"
+    },
+    {
+      "id": "abscess_drainage",
+      "patterns": ["\\bdental abscess\\b", "\\btooth abscess\\b", "\\bgum abscess\\b", "\\babsceso\\b"],
+      "code": "D7510"
+    },
+    {
+      "id": "inlay_onlay",
+      "patterns": ["\\binlay\\b", "\\bonlay\\b", "\\bp porcelain\\b"],
+      "code": "D2642"
+    },
+    {
+      "id": "periodic_child_exam",
+      "patterns": ["\\bchild checkup\\b", "\\bpediatric dental exam\\b", "\\bexam for kid\\b"],
+      "code": "D0120",
+      "childCode": "D0120"
+    },
+    {
+      "id": "filling_replacement",
+      "patterns": ["\\breplacement filling\\b", "\\bold filling\\b", "\\blost filling\\b"],
+      "code": "D2391"
+    },
+    {
+      "id": "periodontal_charting",
+      "patterns": ["\\bperio chart\\b", "\\bperiodontal charting\\b", "\\bgum measurement\\b"],
+      "code": "D0180"
     }
   ]
 }

@@ -1,9 +1,9 @@
 # Somo — Healthcare Platform
-> Last reviewed: 2026-07-02
+> Last reviewed: 2026-07-10
 
 **Version**: 3.2.0  
-**Status**: NYC B2B front desk pilot (primary) + consumer health session — see [`docs/meta/CANONICAL_DOC_MAP.md`](docs/meta/CANONICAL_DOC_MAP.md)  
-**Last Updated:** 2026-07-02
+**Status**: NYC B2B front desk pilot (primary) + platform sales on +363 — see [`docs/architecture/PLATFORM_SNAPSHOT.md`](docs/architecture/PLATFORM_SNAPSHOT.md)  
+**Last Updated:** 2026-07-10
 
 > **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production hosts: **callsomo.com** (UI) and **api.callsomo.com** (API) — see [`docs/deployment/FRONT_DESK_PRODUCTION.md`](docs/deployment/FRONT_DESK_PRODUCTION.md).
 
@@ -19,7 +19,7 @@
 
 > **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.
 
-> **Architecture notes:** [Health session architecture](docs/architecture/HEALTH_SESSION_ARCHITECTURE.md) · [Route ownership](docs/architecture/LIVE.md#route-ownership-pre-phase-3) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
+> **Architecture notes:** [Platform snapshot](docs/architecture/PLATFORM_SNAPSHOT.md) · [Solution architecture report](docs/reviews/SOLUTION_ARCHITECTURE_REPORT.md) · [Health session architecture](docs/architecture/HEALTH_SESSION_ARCHITECTURE.md) · [Route ownership](docs/architecture/LIVE.md#route-ownership-pre-phase-3) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
 
 ---
 
@@ -171,7 +171,7 @@ With `middleware-platform` running (`npm start`), visit:
 | Surface                      | Local URL                       | Served From                              |
 |------------------------------|---------------------------------|------------------------------------------|
 | Marketing / trial entry      | http://localhost:4000/          | Redirect → `/business/trial-activation.html` |
-| Consumer navigation (PSTN)   | +13639990205                    | `consumer-navigation-handler` when `NAVIGATION_ENABLED=1` |
+| Platform company DID (+363) | +13639990205                    | `platform_support` sales rail (`NAVIGATION_ENABLED=0`) |
 | Admin landing                | http://localhost:4000/admin     | `unified-dashboard/admin/index.html`     |
 | Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
 | API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |
@@ -190,7 +190,7 @@ Production hosts: `callsomo.com` (UI), `api.callsomo.com` (API). See [`docs/depl
 # Server
 PORT=4000
 NODE_ENV=production
-POSTGRES_URL=postgresql://user:password@host:5432/middleware?sslmode=require
+DB_PATH=./var/db/middleware-dev.db   # SQLite primary SSOT locally
 
 # Retell AI
 RETELL_API_KEY=your_retell_api_key
@@ -201,8 +201,11 @@ RETELL_SALES_AGENT_ID=your_sales_agent_id  # Optional: Dedicated agent for sales
 TWILIO_PHONE_NUMBER=+1234567890  # Your Twilio number in E.164 format (e.g., +15551234567)
 
 # Multi-tenant defaults / database
-POSTGRES_URL=postgresql://user:password@host:5432/middleware?sslmode=require
+DB_PATH=./var/db/middleware-dev.db
 DEFAULT_CLINIC_ID=clinic-default
+
+# Optional: Postgres mirror (not primary SSOT in prod)
+# POSTGRES_URL=postgresql://user:password@host:5432/middleware?sslmode=require
 
 # Stripe
 STRIPE_SECRET_KEY=your_stripe_secret_key
@@ -629,5 +632,5 @@ For issues and questions:
 
 ---
 
-**Last Updated:** 2026-05-30  
-**Version**: 3.1.0
+**Last Updated:** 2026-07-10  
+**Version**: 3.2.0

@@ -8,6 +8,8 @@
 const db = require('../../database');
 const { pineconeQuery, isPineconeConfigured } = require('../pinecone-rest');
 const { embedText } = require('../semantic-search-service');
+const { allowsPineconeMatchForClinic } = require('./pinecone-tenant-filter');
+const Metrics = require('../metrics');
 
 function splitMetadataCodes(value) {
   if (!value) return [];
@@ -69,16 +71,29 @@ function isValidCodeForType(code, type) {
   return true;
 }
 
-function aggregateFromMatches(matches, field, type) {
+function passesTenantFilter(metadata, clinicId) {
+  const allowed = allowsPineconeMatchForClinic(metadata || {}, clinicId);
+  if (!allowed && String(clinicId || '').trim()) {
+    Metrics.increment('pinecone_tenant_filter_reject', 1);
+  }
+  return allowed;
+}
+
+function aggregateFromMatches(matches, field, type, clinicId) {
   const minScore = parseFloat(process.env.PINECONE_MIN_SCORE || '0.45', 10);
   const fallbackMin = parseFloat(process.env.PINECONE_FALLBACK_MIN_SCORE || '0.35', 10);
   let filtered = (matches || []).filter((m) => {
     const score = typeof m.score === 'number' ? m.score : 0;
-    return score >= minScore;
+    if (score < minScore) return false;
+    return passesTenantFilter(m.metadata || {}, clinicId);
   });
   if (!filtered.length) {
     filtered = (matches || [])
-      .filter((m) => (typeof m.score === 'number' ? m.score : 0) >= fallbackMin)
+      .filter((m) => {
+        const score = typeof m.score === 'number' ? m.score : 0;
+        if (score < fallbackMin) return false;
+        return passesTenantFilter(m.metadata || {}, clinicId);
+      })
       .slice(0, 10);
   }
   const counts = new Map();
@@ -121,12 +136,13 @@ function pineconeFallbackEnabled() {
 
 /**
  * @param {string} query
- * @param {object} opts - { top_k }
+ * @param {object} opts - { top_k, clinicId }
  * @returns {Promise<{ icd10: object[], cpt: object[], hcpcs: object[] }|null>}
  */
 async function retrieveCodesFromPineconeMetadata(query, opts = {}) {
   if (!pineconeFallbackEnabled() || !query || !String(query).trim()) return null;
   const topK = Math.min(30, Math.max(20, opts.top_k || parseInt(process.env.PINECONE_TOP_K || '20', 10)));
+  const clinicId = opts.clinicId || opts.clinic_id || null;
   try {
     const vector = await embedText(String(query).trim().slice(0, 2000));
     if (!vector || !vector.length) return null;
@@ -136,9 +152,9 @@ async function retrieveCodesFromPineconeMetadata(query, opts = {}) {
     });
     if (!matches.length) return null;
     return {
-      icd10: aggregateFromMatches(matches, 'icd10_codes', 'icd10'),
-      cpt: aggregateFromMatches(matches, 'cpt_codes', 'cpt'),
-      hcpcs: aggregateFromMatches(matches, 'hcpcs_codes', 'hcpcs')
+      icd10: aggregateFromMatches(matches, 'icd10_codes', 'icd10', clinicId),
+      cpt: aggregateFromMatches(matches, 'cpt_codes', 'cpt', clinicId),
+      hcpcs: aggregateFromMatches(matches, 'hcpcs_codes', 'hcpcs', clinicId)
     };
   } catch (e) {
     console.warn('[pinecone-code-metadata] retrieval failed:', e.message);
@@ -149,6 +165,7 @@ async function retrieveCodesFromPineconeMetadata(query, opts = {}) {
 module.exports = {
   retrieveCodesFromPineconeMetadata,
   aggregateFromMatches,
+  passesTenantFilter,
   splitMetadataCodes,
   pineconeFallbackEnabled,
   lookupDescription,

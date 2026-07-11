@@ -19,7 +19,7 @@ describe('layer2 retrieval (E-04, E-05)', () => {
 
   test('search-intent-builder shapes query from perceptual state', () => {
     const intent = buildSearchIntent(
-      { expanded_text: 'chest pain exertion', specialty: 'Cardiology' },
+      { expanded_text: 'chest pain exertion', specialty_tag: 'Cardiology' },
       'chest pain'
     );
     expect(intent.query).toBeTruthy();

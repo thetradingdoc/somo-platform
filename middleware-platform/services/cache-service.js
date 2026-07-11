@@ -135,6 +135,7 @@ function warm() {
     for (const note of notes) {
       try {
         if (ks.getCandidateCptCodes) ks.getCandidateCptCodes(note, { limit: 10 });
+        // MT-03: global warmup only — no clinicId (allows untagged codebook vectors).
         const fetchOpts = { maxIcd10: 5, maxCpt: 5 };
         if (typeof ks.getCodeCandidatesDualSource === 'function') {
           ks.getCodeCandidatesDualSource(note, fetchOpts).catch(() => {});

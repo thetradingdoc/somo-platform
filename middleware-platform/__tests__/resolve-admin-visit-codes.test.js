@@ -47,6 +47,12 @@ describe('resolve-admin-visit-codes', () => {
     expect(r.primary_cpt).toBe('D8080');
   });
 
+  test('maps consultation for braces to D9310', () => {
+    const r = resolveAdminVisitCodes('consultation for braces', 'Dental');
+    expect(r.ok).toBe(true);
+    expect(r.primary_cpt).toBe('D9310');
+  });
+
   test('maps perio maintenance to D4910', () => {
     const perio = resolveAdminVisitCodes('periodontal maintenance', 'Dental');
     expect(perio.ok).toBe(true);

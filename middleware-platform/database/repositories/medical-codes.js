@@ -314,6 +314,50 @@ function createMedicalCodesRepository(db) {
     return { inserted: count };
   }
 
+  function bulkUpsertPairRules(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+    const stmt = db.prepare(`
+    INSERT INTO pair_rules (
+      id, column1_code, column2_code, modifier_indicator, reason, rule_type, effective_date, source_file
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      column1_code = excluded.column1_code,
+      column2_code = excluded.column2_code,
+      modifier_indicator = excluded.modifier_indicator,
+      reason = excluded.reason,
+      rule_type = excluded.rule_type,
+      effective_date = excluded.effective_date,
+      source_file = excluded.source_file
+  `);
+    let count = 0;
+    for (const item of items) {
+      if (!item?.column1_code || !item?.column2_code) continue;
+      const id = item.id || `ncci_${item.column1_code}_${item.column2_code}`;
+      stmt.run(
+        String(id).trim(),
+        String(item.column1_code).trim().toUpperCase(),
+        String(item.column2_code).trim().toUpperCase(),
+        item.modifier_indicator != null ? Number(item.modifier_indicator) : 1,
+        item.reason || 'NCCI PTP edit',
+        item.rule_type || 'ncci_ptp',
+        item.effective_date || null,
+        item.source_file || 'ncci-pairs-sample-2025'
+      );
+      count++;
+    }
+    return { inserted: count };
+  }
+
+  function getPairRulesCount() {
+    try {
+      const row = db.prepare('SELECT COUNT(*) AS n FROM pair_rules').get();
+      return row ? row.n : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   function codeExists(code, codeType) {
     if (!code || !codeType) return false;
     const raw = String(code).trim().toUpperCase();
@@ -501,6 +545,8 @@ function createMedicalCodesRepository(db) {
     getIcd10PcsCodesCount,
     bulkUpsertPlaceOfServiceCodes,
     bulkUpsertModifierCodes,
+    bulkUpsertPairRules,
+    getPairRulesCount,
     codeExists,
     getAllCodeEmbeddings,
     getCodeEmbeddingsBatch,

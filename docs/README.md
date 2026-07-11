@@ -1,7 +1,15 @@
 # Somo Platform Documentation
-> Last reviewed: 2026-07-02
+> Last reviewed: 2026-07-11
 
-**Last Updated:** 2026-07-02
+**Last Updated:** 2026-07-11
+
+### Full architecture (read first)
+
+- **Platform snapshot:** **[architecture/PLATFORM_SNAPSHOT.md](./architecture/PLATFORM_SNAPSHOT.md)** — voice, coding, copay, Cloud Run topology
+- **Solution architecture report:** **[reviews/SOLUTION_ARCHITECTURE_REPORT.md](./reviews/SOLUTION_ARCHITECTURE_REPORT.md)** — full-platform architecture (generated 2026-07-11)
+- **Multilingual voice review:** **[reviews/CODEBASE_REVIEW_VOICE_MULTILINGUAL.md](./reviews/CODEBASE_REVIEW_VOICE_MULTILINGUAL.md)** — locale detection, gate i18n, eval coverage
+- **Prod DB parity:** **[deployment/PROD_DB_PARITY.md](./deployment/PROD_DB_PARITY.md)** — codebook row counts, GCS workflow
+- **Medical coding:** **[Medical Coding/README.md](./Medical%20Coding/README.md)** — voice collect → quote → book spine
 
 ### NYC front desk (active pilot)
 

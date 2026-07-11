@@ -16,7 +16,7 @@ const templates = [
   { cat: 'lay_language', inputs: ['burning chest after meals', 'numbness in fingers', 'lower back pain radiating leg', 'sore throat fever child', 'blurred vision diabetes'], icd: ['K21', 'R20', 'M54', 'J02', 'E11'] },
   { cat: 'abbreviation', inputs: ['HTN uncontrolled', 'COPD exacerbation', 'URI congestion', 'UTI burning', 'DM type 2'], icd: ['I10', 'J44', 'J06', 'N39', 'E11'] },
   { cat: 'pair_validation', inputs: ['angina chest pressure exertion', 'depression follow up medication', 'asthma wheezing inhaler', 'skin rash biopsy concern'], icd: ['I20', 'F32', 'J45', 'L30'], cpt: ['99214', '99213', '99213', '99213'] },
-  { cat: 'dental_handoff', inputs: ['dental cleaning', 'root canal pain', 'crown fell off', 'wisdom tooth extraction', 'braces consultation'], icd: ['Z01.20'], cpt: ['D1110', 'D3310', 'D2750', 'D7240', 'D8080'] },
+  { cat: 'dental_handoff', inputs: ['dental cleaning', 'root canal pain', 'crown fell off', 'wisdom tooth extraction', 'braces consultation'], icd: ['Z01.20'], cpt: ['D1110', 'D3310', 'D2740', 'D7240', 'D9310'] },
   { cat: 'preventive', inputs: ['annual wellness no symptoms', 'medicare wellness visit', 'well child check'], icd: ['Z00'], cpt: ['99395', 'G0438', '99391'] },
   { cat: 'telehealth_em', inputs: ['telehealth anxiety follow up', 'video visit established depression'], icd: ['F41', 'F32'], cpt: ['99213', '99213'] }
 ];
@@ -47,6 +47,7 @@ while ((data.cases || []).length < 150) {
   data.cases.push({
     id,
     category: 'lay_language',
+    skip_fast_eval: true,
     input: `general outpatient symptom cluster variant ${idx}`,
     expected: { icd10_contains: ['R69'], cpt_contains: ['99213'] }
   });

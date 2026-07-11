@@ -78,7 +78,7 @@ DEPLOY_ARGS=(
 if [[ "$PRESERVE_ENV" == "1" ]]; then
   echo "==> Production image deploy (preserving existing service env vars)"
   # Re-apply Kelly Rails flags — staging --env-vars-file deploys can wipe them.
-  PRESERVE_ENV_UPDATES="GCS_DB_BUCKET=${GCS_DB_BUCKET:-somo-staging-db-somo-callsomo},DB_PATH=${CLOUDRUN_DB_PATH:-/var/data/middleware-staging.db},KELLY_RAILS_V2=1,KELLY_ALLOW_HYBRID_GRAPH=0,KELLY_RAILS_ROLLOUT_PCT=1,USE_TRIAGE_RAG_V2=1,RAG_API_URL=disabled,VOICE_RATE_LIMIT_BACKEND=${VOICE_RATE_LIMIT_BACKEND:-redis}"
+  PRESERVE_ENV_UPDATES="GCS_DB_BUCKET=${GCS_DB_BUCKET:-somo-staging-db-somo-callsomo},DB_PATH=${CLOUDRUN_DB_PATH:-/var/data/middleware-staging.db},KELLY_RAILS_V2=1,KELLY_ALLOW_HYBRID_GRAPH=0,KELLY_RAILS_ROLLOUT_PCT=1,USE_TRIAGE_RAG_V2=1,RAG_API_URL=disabled,VOICE_RATE_LIMIT_BACKEND=${VOICE_RATE_LIMIT_BACKEND:-memory}"
   if [[ -n "${PINECONE_INDEX_HOST:-}" ]]; then
     PRESERVE_ENV_UPDATES+=",PINECONE_INDEX_HOST=${PINECONE_INDEX_HOST}"
   fi

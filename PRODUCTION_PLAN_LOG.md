@@ -649,6 +649,36 @@ All non-blocker code review items closed. See `[CLOSE-NB]` above and `test-resul
 
 ### Blocked — external only
 
+### [MT-03] Pinecone tenant filter — dual-source caller audit + CI gate
+- **Completed:** 2026-07-10T21:50:00-04:00
+- **Files:** `routes/rag-search.js`, `routes/video-consult.js`, `services/video-consult-graph.js`, `services/video-consult-assistant-service.js`, `services/cache-service.js`, `scripts/ci-local.sh`, `__tests__/pinecone-tenant-isolation.test.js`
+- **Verification:** `npm test -- --runInBand pinecone-tenant-isolation.test.js` — 5/5 pass; caller audit table in KELLY_CODING_MASTER_EXECUTION_PLAN §0.C
+
+### [Ver-01] M-01 live collect_insurance path trace
+- **Completed:** 2026-07-10T21:50:00-04:00
+- **Files:** `services/kelly-tool-executor/collect-insurance.js`, `routes/voice-appointments.js`, `services/resolve-amount-due.js`
+- **Verification:** Code trace — Kelly POST `/voice/insurance/collect` + post-success `resolveAmountDue`; simulate quality falls through to `plan_rules`. `simulate-eligibility-precedence.test.js` 3/3 pass.
+
+### [Gov-01] AGENTIC_FINANCE_REVIEW M-01 annotation
+- **Completed:** 2026-07-10T21:50:00-04:00
+- **Files:** `docs/architecture/AGENTIC_FINANCE_REVIEW.md`
+- **Verification:** § "Eligibility precedence (M-01 / architecture Fix #1) — CLOSED" added with Ver-01/Ver-02 notes.
+
+### [Evid-01] Durable coding evidence path
+- **Completed:** 2026-07-10T22:00:00-04:00
+- **Files:** `PRODUCTION_PLAN_LOG.md`, `scripts/check-coding-ssot-links.cjs`, `docs/clinical/KELLY_F09_GOVERNANCE.md`
+- **Verification:** Eng-closeout evidence (MT-03, Ver-01, Gov-01) logged in this file; `var/evidence/` documented as ephemeral working copy only. D-01/K-02 operator evidence still pending Appendix A/B execution.
+
+### [Gov-03] Coding SSOT broken-link check
+- **Completed:** 2026-07-10T22:00:00-04:00
+- **Files:** `scripts/check-coding-ssot-links.cjs`, `scripts/ci-local.sh`
+- **Verification:** `node scripts/check-coding-ssot-links.cjs` — OK (11 files)
+
+### [Gov-06] F-09 clinical governance registry
+- **Completed:** 2026-07-10T22:00:00-04:00
+- **Files:** `docs/clinical/KELLY_F09_GOVERNANCE.md`, master plan RACI
+- **Verification:** Accountable = Jay; clinical lead name slot in registry (CF-OP-8 product action)
+
 | ID | Task | Blocker |
 |----|------|---------|
 | 6.10 | Stedi 271 multilingual live sign-off | Live Stedi payer sandbox (`VOICE_ELIGIBILITY_SIMULATE=0`) |
@@ -680,4 +710,48 @@ All non-blocker code review items closed. See `[CLOSE-NB]` above and `test-resul
 | 5.17 | health-video Firebase rewrite |
 | 9.1–9.5 | Somo Health consumer (Phase 9) |
 | 7.7-EXT | Full ADA CDT ~900+ codes (427 seeded; stretch) |
+
+---
+
+## Kelly Master Plan — phase implementation (2026-07-11)
+
+### [CP-05] Ranking SSOT + eval baseline
+- **Completed:** 2026-07-11T02:00:00-04:00
+- **Files:** `services/visit-codes-service.js`, `services/resolve-insurance-codes.js`, `scripts/verify-ranking-ssot.cjs`, `scripts/evaluate-accuracy.js`, `tmp/coding-ranking-baseline.json`
+- **Verification:** `verify-ranking-ssot.cjs` pass; unit tests 6/6 ranking SSOT
+
+### [Phase 5 MT] Multitenant foundation MT-01,02,04–09
+- **Completed:** 2026-07-11T02:00:00-04:00
+- **Files:** `scripts/pinecone-code-metadata-ingest.cjs`, `scripts/verify-sqlite-tenant-boundary.cjs`, `docs/Medical Coding/PINECONE_TENANT_INGEST.md`, `docs/Medical Coding/BENEFITS_PRECEDENCE.md`, `__tests__/multitenant-eval-isolation.test.js`
+- **Verification:** `verify:sqlite-tenant-boundary` pass; multitenant isolation tests pass
+
+### [Phase 7 BL/DN] NCCI + dental
+- **Completed:** 2026-07-11T02:00:00-04:00
+- **Files:** `scripts/import-ncci-pairs-expanded.cjs`, `Knowledge/rules/dental-phrase-map.json`, `docs/Medical Coding/DENTAL_G3_SIGNOFF.md`
+- **Verification:** 58 pair_rules; NCCI/modifier/E/M tests pass; 24 dental_handoff eval cases
+
+### [PY-01] plan_rules scale + coverage matrix
+- **Completed:** 2026-07-11T02:00:00-04:00
+- **Files:** `Knowledge/rules/plan-rules-benefits-scale.json`, `scripts/refresh-coverage-matrix.cjs`, `docs/Medical Coding/COVERAGE_MATRIX.md`
+- **Verification:** 17 rows imported; matrix populated
+
+### [D-01 eng complete] Appendix A A1–A11 + evidence bundle
+- **Completed:** 2026-07-11T13:30:00-04:00
+- **Files:** `scripts/capture-coding-prod-evidence.cjs`, `var/evidence/coding-prod/SUMMARY.json`, `var/db/middleware-prod.db`
+- **Verification:** Cloud Run env success; prod GCS pull integrity ok; live+triage spine 5/5; capture SUMMARY success=true; 22 files uploaded to `gs://somo-staging-db-somo-callsomo/evidence/coding-prod/`
+
+### [K-02 night 2] eval:coding:prod green (medical-only)
+- **Completed:** 2026-07-11T13:25:00-04:00
+- **Files:** `var/evidence/k02-nightly-log.json`
+- **Verification:** 100/145 = 69%; consecutive_green=2. **5 nights remain.**
+
+### [Evid-01] GCS durable evidence upload
+- **Completed:** 2026-07-11T13:32:00-04:00
+- **Files:** `scripts/upload-coding-evidence-gcs.cjs`
+- **Verification:** 22 files → `gs://somo-staging-db-somo-callsomo/evidence/coding-prod/`
+
+### [2b-04] verify:pinecone-tenant-wiring
+- **Completed:** 2026-07-11T13:32:00-04:00
+- **Files:** `scripts/verify-pinecone-tenant-wiring.cjs`
+- **Verification:** `pinecone-tenant-isolation.test.js` 5/5 pass
 

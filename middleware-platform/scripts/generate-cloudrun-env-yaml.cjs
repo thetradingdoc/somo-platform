@@ -256,7 +256,12 @@ merged.USE_TRIAGE_RAG_V2 = parsed.USE_TRIAGE_RAG_V2 ?? '1';
 merged.CODING_SPINE_ONLY = parsed.CODING_SPINE_ONLY ?? '1';
 merged.CODING_PROD_CI = parsed.CODING_PROD_CI ?? '1';
 merged.RAG_API_URL = parsed.RAG_API_URL || 'disabled';
-merged.VOICE_RATE_LIMIT_BACKEND = parsed.VOICE_RATE_LIMIT_BACKEND || 'redis';
+
+const secretBindings = buildSecretBindings();
+const redisSecretBound = secretBindings.some((b) => b.startsWith('REDIS_URL='));
+merged.VOICE_RATE_LIMIT_BACKEND =
+  parsed.VOICE_RATE_LIMIT_BACKEND ||
+  (redisSecretBound ? 'redis' : 'memory');
 
 if (isStaging) {
   delete merged.NGROK_URL;
@@ -289,7 +294,6 @@ if (skipped.length) {
   console.warn('Skipped (too long):', skipped.join(', '));
 }
 
-const secretBindings = buildSecretBindings();
 if (secretsOutPath) {
   if (secretBindings.length) {
     fs.writeFileSync(secretsOutPath, secretBindings.join(','), 'utf8');

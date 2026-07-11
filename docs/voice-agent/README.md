@@ -1,13 +1,17 @@
 # Voice Agent Documentation
 
-**Last updated:** 2026-07-02
+**Last updated:** 2026-07-10
 
 Kelly is the **AI front desk receptionist** for NYC dental and medical offices on **callsomo.com**. Runtime: Twilio PSTN → Cloud Run → Retell WebSocket → Kelly Rails v2 + conversation-mode dispatch.
+
+Platform company DID `+13639990205` uses **`platform_support`** (sales rail) with `NAVIGATION_ENABLED=0`. Coding spine: [Medical Coding VOICE_CODING_SPINE.md](../Medical%20Coding/VOICE_CODING_SPINE.md).
 
 ## Start here
 
 | Topic | Doc |
 |-------|-----|
+| Full architecture | [`../architecture/PLATFORM_SNAPSHOT.md`](../architecture/PLATFORM_SNAPSHOT.md) |
+| Voice routing SSOT | [`../voice/VOICE_ROUTING_SSOT.md`](../voice/VOICE_ROUTING_SSOT.md) |
 | Ops gates + deploy smoke | [`unblocked-phases-ops.md`](./unblocked-phases-ops.md) |
 | Phase 2 copay / Stedi sandbox | [`phase2-pilot-checklist.md`](./phase2-pilot-checklist.md) |
 | PMS connect | [`phase3-pilot-checklist.md`](./phase3-pilot-checklist.md) |
